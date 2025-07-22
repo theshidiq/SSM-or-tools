@@ -1,0 +1,2553 @@
+import React, { useState, useMemo, useEffect, useCallback, useRef } from 'react';
+import { format, addDays, addMonths } from 'date-fns';
+import { ja } from 'date-fns/locale';
+import { uuidv7 } from 'uuidv7';
+import { useScheduleQuery } from '../hooks/useScheduleQuery';
+import { 
+  Download, 
+  Save, 
+  RotateCcw, 
+  Calendar, 
+  Users, 
+  UserPlus,
+  FileText,
+  Table,
+  Printer,
+  BarChart3,
+  ChevronLeft,
+  ChevronRight,
+  Settings,
+  Plus,
+  Trash2,
+  Edit,
+  Maximize,
+  Sparkles,
+  TableProperties,
+  RefreshCw
+} from 'lucide-react';
+
+const ShiftScheduleEditor = () => {
+  // Month navigation state - starting from current month (July-August)
+  const [currentMonthIndex, setCurrentMonthIndex] = useState(6); // 6 = July-August (0-indexed)
+  const [currentScheduleId, setCurrentScheduleId] = useState(null);
+  const [schedulesByMonth, setSchedulesByMonth] = useState({}); // Store schedules for each month
+  const [staffMembersByMonth, setStaffMembersByMonth] = useState({}); // Store staff members for each month
+  const {
+    scheduleData: supabaseScheduleData,
+    isConnected,
+    isLoading,
+    isSaving,
+    error,
+    saveSchedule: saveScheduleData,
+    autoSave,
+    clearError,
+    lastSyncTime
+  } = useScheduleQuery(currentScheduleId);
+  
+
+  // Mapping from old string IDs to new UUIDs
+  const oldIdToNewIdMapping = {
+    'chef': '01934d2c-8a7b-7000-8000-1a2b3c4d5e6f',      // 料理長
+    'iseki': '01934d2c-8a7b-7001-8001-2b3c4d5e6f7a',     // 井関
+    'yogi': '01934d2c-8a7b-7002-8002-3c4d5e6f7a8b',      // 与儀
+    'tanabe': '01934d2c-8a7b-7003-8003-4d5e6f7a8b9c',    // 田辺
+    'koto': '01934d2c-8a7b-7004-8004-5e6f7a8b9c0d',      // 古藤
+    'koike': '01934d2c-8a7b-7005-8005-6f7a8b9c0d1e',     // 小池
+    'kishi': '01934d2c-8a7b-7006-8006-7a8b9c0d1e2f',     // 岸
+    'kamal': '01934d2c-8a7b-7007-8007-8b9c0d1e2f3a',     // カマル
+    'takano': '01934d2c-8a7b-7008-8008-9c0d1e2f3a4b',    // 高野
+    'yasui': '01934d2c-8a7b-7009-8009-0d1e2f3a4b5c',     // 安井
+    'nakata': '01934d2c-8a7b-700a-800a-1e2f3a4b5c6d'     // 中田
+  };
+
+  // Function to migrate schedule data from old IDs to new UUIDs
+  const migrateScheduleIds = (scheduleData) => {
+    if (!scheduleData || typeof scheduleData !== 'object') {
+      return scheduleData;
+    }
+
+    const migratedSchedule = {};
+    
+    Object.keys(scheduleData).forEach(oldId => {
+      const newId = oldIdToNewIdMapping[oldId];
+      if (newId) {
+        // Use new UUID as key
+        migratedSchedule[newId] = scheduleData[oldId];
+      } else {
+        // Keep original key if no mapping found (might already be UUID)
+        migratedSchedule[oldId] = scheduleData[oldId];
+      }
+    });
+
+    console.log('Schedule ID migration:', {
+      originalKeys: Object.keys(scheduleData),
+      migratedKeys: Object.keys(migratedSchedule),
+      mappingApplied: Object.keys(scheduleData).filter(key => oldIdToNewIdMapping[key]).length
+    });
+
+    return migratedSchedule;
+  };
+
+  // Function to migrate staff members to ensure they have all required properties
+  const migrateStaffMembers = (staffList) => {
+    const defaultStaffProperties = {
+      '料理長': { status: '社員', position: 'Head Chef', color: 'position-chef', startPeriod: { year: 2022, month: 4, day: 1 }, endPeriod: null },
+      '井関': { status: '社員', position: 'Chef', color: 'position-chef', startPeriod: { year: 2023, month: 6, day: 15 }, endPeriod: null },
+      '与儀': { status: '社員', position: 'Server', color: 'position-server', startPeriod: { year: 2024, month: 1, day: 15 }, endPeriod: null },
+      '田辺': { status: '社員', position: 'Server', color: 'position-server', startPeriod: { year: 2024, month: 2, day: 1 }, endPeriod: null },
+      '古藤': { status: '社員', position: 'Host', color: 'position-host', startPeriod: { year: 2020, month: 8, day: 1 }, endPeriod: null },
+      '小池': { status: '社員', position: 'Server', color: 'position-server', startPeriod: { year: 2024, month: 3, day: 1 }, endPeriod: null },
+      '岸': { status: '社員', position: 'Prep', color: 'position-prep', startPeriod: { year: 2023, month: 5, day: 1 }, endPeriod: null },
+      'カマル': { status: '社員', position: 'Server', color: 'position-server', startPeriod: { year: 2024, month: 4, day: 1 }, endPeriod: null },
+      '高野': { status: '社員', position: 'prep', color: 'position-prep', startPeriod: { year: 2024, month: 1, day: 1 }, endPeriod: null },
+      '安井': { status: '派遣', position: 'Prep', color: 'position-prep', startPeriod: { year: 2024, month: 2, day: 1 }, endPeriod: { year: 2024, month: 7, day: 31 } },
+      '中田': { status: '社員', position: 'Manager', color: 'position-manager', startPeriod: { year: 2018, month: 4, day: 1 }, endPeriod: null }
+    };
+
+    return staffList.map(staff => {
+      const defaults = defaultStaffProperties[staff.name];
+      if (defaults) {
+        return {
+          ...staff,
+          status: defaults.status, // Always use defaults status
+          position: staff.position || defaults.position,
+          color: staff.color || defaults.color,
+          startPeriod: staff.startPeriod || defaults.startPeriod,
+          endPeriod: defaults.endPeriod // Always use defaults endPeriod
+        };
+      }
+      // For new staff not in defaults, ensure they have basic properties
+      return {
+        ...staff,
+        status: staff.status || '派遣',
+        position: staff.position || 'Server',
+        color: staff.color || 'position-server',
+        startPeriod: staff.startPeriod || { year: new Date().getFullYear(), month: new Date().getMonth() + 1, day: 1 },
+        endPeriod: staff.endPeriod
+      };
+    });
+  };
+
+  // Default staff members configuration
+  const defaultStaffMembersArray = [
+    { 
+      id: '01934d2c-8a7b-7000-8000-1a2b3c4d5e6f', 
+      name: '料理長', 
+      position: 'Head Chef', 
+      color: 'position-chef',
+      status: '社員',
+      startPeriod: { year: 2022, month: 4, day: 1 },
+      endPeriod: null
+    },
+    { 
+      id: '01934d2c-8a7b-7001-8001-2b3c4d5e6f7a', 
+      name: '井関', 
+      position: 'Chef', 
+      color: 'position-chef',
+      status: '社員',
+      startPeriod: { year: 2023, month: 6, day: 15 },
+      endPeriod: null
+    },
+    { 
+      id: '01934d2c-8a7b-7002-8002-3c4d5e6f7a8b', 
+      name: '与儀', 
+      position: 'Server', 
+      color: 'position-server',
+      status: '社員',
+      startPeriod: { year: 2024, month: 1, day: 15 },
+      endPeriod: null
+    },
+    { 
+      id: '01934d2c-8a7b-7003-8003-4d5e6f7a8b9c', 
+      name: '田辺', 
+      position: 'Server', 
+      color: 'position-server',
+      status: '社員',
+      startPeriod: { year: 2024, month: 2, day: 1 },
+      endPeriod: null
+    },
+    { 
+      id: '01934d2c-8a7b-7004-8004-5e6f7a8b9c0d', 
+      name: '古藤', 
+      position: 'Host', 
+      color: 'position-host',
+      status: '社員',
+      startPeriod: { year: 2020, month: 8, day: 1 },
+      endPeriod: null
+    },
+    { 
+      id: '01934d2c-8a7b-7005-8005-6f7a8b9c0d1e', 
+      name: '小池', 
+      position: 'Server', 
+      color: 'position-server',
+      status: '社員',
+      startPeriod: { year: 2024, month: 3, day: 1 },
+      endPeriod: null
+    },
+    { 
+      id: '01934d2c-8a7b-7006-8006-7a8b9c0d1e2f', 
+      name: '岸', 
+      position: 'Prep', 
+      color: 'position-prep',
+      status: '社員',
+      startPeriod: { year: 2023, month: 5, day: 1 },
+      endPeriod: null
+    },
+    { 
+      id: '01934d2c-8a7b-7007-8007-8b9c0d1e2f3a', 
+      name: 'カマル', 
+      position: 'Server', 
+      color: 'position-server',
+      status: '社員',
+      startPeriod: { year: 2024, month: 4, day: 1 },
+      endPeriod: null
+    },
+    { 
+      id: '01934d2c-8a7b-7008-8008-9c0d1e2f3a4b', 
+      name: '高野', 
+      position: 'Dishwasher', 
+      color: 'position-dishwasher',
+      status: '派遣',
+      startPeriod: { year: 2024, month: 1, day: 1 },
+      endPeriod: { year: 2024, month: 8, day: 31 }
+    },
+    { 
+      id: '01934d2c-8a7b-7009-8009-0d1e2f3a4b5c', 
+      name: '安井', 
+      position: 'Prep', 
+      color: 'position-prep',
+      status: '派遣',
+      startPeriod: { year: 2024, month: 2, day: 1 },
+      endPeriod: { year: 2024, month: 7, day: 31 }
+    },
+    { 
+      id: '01934d2c-8a7b-700a-800a-1e2f3a4b5c6d', 
+      name: '中田', 
+      position: 'Manager', 
+      color: 'position-manager',
+      status: '社員',
+      startPeriod: { year: 2018, month: 4, day: 1 },
+      endPeriod: null
+    }
+  ];
+
+  // Staff members with Japanese names - dynamic list that can be edited (using UUIDv7)
+  const [staffMembers, setStaffMembers] = useState(() => defaultStaffMembersArray);
+
+  // Shift symbols
+  const shiftSymbols = {
+    early: { symbol: '△', label: 'Early Shift', time: '10:00-18:00', color: 'text-blue-600' },
+    normal: { symbol: '－', label: 'Normal Shift', time: '11:00-20:00', color: 'text-gray-600' },
+    late: { symbol: '◇', label: 'Late Shift', time: '15:00-23:00', color: 'text-purple-600' },
+    special: { symbol: '●', label: 'Special Shift', time: '12:00-21:00', color: 'text-green-600' },
+    off: { symbol: '×', label: 'Day Off', time: 'Rest Day', color: 'text-red-600' },
+    holiday: { symbol: '★', label: 'Designated Holiday', time: 'Public Holiday', color: 'text-yellow-600' },
+    unavailable: { symbol: '⊘', label: 'Unavailable', time: 'Not Available', color: 'text-red-800' }
+  };
+
+  // Dropdown order: normal shift, day off, early shift, designated holiday, special shift
+  const shiftDropdownOrder = ['normal', 'off', 'early', 'holiday', 'special'];
+  
+  // Get dropdown order based on column
+  const getDropdownOrder = (columnIndex, staffName) => {
+    // Special dropdown for 中田 column with unavailable option (no late shift)
+    if (staffName === '中田') {
+      return ['unavailable', 'special', 'off'];
+    }
+    
+    // For other staff, check if they are 社員 to show late shift option
+    const staff = staffMembers.find(s => s.name === staffName);
+    const is社員 = staff?.status === '社員';
+    
+    // console.log('getDropdownOrder:', { staffName, staff: staff?.name, status: staff?.status, is社員 });
+    
+    if (is社員) {
+      // 社員 staff get late shift option
+      return ['normal', 'off', 'early', 'late', 'holiday'];
+    } else {
+      // 派遣 staff get standard options (no late shift)
+      return ['normal', 'off', 'early', 'holiday'];
+    }
+  };
+
+  // Dynamic dropdown positioning logic
+  const getDropdownPosition = (date, columnIndex, rowIndex) => {
+    const day = date.getDate();
+    const month = date.getMonth() + 1; // getMonth() returns 0-11, so add 1
+    
+    // Check if date is between 18-20 (inclusive)
+    if (day >= 18 && day <= 20) {
+      // Display on right for columns 1-9, on left for columns 10-12
+      if (columnIndex <= 9) {
+        return 'right';
+      } else {
+        // For last columns, check specific rows
+        if (rowIndex === 0 || rowIndex === 1) { // 1st and 2nd rows - use 0% positioning
+          return 'left-elevated-top';
+        }
+        return 'left';
+      }
+    }
+    
+    // Check if it's the last column to avoid going off-screen
+    if (columnIndex === getOrderedStaffMembers.length) {
+      // For 1st and 2nd rows, use elevated top positioning
+      if (rowIndex === 0 || rowIndex === 1) { // 1st and 2nd rows - use 0% positioning
+        return 'left-elevated-top';
+      }
+      return 'left';
+    }
+    
+    // Default positioning for other dates
+    return 'center';
+  };
+
+  // Month periods configuration (21st to 20th of next month)
+  const monthPeriods = [
+    { start: new Date(2025, 0, 21), end: new Date(2025, 1, 20), label: '1月・2月' }, // Jan-Feb
+    { start: new Date(2025, 1, 21), end: new Date(2025, 2, 20), label: '2月・3月' }, // Feb-Mar
+    { start: new Date(2025, 2, 21), end: new Date(2025, 3, 20), label: '3月・4月' }, // Mar-Apr
+    { start: new Date(2025, 3, 21), end: new Date(2025, 4, 20), label: '4月・5月' }, // Apr-May
+    { start: new Date(2025, 4, 21), end: new Date(2025, 5, 20), label: '5月・6月' }, // May-Jun
+    { start: new Date(2025, 5, 21), end: new Date(2025, 6, 20), label: '6月・7月' }, // Jun-Jul
+    { start: new Date(2025, 6, 21), end: new Date(2025, 7, 20), label: '7月・8月' }, // Jul-Aug (current)
+  ];
+
+  // Generate date range based on current month index
+  const generateDateRange = (monthIndex) => {
+    const period = monthPeriods[monthIndex];
+    const dates = [];
+    
+    let currentDate = new Date(period.start);
+    while (currentDate <= period.end) {
+      dates.push(new Date(currentDate));
+      currentDate = addDays(currentDate, 1);
+    }
+    
+    return dates;
+  };
+
+  const dateRange = useMemo(() => generateDateRange(currentMonthIndex), [currentMonthIndex]);
+
+  // Initialize schedule state based on current month period
+  const initializeSchedule = (monthIndex = currentMonthIndex) => {
+    const scheduleData = {};
+    const staffIds = ['chef', 'iseki', 'yogi', 'tanabe', 'koto', 'koike', 'kishi', 'kamal', 'takano', 'yasui', 'nakata'];
+    
+    // Initialize each staff member
+    staffIds.forEach(staffId => {
+      scheduleData[staffId] = {};
+    });
+    
+    // For July-August (index 6), use the existing detailed data
+    if (monthIndex === 6) {
+      // ACCURATE initialData based on provided shift schedule images
+      // Staff order: [料理長, 井関, 与儀, 田辺, 古藤, 小池, 岸, カマル, 高野, 安井, 中田]
+      // Symbols: ○ = normal shift (green), △ = early shift (blue), × = day off (red)
+      const initialData = {
+        // JULY 2025 - Exact data from reference images
+        '2025-07-21': ['○', '○', '○', '○', '○', '×', '○', '×', '○', '×', '○'], // Sun: 小池×, カマル×, 安井×
+        '2025-07-22': ['○', '○', '×', '○', '○', '○', '×', '○', '○', '○', '○'], // Mon: 与儀×, 岸×
+        '2025-07-23': ['×', '○', '○', '×', '○', '○', '○', '○', '×', '○', '○'], // Tue: 料理長×, 田辺×, 高野×
+        '2025-07-24': ['○', '×', '○', '○', '×', '○', '○', '○', '○', '×', '○'], // Wed: 井関×, 古藤×, 安井×
+        '2025-07-25': ['○', '○', '○', '○', '○', '○', '×', '×', '○', '○', '○'], // Thu: 岸×, カマル×
+        '2025-07-26': ['○', '○', '○', '○', '○', '×', '○', '○', '×', '○', '○'], // Fri: 小池×, 高野×
+        '2025-07-27': ['△', '○', '×', '△', '○', '○', '○', '○', '○', '○', '○'], // Sat: 料理長△, 与儀×, 田辺△
+        '2025-07-28': ['○', '×', '○', '○', '△', '○', '○', '○', '○', '×', '○'], // Sun: 井関×, 古藤△, 安井×
+        '2025-07-29': ['△', '○', '△', '○', '○', '×', '○', '○', '○', '○', '○'], // Mon: 料理長△, 与儀△, 小池×
+        '2025-07-30': ['○', '○', '○', '×', '○', '○', '○', '×', '○', '○', '○'], // Tue: 田辺×, カマル×
+        '2025-07-31': ['×', '○', '○', '○', '○', '○', '×', '○', '×', '○', '○'], // Wed: 料理長×, 岸×, 高野×
+        
+        // AUGUST 2025 - Exact data from reference images  
+        '2025-08-01': ['○', '○', '○', '○', '○', '○', '○', '○', '○', '○', '○'], // Thu: All normal shifts
+        '2025-08-02': ['○', '○', '○', '○', '○', '○', '○', '○', '○', '○', '○'], // Fri: All normal shifts
+        '2025-08-03': ['○', '△', '×', '○', '○', '○', '○', '○', '○', '○', '○'], // Sat: 井関△, 与儀×
+        '2025-08-04': ['○', '×', '○', '○', '○', '×', '○', '×', '○', '○', '○'], // Sun: 井関×, 小池×, カマル×
+        '2025-08-05': ['○', '○', '○', '○', '○', '○', '○', '×', '○', '×', '○'], // Mon: カマル×, 安井×
+        '2025-08-06': ['○', '△', '○', '○', '○', '○', '○', '×', '○', '×', '○'], // Tue: 井関△, カマル×, 安井×
+        '2025-08-07': ['×', '○', '×', '○', '○', '○', '○', '○', '○', '○', '○'], // Wed: 料理長×, 与儀×
+        '2025-08-08': ['○', '○', '×', '○', '○', '×', '○', '×', '○', '○', '○'], // Thu: 与儀×, 小池×, カマル×
+        '2025-08-09': ['○', '△', '○', '○', '○', '×', '○', '×', '○', '×', '○'], // Fri: 井関△, 小池×, カマル×, 安井×
+        '2025-08-10': ['△', '○', '○', '○', '○', '○', '○', '×', '○', '○', '○'], // Sat: 料理長△, カマル×
+        '2025-08-11': ['○', '×', '×', '○', '○', '○', '○', '○', '○', '○', '○'], // Sun: 井関×, 与儀×
+        '2025-08-12': ['×', '○', '×', '○', '○', '○', '○', '○', '○', '×', '○'], // Mon: 料理長×, 与儀×, 安井×
+        '2025-08-13': ['△', '○', '○', '○', '○', '×', '○', '○', '○', '×', '○'], // Tue: 料理長△, 小池×, 安井×
+        '2025-08-14': ['○', '○', '○', '○', '○', '×', '○', '×', '○', '×', '○'], // Wed: 小池×, カマル×, 安井×
+        '2025-08-15': ['○', '×', '×', '○', '○', '○', '○', '○', '○', '○', '○'], // Thu: 井関×, 与儀×
+        '2025-08-16': ['○', '○', '○', '○', '○', '○', '○', '×', '○', '○', '○'], // Fri: カマル×
+        '2025-08-17': ['△', '○', '×', '○', '○', '○', '○', '○', '○', '×', '○'], // Sat: 料理長△, 与儀×, 安井×
+        '2025-08-18': ['○', '○', '○', '○', '○', '×', '○', '△', '○', '○', '○'], // Sun: 小池×, カマル△
+        '2025-08-19': ['○', '×', '○', '○', '○', '○', '○', '△', '×', '×', '○'], // Mon: 井関×, カマル△, 高野×, 安井×
+        '2025-08-20': ['○', '○', '×', '○', '○', '△', '○', '×', '○', '○', '○']  // Tue: 与儀×, 小池△, カマル×
+      };
+
+      // Convert symbol to shift type
+      const symbolToShift = {
+        '○': 'normal',
+        '△': 'early', 
+        '×': 'off',
+        '': 'normal' // Default for empty strings
+      };
+      
+      // Populate data for each date
+      Object.entries(initialData).forEach(([date, staffShifts]) => {
+        staffShifts.forEach((symbol, staffIndex) => {
+          const staffId = staffIds[staffIndex];
+          const shiftType = symbolToShift[symbol] || 'normal';
+          scheduleData[staffId][date] = shiftType;
+        });
+      });
+    } else {
+      // For other months, create empty schedule that user can fill
+      const currentRange = generateDateRange(monthIndex);
+      currentRange.forEach(date => {
+        const dateKey = format(date, 'yyyy-MM-dd');
+        staffIds.forEach(staffId => {
+          // Get staff name to determine default shift
+          const staff = staffMembers.find(s => s.id === staffId);
+          const defaultShift = staff?.name === '中田' ? 'unavailable' : 'normal';
+          scheduleData[staffId][dateKey] = defaultShift;
+        });
+      });
+    }
+    
+    return scheduleData;
+  };
+
+  // Local state - much simpler with React Query
+  const [schedule, setSchedule] = useState(() => initializeSchedule(currentMonthIndex));
+  const [editingCell, setEditingCell] = useState(null);
+  const [exportFormat, setExportFormat] = useState('csv');
+  const [showDropdown, setShowDropdown] = useState(null);
+  const [customText, setCustomText] = useState('');
+  const [showMonthPicker, setShowMonthPicker] = useState(false);
+  const [editingColumn, setEditingColumn] = useState(null);
+  const [editingSpecificColumn, setEditingSpecificColumn] = useState(null);
+  const [editingColumnName, setEditingColumnName] = useState('');
+  const [editingNames, setEditingNames] = useState({});
+  const [justEnteredEditMode, setJustEnteredEditMode] = useState(false);
+  const newColumnInputRef = useRef(null);
+  
+  // Helper function to get days in a month
+  const getDaysInMonth = (year, month) => {
+    return new Date(year, month, 0).getDate();
+  };
+
+  // Helper function to check if date is within staff work period
+  const isDateWithinWorkPeriod = (date, staff) => {
+    if (!staff.startPeriod) return true; // If no start period defined, assume always working
+    
+    const currentDate = new Date(date);
+    
+    // Check if before start date
+    const startDate = new Date(
+      staff.startPeriod.year, 
+      staff.startPeriod.month - 1, 
+      staff.startPeriod.day || 1
+    );
+    
+    if (currentDate < startDate) {
+      return false; // Before start date
+    }
+    
+    // Check if after end date (only if end period is defined)
+    if (staff.endPeriod) {
+      const endDate = new Date(
+        staff.endPeriod.year, 
+        staff.endPeriod.month - 1, 
+        staff.endPeriod.day || 1
+      );
+      
+      if (currentDate > endDate) {
+        return false; // After end date
+      }
+    }
+    
+    return true; // Within work period
+  };
+
+  // Function to sync updated staff data to database
+  const syncUpdatedStaffToDatabase = async () => {
+    try {
+      // Force save current staff members to database
+      await saveScheduleData({ 
+        schedule_data: schedule, 
+        staff_members: staffMembers 
+      }, currentScheduleId);
+    } catch (error) {
+      // Silent error handling
+    }
+  };
+
+  // Manual sync function to ensure all migrated data is in database
+  const forceFullSync = async () => {
+    try {
+      const dataToSave = { 
+        schedule_data: schedule, 
+        staff_members: staffMembers 
+      };
+      await saveScheduleData(dataToSave, currentScheduleId);
+      return true;
+    } catch (error) {
+      return false;
+    }
+  };
+
+
+
+  // Helper function to check if staff is active during the current month period
+  const isStaffActiveInCurrentPeriod = (staff) => {
+    // Defensive checks
+    if (!staff) return false;
+    if (!staff.startPeriod) return true; // If no start period defined, assume always working
+    if (!dateRange || dateRange.length === 0) return true; // If dateRange not ready, show all staff
+    
+    // Get the first and last dates of current month period
+    const firstDate = dateRange[0];
+    const lastDate = dateRange[dateRange.length - 1];
+    
+    // Validate dates
+    if (!firstDate || !lastDate) return true;
+    
+    const startDate = new Date(
+      staff.startPeriod.year, 
+      staff.startPeriod.month - 1, 
+      staff.startPeriod.day || 1
+    );
+    
+    // Check if staff starts after the current period ends
+    if (startDate > lastDate) {
+      return false; // Starts after current period
+    }
+    
+    // Check if staff ended before the current period starts
+    if (staff.endPeriod) {
+      const endDate = new Date(
+        staff.endPeriod.year, 
+        staff.endPeriod.month - 1, 
+        staff.endPeriod.day || 1
+      );
+      
+      if (endDate < firstDate) {
+        return false; // Ended before current period
+      }
+    }
+    
+    return true; // Active during current period
+  };
+
+  // Helper function to check if date matches staff start/end period
+  const getDateLabel = (date, staff) => {
+    if (!staff.startPeriod && !staff.endPeriod) return null;
+    
+    const dateKey = format(date, 'yyyy-MM-dd');
+    
+    // Check start period
+    if (staff.startPeriod) {
+      const startDate = new Date(
+        staff.startPeriod.year, 
+        staff.startPeriod.month - 1, 
+        staff.startPeriod.day || 1
+      );
+      const startDateKey = format(startDate, 'yyyy-MM-dd');
+      if (dateKey === startDateKey) {
+        return 'START';
+      }
+    }
+    
+    // Check end period
+    if (staff.endPeriod) {
+      const endDate = new Date(
+        staff.endPeriod.year, 
+        staff.endPeriod.month - 1, 
+        staff.endPeriod.day || 1
+      );
+      const endDateKey = format(endDate, 'yyyy-MM-dd');
+      if (dateKey === endDateKey) {
+        return 'END';
+      }
+    }
+    
+    return null;
+  };
+  
+  // Staff Edit Modal states
+  const [showStaffEditModal, setShowStaffEditModal] = useState(false);
+  const [selectedStaffForEdit, setSelectedStaffForEdit] = useState(null);
+  const [isAddingNewStaff, setIsAddingNewStaff] = useState(false);
+  const [editingStaffData, setEditingStaffData] = useState({
+    name: '',
+    position: '',
+    status: '社員',
+    startPeriod: { year: new Date().getFullYear(), month: new Date().getMonth() + 1, day: 1 },
+    endPeriod: { year: new Date().getFullYear() + 1, month: new Date().getMonth() + 1, day: 1 }
+  });
+  
+  
+  // Initialize editing names when entering edit-name-mode
+  useEffect(() => {
+    if (editingColumn === 'edit-name-mode') {
+      const initialNames = {};
+      staffMembers.forEach(staff => {
+        initialNames[staff.id] = staff.name;
+      });
+      setEditingNames(initialNames);
+    }
+  }, [editingColumn, staffMembers]);
+
+  // Focus on new column input when in edit mode
+  useEffect(() => {
+    if (editingSpecificColumn && newColumnInputRef.current) {
+      setTimeout(() => {
+        try {
+          if (newColumnInputRef.current && newColumnInputRef.current.focus) {
+            newColumnInputRef.current.focus();
+            if (newColumnInputRef.current.select) {
+              newColumnInputRef.current.select();
+            }
+          }
+        } catch (error) {
+          console.warn('Error focusing input:', error);
+        }
+      }, 150);
+    }
+  }, [editingSpecificColumn, staffMembers.length]);
+  
+  // Update schedule when month changes - preserve existing data
+  useEffect(() => {
+    // Save current schedule data AND staff members before switching
+    if (schedule) {
+      const updatedSchedulesByMonth = {
+        ...schedulesByMonth,
+        [currentMonthIndex]: schedule
+      };
+      setSchedulesByMonth(updatedSchedulesByMonth);
+      saveToLocalStorage(STORAGE_KEYS.SCHEDULES_BY_MONTH, updatedSchedulesByMonth);
+    }
+    if (staffMembers && staffMembers.length > 0) {
+      const updatedStaffByMonth = {
+        ...staffMembersByMonth,
+        [currentMonthIndex]: staffMembers
+      };
+      setStaffMembersByMonth(updatedStaffByMonth);
+      saveToLocalStorage(STORAGE_KEYS.STAFF_BY_MONTH, updatedStaffByMonth);
+    }
+    
+    // Load schedule for new month (either from cache or initialize new)
+    const savedSchedule = schedulesByMonth[currentMonthIndex];
+    const savedStaffMembers = staffMembersByMonth[currentMonthIndex];
+    
+    if (savedSchedule) {
+      setSchedule(savedSchedule);
+    } else {
+      setSchedule(initializeSchedule(currentMonthIndex));
+    }
+    
+    if (savedStaffMembers) {
+      setStaffMembers(migrateStaffMembers(savedStaffMembers));
+    } else {
+      // If no saved staff members for this month, use the default staff members
+      // This ensures staff members are always available when switching months
+      setStaffMembers(defaultStaffMembersArray);
+    }
+  }, [currentMonthIndex]);
+  
+  // Auto-save with debouncing
+  const autoSaveTimeoutRef = useRef(null);
+  
+  // localStorage keys for fallback persistence
+  const STORAGE_KEYS = {
+    SCHEDULE: 'shift_schedule_data',
+    STAFF_MEMBERS: 'shift_staff_members',
+    SCHEDULES_BY_MONTH: 'shift_schedules_by_month',
+    STAFF_BY_MONTH: 'shift_staff_by_month'
+  };
+
+  // localStorage utility functions
+  const saveToLocalStorage = (key, data) => {
+    try {
+      localStorage.setItem(key, JSON.stringify(data));
+    } catch (error) {
+      // Silent save to localStorage error
+    }
+  };
+
+  const loadFromLocalStorage = (key) => {
+    try {
+      const data = localStorage.getItem(key);
+      if (data) {
+        const parsed = JSON.parse(data);
+        return parsed;
+      }
+    } catch (error) {
+      // Silent load from localStorage error
+    }
+    return null;
+  };
+
+  // Initialize data from localStorage on first load
+  useEffect(() => {
+    
+    // Load from localStorage as fallback
+    const savedSchedule = loadFromLocalStorage(STORAGE_KEYS.SCHEDULE);
+    const savedStaffMembers = loadFromLocalStorage(STORAGE_KEYS.STAFF_MEMBERS);
+    const savedSchedulesByMonth = loadFromLocalStorage(STORAGE_KEYS.SCHEDULES_BY_MONTH);
+    const savedStaffByMonth = loadFromLocalStorage(STORAGE_KEYS.STAFF_BY_MONTH);
+    
+    if (savedSchedule) {
+      setSchedule(savedSchedule);
+    }
+    if (savedStaffMembers) {
+      setStaffMembers(migrateStaffMembers(savedStaffMembers));
+    }
+    if (savedSchedulesByMonth) {
+      setSchedulesByMonth(savedSchedulesByMonth);
+    }
+    if (savedStaffByMonth) {
+      setStaffMembersByMonth(savedStaffByMonth);
+    }
+  }, []); // Only run once on mount
+
+
+  // Load schedule data from React Query - automatic with caching
+  useEffect(() => {
+    if (supabaseScheduleData && supabaseScheduleData.schedule_data) {
+      const scheduleDataFromDb = supabaseScheduleData.schedule_data;
+      
+      // Extract staff members from the special _staff_members key
+      if (scheduleDataFromDb._staff_members) {
+        const migratedStaffMembers = migrateStaffMembers(scheduleDataFromDb._staff_members);
+        
+        // Only update if staff members are actually different (prevent infinite loop)
+        const currentStaffIds = staffMembers.map(s => s.id).sort().join(',');
+        const newStaffIds = migratedStaffMembers.map(s => s.id).sort().join(',');
+        const staffStructureChanged = currentStaffIds !== newStaffIds;
+        
+        // Check if any staff member properties have changed
+        const staffPropertiesChanged = migratedStaffMembers.some(migrated => {
+          const current = staffMembers.find(s => s.id === migrated.id);
+          return !current || 
+            current.status !== migrated.status ||
+            JSON.stringify(current.endPeriod) !== JSON.stringify(migrated.endPeriod) ||
+            current.name !== migrated.name;
+        });
+        
+        // Only update if there are actual changes
+        if (staffStructureChanged || staffPropertiesChanged) {
+          setStaffMembers(migratedStaffMembers);
+          // Also store in month cache and localStorage
+          setStaffMembersByMonth(prev => ({
+            ...prev,
+            [currentMonthIndex]: migratedStaffMembers
+          }));
+          saveToLocalStorage(STORAGE_KEYS.STAFF_MEMBERS, migratedStaffMembers);
+          
+          // Schedule a delayed sync to database to avoid infinite loop
+          setTimeout(() => {
+            if (schedule && !isSaving) {
+              syncUpdatedStaffToDatabase();
+            }
+          }, 3000);
+        }
+      }
+      
+      // Remove the _staff_members key from schedule data before setting
+      const { _staff_members, ...actualScheduleData } = scheduleDataFromDb;
+      
+      // Debug: Check schedule data structure
+      console.log('Database schedule data structure (before migration):', {
+        actualScheduleData,
+        hasScheduleData: !!actualScheduleData,
+        scheduleKeys: Object.keys(actualScheduleData || {}),
+        sampleStaffData: Object.keys(actualScheduleData || {}).slice(0, 3).map(key => ({
+          staffId: key,
+          data: actualScheduleData[key]
+        }))
+      });
+      
+      // Migrate old staff IDs to new UUIDs
+      const migratedScheduleData = migrateScheduleIds(actualScheduleData);
+      
+      console.log('Database schedule data structure (after migration):', {
+        migratedScheduleData,
+        hasScheduleData: !!migratedScheduleData,
+        scheduleKeys: Object.keys(migratedScheduleData || {}),
+        sampleStaffData: Object.keys(migratedScheduleData || {}).slice(0, 3).map(key => ({
+          staffId: key,
+          data: migratedScheduleData[key]
+        }))
+      });
+      
+      // Only update schedule if it's actually different
+      const currentScheduleStr = JSON.stringify(schedule);
+      const newScheduleStr = JSON.stringify(migratedScheduleData);
+      
+      if (currentScheduleStr !== newScheduleStr) {
+        console.log('Updating schedule with migrated database data');
+        setSchedule(migratedScheduleData);
+        saveToLocalStorage(STORAGE_KEYS.SCHEDULE, migratedScheduleData);
+      } else {
+        console.log('Schedule data is identical, no update needed');
+      }
+      
+      // Only update schedule ID if it's different
+      if (currentScheduleId !== supabaseScheduleData.id) {
+        setCurrentScheduleId(supabaseScheduleData.id);
+      }
+    }
+  }, [supabaseScheduleData?.id, supabaseScheduleData?.updated_at, currentMonthIndex]);
+
+  // React Query Auto-save with debouncing - much simpler!
+  const scheduleAutoSave = useCallback((newScheduleData, newStaffMembers = null) => {
+    // Clear existing timer
+    if (autoSaveTimeoutRef.current) {
+      clearTimeout(autoSaveTimeoutRef.current);
+    }
+
+    // Immediately save to localStorage as backup
+    const currentStaffMembers = newStaffMembers || staffMembers;
+    saveToLocalStorage(STORAGE_KEYS.SCHEDULE, newScheduleData);
+    saveToLocalStorage(STORAGE_KEYS.STAFF_MEMBERS, currentStaffMembers);
+    saveToLocalStorage(STORAGE_KEYS.SCHEDULES_BY_MONTH, schedulesByMonth);
+    saveToLocalStorage(STORAGE_KEYS.STAFF_BY_MONTH, staffMembersByMonth);
+
+    // Set timer for auto-save after inactivity
+    autoSaveTimeoutRef.current = setTimeout(async () => {
+      try {
+        // Save both schedule data and staff members
+        
+        // Save schedule data and staff members separately
+        const dataToSave = { 
+          schedule_data: newScheduleData, 
+          staff_members: currentStaffMembers 
+        };
+        
+        await autoSave(dataToSave, currentScheduleId, 0); // No delay, immediate save
+      } catch (error) {
+        // Silent auto-save error
+        // Don't show alert for auto-save errors as they're automatic
+      }
+    }, 2000); // 2 seconds of inactivity
+  }, [autoSave, currentScheduleId, staffMembers, schedulesByMonth, staffMembersByMonth]);
+
+  // Cleanup timer on unmount
+  useEffect(() => {
+    return () => {
+      if (autoSaveTimeoutRef.current) {
+        clearTimeout(autoSaveTimeoutRef.current);
+      }
+    };
+  }, []);
+
+
+  // Handle shift change with React Query optimistic updates
+  const handleShiftChange = (staffId, dateKey, newShift) => {
+    const newSchedule = {
+      ...schedule,
+      [staffId]: {
+        ...schedule[staffId],
+        [dateKey]: newShift
+      }
+    };
+    
+    // Update UI immediately - React Query handles optimistic updates
+    setSchedule(newSchedule);
+    setEditingCell(null);
+    
+    // Also update the cached schedule for current month
+    setSchedulesByMonth(prev => ({
+      ...prev,
+      [currentMonthIndex]: newSchedule
+    }));
+    
+    // Use React Query auto-save - seamless, no refresh
+    scheduleAutoSave(newSchedule);
+  };
+
+  // Handle cell click for editing
+  const handleCellClick = (staffId, dateKey) => {
+    const cellId = `${staffId}-${dateKey}`;
+    setShowDropdown(showDropdown === cellId ? null : cellId);
+    setEditingCell(null);
+  };
+
+  // Handle shift selection from dropdown
+  const handleShiftSelect = (staffId, dateKey, newShift) => {
+    handleShiftChange(staffId, dateKey, newShift);
+    setShowDropdown(null);
+  };
+
+  // Simple status display with React Query
+  const getSyncStatusDisplay = () => {
+    if (!isConnected) {
+      return {
+        color: 'red',
+        text: 'Disconnected',
+        icon: '🔴'
+      };
+    }
+    
+    if (isSaving) {
+      return {
+        color: 'blue',
+        text: 'Saving...',
+        icon: '🔄'
+      };
+    }
+    
+    if (error) {
+      return {
+        color: 'red',
+        text: 'Error',
+        icon: '❌'
+      };
+    }
+    
+    return {
+      color: 'green',
+      text: 'Synced',
+      icon: '✅'
+    };
+  };
+
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      try {
+        // Safely check event target exists
+        if (!event || !event.target) return;
+        
+        // Auto save when clicking outside any dropdown or cell
+        if (showDropdown && event.target.closest && !event.target.closest('.shift-dropdown')) {
+          // Auto save any pending changes before closing dropdown
+          if (schedule) {
+            scheduleAutoSave(schedule, staffMembers);
+          }
+          setShowDropdown(null);
+        }
+        
+        if (showMonthPicker && event.target.closest && !event.target.closest('.month-picker')) {
+          setShowMonthPicker(false);
+        }
+        
+        // Exit edit mode when clicking outside table header - auto save changes
+        if ((editingColumn === 'delete-mode' || editingColumn === 'edit-name-mode' || editingSpecificColumn) && 
+            event.target.closest && 
+            !event.target.closest('th') && 
+            !event.target.closest('button') && 
+            !justEnteredEditMode) {
+          // Auto save any pending changes before exiting
+          if (schedule) {
+            scheduleAutoSave(schedule, staffMembers);
+          }
+          if (editingColumn === 'edit-name-mode') {
+            // Save all changes before exiting
+            Object.keys(editingNames).forEach(staffId => {
+              const newName = editingNames[staffId];
+              if (newName && newName.trim()) {
+                editColumnName(staffId, newName.trim());
+              }
+            });
+            setEditingColumn(null);
+          } else {
+            exitEditMode();
+          }
+        }
+      } catch (error) {
+        console.warn('Error in handleClickOutside:', error);
+        // Reset states on error to prevent stuck modals
+        setShowDropdown(null);
+        setShowMonthPicker(false);
+      }
+    };
+
+    try {
+      document.addEventListener('click', handleClickOutside);
+    } catch (error) {
+      console.warn('Error adding click listener:', error);
+    }
+    
+    return () => {
+      try {
+        document.removeEventListener('click', handleClickOutside);
+      } catch (error) {
+        console.warn('Error removing click listener:', error);
+      }
+    };
+  }, [showDropdown, showMonthPicker, editingColumn, editingSpecificColumn]);
+
+  // Remove tab management - using single page layout
+
+  // Handle key press for quick editing
+  const handleKeyPress = (e, staffId, dateKey) => {
+    const currentShift = schedule[staffId][dateKey];
+    let newShift = currentShift;
+
+    switch (e.key) {
+      case '1':
+      case 'e':
+      case 'E':
+        newShift = 'early';
+        break;
+      case '2':
+      case 'n':
+      case 'N':
+        newShift = 'normal';
+        break;
+      case '3':
+      case 'o':
+      case 'O':
+      case 'x':
+      case 'X':
+        newShift = 'off';
+        break;
+      case ' ':
+        // Cycle through shifts
+        const shifts = ['early', 'normal', 'off'];
+        const currentIndex = shifts.indexOf(currentShift);
+        newShift = shifts[(currentIndex + 1) % shifts.length];
+        break;
+    }
+
+    if (newShift !== currentShift) {
+      handleShiftChange(staffId, dateKey, newShift);
+    }
+  };
+
+  // Calculate vacation days for staff
+  const calculateVacationDays = (staffId) => {
+    let vacationDays = 0;
+    dateRange.forEach(date => {
+      const dateKey = format(date, 'yyyy-MM-dd');
+      // Safe access to schedule data
+      const staffSchedule = schedule[staffId];
+      const staff = staffMembers.find(s => s.id === staffId);
+      const defaultShift = staff?.name === '中田' ? 'unavailable' : 'normal';
+      const shift = staffSchedule && staffSchedule[dateKey] ? staffSchedule[dateKey] : defaultShift;
+      
+      if (shift === 'early') {
+        vacationDays += 0.5; // △ = 0.5 days
+      } else if (shift === 'off' || shift === 'unavailable' || shift === 'holiday') {
+        vacationDays += 1; // ×, ⊘, and ★ = 1 day
+      }
+      // ○ = 0 days (no vacation)
+    });
+    return vacationDays;
+  };
+
+  // Get comprehensive statistics
+  const getStatistics = () => {
+    const stats = {
+      totalShifts: { early: 0, normal: 0, late: 0, off: 0 },
+      staffStats: {},
+      vacationTotals: {}
+    };
+
+    // Only calculate stats for active staff members
+    const activeStaff = staffMembers.filter(staff => isStaffActiveInCurrentPeriod(staff));
+    
+    activeStaff.forEach(staff => {
+      stats.staffStats[staff.id] = {
+        name: staff.name,
+        position: staff.position,
+        early: 0,
+        normal: 0,
+        late: 0,
+        off: 0,
+        workDays: 0,
+        vacationDays: 0
+      };
+
+      dateRange.forEach(date => {
+        const dateKey = format(date, 'yyyy-MM-dd');
+        // Safe access to schedule data
+        const staffSchedule = schedule[staff.id];
+        const defaultShift = staff.name === '中田' ? 'unavailable' : 'normal';
+        const shift = staffSchedule && staffSchedule[dateKey] ? staffSchedule[dateKey] : defaultShift;
+        
+        // Count shifts with mapping: special->normal, unavailable->off, holiday->off
+        let countedShift = shift;
+        if (shift === 'special') {
+          countedShift = 'normal';
+        } else if (shift === 'unavailable' || shift === 'holiday') {
+          countedShift = 'off';
+        } else if (shift === 'late') {
+          countedShift = 'late'; // Keep late shift as separate count
+        }
+        
+        // Only count known shift types
+        if (countedShift === 'early' || countedShift === 'normal' || countedShift === 'late' || countedShift === 'off') {
+          stats.totalShifts[countedShift]++;
+          stats.staffStats[staff.id][countedShift]++;
+        }
+        
+        // Count work days (exclude off, unavailable, and holiday)
+        if (shift !== 'off' && shift !== 'unavailable' && shift !== 'holiday') {
+          stats.staffStats[staff.id].workDays++;
+        }
+      });
+
+      stats.staffStats[staff.id].vacationDays = calculateVacationDays(staff.id);
+      stats.vacationTotals[staff.id] = stats.staffStats[staff.id].vacationDays;
+    });
+
+    return stats;
+  };
+
+  const statistics = getStatistics();
+
+  // Reset schedule
+  const resetSchedule = () => {
+    setSchedule(initializeSchedule());
+  };
+
+  // Function to order staff members with 中田 always at the end, filtering out inactive staff
+  const getOrderedStaffMembers = useMemo(() => {
+    try {
+      // Defensive check
+      if (!staffMembers || !Array.isArray(staffMembers) || staffMembers.length === 0) {
+        return []; // Return empty array if no staff members
+      }
+      
+      // First filter out staff who are not active in the current period
+      const activeStaff = staffMembers.filter(staff => {
+        try {
+          return staff && isStaffActiveInCurrentPeriod(staff);
+        } catch (error) {
+          // If there's an error checking activity, include the staff member
+          console.warn('Error checking staff activity:', error, staff);
+          return true;
+        }
+      });
+      
+      // If no active staff found but we have staff members, return all staff (fallback)
+      if (activeStaff.length === 0 && staffMembers.length > 0) {
+        const nakataStaff = staffMembers.find(staff => staff && staff.name === '中田');
+        const otherStaff = staffMembers.filter(staff => staff && staff.name !== '中田');
+        return nakataStaff ? [...otherStaff, nakataStaff] : staffMembers;
+      }
+      
+      const nakataStaff = activeStaff.find(staff => staff && staff.name === '中田');
+      const otherStaff = activeStaff.filter(staff => staff && staff.name !== '中田');
+      return nakataStaff ? [...otherStaff, nakataStaff] : activeStaff;
+    } catch (error) {
+      console.error('Error in getOrderedStaffMembers:', error);
+      return staffMembers || []; // Return original staff members or empty array
+    }
+  }, [staffMembers, dateRange]);
+
+  // Column management functions
+  const addNewColumn = () => {
+    // Show add staff modal instead of immediately adding column
+    setIsAddingNewStaff(true);
+    setSelectedStaffForEdit(null); // Clear any existing staff selection
+    setEditingStaffData({
+      name: '',
+      position: '',
+      status: '社員',
+      startPeriod: { year: new Date().getFullYear(), month: new Date().getMonth() + 1, day: 1 },
+      endPeriod: null
+    });
+    setShowStaffEditModal(false); // Skip staff selection modal for add mode
+  };
+
+  // Function to actually create new staff after modal completion
+  const createNewStaff = (staffData) => {
+    const newStaffId = `01934d2c-8a7b-7${Date.now().toString(16).slice(-3)}-8${Math.random().toString(16).slice(2, 5)}-${Math.random().toString(16).slice(2, 14)}`;
+    const newStaff = {
+      id: newStaffId,
+      name: staffData.name || '新しいスタッフ',
+      position: staffData.position || 'Staff',
+      color: 'position-server',
+      status: staffData.status,
+      startPeriod: staffData.startPeriod,
+      endPeriod: staffData.endPeriod
+    };
+    
+    const newStaffMembers = [...staffMembers, newStaff];
+    setStaffMembers(newStaffMembers);
+    
+    // Add empty schedule data for new staff member
+    const newSchedule = {
+      ...schedule,
+      [newStaffId]: {}
+    };
+    
+    // Initialize all dates for the new staff member
+    dateRange.forEach(date => {
+      const dateKey = format(date, 'yyyy-MM-dd');
+      const defaultShift = newStaff.name === '中田' ? 'unavailable' : 'normal';
+      newSchedule[newStaffId][dateKey] = defaultShift;
+    });
+    
+    setSchedule(newSchedule);
+    setSchedulesByMonth(prev => ({
+      ...prev,
+      [currentMonthIndex]: newSchedule
+    }));
+    
+    // Save changes to database
+    scheduleAutoSave(newSchedule, newStaffMembers);
+  };
+
+  const editColumnName = (staffId, newName) => {
+    console.log(`editColumnName called with staffId: ${staffId}, newName: ${newName}`);
+    const oldStaff = staffMembers.find(s => s.id === staffId);
+    console.log(`Old staff member:`, oldStaff);
+    
+    const newStaffMembers = staffMembers.map(staff => 
+      staff.id === staffId ? { ...staff, name: newName } : staff
+    );
+    
+    const updatedStaff = newStaffMembers.find(s => s.id === staffId);
+    console.log(`Updated staff member:`, updatedStaff);
+    console.log('All updated staff members:', newStaffMembers);
+    
+    setStaffMembers(newStaffMembers);
+    
+    // Save changes to database
+    scheduleAutoSave(schedule, newStaffMembers);
+  };
+
+  const exitEditMode = () => {
+    setEditingColumn(null);
+    setEditingSpecificColumn(null);
+    setEditingColumnName('');
+  };
+
+  const deleteColumn = (staffId) => {
+    if (staffMembers.length <= 1) {
+      alert('最低1つの列は必要です。');
+      return;
+    }
+    
+    // Delete immediately without confirmation
+    const newStaffMembers = staffMembers.filter(staff => staff.id !== staffId);
+    setStaffMembers(newStaffMembers);
+    
+    // Remove from schedule data
+    const newSchedule = { ...schedule };
+    delete newSchedule[staffId];
+    setSchedule(newSchedule);
+    
+    setSchedulesByMonth(prev => ({
+      ...prev,
+      [currentMonthIndex]: newSchedule
+    }));
+    
+    // Save changes to database
+    scheduleAutoSave(newSchedule, newStaffMembers);
+    
+    // Exit delete mode after deleting
+    setEditingColumn(null);
+  };
+
+  // Manual save with React Query - seamless
+  const saveScheduleManually = async () => {
+    try {
+      // Clear any pending auto-save
+      if (autoSaveTimeoutRef.current) {
+        clearTimeout(autoSaveTimeoutRef.current);
+      }
+      
+      // Force immediate save - user explicitly requested it
+      const dataToSave = { schedule_data: schedule, staff_members: staffMembers };
+      const savedSchedule = await saveScheduleData(dataToSave, currentScheduleId);
+      
+      if (!currentScheduleId && savedSchedule) {
+        setCurrentScheduleId(savedSchedule.id);
+      }
+      
+      console.log('Manual save successful');
+      
+    } catch (err) {
+      console.error('Failed to save schedule:', err);
+      const errorMessage = err?.message || err?.error?.message || String(err);
+      alert(`保存エラー: ${errorMessage}`);
+    }
+  };
+
+  // Export functions - Updated for vertical layout
+
+
+  const exportToCSV = () => {
+    const headers = ['Date / 日付', ...getOrderedStaffMembers.map(staff => staff?.name || 'Unknown')];
+    const rows = [headers];
+
+    dateRange.forEach(date => {
+      const dateKey = format(date, 'yyyy-MM-dd');
+      const row = [
+        `${format(date, 'dd-MMM')} (${format(date, 'EEE', { locale: ja })})`,
+        ...getOrderedStaffMembers.map(staff => {
+          // Check if date is within work period
+          if (!isDateWithinWorkPeriod(date, staff)) {
+            return '-'; // Show dash for dates outside work period
+          }
+          const defaultShift = staff.name === '中田' ? 'unavailable' : 'normal';
+          const shift = schedule[staff.id]?.[dateKey] || defaultShift;
+          return shiftSymbols[shift].symbol;
+        })
+      ];
+      rows.push(row);
+    });
+
+    try {
+      const csvContent = rows.map(row => row.join(',')).join('\n');
+      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+      const link = document.createElement('a');
+      link.href = URL.createObjectURL(blob);
+      link.download = `shift-schedule-${format(new Date(), 'yyyy-MM-dd')}.csv`;
+      
+      // Safely append and click
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      
+      // Clean up blob URL
+      URL.revokeObjectURL(link.href);
+    } catch (error) {
+      console.error('Error exporting CSV:', error);
+      alert('CSV export failed. Please try again.');
+    }
+  };
+
+  const exportToPrint = () => {
+    const printContent = `
+      <html>
+        <head>
+          <title>Shift Schedule - ${format(dateRange[0], 'yyyy年M月d日')} ~ ${format(dateRange[dateRange.length - 1], 'yyyy年M月d日')}</title>
+          <style>
+            body { font-family: 'Noto Sans JP', sans-serif; margin: 20px; }
+            table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+            th, td { border: 1px solid #ddd; padding: 8px; text-align: center; }
+            th { background-color: #dc2626; color: white; }
+            .date-header { font-weight: bold; background-color: #fef2f2; }
+            .early { background-color: #fef3c7; }
+            .normal { background-color: #dcfce7; }
+            .off { background-color: #f3f4f6; }
+          </style>
+        </head>
+        <body>
+          <h1>🍣 Japanese Restaurant Shift Schedule</h1>
+          <p>期間: ${format(dateRange[0], 'yyyy年M月d日')} ~ ${format(dateRange[dateRange.length - 1], 'yyyy年M月d日')}</p>
+          <table>
+            <thead>
+              <tr>
+                <th>日付 / Date</th>
+                ${getOrderedStaffMembers.map(staff => `<th>${staff.name}<br><small>${staff.position}</small></th>`).join('')}
+              </tr>
+            </thead>
+            <tbody>
+              ${dateRange.map(date => {
+                const dateKey = format(date, 'yyyy-MM-dd');
+                return `
+                  <tr>
+                    <td class="date-header">${format(date, 'dd-MMM')}<br><small>${format(date, 'EEE', { locale: ja })}</small></td>
+                    ${getOrderedStaffMembers.map(staff => {
+                      // Check if date is within work period
+                      if (!isDateWithinWorkPeriod(date, staff)) {
+                        return '<td class="not-working">-</td>'; // Show dash for dates outside work period
+                      }
+                      const defaultShift = staff.name === '中田' ? 'unavailable' : 'normal';
+                      const shift = schedule[staff.id]?.[dateKey] || defaultShift;
+                      return `<td class="${shift}">${shiftSymbols[shift].symbol}</td>`;
+                    }).join('')}
+                  </tr>
+                `;
+              }).join('')}
+            </tbody>
+          </table>
+          <div style="margin-top: 20px; font-size: 12px;">
+            <p>△ = Early Shift (10:00-18:00) | ○ = Normal Shift (11:00-20:00) | ◇ = Late Shift (15:00-23:00) | × = Off Day | ⊘ = Unavailable</p>
+          </div>
+        </body>
+      </html>
+    `;
+
+    try {
+      const printWindow = window.open('', '_blank');
+      if (printWindow) {
+        printWindow.document.write(printContent);
+        printWindow.document.close();
+        printWindow.print();
+      } else {
+        // Fallback if popup blocked
+        const blob = new Blob([printContent], { type: 'text/html' });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = `shift-schedule-${format(new Date(), 'yyyy-MM-dd')}.html`;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(url);
+      }
+    } catch (error) {
+      console.error('Error printing:', error);
+      alert('Print failed. Please try again.');
+    }
+  };
+
+
+  // Show loading state
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="flex items-center gap-3">
+          <div className="w-6 h-6 border-2 border-blue-600 border-t-transparent rounded-full animate-spin"></div>
+          <span className="text-gray-600">Loading schedule...</span>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <>
+    <div className="shift-schedule-editor">
+      {/* Error Display */}
+      {error && clearError && (
+        <div className="mb-4 p-4 bg-red-50 border border-red-200 rounded-md">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center">
+              <div className="w-4 h-4 bg-red-500 rounded-full mr-3"></div>
+              <span className="text-red-700 font-medium">Database Error:</span>
+            </div>
+            <button
+              onClick={clearError}
+              className="text-red-500 hover:text-red-700"
+            >
+              ×
+            </button>
+          </div>
+          <p className="text-red-600 mt-2">{
+            error?.message || 
+            error?.error?.message || 
+            (typeof error === 'string' ? error : JSON.stringify(error, null, 2))
+          }</p>
+        </div>
+      )}
+      
+      {/* Unified Navigation Bar */}
+      <div className="w-4/5 mx-auto flex items-center justify-between mb-4 p-4 bg-white rounded-lg border border-gray-200 shadow-sm">
+        {/* Left Side - Month Navigation and Action Icons */}
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => setCurrentMonthIndex(Math.max(0, currentMonthIndex - 1))}
+            disabled={currentMonthIndex === 0}
+            className={`flex items-center px-3 py-2 h-10 text-sm font-medium rounded-lg border border-gray-300 bg-white transition-colors ${
+              currentMonthIndex === 0
+                ? 'cursor-not-allowed'
+                : 'hover:border-gray-400'
+            }`}
+            title="Previous month"
+          >
+            <ChevronLeft size={16} className={currentMonthIndex === 0 ? 'text-gray-400' : 'text-gray-600 hover:text-gray-800'} />
+          </button>
+          
+          <div className="relative month-picker">
+            <button
+              onClick={() => setShowMonthPicker(!showMonthPicker)}
+              className="flex items-center px-4 py-2 h-10 text-sm font-medium bg-white rounded-lg border border-gray-300 shadow-sm hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 cursor-pointer pr-8 pl-10 min-w-[120px]"
+            >
+              <Calendar size={16} className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-500" />
+              <span className="font-bold text-gray-800">
+                {monthPeriods[currentMonthIndex].label}
+              </span>
+              <div className="absolute right-3 top-1/2 transform -translate-y-1/2">
+                <svg className={`w-4 h-4 text-gray-500 transition-transform ${showMonthPicker ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                </svg>
+              </div>
+            </button>
+            
+            {/* Month Picker Grid */}
+            {showMonthPicker && (
+              <div className="absolute top-full left-1/2 transform -translate-x-1/2 mt-1 w-80 bg-white rounded-lg border border-gray-300 shadow-lg z-[1000] p-4">
+                <div className="grid grid-cols-2 gap-2">
+                  {monthPeriods.map((period, index) => (
+                    <button
+                      key={index}
+                      onClick={() => {
+                        setCurrentMonthIndex(index);
+                        setShowMonthPicker(false);
+                      }}
+                      className={`p-3 text-sm font-medium rounded-lg border transition-colors ${
+                        currentMonthIndex === index
+                          ? 'bg-blue-500 text-white border-blue-500'
+                          : 'bg-gray-50 text-gray-700 border-gray-200 hover:bg-blue-50 hover:border-blue-300'
+                      }`}
+                    >
+                      <div className="text-center">
+                        <div className="font-bold">{period.label}</div>
+                        <div className="text-xs opacity-75 mt-1">
+                          {format(period.start, 'MMM dd')} - {format(period.end, 'MMM dd')}
+                        </div>
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+          
+          <button
+            onClick={() => setCurrentMonthIndex(Math.min(monthPeriods.length - 1, currentMonthIndex + 1))}
+            disabled={currentMonthIndex === monthPeriods.length - 1}
+            className={`flex items-center px-3 py-2 h-10 text-sm font-medium rounded-lg border border-gray-300 bg-white transition-colors ${
+              currentMonthIndex === monthPeriods.length - 1
+                ? 'cursor-not-allowed'
+                : 'hover:border-gray-400'
+            }`}
+            title="Next month"
+          >
+            <ChevronRight size={16} className={currentMonthIndex === monthPeriods.length - 1 ? 'text-gray-400' : 'text-gray-600 hover:text-gray-800'} />
+          </button>
+          
+          <div className="w-px h-6 bg-gray-300 mx-1"></div>
+          
+          {/* Toggle Fullscreen Button */}
+          <button 
+            onClick={() => {
+              // TODO: Implement fullscreen toggle functionality
+              console.log('Toggle fullscreen clicked');
+            }}
+            className="flex items-center px-3 py-2 h-10 text-sm font-medium rounded-lg border border-gray-300 bg-white hover:border-gray-400 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500 transition-all duration-200"
+            title="Toggle Fullscreen"
+          >
+            <Maximize size={16} className="text-indigo-600 hover:text-indigo-700" />
+          </button>
+          
+          {/* Force Sync Button */}
+          <button 
+            onClick={async () => {
+              const success = await forceFullSync();
+              if (success) {
+                alert('✅ Data synced to database successfully!');
+              } else {
+                alert('❌ Failed to sync data to database.');
+              }
+            }}
+            className="flex items-center px-3 py-2 h-10 text-sm font-medium rounded-lg border border-green-300 bg-green-50 hover:bg-green-100 hover:border-green-400 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 transition-all duration-200"
+            title="Force sync all data to database"
+            disabled={isSaving}
+          >
+            <RefreshCw size={16} className={`${isSaving ? 'animate-spin text-gray-400' : 'text-green-600 hover:text-green-700'}`} />
+          </button>
+
+          {/* Force Migration Button */}
+          <button 
+            onClick={async () => {
+              try {
+                // Get current database data
+                if (supabaseScheduleData && supabaseScheduleData.schedule_data) {
+                  const { _staff_members, ...oldScheduleData } = supabaseScheduleData.schedule_data;
+                  
+                  // Migrate IDs
+                  const migratedScheduleData = migrateScheduleIds(oldScheduleData);
+                  
+                  console.log('Force migration - Converting old IDs to UUIDs:', {
+                    oldKeys: Object.keys(oldScheduleData),
+                    newKeys: Object.keys(migratedScheduleData)
+                  });
+                  
+                  // Update local state
+                  setSchedule(migratedScheduleData);
+                  
+                  // Save migrated data back to database with new IDs
+                  const success = await saveScheduleData({
+                    schedule_data: migratedScheduleData,
+                    staff_members: staffMembers
+                  }, currentScheduleId);
+                  
+                  if (success) {
+                    alert('✅ Schedule IDs migrated successfully! Data converted from old IDs to UUIDs.');
+                  } else {
+                    alert('❌ Failed to migrate schedule IDs.');
+                  }
+                } else {
+                  alert('⚠️ No database schedule data found to migrate.');
+                }
+              } catch (error) {
+                console.error('Migration error:', error);
+                alert('❌ Error during migration: ' + error.message);
+              }
+            }}
+            className="flex items-center px-3 py-2 h-10 text-sm font-medium rounded-lg border border-blue-300 bg-blue-50 hover:bg-blue-100 hover:border-blue-400 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-all duration-200"
+            title="Migrate old staff IDs to new UUIDs in database"
+            disabled={isSaving}
+          >
+            <Settings size={16} className="text-blue-600 hover:text-blue-700" />
+          </button>
+          
+          {/* AI Assistant Button */}
+          <button 
+            onClick={() => {
+              // TODO: Implement AI functionality
+              console.log('AI button clicked');
+            }}
+            className="flex items-center px-3 py-2 h-10 text-sm font-medium rounded-lg border border-gray-300 bg-white hover:border-gray-400 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500 transition-all duration-200"
+            title="AI Assistant"
+          >
+            <Sparkles size={16} className="text-violet-600 hover:text-violet-700" />
+          </button>
+          
+          {/* Add Table Button */}
+          <button 
+            onClick={() => {
+              // TODO: Implement add table functionality
+              console.log('Add table clicked');
+            }}
+            className="flex items-center px-3 py-2 h-10 text-sm font-medium rounded-lg border border-gray-300 bg-white hover:border-gray-400 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500 transition-all duration-200"
+            title="Add Table"
+          >
+            <TableProperties size={16} className="text-teal-600 hover:text-teal-700" />
+          </button>
+          
+          {/* Add User Button */}
+          <button
+            onClick={addNewColumn}
+            className="flex items-center px-3 py-2 h-10 text-sm font-medium rounded-lg border border-gray-300 bg-white hover:border-gray-400 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500 transition-all duration-200"
+            title="Add User"
+          >
+            <UserPlus size={16} className="text-green-600 hover:text-green-700" />
+          </button>
+          
+          {/* Edit Staff Button */}
+          <button
+            onClick={() => {
+              setShowStaffEditModal(true);
+            }}
+            className="flex items-center px-3 py-2 h-10 text-sm font-medium rounded-lg border border-gray-300 bg-white hover:border-gray-400 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500 transition-all duration-200"
+            title="Edit Staff"
+          >
+            <Edit size={16} className="text-purple-600 hover:text-purple-700" />
+          </button>
+          
+          {/* Delete Columns Button */}
+          <button
+            onClick={() => {
+              setEditingColumn('delete-mode');
+            }}
+            className={`flex items-center px-3 py-2 h-10 text-sm font-medium rounded-lg border transition-all duration-200 ${
+              editingColumn === 'delete-mode'
+                ? 'border-red-300 bg-red-50 text-red-700 hover:bg-red-100'
+                : 'border-gray-300 bg-white hover:border-gray-400'
+            }`}
+            title="Delete Columns"
+          >
+            <Trash2 size={16} className={editingColumn === 'delete-mode' ? 'text-red-600' : 'text-red-600 hover:text-red-700'} />
+          </button>
+          
+          {/* Reset Button */}
+          <button 
+            onClick={resetSchedule}
+            className="flex items-center px-3 py-2 h-10 text-sm font-medium rounded-lg border border-gray-300 bg-white hover:border-gray-400 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500 transition-all duration-200"
+            title="Reset Schedule"
+          >
+            <RotateCcw size={16} className="text-red-600 hover:text-red-700" />
+          </button>
+
+          {/* Download Button */}
+          <button 
+            onClick={exportToCSV}
+            className="flex items-center px-3 py-2 h-10 text-sm font-medium rounded-lg border border-gray-300 bg-white hover:border-gray-400 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500 transition-all duration-200"
+            title="Download CSV"
+          >
+            <Download size={16} className="text-green-600 hover:text-green-700" />
+          </button>
+          
+          {/* Print Button */}
+          <button 
+            onClick={exportToPrint}
+            className="flex items-center px-3 py-2 h-10 text-sm font-medium rounded-lg border border-gray-300 bg-white hover:border-gray-400 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500 transition-all duration-200"
+            title="Print"
+          >
+            <Printer size={16} className="text-blue-600 hover:text-blue-700" />
+          </button>
+        </div>
+
+        {/* Right Side - Status Indicator */}
+        <div className="flex items-center gap-3">
+          {/* Simple Saving Indicator */}
+          {isSaving && (
+            <div className="flex items-center gap-1">
+              <div className="w-2 h-2 bg-blue-500 rounded-full animate-pulse"></div>
+            </div>
+          )}
+          
+          {/* Exit Edit Mode Button - only show when in edit mode */}
+          {editingColumn && (
+            <button
+              onClick={() => {
+                if (editingColumn === 'edit-name-mode') {
+                  // Save all changes before exiting
+                  Object.keys(editingNames).forEach(staffId => {
+                    const newName = editingNames[staffId];
+                    if (newName && newName.trim()) {
+                      editColumnName(staffId, newName.trim());
+                    }
+                  });
+                }
+                setEditingColumn(null);
+              }}
+              className="flex items-center px-4 py-2 h-10 text-sm font-medium rounded-lg border border-blue-300 text-blue-700 bg-blue-50 hover:bg-blue-100 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-all duration-200 whitespace-nowrap"
+            >
+              <span>完了</span>
+            </button>
+          )}
+        </div>
+      </div>
+
+      
+      
+      {/* Schedule Table */}
+      <div className="table-container w-4/5 mx-auto overflow-auto border border-gray-200 rounded-lg shadow-sm mb-6" style={{ maxHeight: 'calc(100vh - 110px)' }}>
+        <table className="shift-table w-full text-sm" style={{ minWidth: `${60 + (staffMembers.length * 40)}px` }}>
+          {/* Sticky Header Row: Staff Names as Column Headers */}
+          <thead>
+            <tr>
+              <th className="bg-gray-600 text-white min-w-[60px] border-r-2 border-gray-400 sticky left-0" style={{ zIndex: 400 }}>
+                <div className="flex items-center justify-center gap-1 py-0.5">
+                  <Calendar size={12} />
+                  <span className="font-bold text-xs">日付 / Date</span>
+                </div>
+              </th>
+              {/* Staff Members as Column Headers - Sticky Top */}
+              {getOrderedStaffMembers.map(staff => staff && (
+                <th key={staff.id || 'unknown'} className="min-w-[40px] bg-gray-600 text-white border-r border-gray-400 relative">
+                  <div className="text-center py-0.5">
+                    {editingSpecificColumn === staff.id || editingColumn === 'edit-name-mode' ? (
+                      <div className="font-bold japanese-text text-xs flex items-center justify-center gap-1">
+                        <input
+                          ref={editingSpecificColumn === staff.id ? newColumnInputRef : null}
+                          type="text"
+                          value={editingColumn === 'edit-name-mode' ? (editingNames[staff.id] !== undefined ? editingNames[staff.id] : staff.name) : editingColumnName}
+                          onChange={(e) => {
+                            if (editingColumn === 'edit-name-mode') {
+                              const newValue = e.target.value;
+                              setEditingNames(prev => ({
+                                ...prev,
+                                [staff.id]: newValue
+                              }));
+                            } else {
+                              setEditingColumnName(e.target.value);
+                            }
+                          }}
+                          onBlur={() => {
+                            if (editingColumn === 'edit-name-mode') {
+                              // Save current field and exit edit mode
+                              const newName = editingNames[staff.id];
+                              if (newName !== undefined) {
+                                editColumnName(staff.id, newName.trim());
+                              }
+                              setEditingColumn(null);
+                            } else {
+                              if (editingColumnName.trim()) {
+                                editColumnName(staff.id, editingColumnName.trim());
+                              }
+                              exitEditMode();
+                            }
+                          }}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') {
+                              if (editingColumn === 'edit-name-mode') {
+                                // Save current field and exit edit mode on Enter
+                                const newName = editingNames[staff.id];
+                                if (newName !== undefined) {
+                                  editColumnName(staff.id, newName.trim());
+                                }
+                                setEditingColumn(null);
+                              } else {
+                                if (editingColumnName.trim()) {
+                                  editColumnName(staff.id, editingColumnName.trim());
+                                }
+                                exitEditMode();
+                              }
+                            }
+                          }}
+                          className="w-full bg-white text-gray-900 text-xs font-bold text-center border-none outline-none rounded px-1"
+                          style={{ minWidth: '60px' }}
+                        />
+                      </div>
+                    ) : (
+                      <div className="font-bold japanese-text text-xs flex items-center justify-center gap-1">
+                        <span 
+                          onClick={() => {
+                            if (editingColumn !== 'delete-mode') {
+                              // Direct edit staff functionality
+                              setSelectedStaffForEdit(staff);
+                              setEditingStaffData({
+                                name: staff.name,
+                                position: staff.position,
+                                status: staff.status || '社員',
+                                startPeriod: staff.startPeriod || { year: new Date().getFullYear(), month: new Date().getMonth() + 1, day: 1 },
+                                endPeriod: staff.endPeriod || (staff.status === '派遣' ? { year: new Date().getFullYear() + 1, month: new Date().getMonth() + 1, day: 1 } : null)
+                              });
+                              setShowStaffEditModal(false); // Skip staff selection modal
+                            }
+                          }}
+                          className="cursor-pointer hover:text-blue-300 hover:underline transition-all duration-200 px-1 rounded"
+                          title={`Edit ${staff.name} - Click to edit staff details`}
+                        >
+                          {staff.name}
+                        </span>
+                        {editingColumn === 'delete-mode' && (
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              deleteColumn(staff.id);
+                            }}
+                            className="text-red-400 hover:text-red-200 ml-1 border border-red-500 rounded px-1 bg-red-100"
+                            title="Delete column"
+                          >
+                            <Trash2 size={12} />
+                          </button>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                </th>
+              ))}
+            </tr>
+          </thead>
+          
+          {/* Body: Each Row = One Date, Each Column = One Staff Member */}
+          <tbody>
+            {dateRange.map((date, dateIndex) => {
+              const dateKey = format(date, 'yyyy-MM-dd');
+              const isWeekend = date.getDay() === 0 || date.getDay() === 6;
+              
+              return (
+                <tr key={dateKey} className="bg-white">
+                  {/* Date Cell - Sticky Left Column */}
+                  <td className="sticky left-0 z-20 bg-white border-r-2 border-gray-200 min-w-[60px] shadow-sm">
+                    <div className="text-center py-1">
+                      <div className="font-semibold text-gray-900 text-xs">
+                        {format(date, 'dd-MMM')}
+                      </div>
+                      <div className={`text-xs ${isWeekend ? 'text-red-600 font-medium' : 'text-gray-500'}`}>
+                        {format(date, 'EEE', { locale: ja })}
+                      </div>
+                    </div>
+                  </td>
+                  
+                  {/* Staff Shift Cells - One Column per Staff Member */}
+                  {getOrderedStaffMembers.map((staff, staffIndex) => {
+                    if (!staff || !staff.id) return null;
+                    
+                    // Safe access to schedule data
+                    const staffSchedule = schedule[staff.id];
+                    const defaultShift = staff.name === '中田' ? 'unavailable' : 'normal';
+                    const shift = staffSchedule && staffSchedule[dateKey] ? staffSchedule[dateKey] : defaultShift;
+                    
+                    // Debug: Check if data exists for this staff/date combination
+                    if (dateIndex === 0 && staffIndex === 0) { // Log only for first cell to avoid spam
+                      console.log('Cell data check:', {
+                        staffName: staff.name,
+                        staffId: staff.id,
+                        dateKey,
+                        hasScheduleForStaff: !!schedule[staff.id],
+                        scheduleKeys: Object.keys(schedule),
+                        staffScheduleKeys: staffSchedule ? Object.keys(staffSchedule) : 'No schedule',
+                        shift,
+                        defaultShift,
+                        actualShiftData: staffSchedule ? staffSchedule[dateKey] : 'No staff schedule'
+                      });
+                    }
+                    
+                    // Ensure shift is always a string and handle any objects
+                    let shiftValue;
+                    try {
+                      if (typeof shift === 'string') {
+                        shiftValue = shift;
+                      } else if (shift && typeof shift === 'object') {
+                        if (shift instanceof Error) {
+                          console.warn('Error object found in schedule data:', shift);
+                          shiftValue = 'normal';
+                        } else {
+                          shiftValue = shift.toString ? shift.toString() : 'normal';
+                        }
+                      } else {
+                        shiftValue = String(shift);
+                      }
+                    } catch (e) {
+                      console.warn('Error processing shift value:', shift, e);
+                      shiftValue = 'normal';
+                    }
+                    
+                    // Final safety check
+                    if (typeof shiftValue !== 'string') {
+                      shiftValue = 'normal';
+                    }
+                    const cellId = `${staff.id}-${dateKey}`;
+                    const isDropdownOpen = showDropdown === cellId;
+                    const dropdownPosition = getDropdownPosition(date, staffIndex + 1, dateIndex); // Include row index
+                    
+                    // Dynamic dropdown positioning classes
+                    const getDropdownClasses = () => {
+                      const baseClasses = "shift-dropdown absolute bg-white border border-gray-300 rounded-lg shadow-lg py-2 min-w-[120px]";
+                      
+                      switch(dropdownPosition) {
+                        case 'right':
+                          return `${baseClasses} z-50 left-full top-1/2 transform -translate-y-1/2 ml-1`;
+                        case 'left':
+                          return `${baseClasses} z-50 right-full top-1/2 transform -translate-y-1/2 mr-1`;
+                        case 'left-elevated-top':
+                          return `${baseClasses} z-[500] right-full mr-1` + ' ' + 'top-[0%]';
+                        case 'below':
+                          return `${baseClasses} z-50 top-full left-1/2 transform -translate-x-1/2 mt-1`;
+                        default:
+                          return `${baseClasses} z-50 top-full left-1/2 transform -translate-x-1/2 mt-1`;
+                      }
+                    };
+                    
+                    // Check if date is within work period and if it has START/END label
+                    const isWithinWorkPeriod = isDateWithinWorkPeriod(date, staff);
+                    const dateLabel = getDateLabel(date, staff);
+                    const isStartOrEndDate = dateLabel === 'START' || dateLabel === 'END';
+                    
+                    return (
+                      <td 
+                        key={staff.id}
+                        className={`text-center relative border-r border-gray-200 ${
+                          !isWithinWorkPeriod ? 'bg-gray-100' : 
+                          isStartOrEndDate ? 'bg-blue-50' :
+                          editingSpecificColumn === staff.id ? 'bg-white' : 
+                          isDropdownOpen ? 'ring-2 ring-gray-400 bg-white' : ''
+                        }`}
+                        style={{ minWidth: '40px', padding: '0' }}
+                      >
+                        {isWithinWorkPeriod ? (
+                          isStartOrEndDate ? (
+                            // Non-clickable START/END cell
+                            <div 
+                              className="w-full h-full py-1 px-1 font-bold bg-blue-50"
+                              title={`${staff.name} - ${format(date, 'MMM dd')} - ${dateLabel} Date`}
+                            >
+                              <div className="relative flex items-center justify-center">
+                                <div className={`text-xs font-bold px-2 py-1 rounded ${
+                                  dateLabel === 'START' 
+                                    ? 'bg-green-500 text-white' 
+                                    : 'bg-red-500 text-white'
+                                }`}>
+                                  {dateLabel}
+                                </div>
+                              </div>
+                            </div>
+                          ) : (
+                            // Regular clickable cell
+                            <div 
+                              className={`w-full h-full py-1 px-1 cursor-pointer font-bold ${
+                                shiftSymbols[shiftValue]?.color || 'text-gray-600'
+                              } ${isDropdownOpen ? '' : 'hover:bg-gray-50'}`}
+                              style={{ fontSize: shiftSymbols[shiftValue] ? '1.5rem' : '1rem' }}
+                              onClick={(e) => {
+                                console.log('DIV clicked!', staff.id, dateKey, 'Position:', dropdownPosition, 'Column:', staffIndex + 1);
+                                e.stopPropagation();
+                                handleCellClick(staff.id, dateKey);
+                              }}
+                              title={`${staff.name} - ${format(date, 'MMM dd')} - ${shiftSymbols[shiftValue]?.label || shiftValue}`}
+                            >
+                              <div className="relative">
+                                {shiftSymbols[shiftValue]?.symbol || shiftValue}
+                              </div>
+                            </div>
+                          )
+                        ) : (
+                          // Blank non-clickable cell for dates outside work period
+                          <div 
+                            className="w-full h-full py-1 px-1 bg-gray-100"
+                            title={`${staff.name} - ${format(date, 'MMM dd')} - Not working`}
+                          >
+                            <div className="text-gray-400 text-xs">-</div>
+                          </div>
+                        )}
+                        
+                        {/* Custom Dropdown with Dynamic Positioning - only show if within work period and not START/END date */}
+                        {isDropdownOpen && isWithinWorkPeriod && !isStartOrEndDate && (
+                          <div className={getDropdownClasses()}>
+                            {getDropdownOrder(staffIndex + 1, staff.name).map((key) => {
+                              const value = shiftSymbols[key];
+                              if (!value) {
+                                console.warn('Missing shift symbol for key:', key);
+                                return null;
+                              }
+                              return (
+                                <div
+                                  key={key}
+                                  className={`flex items-center px-3 py-2 hover:bg-gray-100 cursor-pointer ${
+                                    shiftValue === key ? 'bg-blue-50 text-blue-600' : ''
+                                  }`}
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleShiftSelect(staff.id, dateKey, key);
+                                  }}
+                                >
+                                  <span className={`font-bold mr-3 ${value.color}`} style={{ fontSize: '1.2rem' }}>
+                                    {value.symbol}
+                                  </span>
+                                  <span className="text-sm">{value.label}</span>
+                                </div>
+                              );
+                            })}
+                            
+                            {/* Custom Text Input for all columns */}
+                            <div className="border-t border-gray-200 pt-2">
+                              <div className="px-3 py-2">
+                                <input
+                                  type="text"
+                                  value={customText}
+                                  onChange={(e) => setCustomText(e.target.value)}
+                                  onKeyPress={(e) => {
+                                    if (e.key === 'Enter' && customText.trim()) {
+                                      e.stopPropagation();
+                                      handleShiftSelect(staff.id, dateKey, customText.trim());
+                                      setCustomText('');
+                                    }
+                                  }}
+                                  onClick={(e) => e.stopPropagation()}
+                                  placeholder="Type custom text..."
+                                  className="w-full px-3 py-2 text-sm border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
+                                  autoFocus
+                                />
+                              </div>
+                            </div>
+                            
+                            {/* Action Buttons - moved to bottom */}
+                            <div className="border-t border-gray-200 p-1 flex gap-1">
+                              {/* Delete Button - only show if cell has existing text */}
+                              {shiftValue && !shiftSymbols[shiftValue] && (
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleShiftSelect(staff.id, dateKey, 'normal');
+                                  }}
+                                  className="flex-1 px-2 py-1 text-xs bg-red-500 text-white rounded hover:bg-red-600 transition-colors"
+                                  title="Delete custom text"
+                                >
+                                  ×
+                                </button>
+                              )}
+                              
+                              {/* Apply Button */}
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  if (customText.trim()) {
+                                    handleShiftSelect(staff.id, dateKey, customText.trim());
+                                    setCustomText('');
+                                  }
+                                }}
+                                disabled={!customText.trim()}
+                                className={`flex-1 px-2 py-1 text-xs rounded transition-colors ${
+                                  customText.trim() 
+                                    ? 'bg-blue-500 text-white hover:bg-blue-600' 
+                                    : 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                                }`}
+                                title="Apply custom text"
+                              >
+                                ✓
+                              </button>
+                            </div>
+                          </div>
+                        )}
+                      </td>
+                    );
+                  })}
+                </tr>
+              );
+            })}
+          </tbody>
+          
+          {/* Vacation Footer Row */}
+          <tfoot>
+            <tr className="bg-yellow-100 border-t-2 border-orange-300">
+              <td className="sticky left-0 z-20 bg-orange-200 border-r-2 border-orange-300 min-w-[100px] shadow-sm">
+                <div className="text-center py-2">
+                  <div className="font-bold text-orange-800 text-xs">
+                    休暇合計
+                  </div>
+                  <div className="text-xs text-orange-700">
+                    Vacation Total
+                  </div>
+                </div>
+              </td>
+              {getOrderedStaffMembers.map(staff => (
+                <td key={staff.id} className="text-center py-2 min-w-[70px] border-r border-orange-300 bg-yellow-50">
+                  <div className="font-bold text-orange-800 text-sm">
+                    {calculateVacationDays(staff.id)}
+                  </div>
+                  <div className="text-xs text-orange-700">
+                    days
+                  </div>
+                </td>
+              ))}
+            </tr>
+          </tfoot>
+        </table>
+      </div>
+
+      {/* Statistics Section - Below Table */}
+      <div className="statistics-section w-4/5 mx-auto">
+        <div className="bg-gradient-to-r from-gray-50 to-blue-50 p-6 rounded-lg border border-gray-200 shadow-sm mb-6">
+          <h2 className="text-xl font-bold text-gray-800 mb-6 flex items-center gap-2">
+            <BarChart3 size={24} />
+            統計・分析 (Statistics & Analytics)
+          </h2>
+          
+
+          {/* Staff Work Patterns Table */}
+          <div className="bg-white p-6 rounded-lg border border-gray-200 shadow-sm">
+            <h3 className="text-lg font-bold text-gray-800 mb-4 flex items-center gap-2">
+              <FileText size={20} />
+              スタッフ別勤務パターン詳細 (Detailed Staff Work Patterns)
+            </h3>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="bg-gray-50">
+                    <th className="text-left p-3 font-medium text-gray-700">スタッフ (Staff)</th>
+                    <th className="text-center p-3 font-medium text-amber-600">△ Early</th>
+                    <th className="text-center p-3 font-medium text-green-600">○ Normal</th>
+                    <th className="text-center p-3 font-medium text-purple-600">◇ Late</th>
+                    <th className="text-center p-3 font-medium text-gray-600">× Off</th>
+                    <th className="text-center p-3 font-medium text-blue-600">Work Days</th>
+                    <th className="text-center p-3 font-medium text-orange-600">Vacation</th>
+                    <th className="text-center p-3 font-medium text-purple-600">Workload</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {getOrderedStaffMembers.map(staff => {
+                    const staffStats = statistics.staffStats[staff.id];
+                    const workloadPercentage = Math.round((staffStats.workDays / dateRange.length) * 100);
+                    return (
+                      <tr key={staff.id} className="border-t border-gray-200 hover:bg-gray-50">
+                        <td className="p-3 font-medium text-gray-800">{staffStats.name}</td>
+                        <td className="p-3 text-center text-amber-600 font-medium">{staffStats.early}</td>
+                        <td className="p-3 text-center text-green-600 font-medium">{staffStats.normal}</td>
+                        <td className="p-3 text-center text-purple-600 font-medium">{staffStats.late}</td>
+                        <td className="p-3 text-center text-gray-600 font-medium">{staffStats.off}</td>
+                        <td className="p-3 text-center text-blue-600 font-medium">{staffStats.workDays}</td>
+                        <td className="p-3 text-center text-orange-600 font-bold">{staffStats.vacationDays}</td>
+                        <td className="p-3 text-center text-purple-600 font-bold">{workloadPercentage}%</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+
+    {/* Staff Selection Modal */}
+    {showStaffEditModal && (
+      <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+        <div className="bg-white rounded-lg shadow-xl max-w-md w-full mx-4 p-6">
+          <div className="flex justify-between items-center mb-6">
+            <h3 className="text-lg font-bold text-gray-900">スタッフ選択 (Select Staff)</h3>
+            <button
+              onClick={() => setShowStaffEditModal(false)}
+              className="text-gray-400 hover:text-gray-600 text-2xl"
+            >
+              ×
+            </button>
+          </div>
+          
+          <div className="space-y-2 max-h-96 overflow-y-auto">
+            {getOrderedStaffMembers.map(staff => (
+              <button
+                key={staff.id}
+                onClick={() => {
+                  setSelectedStaffForEdit(staff);
+                  setEditingStaffData({
+                    name: staff.name,
+                    position: staff.position,
+                    status: staff.status || '社員',
+                    startPeriod: staff.startPeriod || { year: new Date().getFullYear(), month: new Date().getMonth() + 1, day: 1 },
+                    endPeriod: staff.endPeriod || (staff.status === '派遣' ? { year: new Date().getFullYear() + 1, month: new Date().getMonth() + 1, day: 1 } : null)
+                  });
+                }}
+                className="w-full text-left p-3 rounded-lg border border-gray-200 hover:border-blue-300 hover:bg-blue-50 transition-colors flex items-center justify-between"
+              >
+                <div>
+                  <div className="font-medium text-gray-900">{staff.name}</div>
+                  <div className="text-sm text-gray-500">{staff.position}</div>
+                  <div className="text-xs text-gray-400">
+                    {staff.status || '社員'} | 
+                    {staff.startPeriod ? ` ${staff.startPeriod.year}/${staff.startPeriod.month}/${staff.startPeriod.day || 1}` : ' -'} - 
+                    {staff.endPeriod ? ` ${staff.endPeriod.year}/${staff.endPeriod.month}/${staff.endPeriod.day || 1}` : ' 無期限'}
+                  </div>
+                </div>
+                <div className={`w-3 h-3 rounded-full ${staff.status === '社員' ? 'bg-blue-500' : 'bg-orange-500'}`}></div>
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
+    )}
+
+    {/* Staff Edit Form Modal */}
+    {(selectedStaffForEdit || isAddingNewStaff) && (
+      <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+        <div className="bg-white rounded-lg shadow-xl max-w-lg w-full mx-4 p-6">
+          <div className="flex justify-between items-center mb-6">
+            <h3 className="text-lg font-bold text-gray-900">
+              {isAddingNewStaff ? 'スタッフ追加 (Add Staff)' : 'スタッフ編集 (Edit Staff)'}
+            </h3>
+            <button
+              onClick={() => {
+                setSelectedStaffForEdit(null);
+                setIsAddingNewStaff(false);
+                setEditingStaffData({
+                  name: '',
+                  position: '',
+                  status: '社員',
+                  startPeriod: { year: new Date().getFullYear(), month: new Date().getMonth() + 1 },
+                  endPeriod: { year: new Date().getFullYear() + 1, month: new Date().getMonth() + 1 }
+                });
+              }}
+              className="text-gray-400 hover:text-gray-600 text-2xl"
+            >
+              ×
+            </button>
+          </div>
+          
+          <div className="space-y-4">
+            {/* Name Field */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                名前 (Name)
+              </label>
+              <input
+                type="text"
+                value={editingStaffData.name}
+                onChange={(e) => setEditingStaffData(prev => ({...prev, name: e.target.value}))}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                placeholder="スタッフ名を入力"
+              />
+            </div>
+
+            {/* Position Field */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                職位 (Position)
+              </label>
+              <input
+                type="text"
+                value={editingStaffData.position}
+                onChange={(e) => setEditingStaffData(prev => ({...prev, position: e.target.value}))}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                placeholder="職位を入力"
+              />
+            </div>
+
+            {/* Status Checkboxes */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                ステータス (Status)
+              </label>
+              <div className="flex space-x-4">
+                <label className="flex items-center">
+                  <input
+                    type="checkbox"
+                    checked={editingStaffData.status === '社員'}
+                    onChange={() => setEditingStaffData(prev => ({...prev, status: '社員'}))}
+                    className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                  />
+                  <span className="ml-2 text-sm text-gray-700">社員</span>
+                </label>
+                <label className="flex items-center">
+                  <input
+                    type="checkbox"
+                    checked={editingStaffData.status === '派遣'}
+                    onChange={() => setEditingStaffData(prev => ({...prev, status: '派遣'}))}
+                    className="w-4 h-4 text-orange-600 border-gray-300 rounded focus:ring-orange-500"
+                  />
+                  <span className="ml-2 text-sm text-gray-700">派遣</span>
+                </label>
+              </div>
+            </div>
+
+            {/* Start Period */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                開始期間 (Start Period)
+              </label>
+              <div className="flex space-x-2">
+                {editingStaffData.status === '派遣' ? (
+                  // For 派遣: Show current year only (fixed) + month + day selector
+                  <>
+                    <div className="flex-1 px-3 py-2 border border-gray-300 rounded-lg bg-gray-100 text-gray-700 text-center">
+                      {new Date().getFullYear()}年
+                    </div>
+                    <select
+                      value={editingStaffData.startPeriod.month}
+                      onChange={(e) => {
+                        const month = parseInt(e.target.value);
+                        const maxDays = getDaysInMonth(new Date().getFullYear(), month);
+                        const currentDay = editingStaffData.startPeriod.day > maxDays ? 1 : editingStaffData.startPeriod.day;
+                        setEditingStaffData(prev => ({
+                          ...prev, 
+                          startPeriod: {year: new Date().getFullYear(), month, day: currentDay}
+                        }));
+                      }}
+                      className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    >
+                      {Array.from({length: 12}, (_, i) => i + 1).map(month => (
+                        <option key={month} value={month}>{month}月</option>
+                      ))}
+                    </select>
+                    <select
+                      value={editingStaffData.startPeriod.day}
+                      onChange={(e) => setEditingStaffData(prev => ({
+                        ...prev, 
+                        startPeriod: {...prev.startPeriod, day: parseInt(e.target.value)}
+                      }))}
+                      className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    >
+                      {Array.from({length: getDaysInMonth(new Date().getFullYear(), editingStaffData.startPeriod.month)}, (_, i) => i + 1).map(day => (
+                        <option key={day} value={day}>{day}日</option>
+                      ))}
+                    </select>
+                  </>
+                ) : (
+                  // For 社員: Show full year range + month + day selector
+                  <>
+                    <select
+                      value={editingStaffData.startPeriod.year}
+                      onChange={(e) => {
+                        const year = parseInt(e.target.value);
+                        const maxDays = getDaysInMonth(year, editingStaffData.startPeriod.month);
+                        const currentDay = editingStaffData.startPeriod.day > maxDays ? 1 : editingStaffData.startPeriod.day;
+                        setEditingStaffData(prev => ({
+                          ...prev, 
+                          startPeriod: {...prev.startPeriod, year, day: currentDay}
+                        }));
+                      }}
+                      className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    >
+                      {Array.from({length: new Date().getFullYear() - 2014}, (_, i) => 2015 + i).map(year => (
+                        <option key={year} value={year}>{year}年</option>
+                      ))}
+                    </select>
+                    <select
+                      value={editingStaffData.startPeriod.month}
+                      onChange={(e) => {
+                        const month = parseInt(e.target.value);
+                        const maxDays = getDaysInMonth(editingStaffData.startPeriod.year, month);
+                        const currentDay = editingStaffData.startPeriod.day > maxDays ? 1 : editingStaffData.startPeriod.day;
+                        setEditingStaffData(prev => ({
+                          ...prev, 
+                          startPeriod: {...prev.startPeriod, month, day: currentDay}
+                        }));
+                      }}
+                      className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    >
+                      {Array.from({length: 12}, (_, i) => i + 1).map(month => (
+                        <option key={month} value={month}>{month}月</option>
+                      ))}
+                    </select>
+                    <select
+                      value={editingStaffData.startPeriod.day}
+                      onChange={(e) => setEditingStaffData(prev => ({
+                        ...prev, 
+                        startPeriod: {...prev.startPeriod, day: parseInt(e.target.value)}
+                      }))}
+                      className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    >
+                      {Array.from({length: getDaysInMonth(editingStaffData.startPeriod.year, editingStaffData.startPeriod.month)}, (_, i) => i + 1).map(day => (
+                        <option key={day} value={day}>{day}日</option>
+                      ))}
+                    </select>
+                  </>
+                )}
+              </div>
+            </div>
+
+            {/* End Period */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                終了期間 (End Period)
+              </label>
+              <div className="flex space-x-2">
+                {editingStaffData.status === '派遣' ? (
+                  // For 派遣: Show current year only (fixed) + month + day selector
+                  <>
+                    <div className="flex-1 px-3 py-2 border border-gray-300 rounded-lg bg-gray-100 text-gray-700 text-center">
+                      {new Date().getFullYear()}年
+                    </div>
+                    <select
+                      value={editingStaffData.endPeriod?.month || ''}
+                      onChange={(e) => {
+                        const month = parseInt(e.target.value);
+                        const maxDays = getDaysInMonth(new Date().getFullYear(), month);
+                        setEditingStaffData(prev => ({
+                          ...prev, 
+                          endPeriod: {year: new Date().getFullYear(), month, day: 1}
+                        }));
+                      }}
+                      className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    >
+                      <option value="">月を選択</option>
+                      {Array.from({length: 12}, (_, i) => i + 1).map(month => (
+                        <option key={month} value={month}>{month}月</option>
+                      ))}
+                    </select>
+                    {editingStaffData.endPeriod?.month && (
+                      <select
+                        value={editingStaffData.endPeriod?.day || ''}
+                        onChange={(e) => setEditingStaffData(prev => ({
+                          ...prev, 
+                          endPeriod: {...prev.endPeriod, day: parseInt(e.target.value)}
+                        }))}
+                        className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                      >
+                        {Array.from({length: getDaysInMonth(new Date().getFullYear(), editingStaffData.endPeriod.month)}, (_, i) => i + 1).map(day => (
+                          <option key={day} value={day}>{day}日</option>
+                        ))}
+                      </select>
+                    )}
+                  </>
+                ) : (
+                  // For 社員: Show year range (with unlimited option) + conditional month + day selector
+                  <>
+                    <select
+                      value={editingStaffData.endPeriod?.year || ''}
+                      onChange={(e) => {
+                        const year = e.target.value === '' ? null : parseInt(e.target.value);
+                        setEditingStaffData(prev => ({
+                          ...prev, 
+                          endPeriod: year ? {...(prev.endPeriod || {}), year, month: prev.endPeriod?.month || 1, day: prev.endPeriod?.day || 1} : null
+                        }));
+                      }}
+                      className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    >
+                      <option value="">-- (無期限)</option>
+                      {Array.from({length: 3}, (_, i) => new Date().getFullYear() + i).map(year => (
+                        <option key={year} value={year}>{year}年</option>
+                      ))}
+                    </select>
+                    {editingStaffData.endPeriod?.year && (
+                      <select
+                        value={editingStaffData.endPeriod?.month || ''}
+                        onChange={(e) => {
+                          const month = e.target.value === '' ? 1 : parseInt(e.target.value);
+                          const maxDays = getDaysInMonth(editingStaffData.endPeriod.year, month);
+                          const currentDay = editingStaffData.endPeriod.day > maxDays ? 1 : editingStaffData.endPeriod.day || 1;
+                          setEditingStaffData(prev => ({
+                            ...prev, 
+                            endPeriod: {...prev.endPeriod, month, day: currentDay}
+                          }));
+                        }}
+                        className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                      >
+                        {Array.from({length: 12}, (_, i) => i + 1).map(month => (
+                          <option key={month} value={month}>{month}月</option>
+                        ))}
+                      </select>
+                    )}
+                    {editingStaffData.endPeriod?.year && editingStaffData.endPeriod?.month && (
+                      <select
+                        value={editingStaffData.endPeriod?.day || ''}
+                        onChange={(e) => setEditingStaffData(prev => ({
+                          ...prev, 
+                          endPeriod: {...prev.endPeriod, day: parseInt(e.target.value)}
+                        }))}
+                        className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                      >
+                        {Array.from({length: getDaysInMonth(editingStaffData.endPeriod.year, editingStaffData.endPeriod.month)}, (_, i) => i + 1).map(day => (
+                          <option key={day} value={day}>{day}日</option>
+                        ))}
+                      </select>
+                    )}
+                    {!editingStaffData.endPeriod?.year && (
+                      <div className="flex-1 px-3 py-2 border border-gray-300 rounded-lg bg-gray-100 text-gray-500 text-center">
+                        無期限
+                      </div>
+                    )}
+                  </>
+                )}
+              </div>
+              {editingStaffData.status === '社員' && (
+                <p className="text-xs text-gray-500 mt-1">社員の場合、終了期間は無期限にできます</p>
+              )}
+              {editingStaffData.status === '派遣' && (
+                <p className="text-xs text-gray-500 mt-1">派遣の場合、{new Date().getFullYear()}年内での開始・終了期間を選択してください</p>
+              )}
+            </div>
+          </div>
+
+          {/* Action Buttons */}
+          <div className="flex justify-end space-x-3 mt-6 pt-4 border-t border-gray-200">
+            <button
+              onClick={() => {
+                setSelectedStaffForEdit(null);
+                setIsAddingNewStaff(false);
+                setEditingStaffData({
+                  name: '',
+                  position: '',
+                  status: '社員',
+                  startPeriod: { year: new Date().getFullYear(), month: new Date().getMonth() + 1 },
+                  endPeriod: { year: new Date().getFullYear() + 1, month: new Date().getMonth() + 1 }
+                });
+              }}
+              className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500"
+            >
+              キャンセル
+            </button>
+            <button
+              onClick={() => {
+                if (isAddingNewStaff) {
+                  // Create new staff member
+                  createNewStaff(editingStaffData);
+                } else {
+                  // Update existing staff member
+                  const updatedStaffMembers = staffMembers.map(staff => 
+                    staff.id === selectedStaffForEdit.id 
+                      ? { 
+                          ...staff, 
+                          name: editingStaffData.name,
+                          position: editingStaffData.position,
+                          status: editingStaffData.status,
+                          startPeriod: editingStaffData.startPeriod,
+                          endPeriod: editingStaffData.endPeriod
+                        }
+                      : staff
+                  );
+                  
+                  setStaffMembers(updatedStaffMembers);
+                  
+                  // Auto-save to database
+                  scheduleAutoSave(schedule, updatedStaffMembers);
+                }
+                
+                // Close modal
+                setSelectedStaffForEdit(null);
+                setIsAddingNewStaff(false);
+                setShowStaffEditModal(false);
+                setEditingStaffData({
+                  name: '',
+                  position: '',
+                  status: '社員',
+                  startPeriod: { year: new Date().getFullYear(), month: new Date().getMonth() + 1 },
+                  endPeriod: { year: new Date().getFullYear() + 1, month: new Date().getMonth() + 1 }
+                });
+              }}
+              className="px-4 py-2 text-sm font-medium text-white bg-blue-600 border border-transparent rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+            >
+              {isAddingNewStaff ? '追加' : '保存'}
+            </button>
+          </div>
+        </div>
+      </div>
+    )}
+
+
+    </>
+  );
+};
+
+export default ShiftScheduleEditor;
