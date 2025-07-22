@@ -81,11 +81,6 @@ const ShiftScheduleEditor = () => {
       }
     });
 
-    console.log('Schedule ID migration:', {
-      originalKeys: Object.keys(scheduleData),
-      migratedKeys: Object.keys(migratedSchedule),
-      mappingApplied: Object.keys(scheduleData).filter(key => oldIdToNewIdMapping[key]).length
-    });
 
     return migratedSchedule;
   };
@@ -261,7 +256,6 @@ const ShiftScheduleEditor = () => {
     const staff = staffMembers.find(s => s.name === staffName);
     const is社員 = staff?.status === '社員';
     
-    // console.log('getDropdownOrder:', { staffName, staff: staff?.name, status: staff?.status, is社員 });
     
     if (is社員) {
       // 社員 staff get late shift option
@@ -547,7 +541,7 @@ const ShiftScheduleEditor = () => {
             }
           }
         } catch (error) {
-          console.warn('Error focusing input:', error);
+          // Silently handle focus errors
         }
       }, 150);
     }
@@ -595,10 +589,8 @@ const ShiftScheduleEditor = () => {
         });
         
         if (hasMatchingDates) {
-          console.log(`Found database data for month ${currentMonthIndex}, using it instead of initializing empty`);
           setSchedule(migratedScheduleData);
         } else {
-          console.log(`No database data for month ${currentMonthIndex}, initializing empty schedule`);
           setSchedule(initializeSchedule(currentMonthIndex));
         }
       } else {
@@ -717,40 +709,16 @@ const ShiftScheduleEditor = () => {
       // Remove the _staff_members key from schedule data before setting
       const { _staff_members, ...actualScheduleData } = scheduleDataFromDb;
       
-      // Debug: Check schedule data structure
-      console.log('Database schedule data structure (before migration):', {
-        actualScheduleData,
-        hasScheduleData: !!actualScheduleData,
-        scheduleKeys: Object.keys(actualScheduleData || {}),
-        sampleStaffData: Object.keys(actualScheduleData || {}).slice(0, 3).map(key => ({
-          staffId: key,
-          data: actualScheduleData[key]
-        }))
-      });
-      
       // Migrate old staff IDs to new UUIDs
       const migratedScheduleData = migrateScheduleIds(actualScheduleData);
-      
-      console.log('Database schedule data structure (after migration):', {
-        migratedScheduleData,
-        hasScheduleData: !!migratedScheduleData,
-        scheduleKeys: Object.keys(migratedScheduleData || {}),
-        sampleStaffData: Object.keys(migratedScheduleData || {}).slice(0, 3).map(key => ({
-          staffId: key,
-          data: migratedScheduleData[key]
-        }))
-      });
       
       // Only update schedule if it's actually different
       const currentScheduleStr = JSON.stringify(schedule);
       const newScheduleStr = JSON.stringify(migratedScheduleData);
       
       if (currentScheduleStr !== newScheduleStr) {
-        console.log('Updating schedule with migrated database data');
         setSchedule(migratedScheduleData);
         saveToLocalStorage(STORAGE_KEYS.SCHEDULE, migratedScheduleData);
-      } else {
-        console.log('Schedule data is identical, no update needed');
       }
       
       // Only update schedule ID if it's different
@@ -917,7 +885,6 @@ const ShiftScheduleEditor = () => {
           }
         }
       } catch (error) {
-        console.warn('Error in handleClickOutside:', error);
         // Reset states on error to prevent stuck modals
         setShowDropdown(null);
         setShowMonthPicker(false);
@@ -927,14 +894,14 @@ const ShiftScheduleEditor = () => {
     try {
       document.addEventListener('click', handleClickOutside);
     } catch (error) {
-      console.warn('Error adding click listener:', error);
+      // Silently handle click listener errors
     }
     
     return () => {
       try {
         document.removeEventListener('click', handleClickOutside);
       } catch (error) {
-        console.warn('Error removing click listener:', error);
+        // Silently handle click listener errors
       }
     };
   }, [showDropdown, showMonthPicker, editingColumn, editingSpecificColumn]);
@@ -1150,17 +1117,9 @@ const ShiftScheduleEditor = () => {
   };
 
   const editColumnName = (staffId, newName) => {
-    console.log(`editColumnName called with staffId: ${staffId}, newName: ${newName}`);
-    const oldStaff = staffMembers.find(s => s.id === staffId);
-    console.log(`Old staff member:`, oldStaff);
-    
     const newStaffMembers = staffMembers.map(staff => 
       staff.id === staffId ? { ...staff, name: newName } : staff
     );
-    
-    const updatedStaff = newStaffMembers.find(s => s.id === staffId);
-    console.log(`Updated staff member:`, updatedStaff);
-    console.log('All updated staff members:', newStaffMembers);
     
     setStaffMembers(newStaffMembers);
     
@@ -1217,10 +1176,8 @@ const ShiftScheduleEditor = () => {
         setCurrentScheduleId(savedSchedule.id);
       }
       
-      console.log('Manual save successful');
       
     } catch (err) {
-      console.error('Failed to save schedule:', err);
       const errorMessage = err?.message || err?.error?.message || String(err);
       alert(`保存エラー: ${errorMessage}`);
     }
@@ -1264,7 +1221,6 @@ const ShiftScheduleEditor = () => {
       // Clean up blob URL
       URL.revokeObjectURL(link.href);
     } catch (error) {
-      console.error('Error exporting CSV:', error);
       alert('CSV export failed. Please try again.');
     }
   };
@@ -1341,7 +1297,6 @@ const ShiftScheduleEditor = () => {
         URL.revokeObjectURL(url);
       }
     } catch (error) {
-      console.error('Error printing:', error);
       alert('Print failed. Please try again.');
     }
   };
@@ -1467,7 +1422,6 @@ const ShiftScheduleEditor = () => {
           <button 
             onClick={() => {
               // TODO: Implement fullscreen toggle functionality
-              console.log('Toggle fullscreen clicked');
             }}
             className="flex items-center px-3 py-2 h-10 text-sm font-medium rounded-lg border border-gray-300 bg-white hover:border-gray-400 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500 transition-all duration-200"
             title="Toggle Fullscreen"
@@ -1503,10 +1457,6 @@ const ShiftScheduleEditor = () => {
                   // Migrate IDs
                   const migratedScheduleData = migrateScheduleIds(oldScheduleData);
                   
-                  console.log('Force migration - Converting old IDs to UUIDs:', {
-                    oldKeys: Object.keys(oldScheduleData),
-                    newKeys: Object.keys(migratedScheduleData)
-                  });
                   
                   // Update local state
                   setSchedule(migratedScheduleData);
@@ -1526,7 +1476,6 @@ const ShiftScheduleEditor = () => {
                   alert('⚠️ No database schedule data found to migrate.');
                 }
               } catch (error) {
-                console.error('Migration error:', error);
                 alert('❌ Error during migration: ' + error.message);
               }
             }}
@@ -1555,14 +1504,11 @@ const ShiftScheduleEditor = () => {
               try {
                 // 1. Clear all localStorage
                 localStorage.clear();
-                console.log('✅ Cleared all localStorage');
                 
                 // 2. Delete ALL database schedule data
                 try {
                   await deleteAllSchedulesData();
-                  console.log('✅ Deleted all database records');
                 } catch (dbError) {
-                  console.warn('Warning: Could not delete database records:', dbError);
                   // Continue with local cleanup even if database deletion fails
                 }
                 
@@ -1580,18 +1526,15 @@ const ShiftScheduleEditor = () => {
                 setShowStaffEditModal(false);
                 setSelectedStaffForEdit(null);
                 setIsAddingNewStaff(false);
-                console.log('✅ Reset all local state');
                 
                 // 4. Clear React Query cache
                 clearError();
-                console.log('✅ Cleared React Query cache');
                 
                 // 5. Force page reload to ensure clean state
                 alert('✅ All data cleared successfully! Page will reload for clean state.');
                 window.location.reload();
                 
               } catch (error) {
-                console.error('Reset error:', error);
                 alert('❌ Error during reset: ' + error.message);
               }
             }}
@@ -1606,7 +1549,6 @@ const ShiftScheduleEditor = () => {
           <button 
             onClick={() => {
               // TODO: Implement AI functionality
-              console.log('AI button clicked');
             }}
             className="flex items-center px-3 py-2 h-10 text-sm font-medium rounded-lg border border-gray-300 bg-white hover:border-gray-400 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500 transition-all duration-200"
             title="AI Assistant"
@@ -1618,7 +1560,6 @@ const ShiftScheduleEditor = () => {
           <button 
             onClick={() => {
               // TODO: Implement add table functionality
-              console.log('Add table clicked');
             }}
             className="flex items-center px-3 py-2 h-10 text-sm font-medium rounded-lg border border-gray-300 bg-white hover:border-gray-400 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500 transition-all duration-200"
             title="Add Table"
@@ -1862,19 +1803,6 @@ const ShiftScheduleEditor = () => {
                     const staffSchedule = schedule[staff.id];
                     const shift = staffSchedule && staffSchedule[dateKey] ? staffSchedule[dateKey] : '';
                     
-                    // Debug: Check if data exists for this staff/date combination
-                    if (dateIndex === 0 && staffIndex === 0) { // Log only for first cell to avoid spam
-                      console.log('Cell data check:', {
-                        staffName: staff.name,
-                        staffId: staff.id,
-                        dateKey,
-                        hasScheduleForStaff: !!schedule[staff.id],
-                        scheduleKeys: Object.keys(schedule),
-                        staffScheduleKeys: staffSchedule ? Object.keys(staffSchedule) : 'No schedule',
-                        shift,
-                        actualShiftData: staffSchedule ? staffSchedule[dateKey] : 'No staff schedule'
-                      });
-                    }
                     
                     // Ensure shift is always a string and handle any objects
                     let shiftValue;
@@ -1883,7 +1811,6 @@ const ShiftScheduleEditor = () => {
                         shiftValue = shift;
                       } else if (shift && typeof shift === 'object') {
                         if (shift instanceof Error) {
-                          console.warn('Error object found in schedule data:', shift);
                           shiftValue = 'normal';
                         } else {
                           shiftValue = shift.toString ? shift.toString() : 'normal';
@@ -1892,7 +1819,6 @@ const ShiftScheduleEditor = () => {
                         shiftValue = String(shift);
                       }
                     } catch (e) {
-                      console.warn('Error processing shift value:', shift, e);
                       shiftValue = 'normal';
                     }
                     
@@ -1963,7 +1889,6 @@ const ShiftScheduleEditor = () => {
                               } ${isDropdownOpen ? '' : 'hover:bg-gray-50'}`}
                               style={{ fontSize: shiftSymbols[shiftValue] ? '1.5rem' : '1rem' }}
                               onClick={(e) => {
-                                console.log('DIV clicked!', staff.id, dateKey, 'Position:', dropdownPosition, 'Column:', staffIndex + 1);
                                 e.stopPropagation();
                                 handleCellClick(staff.id, dateKey);
                               }}
@@ -1990,7 +1915,6 @@ const ShiftScheduleEditor = () => {
                             {getDropdownOrder(staffIndex + 1, staff.name).map((key) => {
                               const value = shiftSymbols[key];
                               if (!value) {
-                                console.warn('Missing shift symbol for key:', key);
                                 return null;
                               }
                               return (
