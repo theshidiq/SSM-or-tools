@@ -86,6 +86,32 @@ const scheduleOperations = {
     }
   },
 
+  // Delete schedule
+  deleteSchedule: async (scheduleId) => {
+    if (!scheduleId) {
+      throw new Error('Schedule ID is required for deletion');
+    }
+    
+    const { error } = await supabase
+      .from('schedules')
+      .delete()
+      .eq('id', scheduleId);
+    
+    if (error) throw error;
+    return true;
+  },
+
+  // Delete all schedules (for complete reset)
+  deleteAllSchedules: async () => {
+    const { error } = await supabase
+      .from('schedules')
+      .delete()
+      .gte('id', 0); // Delete all records
+    
+    if (error) throw error;
+    return true;
+  },
+
   // Check connection
   checkConnection: async () => {
     const { data, error } = await supabase.from('schedules').select('count').limit(1);
@@ -111,6 +137,23 @@ export const useScheduleQuery = (scheduleId = null) => {
     cacheTime: 5 * 60 * 1000, // 5 minutes
     refetchInterval: 60 * 1000, // Refetch every minute for real-time sync
     refetchIntervalInBackground: false,
+  });
+
+  // Mutation for deleting schedule data
+  const deleteMutation = useMutation({
+    mutationFn: scheduleOperations.deleteSchedule,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: QUERY_KEYS.schedules });
+    },
+  });
+
+  // Mutation for deleting all schedules
+  const deleteAllMutation = useMutation({
+    mutationFn: scheduleOperations.deleteAllSchedules,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: QUERY_KEYS.schedules });
+      queryClient.clear(); // Clear all cached data
+    },
   });
 
   // Mutation for saving schedule data with optimistic updates
@@ -228,6 +271,8 @@ export const useScheduleQuery = (scheduleId = null) => {
     // Functions
     saveSchedule: (scheduleData, targetScheduleId) => 
       saveMutation.mutateAsync({ scheduleData, scheduleId: targetScheduleId }),
+    deleteSchedule: (scheduleId) => deleteMutation.mutateAsync(scheduleId),
+    deleteAllSchedules: () => deleteAllMutation.mutateAsync(),
     autoSave,
     refetch,
     

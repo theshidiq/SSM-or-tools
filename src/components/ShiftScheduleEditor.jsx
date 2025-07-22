@@ -39,6 +39,8 @@ const ShiftScheduleEditor = () => {
     isSaving,
     error,
     saveSchedule: saveScheduleData,
+    deleteSchedule: deleteScheduleData,
+    deleteAllSchedules: deleteAllSchedulesData,
     autoSave,
     clearError,
     lastSyncTime
@@ -633,14 +635,37 @@ const ShiftScheduleEditor = () => {
       saveToLocalStorage(STORAGE_KEYS.STAFF_BY_MONTH, updatedStaffByMonth);
     }
     
-    // Load schedule for new month (either from cache or initialize new)
+    // Load schedule for new month (either from cache, database data, or initialize new)
     const savedSchedule = schedulesByMonth[currentMonthIndex];
     const savedStaffMembers = staffMembersByMonth[currentMonthIndex];
     
     if (savedSchedule) {
       setSchedule(savedSchedule);
     } else {
-      setSchedule(initializeSchedule(currentMonthIndex));
+      // Check if we have database data that matches current month dates
+      if (supabaseScheduleData && supabaseScheduleData.schedule_data) {
+        const { _staff_members, ...actualScheduleData } = supabaseScheduleData.schedule_data;
+        const migratedScheduleData = migrateScheduleIds(actualScheduleData);
+        
+        // Check if database data has dates that match current month range
+        const currentDateRange = generateDateRange(currentMonthIndex);
+        const hasMatchingDates = currentDateRange.some(date => {
+          const dateKey = format(date, 'yyyy-MM-dd');
+          return Object.keys(migratedScheduleData).some(staffId => 
+            migratedScheduleData[staffId] && migratedScheduleData[staffId][dateKey]
+          );
+        });
+        
+        if (hasMatchingDates) {
+          console.log(`Found database data for month ${currentMonthIndex}, using it instead of initializing empty`);
+          setSchedule(migratedScheduleData);
+        } else {
+          console.log(`No database data for month ${currentMonthIndex}, initializing empty schedule`);
+          setSchedule(initializeSchedule(currentMonthIndex));
+        }
+      } else {
+        setSchedule(initializeSchedule(currentMonthIndex));
+      }
     }
     
     if (savedStaffMembers) {
@@ -1577,6 +1602,71 @@ const ShiftScheduleEditor = () => {
             disabled={isSaving}
           >
             <Settings size={16} className="text-blue-600 hover:text-blue-700" />
+          </button>
+
+          {/* Complete Reset Button */}
+          <button 
+            onClick={async () => {
+              const confirmed = window.confirm(
+                '⚠️ WARNING: This will completely delete ALL data!\n\n' +
+                '• All database schedule data\n' +
+                '• All localStorage cache\n' +
+                '• All month schedules\n' +
+                '• Staff configurations\n\n' +
+                'This action cannot be undone!\n\n' +
+                'Are you absolutely sure you want to proceed?'
+              );
+              
+              if (!confirmed) return;
+              
+              try {
+                // 1. Clear all localStorage
+                localStorage.clear();
+                console.log('✅ Cleared all localStorage');
+                
+                // 2. Delete ALL database schedule data
+                try {
+                  await deleteAllSchedulesData();
+                  console.log('✅ Deleted all database records');
+                } catch (dbError) {
+                  console.warn('Warning: Could not delete database records:', dbError);
+                  // Continue with local cleanup even if database deletion fails
+                }
+                
+                // 3. Reset all local state
+                setSchedule(initializeSchedule(currentMonthIndex));
+                setSchedulesByMonth({});
+                setStaffMembersByMonth({});
+                setStaffMembers(defaultStaffMembersArray);
+                setCurrentScheduleId(null);
+                setEditingCell(null);
+                setShowDropdown(null);
+                setEditingColumn(null);
+                setEditingSpecificColumn(null);
+                setEditingNames({});
+                setShowStaffEditModal(false);
+                setSelectedStaffForEdit(null);
+                setIsAddingNewStaff(false);
+                console.log('✅ Reset all local state');
+                
+                // 4. Clear React Query cache
+                clearError();
+                console.log('✅ Cleared React Query cache');
+                
+                // 5. Force page reload to ensure clean state
+                alert('✅ All data cleared successfully! Page will reload for clean state.');
+                window.location.reload();
+                
+              } catch (error) {
+                console.error('Reset error:', error);
+                alert('❌ Error during reset: ' + error.message);
+              }
+            }}
+            className="flex items-center px-3 py-2 h-10 text-sm font-medium rounded-lg border border-red-300 bg-red-50 hover:bg-red-100 hover:border-red-400 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 transition-all duration-200"
+            title="⚠️ DANGER: Completely delete all data and start fresh"
+            disabled={isSaving}
+          >
+            <Trash2 size={16} className="text-red-600 hover:text-red-700" />
           </button>
           
           {/* AI Assistant Button */}
