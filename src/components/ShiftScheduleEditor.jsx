@@ -238,13 +238,13 @@ const ShiftScheduleEditor = () => {
 
   // Shift symbols
   const shiftSymbols = {
-    early: { symbol: '△', label: 'Early Shift', time: '10:00-18:00', color: 'text-blue-600' },
-    normal: { symbol: '－', label: 'Normal Shift', time: '11:00-20:00', color: 'text-gray-600' },
-    late: { symbol: '◇', label: 'Late Shift', time: '15:00-23:00', color: 'text-purple-600' },
-    special: { symbol: '●', label: 'Special Shift', time: '12:00-21:00', color: 'text-green-600' },
-    off: { symbol: '×', label: 'Day Off', time: 'Rest Day', color: 'text-red-600' },
-    holiday: { symbol: '★', label: 'Designated Holiday', time: 'Public Holiday', color: 'text-yellow-600' },
-    unavailable: { symbol: '⊘', label: 'Unavailable', time: 'Not Available', color: 'text-red-800' }
+    early: { symbol: '△', label: 'Early Shift', color: 'text-blue-600' },
+    normal: { symbol: '－', label: 'Normal Shift', color: 'text-gray-600' },
+    late: { symbol: '◇', label: 'Late Shift', color: 'text-purple-600' },
+    special: { symbol: '●', label: 'Special Shift', color: 'text-green-600' },
+    off: { symbol: '×', label: 'Day Off', color: 'text-red-600' },
+    holiday: { symbol: '★', label: 'Designated Holiday', color: 'text-yellow-600' },
+    unavailable: { symbol: '⊘', label: 'Unavailable', color: 'text-red-800' }
   };
 
   // Dropdown order: normal shift, day off, early shift, designated holiday, special shift
