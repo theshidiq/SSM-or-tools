@@ -237,6 +237,8 @@ const ShiftScheduleEditor = () => {
     normal: { symbol: '－', label: 'Normal Shift', color: 'text-gray-600' },
     late: { symbol: '◇', label: 'Late Shift', color: 'text-purple-600' },
     special: { symbol: '●', label: 'Special Shift', color: 'text-green-600' },
+    medamayaki: { symbol: '◎', label: '目玉焼き', color: 'text-orange-600' },
+    zensai: { symbol: '▣', label: '前菜', color: 'text-teal-600' },
     off: { symbol: '×', label: 'Day Off', color: 'text-red-600' },
     holiday: { symbol: '★', label: 'Designated Holiday', color: 'text-yellow-600' },
     unavailable: { symbol: '⊘', label: 'Unavailable', color: 'text-red-800' }
@@ -258,10 +260,10 @@ const ShiftScheduleEditor = () => {
     
     
     if (is社員) {
-      // 社員 staff get late shift option
-      return ['normal', 'off', 'early', 'late', 'holiday'];
+      // 社員 staff get late shift + new options (目玉焼き, 前菜)
+      return ['normal', 'off', 'early', 'late', 'medamayaki', 'zensai', 'holiday'];
     } else {
-      // 派遣 staff get standard options (no late shift)
+      // 派遣 staff get standard options (no late shift, no special symbols)
       return ['normal', 'off', 'early', 'holiday'];
     }
   };
