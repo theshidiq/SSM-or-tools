@@ -960,7 +960,8 @@ const ShiftScheduleEditor = () => {
       } else if (shift === 'off' || shift === 'unavailable' || shift === 'holiday') {
         vacationDays += 1; // ×, ⊘, and ★ = 1 day
       }
-      // ○ = 0 days (no vacation)
+      // ○, ◇, ◎, ▣ = 0 days (no vacation)
+      // medamayaki and zensai don't count as vacation days
     });
     return vacationDays;
   };
@@ -995,6 +996,7 @@ const ShiftScheduleEditor = () => {
         const shift = staffSchedule && staffSchedule[dateKey] ? staffSchedule[dateKey] : '';
         
         // Count shifts with mapping: special->normal, unavailable->off, holiday->off
+        // Exclude medamayaki and zensai from all statistics
         let countedShift = shift;
         if (shift === 'special') {
           countedShift = 'normal';
@@ -1002,6 +1004,9 @@ const ShiftScheduleEditor = () => {
           countedShift = 'off';
         } else if (shift === 'late') {
           countedShift = 'late'; // Keep late shift as separate count
+        } else if (shift === 'medamayaki' || shift === 'zensai') {
+          // Skip counting these special symbols
+          return;
         }
         
         // Only count known shift types
@@ -1010,8 +1015,9 @@ const ShiftScheduleEditor = () => {
           stats.staffStats[staff.id][countedShift]++;
         }
         
-        // Count work days (exclude off, unavailable, and holiday)
-        if (shift !== 'off' && shift !== 'unavailable' && shift !== 'holiday') {
+        // Count work days (exclude off, unavailable, holiday, medamayaki, zensai)
+        if (shift !== 'off' && shift !== 'unavailable' && shift !== 'holiday' && 
+            shift !== 'medamayaki' && shift !== 'zensai') {
           stats.staffStats[staff.id].workDays++;
         }
       });
