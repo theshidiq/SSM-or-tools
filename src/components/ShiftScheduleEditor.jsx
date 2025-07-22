@@ -1872,7 +1872,6 @@ const ShiftScheduleEditor = () => {
                         scheduleKeys: Object.keys(schedule),
                         staffScheduleKeys: staffSchedule ? Object.keys(staffSchedule) : 'No schedule',
                         shift,
-                        defaultShift,
                         actualShiftData: staffSchedule ? staffSchedule[dateKey] : 'No staff schedule'
                       });
                     }
