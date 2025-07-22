@@ -341,77 +341,15 @@ const ShiftScheduleEditor = () => {
       scheduleData[staffId] = {};
     });
     
-    // For July-August (index 6), use the existing detailed data
-    if (monthIndex === 6) {
-      // ACCURATE initialData based on provided shift schedule images
-      // Staff order: [料理長, 井関, 与儀, 田辺, 古藤, 小池, 岸, カマル, 高野, 安井, 中田]
-      // Symbols: ○ = normal shift (green), △ = early shift (blue), × = day off (red)
-      const initialData = {
-        // JULY 2025 - Exact data from reference images
-        '2025-07-21': ['○', '○', '○', '○', '○', '×', '○', '×', '○', '×', '○'], // Sun: 小池×, カマル×, 安井×
-        '2025-07-22': ['○', '○', '×', '○', '○', '○', '×', '○', '○', '○', '○'], // Mon: 与儀×, 岸×
-        '2025-07-23': ['×', '○', '○', '×', '○', '○', '○', '○', '×', '○', '○'], // Tue: 料理長×, 田辺×, 高野×
-        '2025-07-24': ['○', '×', '○', '○', '×', '○', '○', '○', '○', '×', '○'], // Wed: 井関×, 古藤×, 安井×
-        '2025-07-25': ['○', '○', '○', '○', '○', '○', '×', '×', '○', '○', '○'], // Thu: 岸×, カマル×
-        '2025-07-26': ['○', '○', '○', '○', '○', '×', '○', '○', '×', '○', '○'], // Fri: 小池×, 高野×
-        '2025-07-27': ['△', '○', '×', '△', '○', '○', '○', '○', '○', '○', '○'], // Sat: 料理長△, 与儀×, 田辺△
-        '2025-07-28': ['○', '×', '○', '○', '△', '○', '○', '○', '○', '×', '○'], // Sun: 井関×, 古藤△, 安井×
-        '2025-07-29': ['△', '○', '△', '○', '○', '×', '○', '○', '○', '○', '○'], // Mon: 料理長△, 与儀△, 小池×
-        '2025-07-30': ['○', '○', '○', '×', '○', '○', '○', '×', '○', '○', '○'], // Tue: 田辺×, カマル×
-        '2025-07-31': ['×', '○', '○', '○', '○', '○', '×', '○', '×', '○', '○'], // Wed: 料理長×, 岸×, 高野×
-        
-        // AUGUST 2025 - Exact data from reference images  
-        '2025-08-01': ['○', '○', '○', '○', '○', '○', '○', '○', '○', '○', '○'], // Thu: All normal shifts
-        '2025-08-02': ['○', '○', '○', '○', '○', '○', '○', '○', '○', '○', '○'], // Fri: All normal shifts
-        '2025-08-03': ['○', '△', '×', '○', '○', '○', '○', '○', '○', '○', '○'], // Sat: 井関△, 与儀×
-        '2025-08-04': ['○', '×', '○', '○', '○', '×', '○', '×', '○', '○', '○'], // Sun: 井関×, 小池×, カマル×
-        '2025-08-05': ['○', '○', '○', '○', '○', '○', '○', '×', '○', '×', '○'], // Mon: カマル×, 安井×
-        '2025-08-06': ['○', '△', '○', '○', '○', '○', '○', '×', '○', '×', '○'], // Tue: 井関△, カマル×, 安井×
-        '2025-08-07': ['×', '○', '×', '○', '○', '○', '○', '○', '○', '○', '○'], // Wed: 料理長×, 与儀×
-        '2025-08-08': ['○', '○', '×', '○', '○', '×', '○', '×', '○', '○', '○'], // Thu: 与儀×, 小池×, カマル×
-        '2025-08-09': ['○', '△', '○', '○', '○', '×', '○', '×', '○', '×', '○'], // Fri: 井関△, 小池×, カマル×, 安井×
-        '2025-08-10': ['△', '○', '○', '○', '○', '○', '○', '×', '○', '○', '○'], // Sat: 料理長△, カマル×
-        '2025-08-11': ['○', '×', '×', '○', '○', '○', '○', '○', '○', '○', '○'], // Sun: 井関×, 与儀×
-        '2025-08-12': ['×', '○', '×', '○', '○', '○', '○', '○', '○', '×', '○'], // Mon: 料理長×, 与儀×, 安井×
-        '2025-08-13': ['△', '○', '○', '○', '○', '×', '○', '○', '○', '×', '○'], // Tue: 料理長△, 小池×, 安井×
-        '2025-08-14': ['○', '○', '○', '○', '○', '×', '○', '×', '○', '×', '○'], // Wed: 小池×, カマル×, 安井×
-        '2025-08-15': ['○', '×', '×', '○', '○', '○', '○', '○', '○', '○', '○'], // Thu: 井関×, 与儀×
-        '2025-08-16': ['○', '○', '○', '○', '○', '○', '○', '×', '○', '○', '○'], // Fri: カマル×
-        '2025-08-17': ['△', '○', '×', '○', '○', '○', '○', '○', '○', '×', '○'], // Sat: 料理長△, 与儀×, 安井×
-        '2025-08-18': ['○', '○', '○', '○', '○', '×', '○', '△', '○', '○', '○'], // Sun: 小池×, カマル△
-        '2025-08-19': ['○', '×', '○', '○', '○', '○', '○', '△', '×', '×', '○'], // Mon: 井関×, カマル△, 高野×, 安井×
-        '2025-08-20': ['○', '○', '×', '○', '○', '△', '○', '×', '○', '○', '○']  // Tue: 与儀×, 小池△, カマル×
-      };
-
-      // Convert symbol to shift type
-      const symbolToShift = {
-        '○': 'normal',
-        '△': 'early', 
-        '×': 'off',
-        '': 'normal' // Default for empty strings
-      };
-      
-      // Populate data for each date
-      Object.entries(initialData).forEach(([date, staffShifts]) => {
-        staffShifts.forEach((symbol, staffIndex) => {
-          const staffId = staffIds[staffIndex];
-          const shiftType = symbolToShift[symbol] || 'normal';
-          scheduleData[staffId][date] = shiftType;
-        });
+    // For all months, create completely blank schedule that user can fill
+    const currentRange = generateDateRange(monthIndex);
+    currentRange.forEach(date => {
+      const dateKey = format(date, 'yyyy-MM-dd');
+      staffIds.forEach(staffId => {
+        // Leave completely blank - no default values
+        scheduleData[staffId][dateKey] = '';
       });
-    } else {
-      // For other months, create empty schedule that user can fill
-      const currentRange = generateDateRange(monthIndex);
-      currentRange.forEach(date => {
-        const dateKey = format(date, 'yyyy-MM-dd');
-        staffIds.forEach(staffId => {
-          // Get staff name to determine default shift
-          const staff = staffMembers.find(s => s.id === staffId);
-          const defaultShift = staff?.name === '中田' ? 'unavailable' : 'normal';
-          scheduleData[staffId][dateKey] = defaultShift;
-        });
-      });
-    }
+    });
     
     return scheduleData;
   };
@@ -1046,9 +984,7 @@ const ShiftScheduleEditor = () => {
       const dateKey = format(date, 'yyyy-MM-dd');
       // Safe access to schedule data
       const staffSchedule = schedule[staffId];
-      const staff = staffMembers.find(s => s.id === staffId);
-      const defaultShift = staff?.name === '中田' ? 'unavailable' : 'normal';
-      const shift = staffSchedule && staffSchedule[dateKey] ? staffSchedule[dateKey] : defaultShift;
+      const shift = staffSchedule && staffSchedule[dateKey] ? staffSchedule[dateKey] : '';
       
       if (shift === 'early') {
         vacationDays += 0.5; // △ = 0.5 days
@@ -1087,8 +1023,7 @@ const ShiftScheduleEditor = () => {
         const dateKey = format(date, 'yyyy-MM-dd');
         // Safe access to schedule data
         const staffSchedule = schedule[staff.id];
-        const defaultShift = staff.name === '中田' ? 'unavailable' : 'normal';
-        const shift = staffSchedule && staffSchedule[dateKey] ? staffSchedule[dateKey] : defaultShift;
+        const shift = staffSchedule && staffSchedule[dateKey] ? staffSchedule[dateKey] : '';
         
         // Count shifts with mapping: special->normal, unavailable->off, holiday->off
         let countedShift = shift;
@@ -1201,8 +1136,7 @@ const ShiftScheduleEditor = () => {
     // Initialize all dates for the new staff member
     dateRange.forEach(date => {
       const dateKey = format(date, 'yyyy-MM-dd');
-      const defaultShift = newStaff.name === '中田' ? 'unavailable' : 'normal';
-      newSchedule[newStaffId][dateKey] = defaultShift;
+      newSchedule[newStaffId][dateKey] = ''; // Start with blank
     });
     
     setSchedule(newSchedule);
@@ -1308,9 +1242,8 @@ const ShiftScheduleEditor = () => {
           if (!isDateWithinWorkPeriod(date, staff)) {
             return '-'; // Show dash for dates outside work period
           }
-          const defaultShift = staff.name === '中田' ? 'unavailable' : 'normal';
-          const shift = schedule[staff.id]?.[dateKey] || defaultShift;
-          return shiftSymbols[shift].symbol;
+          const shift = schedule[staff.id]?.[dateKey] || '';
+          return shift ? shiftSymbols[shift]?.symbol || '' : '';
         })
       ];
       rows.push(row);
@@ -1373,9 +1306,9 @@ const ShiftScheduleEditor = () => {
                       if (!isDateWithinWorkPeriod(date, staff)) {
                         return '<td class="not-working">-</td>'; // Show dash for dates outside work period
                       }
-                      const defaultShift = staff.name === '中田' ? 'unavailable' : 'normal';
-                      const shift = schedule[staff.id]?.[dateKey] || defaultShift;
-                      return `<td class="${shift}">${shiftSymbols[shift].symbol}</td>`;
+                      const shift = schedule[staff.id]?.[dateKey] || '';
+                      const symbol = shift ? shiftSymbols[shift]?.symbol || '' : '';
+                      return `<td class="${shift}">${symbol}</td>`;
                     }).join('')}
                   </tr>
                 `;
@@ -1927,8 +1860,7 @@ const ShiftScheduleEditor = () => {
                     
                     // Safe access to schedule data
                     const staffSchedule = schedule[staff.id];
-                    const defaultShift = staff.name === '中田' ? 'unavailable' : 'normal';
-                    const shift = staffSchedule && staffSchedule[dateKey] ? staffSchedule[dateKey] : defaultShift;
+                    const shift = staffSchedule && staffSchedule[dateKey] ? staffSchedule[dateKey] : '';
                     
                     // Debug: Check if data exists for this staff/date combination
                     if (dateIndex === 0 && staffIndex === 0) { // Log only for first cell to avoid spam
