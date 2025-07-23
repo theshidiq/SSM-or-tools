@@ -47,43 +47,6 @@ const ShiftScheduleEditor = () => {
   } = useScheduleQuery(currentScheduleId);
   
 
-  // Mapping from old string IDs to new UUIDs
-  const oldIdToNewIdMapping = {
-    'chef': '01934d2c-8a7b-7000-8000-1a2b3c4d5e6f',      // 料理長
-    'iseki': '01934d2c-8a7b-7001-8001-2b3c4d5e6f7a',     // 井関
-    'yogi': '01934d2c-8a7b-7002-8002-3c4d5e6f7a8b',      // 与儀
-    'tanabe': '01934d2c-8a7b-7003-8003-4d5e6f7a8b9c',    // 田辺
-    'koto': '01934d2c-8a7b-7004-8004-5e6f7a8b9c0d',      // 古藤
-    'koike': '01934d2c-8a7b-7005-8005-6f7a8b9c0d1e',     // 小池
-    'kishi': '01934d2c-8a7b-7006-8006-7a8b9c0d1e2f',     // 岸
-    'kamal': '01934d2c-8a7b-7007-8007-8b9c0d1e2f3a',     // カマル
-    'takano': '01934d2c-8a7b-7008-8008-9c0d1e2f3a4b',    // 高野
-    'yasui': '01934d2c-8a7b-7009-8009-0d1e2f3a4b5c',     // 安井
-    'nakata': '01934d2c-8a7b-700a-800a-1e2f3a4b5c6d'     // 中田
-  };
-
-  // Function to migrate schedule data from old IDs to new UUIDs
-  const migrateScheduleIds = (scheduleData) => {
-    if (!scheduleData || typeof scheduleData !== 'object') {
-      return scheduleData;
-    }
-
-    const migratedSchedule = {};
-    
-    Object.keys(scheduleData).forEach(oldId => {
-      const newId = oldIdToNewIdMapping[oldId];
-      if (newId) {
-        // Use new UUID as key
-        migratedSchedule[newId] = scheduleData[oldId];
-      } else {
-        // Keep original key if no mapping found (might already be UUID)
-        migratedSchedule[oldId] = scheduleData[oldId];
-      }
-    });
-
-
-    return migratedSchedule;
-  };
 
   // Function to migrate staff members to ensure they have all required properties
   const migrateStaffMembers = (staffList) => {
@@ -579,19 +542,18 @@ const ShiftScheduleEditor = () => {
       // Check if we have database data that matches current month dates
       if (supabaseScheduleData && supabaseScheduleData.schedule_data) {
         const { _staff_members, ...actualScheduleData } = supabaseScheduleData.schedule_data;
-        const migratedScheduleData = migrateScheduleIds(actualScheduleData);
         
         // Check if database data has dates that match current month range
         const currentDateRange = generateDateRange(currentMonthIndex);
         const hasMatchingDates = currentDateRange.some(date => {
           const dateKey = format(date, 'yyyy-MM-dd');
-          return Object.keys(migratedScheduleData).some(staffId => 
-            migratedScheduleData[staffId] && migratedScheduleData[staffId][dateKey]
+          return Object.keys(actualScheduleData).some(staffId => 
+            actualScheduleData[staffId] && actualScheduleData[staffId][dateKey]
           );
         });
         
         if (hasMatchingDates) {
-          setSchedule(migratedScheduleData);
+          setSchedule(actualScheduleData);
         } else {
           setSchedule(initializeSchedule(currentMonthIndex));
         }
@@ -711,16 +673,13 @@ const ShiftScheduleEditor = () => {
       // Remove the _staff_members key from schedule data before setting
       const { _staff_members, ...actualScheduleData } = scheduleDataFromDb;
       
-      // Migrate old staff IDs to new UUIDs
-      const migratedScheduleData = migrateScheduleIds(actualScheduleData);
-      
       // Only update schedule if it's actually different
       const currentScheduleStr = JSON.stringify(schedule);
-      const newScheduleStr = JSON.stringify(migratedScheduleData);
+      const newScheduleStr = JSON.stringify(actualScheduleData);
       
       if (currentScheduleStr !== newScheduleStr) {
-        setSchedule(migratedScheduleData);
-        saveToLocalStorage(STORAGE_KEYS.SCHEDULE, migratedScheduleData);
+        setSchedule(actualScheduleData);
+        saveToLocalStorage(STORAGE_KEYS.SCHEDULE, actualScheduleData);
       }
       
       // Only update schedule ID if it's different
@@ -1454,45 +1413,6 @@ const ShiftScheduleEditor = () => {
             <RefreshCw size={16} className={`${isSaving ? 'animate-spin text-gray-400' : 'text-green-600 hover:text-green-700'}`} />
           </button>
 
-          {/* Force Migration Button */}
-          <button 
-            onClick={async () => {
-              try {
-                // Get current database data
-                if (supabaseScheduleData && supabaseScheduleData.schedule_data) {
-                  const { _staff_members, ...oldScheduleData } = supabaseScheduleData.schedule_data;
-                  
-                  // Migrate IDs
-                  const migratedScheduleData = migrateScheduleIds(oldScheduleData);
-                  
-                  
-                  // Update local state
-                  setSchedule(migratedScheduleData);
-                  
-                  // Save migrated data back to database with new IDs
-                  const success = await saveScheduleData({
-                    schedule_data: migratedScheduleData,
-                    staff_members: staffMembers
-                  }, currentScheduleId);
-                  
-                  if (success) {
-                    alert('✅ Schedule IDs migrated successfully! Data converted from old IDs to UUIDs.');
-                  } else {
-                    alert('❌ Failed to migrate schedule IDs.');
-                  }
-                } else {
-                  alert('⚠️ No database schedule data found to migrate.');
-                }
-              } catch (error) {
-                alert('❌ Error during migration: ' + error.message);
-              }
-            }}
-            className="flex items-center px-3 py-2 h-10 text-sm font-medium rounded-lg border border-blue-300 bg-blue-50 hover:bg-blue-100 hover:border-blue-400 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-all duration-200"
-            title="Migrate old staff IDs to new UUIDs in database"
-            disabled={isSaving}
-          >
-            <Settings size={16} className="text-blue-600 hover:text-blue-700" />
-          </button>
 
           {/* Complete Reset Button */}
           <button 
