@@ -103,12 +103,32 @@ const scheduleOperations = {
 
   // Delete all schedules (for complete reset)
   deleteAllSchedules: async () => {
-    const { error } = await supabase
+    // Method 1: Try to delete all with neq (not equal) to a non-existent value
+    const { error: deleteError1 } = await supabase
       .from('schedules')
       .delete()
-      .gte('id', 0); // Delete all records
+      .neq('id', '00000000-0000-0000-0000-000000000000'); // Delete all records that don't have this fake ID
     
-    if (error) throw error;
+    if (!deleteError1) {
+      return true; // Success with method 1
+    }
+    
+    // Method 2: Fallback - Get all IDs and delete them
+    const { data: allRecords, error: fetchError } = await supabase
+      .from('schedules')
+      .select('id');
+    
+    if (fetchError) throw fetchError;
+    
+    if (allRecords && allRecords.length > 0) {
+      const { error: deleteError2 } = await supabase
+        .from('schedules')
+        .delete()
+        .in('id', allRecords.map(record => record.id));
+      
+      if (deleteError2) throw deleteError2;
+    }
+    
     return true;
   },
 
