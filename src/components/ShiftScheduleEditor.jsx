@@ -85,6 +85,24 @@ const ShiftScheduleEditor = () => {
     return migratedSchedule;
   };
 
+  // Function to clean schedule data before saving (remove any legacy IDs)
+  const cleanScheduleForSave = (scheduleData) => {
+    if (!scheduleData || typeof scheduleData !== 'object') {
+      return {};
+    }
+
+    const cleanedSchedule = {};
+    
+    // Only keep UUID-based entries (no legacy string IDs)
+    Object.keys(scheduleData).forEach(key => {
+      if (key.startsWith('01934d2c-')) {
+        cleanedSchedule[key] = scheduleData[key];
+      }
+    });
+
+    return cleanedSchedule;
+  };
+
   // Function to migrate staff members to ensure they have all required properties
   const migrateStaffMembers = (staffList) => {
     if (!staffList || !Array.isArray(staffList)) {
@@ -776,10 +794,12 @@ const ShiftScheduleEditor = () => {
       try {
         // Save both schedule data and staff members
         
-        // Save schedule data and staff members separately
+        // Save schedule data with staff members in the _staff_members key (database format)
+        // Clean schedule data to remove any legacy IDs before saving
+        const cleanedSchedule = cleanScheduleForSave(newScheduleData);
         const dataToSave = { 
-          schedule_data: newScheduleData, 
-          staff_members: currentStaffMembers 
+          ...cleanedSchedule,
+          _staff_members: currentStaffMembers 
         };
         
         await autoSave(dataToSave, currentScheduleId, 0); // No delay, immediate save
@@ -1305,8 +1325,10 @@ const ShiftScheduleEditor = () => {
         clearTimeout(autoSaveTimeoutRef.current);
       }
       
-      // Force immediate save - user explicitly requested it
-      const dataToSave = { schedule_data: schedule, staff_members: staffMembers };
+      // Force immediate save - user explicitly requested it (database format)
+      // Clean schedule data to remove any legacy IDs before saving
+      const cleanedSchedule = cleanScheduleForSave(schedule);
+      const dataToSave = { ...cleanedSchedule, _staff_members: staffMembers };
       const savedSchedule = await saveScheduleData(dataToSave, currentScheduleId);
       
       if (!currentScheduleId && savedSchedule) {
