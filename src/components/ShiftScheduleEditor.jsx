@@ -23,7 +23,8 @@ import {
   Maximize,
   Sparkles,
   TableProperties,
-  RefreshCw
+  RefreshCw,
+  X
 } from 'lucide-react';
 
 const ShiftScheduleEditor = () => {
@@ -59,8 +60,7 @@ const ShiftScheduleEditor = () => {
       '小池': { status: '社員', position: 'Server', color: 'position-server', startPeriod: { year: 2024, month: 3, day: 1 }, endPeriod: null },
       '岸': { status: '社員', position: 'Prep', color: 'position-prep', startPeriod: { year: 2023, month: 5, day: 1 }, endPeriod: null },
       'カマル': { status: '社員', position: 'Server', color: 'position-server', startPeriod: { year: 2024, month: 4, day: 1 }, endPeriod: null },
-      '高野': { status: '社員', position: 'prep', color: 'position-prep', startPeriod: { year: 2024, month: 1, day: 1 }, endPeriod: null },
-      '安井': { status: '派遣', position: 'Prep', color: 'position-prep', startPeriod: { year: 2024, month: 2, day: 1 }, endPeriod: { year: 2024, month: 7, day: 31 } },
+      '高野': { status: '社員', position: 'Prep', color: 'position-prep', startPeriod: { year: 2025, month: 4, day: 1 }, endPeriod: null },
       '中田': { status: '社員', position: 'Manager', color: 'position-manager', startPeriod: { year: 2018, month: 4, day: 1 }, endPeriod: null }
     };
 
@@ -77,12 +77,20 @@ const ShiftScheduleEditor = () => {
         };
       }
       // For new staff not in defaults, ensure they have basic properties
+      // Use current period start date for new staff to ensure they appear in current period
+      const currentPeriod = monthPeriods[currentMonthIndex] || monthPeriods[6]; // Fallback to July-August
+      const defaultStart = {
+        year: currentPeriod.start.getFullYear(),
+        month: currentPeriod.start.getMonth() + 1,
+        day: currentPeriod.start.getDate()
+      };
+      
       return {
         ...staff,
         status: staff.status || '派遣',
         position: staff.position || 'Server',
         color: staff.color || 'position-server',
-        startPeriod: staff.startPeriod || { year: new Date().getFullYear(), month: new Date().getMonth() + 1, day: 1 },
+        startPeriod: staff.startPeriod || defaultStart,
         endPeriod: staff.endPeriod
       };
     });
@@ -165,20 +173,11 @@ const ShiftScheduleEditor = () => {
     { 
       id: '01934d2c-8a7b-7008-8008-9c0d1e2f3a4b', 
       name: '高野', 
-      position: 'Dishwasher', 
-      color: 'position-dishwasher',
-      status: '派遣',
-      startPeriod: { year: 2024, month: 1, day: 1 },
-      endPeriod: { year: 2024, month: 8, day: 31 }
-    },
-    { 
-      id: '01934d2c-8a7b-7009-8009-0d1e2f3a4b5c', 
-      name: '安井', 
-      position: 'Prep', 
+      position: 'prep', 
       color: 'position-prep',
-      status: '派遣',
-      startPeriod: { year: 2024, month: 2, day: 1 },
-      endPeriod: { year: 2024, month: 7, day: 31 }
+      status: '社員',
+      startPeriod: { year: 2025, month: 4, day: 1 },
+      endPeriod: null
     },
     { 
       id: '01934d2c-8a7b-700a-800a-1e2f3a4b5c6d', 
@@ -478,7 +477,11 @@ const ShiftScheduleEditor = () => {
     name: '',
     position: '',
     status: '社員',
-    startPeriod: { year: new Date().getFullYear(), month: new Date().getMonth() + 1, day: 1 },
+    startPeriod: { 
+      year: monthPeriods[currentMonthIndex].start.getFullYear(), 
+      month: monthPeriods[currentMonthIndex].start.getMonth() + 1, 
+      day: monthPeriods[currentMonthIndex].start.getDate() 
+    },
     endPeriod: { year: new Date().getFullYear() + 1, month: new Date().getMonth() + 1, day: 1 }
   });
   
@@ -995,6 +998,64 @@ const ShiftScheduleEditor = () => {
     setSchedule(initializeSchedule());
   };
 
+  // Function to delete only current month period data
+  const deleteCurrentPeriodData = async () => {
+    const currentPeriodLabel = monthPeriods[currentMonthIndex].label;
+    const confirmed = window.confirm(
+      `⚠️ Delete ${currentPeriodLabel} Period Data\n\n` +
+      'This will delete:\n' +
+      `• Schedule data for ${currentPeriodLabel} period\n` +
+      `• localStorage cache for this period\n\n` +
+      'Other period data will remain intact.\n\n' +
+      'Are you sure you want to proceed?'
+    );
+    
+    if (!confirmed) return;
+    
+    try {
+      // 1. Clear current period from localStorage
+      const currentSchedulesKey = `${STORAGE_KEYS.SCHEDULES_BY_MONTH}`;
+      const currentStaffKey = `${STORAGE_KEYS.STAFF_BY_MONTH}`;
+      
+      // Get existing data
+      const existingSchedules = getFromLocalStorage(currentSchedulesKey, {});
+      const existingStaff = getFromLocalStorage(currentStaffKey, {});
+      
+      // Remove current month data
+      delete existingSchedules[currentMonthIndex];
+      delete existingStaff[currentMonthIndex];
+      
+      // Save back to localStorage
+      saveToLocalStorage(currentSchedulesKey, existingSchedules);
+      saveToLocalStorage(currentStaffKey, existingStaff);
+      
+      // 2. Delete current schedule in database if it exists
+      if (currentScheduleId) {
+        try {
+          await deleteScheduleData(currentScheduleId);
+        } catch (dbError) {
+          console.warn('Failed to delete from database:', dbError);
+        }
+      }
+      
+      // 3. Reset current period state
+      setSchedule(initializeSchedule(currentMonthIndex));
+      setStaffMembers(defaultStaffMembersArray);
+      setCurrentScheduleId(null);
+      setEditingCell(null);
+      
+      // 4. Update month caches
+      setSchedulesByMonth(existingSchedules);
+      setStaffMembersByMonth(existingStaff);
+      
+      alert(`${currentPeriodLabel} period data has been deleted successfully.`);
+      
+    } catch (error) {
+      console.error('Error deleting current period data:', error);
+      alert('Error occurred while deleting period data. Please try again.');
+    }
+  };
+
   // Function to order staff members with 中田 always at the end, filtering out inactive staff
   const getOrderedStaffMembers = useMemo(() => {
     try {
@@ -1039,7 +1100,11 @@ const ShiftScheduleEditor = () => {
       name: '',
       position: '',
       status: '社員',
-      startPeriod: { year: new Date().getFullYear(), month: new Date().getMonth() + 1, day: 1 },
+      startPeriod: { 
+        year: monthPeriods[currentMonthIndex].start.getFullYear(), 
+        month: monthPeriods[currentMonthIndex].start.getMonth() + 1, 
+        day: monthPeriods[currentMonthIndex].start.getDate() 
+      },
       endPeriod: null
     });
     setShowStaffEditModal(false); // Skip staff selection modal for add mode
@@ -1048,13 +1113,22 @@ const ShiftScheduleEditor = () => {
   // Function to actually create new staff after modal completion
   const createNewStaff = (staffData) => {
     const newStaffId = `01934d2c-8a7b-7${Date.now().toString(16).slice(-3)}-8${Math.random().toString(16).slice(2, 5)}-${Math.random().toString(16).slice(2, 14)}`;
+    
+    // Ensure new staff have a valid start period that allows them to appear in current period
+    const currentPeriod = monthPeriods[currentMonthIndex];
+    const defaultStartPeriod = {
+      year: currentPeriod.start.getFullYear(),
+      month: currentPeriod.start.getMonth() + 1,
+      day: currentPeriod.start.getDate()
+    };
+    
     const newStaff = {
       id: newStaffId,
       name: staffData.name || '新しいスタッフ',
       position: staffData.position || 'Staff',
       color: 'position-server',
       status: staffData.status,
-      startPeriod: staffData.startPeriod,
+      startPeriod: staffData.startPeriod || defaultStartPeriod,
       endPeriod: staffData.endPeriod
     };
     
@@ -1414,63 +1488,14 @@ const ShiftScheduleEditor = () => {
           </button>
 
 
-          {/* Complete Reset Button */}
+          {/* Delete Current Period Button */}
           <button 
-            onClick={async () => {
-              const confirmed = window.confirm(
-                '⚠️ WARNING: This will completely delete ALL data!\n\n' +
-                '• All database schedule data\n' +
-                '• All localStorage cache\n' +
-                '• All month schedules\n' +
-                '• Staff configurations\n\n' +
-                'This action cannot be undone!\n\n' +
-                'Are you absolutely sure you want to proceed?'
-              );
-              
-              if (!confirmed) return;
-              
-              try {
-                // 1. Clear all localStorage
-                localStorage.clear();
-                
-                // 2. Delete ALL database schedule data
-                try {
-                  await deleteAllSchedulesData();
-                } catch (dbError) {
-                  // Continue with local cleanup even if database deletion fails
-                }
-                
-                // 3. Reset all local state
-                setSchedule(initializeSchedule(currentMonthIndex));
-                setSchedulesByMonth({});
-                setStaffMembersByMonth({});
-                setStaffMembers(defaultStaffMembersArray);
-                setCurrentScheduleId(null);
-                setEditingCell(null);
-                setShowDropdown(null);
-                setEditingColumn(null);
-                setEditingSpecificColumn(null);
-                setEditingNames({});
-                setShowStaffEditModal(false);
-                setSelectedStaffForEdit(null);
-                setIsAddingNewStaff(false);
-                
-                // 4. Clear React Query cache
-                clearError();
-                
-                // 5. Force page reload to ensure clean state
-                alert('✅ All data cleared successfully! Page will reload for clean state.');
-                window.location.reload();
-                
-              } catch (error) {
-                alert('❌ Error during reset: ' + error.message);
-              }
-            }}
-            className="flex items-center px-3 py-2 h-10 text-sm font-medium rounded-lg border border-red-300 bg-red-50 hover:bg-red-100 hover:border-red-400 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 transition-all duration-200"
-            title="⚠️ DANGER: Completely delete all data and start fresh"
+            onClick={deleteCurrentPeriodData}
+            className="flex items-center px-3 py-2 h-10 text-sm font-medium rounded-lg border border-orange-300 bg-orange-50 hover:bg-orange-100 hover:border-orange-400 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-orange-500 transition-all duration-200"
+            title={`Delete ${monthPeriods[currentMonthIndex].label} period data (other periods will remain intact)`}
             disabled={isSaving}
           >
-            <Trash2 size={16} className="text-red-600 hover:text-red-700" />
+            <Trash2 size={16} className="text-orange-600 hover:text-orange-700" />
           </button>
           
           {/* AI Assistant Button */}
@@ -1527,7 +1552,7 @@ const ShiftScheduleEditor = () => {
             }`}
             title="Delete Columns"
           >
-            <Trash2 size={16} className={editingColumn === 'delete-mode' ? 'text-red-600' : 'text-red-600 hover:text-red-700'} />
+            <X size={16} className={editingColumn === 'delete-mode' ? 'text-red-600' : 'text-red-600 hover:text-red-700'} />
           </button>
           
           {/* Reset Button */}
@@ -1692,7 +1717,7 @@ const ShiftScheduleEditor = () => {
                             className="text-red-400 hover:text-red-200 ml-1 border border-red-500 rounded px-1 bg-red-100"
                             title="Delete column"
                           >
-                            <Trash2 size={12} />
+                            <X size={12} />
                           </button>
                         )}
                       </div>

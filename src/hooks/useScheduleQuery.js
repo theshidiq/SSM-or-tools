@@ -207,7 +207,7 @@ export const useScheduleQuery = (scheduleId = null) => {
       queryClient.setQueryData(queryKey, (old) => {
         if (!old) {
           const newData = {
-            id: mutationScheduleId || 'temp-id',
+            id: mutationScheduleId || null, // Use null instead of temp-id for new records
             schedule_data: {
               ...actualScheduleData,
               _staff_members: staffMembers
