@@ -63,7 +63,7 @@ const ShiftScheduleEditor = ({
     editStaffName,
     deleteStaff,
     startAddingNewStaff
-  } = useStaffManagement(currentMonthIndex, staffMembersByMonth);
+  } = useStaffManagement(currentMonthIndex, staffMembersByMonth, supabaseScheduleData);
 
   // Calculate derived data
   const orderedStaffMembers = useMemo(() => 
@@ -124,6 +124,11 @@ const ShiftScheduleEditor = ({
       scheduleAutoSave(newSchedule, newStaffMembers);
     }, 0);
   };
+
+  // Handle external error updates
+  useEffect(() => {
+    setError(externalError);
+  }, [externalError]);
 
   // Click outside handler
   useEffect(() => {

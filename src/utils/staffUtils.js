@@ -124,6 +124,48 @@ export const getOrderedStaffMembers = (staffMembers, dateRange = []) => {
   }
 };
 
+// Migrate legacy schedule data from string IDs to UUIDs
+export const migrateScheduleData = (scheduleData, staffMembers) => {
+  if (!scheduleData || typeof scheduleData !== 'object') {
+    return {};
+  }
+
+  const uuidMap = {
+    'chef': '01934d2c-8a7b-7000-8000-1a2b3c4d5e6f',
+    'iseki': '01934d2c-8a7b-7001-8001-2b3c4d5e6f7a', 
+    'yogi': '01934d2c-8a7b-7002-8002-3c4d5e6f7a8b',
+    'tanabe': '01934d2c-8a7b-7003-8003-4d5e6f7a8b9c',
+    'koto': '01934d2c-8a7b-7004-8004-5e6f7a8b9c0d',
+    'koike': '01934d2c-8a7b-7005-8005-6f7a8b9c0d1e',
+    'kishi': '01934d2c-8a7b-7006-8006-7a8b9c0d1e2f',
+    'kamal': '01934d2c-8a7b-7007-8007-8b9c0d1e2f3a',
+    'takano': '01934d2c-8a7b-7008-8008-9c0d1e2f3a4b',
+    'yasui': '01934d2c-8a7b-7009-8009-0d1e2f3a4b5c',
+    'nakata': '01934d2c-8a7b-700a-800a-1e2f3a4b5c6d'
+  };
+
+  const migratedSchedule = {};
+  
+  // First, copy all UUID-based entries as-is
+  Object.keys(scheduleData).forEach(key => {
+    if (key.startsWith('01934d2c-') || key === '_staff_members') {
+      migratedSchedule[key] = scheduleData[key];
+    } else if (uuidMap[key]) {
+      // Migrate legacy string IDs to UUIDs
+      migratedSchedule[uuidMap[key]] = scheduleData[key];
+    }
+  });
+
+  // Ensure all current staff members have schedule entries
+  staffMembers.forEach(staff => {
+    if (staff && staff.id && !migratedSchedule[staff.id]) {
+      migratedSchedule[staff.id] = {};
+    }
+  });
+
+  return migratedSchedule;
+};
+
 // Initialize schedule data structure
 export const initializeSchedule = (staffMembers, dateRange) => {
   const scheduleData = {};

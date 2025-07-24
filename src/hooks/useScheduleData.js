@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { generateDateRange } from '../utils/dateUtils';
-import { initializeSchedule } from '../utils/staffUtils';
+import { initializeSchedule, migrateScheduleData, migrateStaffMembers } from '../utils/staffUtils';
 import { defaultStaffMembersArray } from '../constants/staffConstants';
 
 const STORAGE_KEYS = {
@@ -86,19 +86,25 @@ export const useScheduleData = (
       if (supabaseScheduleData && supabaseScheduleData.schedule_data) {
         const { _staff_members, ...actualScheduleData } = supabaseScheduleData.schedule_data;
         
+        // First, migrate the staff members from database
+        const migratedStaffMembers = _staff_members ? migrateStaffMembers(_staff_members) : defaultStaffMembersArray;
+        
+        // Then migrate the schedule data to use UUIDs
+        const migratedScheduleData = migrateScheduleData(actualScheduleData, migratedStaffMembers);
+        
         // Check if database data has dates that match current month range
         const currentDateRange = generateDateRange(currentMonthIndex);
         const hasMatchingDates = currentDateRange.some(date => {
           const dateKey = date.toISOString().split('T')[0];
-          return Object.keys(actualScheduleData).some(staffId => 
-            actualScheduleData[staffId] && actualScheduleData[staffId][dateKey]
+          return Object.keys(migratedScheduleData).some(staffId => 
+            migratedScheduleData[staffId] && migratedScheduleData[staffId][dateKey] !== undefined
           );
         });
         
         if (hasMatchingDates) {
-          setSchedule(actualScheduleData);
+          setSchedule(migratedScheduleData);
         } else {
-          setSchedule(initializeSchedule(defaultStaffMembersArray, currentDateRange));
+          setSchedule(initializeSchedule(migratedStaffMembers, currentDateRange));
         }
       } else {
         setSchedule(initializeSchedule(defaultStaffMembersArray, generateDateRange(currentMonthIndex)));

@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { migrateStaffMembers } from '../utils/staffUtils';
 import { defaultStaffMembersArray } from '../constants/staffConstants';
 
-export const useStaffManagement = (currentMonthIndex, staffMembersByMonth) => {
+export const useStaffManagement = (currentMonthIndex, staffMembersByMonth, supabaseScheduleData) => {
   const [staffMembers, setStaffMembers] = useState(() => defaultStaffMembersArray);
   const [isAddingNewStaff, setIsAddingNewStaff] = useState(false);
   const [selectedStaffForEdit, setSelectedStaffForEdit] = useState(null);
@@ -21,11 +21,15 @@ export const useStaffManagement = (currentMonthIndex, staffMembersByMonth) => {
     
     if (savedStaffMembers) {
       setStaffMembers(migrateStaffMembers(savedStaffMembers));
+    } else if (supabaseScheduleData && supabaseScheduleData.schedule_data && supabaseScheduleData.schedule_data._staff_members) {
+      // Use staff members from database if available
+      const migratedStaffFromDb = migrateStaffMembers(supabaseScheduleData.schedule_data._staff_members);
+      setStaffMembers(migratedStaffFromDb);
     } else {
       // If no saved staff members for this month, use the default staff members
       setStaffMembers(defaultStaffMembersArray);
     }
-  }, [currentMonthIndex, staffMembersByMonth]);
+  }, [currentMonthIndex, staffMembersByMonth, supabaseScheduleData]);
 
   // Create new staff member
   const createNewStaff = useCallback((staffData, schedule, dateRange, onScheduleUpdate, onStaffUpdate) => {
