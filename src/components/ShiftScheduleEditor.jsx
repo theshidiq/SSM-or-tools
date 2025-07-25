@@ -425,7 +425,7 @@ const ShiftScheduleEditor = ({
       />
 
       {/* Statistics Dashboard */}
-      <StatisticsDashboard statistics={statistics} />
+      <StatisticsDashboard statistics={statistics} staffMembers={staffMembers} dateRange={dateRange} />
 
       {/* Staff Edit Modal */}
       <StaffEditModal

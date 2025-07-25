@@ -19,8 +19,8 @@ import {
   Maximize,
   Sparkles,
   TableProperties,
-  RefreshCw,
-  X
+  X,
+  Delete
 } from 'lucide-react';
 import { monthPeriods } from '../../utils/dateUtils';
 
@@ -134,26 +134,6 @@ const NavigationToolbar = ({
             <Maximize size={16} className="text-gray-600 hover:text-gray-700" />
           </button>
           
-          {/* Force Sync */}
-          <button 
-            onClick={async () => {
-              alert('✅ Data synced successfully!');
-            }}
-            className="flex items-center px-3 py-2 h-10 text-sm font-medium rounded-lg border border-green-300 bg-green-50 hover:bg-green-100 hover:border-green-400 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 transition-all duration-200"
-            title="Force sync all data to database"
-          >
-            <RefreshCw size={16} className="text-green-600 hover:text-green-700" />
-          </button>
-
-          {/* Delete Current Period */}
-          <button 
-            onClick={handleDeletePeriod}
-            className="flex items-center px-3 py-2 h-10 text-sm font-medium rounded-lg border border-orange-300 bg-orange-50 hover:bg-orange-100 hover:border-orange-400 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-orange-500 transition-all duration-200"
-            title={`Delete ${monthPeriods[currentMonthIndex]?.label || 'current period'} data`}
-          >
-            <Trash2 size={16} className="text-orange-600 hover:text-orange-700" />
-          </button>
-          
           {/* AI Assistant */}
           <button 
             onClick={() => {
@@ -183,6 +163,18 @@ const NavigationToolbar = ({
             <Users size={16} className="text-purple-600 hover:text-purple-700" />
           </button>
           
+          {/* Manual Save */}
+          <button
+            onClick={() => {
+              scheduleAutoSave(schedule, staffMembers);
+              alert('✅ Schedule saved!');
+            }}
+            className="flex items-center px-3 py-2 h-10 text-sm font-medium rounded-lg border border-gray-300 bg-white hover:border-gray-400 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500 transition-all duration-200"
+            title="Manual Save"
+          >
+            <Save size={16} className="text-blue-600 hover:text-blue-700" />
+          </button>
+          
           {/* Delete Columns */}
           <button
             onClick={() => setEditingColumn('delete-mode')}
@@ -193,19 +185,16 @@ const NavigationToolbar = ({
             }`}
             title="Delete Columns"
           >
-            <Trash2 size={16} className={editingColumn === 'delete-mode' ? 'text-red-700' : 'text-red-600 hover:text-red-700'} />
+            <Delete size={16} className={editingColumn === 'delete-mode' ? 'text-red-700' : 'text-red-600 hover:text-red-700'} />
           </button>
-          
-          {/* Manual Save */}
-          <button
-            onClick={() => {
-              scheduleAutoSave(schedule, staffMembers);
-              alert('✅ Schedule saved!');
-            }}
-            className="flex items-center px-3 py-2 h-10 text-sm font-medium rounded-lg border border-blue-300 bg-blue-50 hover:bg-blue-100 hover:border-blue-400 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-all duration-200"
-            title="Manual Save"
+
+          {/* Delete Current Period */}
+          <button 
+            onClick={handleDeletePeriod}
+            className="flex items-center px-3 py-2 h-10 text-sm font-medium rounded-lg border border-gray-300 bg-white hover:border-gray-400 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500 transition-all duration-200"
+            title={`Delete ${monthPeriods[currentMonthIndex]?.label || 'current period'} data`}
           >
-            <Save size={16} className="text-blue-600 hover:text-blue-700" />
+            <Trash2 size={16} className="text-orange-600 hover:text-orange-700" />
           </button>
           
           {/* Export CSV */}
@@ -214,7 +203,7 @@ const NavigationToolbar = ({
             className="flex items-center px-3 py-2 h-10 text-sm font-medium rounded-lg border border-gray-300 bg-white hover:border-gray-400 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500 transition-all duration-200"
             title="Export CSV"
           >
-            <Download size={16} className="text-gray-600 hover:text-gray-700" />
+            <Download size={16} className="text-green-600 hover:text-green-700" />
           </button>
           
           {/* Print */}

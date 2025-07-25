@@ -107,19 +107,23 @@ export const isDateWithinWorkPeriod = (date, staff) => {
 
 // Dynamic dropdown positioning logic
 export const getDropdownPosition = (staffIndex, dateIndex, totalStaff, totalDates) => {
-  // Simple positioning to ensure dropdown is always visible
-  // Position below the cell by default, to the left if near right edge
+  // Improved positioning to align better with cell dimensions
+  // Cell dimensions: width: 40px, height: 50px
   const isRightSide = staffIndex >= totalStaff - 3; // Last 3 columns
   const isBottomHalf = dateIndex >= totalDates - 5; // Last 5 rows
   
   if (isRightSide && isBottomHalf) {
-    return { left: '-120px', top: '-150px' }; // Above and to the left
+    // Above and to the left - align dropdown right edge with cell right edge
+    return { right: '0px', bottom: '100%', transform: 'translateY(-4px)' };
   } else if (isRightSide) {
-    return { left: '-120px', top: '100%' }; // Below and to the left
+    // Below and to the left - align dropdown right edge with cell right edge
+    return { right: '0px', top: '100%', transform: 'translateY(4px)' };
   } else if (isBottomHalf) {
-    return { left: '0px', top: '-150px' }; // Above and to the right
+    // Above and to the right - align dropdown left edge with cell left edge
+    return { left: '0px', bottom: '100%', transform: 'translateY(-4px)' };
   } else {
-    return { left: '0px', top: '100%' }; // Below and to the right (default)
+    // Below and to the right - align dropdown left edge with cell left edge (default)
+    return { left: '0px', top: '100%', transform: 'translateY(4px)' };
   }
 };
 

@@ -64,25 +64,42 @@ export const generateStatistics = (schedule, staffMembers, dateRange) => {
       const staffSchedule = schedule[staff.id];
       const shift = staffSchedule && staffSchedule[dateKey] ? staffSchedule[dateKey] : '';
       
-      // Count shifts with mapping: blank/empty->normal, special->normal, unavailable->off, holiday->off
+      // Count shifts with proper mapping
       // Exclude medamayaki and zensai from all statistics
-      let countedShift = shift;
-      if (shift === '' || shift === undefined || shift === null) countedShift = 'normal'; // Blank counts as normal
-      if (shift === 'special') countedShift = 'normal';
-      if (shift === 'unavailable') countedShift = 'off';
-      if (shift === 'holiday') countedShift = 'off';
-      
-      // Skip medamayaki and zensai entirely from counting
-      if (shift === 'medamayaki' || shift === 'zensai') {
+      if (shift === 'medamayaki' || shift === 'zensai' || shift === '◎' || shift === '▣') {
         return; // Don't count these shifts at all
       }
+      
+      // Map shift values to statistics categories
+      // Handle both symbol characters and key names
+      let countedShift = shift;
+      if (shift === '' || shift === undefined || shift === null) {
+        countedShift = 'normal'; // Blank counts as normal
+      } else if (shift === 'special' || shift === '●') {
+        countedShift = 'normal'; // Special counts as normal
+      } else if (shift === 'unavailable' || shift === '⊘') {
+        countedShift = 'off'; // Unavailable counts as off
+      } else if (shift === '△') {
+        countedShift = 'early'; // Triangle symbol
+      } else if (shift === '×') {
+        countedShift = 'off'; // Cross symbol
+      } else if (shift === '★') {
+        countedShift = 'holiday'; // Star symbol
+      } else if (shift === '◇') {
+        countedShift = 'late'; // Diamond symbol
+      } else if (shift === '◎') {
+        countedShift = 'medamayaki'; // Will be excluded above
+      } else if (shift === '▣') {
+        countedShift = 'zensai'; // Will be excluded above
+      }
+      // Keep other values as they are
       
       if (countedShift && stats.staffStats[staff.id][countedShift] !== undefined) {
         stats.staffStats[staff.id][countedShift]++;
       }
       
-      // Count work days (blank counts as working, off/unavailable/holiday don't)
-      if (countedShift !== 'off' && shift !== 'medamayaki' && shift !== 'zensai') {
+      // Count work days (blank counts as working, off/unavailable/holiday don't count as work days)
+      if (countedShift !== 'off' && countedShift !== 'holiday' && shift !== 'medamayaki' && shift !== 'zensai' && shift !== '◎' && shift !== '▣') {
         stats.staffStats[staff.id].workDays++;
       }
     });

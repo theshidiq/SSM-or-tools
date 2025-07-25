@@ -66,8 +66,16 @@ const ScheduleTable = ({
   };
 
   const handleShiftSelect = (staffId, dateKey, shiftKey) => {
-    // Normal shift shows as blank (empty string) but counts as a normal shift
-    const shiftValue = shiftKey === 'normal' ? '' : (shiftSymbols[shiftKey]?.symbol || shiftKey);
+    // Handle different shift types
+    let shiftValue;
+    if (shiftKey === 'normal') {
+      shiftValue = ''; // Normal shift shows as blank
+    } else if (shiftKey === 'late') {
+      shiftValue = 'late'; // Late shift stores as 'late' key, not symbol
+    } else {
+      shiftValue = shiftSymbols[shiftKey]?.symbol || shiftKey; // Other shifts show symbols
+    }
+    
     updateShift(staffId, dateKey, shiftValue);
     setShowDropdown(null);
     setCustomInputText('');
@@ -269,7 +277,9 @@ const ScheduleTable = ({
                       key={staff.id}
                       className={`text-center border-r border-gray-200 relative ${
                         staffIndex === orderedStaffMembers.length - 1 ? 'border-r-2 border-gray-300' : ''
-                      } hover:bg-blue-50 ${
+                      } ${
+                        cellValue === 'late' ? 'bg-purple-200 hover:bg-purple-300' : 'hover:bg-blue-50'
+                      } ${
                         !isActiveForDate ? 'bg-gray-100' : ''
                       }`}
                       style={{ 
@@ -307,7 +317,9 @@ const ScheduleTable = ({
                       ) : (
                         <>
                           <button
-                            className={`w-full h-full flex items-center justify-center cursor-pointer transition-all duration-200 hover:bg-blue-100 ${
+                            className={`w-full h-full flex items-center justify-center cursor-pointer transition-all duration-200 ${
+                              cellValue === 'late' ? '' : 'hover:bg-blue-100'
+                            } ${
                               isDropdownOpen ? 'bg-blue-100' : ''
                             }`}
                             onClick={(e) => {
@@ -317,7 +329,7 @@ const ScheduleTable = ({
                             title={`${staff.name} - ${format(date, 'M/d')}`}
                           >
                             <span className={`text-2xl font-bold select-none ${getSymbolColor(cellValue)}`}>
-                              {cellValue}
+                              {cellValue === 'late' ? '' : cellValue}
                             </span>
                           </button>
                           
@@ -407,8 +419,8 @@ const ScheduleTable = ({
         
         {/* Day Off Count Footer */}
         <tfoot>
-          <tr className="bg-gray-100 border-t-2 border-gray-400">
-            <td className="text-center font-bold text-xs border-r-2 border-gray-300 sticky left-0 bg-gray-100 py-2" style={{ zIndex: 300 }}>
+          <tr className="bg-yellow-100 border-t-2 border-gray-400">
+            <td className="text-center font-bold text-xs border-r-2 border-gray-300 sticky left-0 bg-yellow-100 py-2" style={{ zIndex: 300, color: '#dc2626' }}>
               休日数
             </td>
             {orderedStaffMembers.map((staff, staffIndex) => {
@@ -431,13 +443,14 @@ const ScheduleTable = ({
               return (
                 <td 
                   key={staff.id}
-                  className={`text-center font-bold text-xs border-r border-gray-300 bg-gray-100 py-2 ${
+                  className={`text-center font-bold text-xs border-r border-gray-300 bg-yellow-100 py-2 ${
                     staffIndex === orderedStaffMembers.length - 1 ? 'border-r-2' : ''
                   }`}
                   style={{ 
                     minWidth: '40px',
                     width: '40px',
-                    maxWidth: '40px'
+                    maxWidth: '40px',
+                    color: '#dc2626'
                   }}
                 >
                   {dayOffCount % 1 === 0 ? dayOffCount : dayOffCount.toFixed(1)}
