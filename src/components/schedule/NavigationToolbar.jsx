@@ -39,7 +39,8 @@ const NavigationToolbar = ({
   staffMembers,
   handleExport,
   handlePrint,
-  handleAddTable
+  handleAddTable,
+  handleDeletePeriod
 }) => {
   return (
     <div className="toolbar-section mb-6">
@@ -146,13 +147,7 @@ const NavigationToolbar = ({
 
           {/* Delete Current Period */}
           <button 
-            onClick={() => {
-              const periodLabel = monthPeriods[currentMonthIndex]?.label || 'current period';
-              const confirmed = window.confirm(`Delete ${periodLabel} data?`);
-              if (confirmed) {
-                // TODO: Implement delete period
-              }
-            }}
+            onClick={handleDeletePeriod}
             className="flex items-center px-3 py-2 h-10 text-sm font-medium rounded-lg border border-orange-300 bg-orange-50 hover:bg-orange-100 hover:border-orange-400 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-orange-500 transition-all duration-200"
             title={`Delete ${monthPeriods[currentMonthIndex]?.label || 'current period'} data`}
           >

@@ -2,11 +2,9 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { migrateStaffMembers } from '../utils/staffUtils';
 import { defaultStaffMembersArray } from '../constants/staffConstants';
 
-export const useStaffManagement = (currentMonthIndex, staffMembersByMonth, supabaseScheduleData) => {
-  const [staffMembers, setStaffMembers] = useState(() => {
-    console.log('Initializing staffMembers with defaults:', defaultStaffMembersArray);
-    return defaultStaffMembersArray;
-  });
+export const useStaffManagement = (currentMonthIndex, supabaseScheduleData) => {
+  const [staffMembers, setStaffMembers] = useState([]);
+  const [hasLoadedFromDb, setHasLoadedFromDb] = useState(false);
   const [isAddingNewStaff, setIsAddingNewStaff] = useState(false);
   const [selectedStaffForEdit, setSelectedStaffForEdit] = useState(null);
   const [showStaffEditModal, setShowStaffEditModal] = useState(false);
@@ -18,33 +16,31 @@ export const useStaffManagement = (currentMonthIndex, staffMembersByMonth, supab
     endPeriod: null
   });
 
-  // Load staff members for current month
+  // Load staff members - from database or localStorage as fallback
   useEffect(() => {
-    console.log('Loading staff for month:', currentMonthIndex, 'supabaseScheduleData:', supabaseScheduleData);
-    const savedStaffMembers = staffMembersByMonth[currentMonthIndex];
-    
-    if (savedStaffMembers) {
-      console.log('Using saved staff members:', savedStaffMembers);
-      setStaffMembers(migrateStaffMembers(savedStaffMembers));
-    } else if (supabaseScheduleData && supabaseScheduleData.schedule_data && supabaseScheduleData.schedule_data._staff_members) {
-      // Use staff members from database if available
-      console.log('Using staff from database:', supabaseScheduleData.schedule_data._staff_members);
+    if (supabaseScheduleData && supabaseScheduleData.schedule_data && supabaseScheduleData.schedule_data._staff_members) {
+      // Use staff members from database
       const migratedStaffFromDb = migrateStaffMembers(supabaseScheduleData.schedule_data._staff_members);
       setStaffMembers(migratedStaffFromDb);
-    } else {
-      // If no saved staff members for this month, use the default staff members
-      console.log('Using default staff members:', defaultStaffMembersArray);
-      setStaffMembers(defaultStaffMembersArray);
+      setHasLoadedFromDb(true);
+    } else if (supabaseScheduleData === null) {
+      // Database is null - check localStorage as fallback
+      try {
+        const savedStaffByMonth = JSON.parse(localStorage.getItem('staff-by-month-data') || '{}');
+        const localStaff = savedStaffByMonth[currentMonthIndex] || [];
+        if (localStaff.length > 0) {
+          setStaffMembers(localStaff);
+        } else {
+          setStaffMembers([]);
+        }
+      } catch {
+        setStaffMembers([]);
+      }
+      setHasLoadedFromDb(true);
     }
-  }, [currentMonthIndex, staffMembersByMonth, supabaseScheduleData]);
+    // Don't set hasLoadedFromDb for undefined case (still loading)
+  }, [supabaseScheduleData, currentMonthIndex]);
 
-  // Force reset to default staff when database is empty
-  useEffect(() => {
-    if (supabaseScheduleData === null) {
-      console.log('Database is empty, using default staff from useState initial state');
-      setStaffMembers(defaultStaffMembersArray);
-    }
-  }, [supabaseScheduleData]);
 
   // Create new staff member
   const createNewStaff = useCallback((staffData, schedule, dateRange, onScheduleUpdate, onStaffUpdate) => {
@@ -81,12 +77,17 @@ export const useStaffManagement = (currentMonthIndex, staffMembersByMonth, supab
       onScheduleUpdate(newSchedule);
     });
     
+    // Force save to localStorage immediately
+    const savedStaffByMonth = JSON.parse(localStorage.getItem('staff-by-month-data') || '{}');
+    savedStaffByMonth[currentMonthIndex] = newStaffMembers;
+    localStorage.setItem('staff-by-month-data', JSON.stringify(savedStaffByMonth));
+    
     // Close modal immediately for better UX
     setShowStaffEditModal(false);
     setIsAddingNewStaff(false);
     
     return { newStaffMembers, newSchedule };
-  }, [staffMembers]);
+  }, [staffMembers, currentMonthIndex]);
 
   // Edit staff member name
   const editStaffName = useCallback((staffId, newName, onStaffUpdate) => {
@@ -145,6 +146,11 @@ export const useStaffManagement = (currentMonthIndex, staffMembersByMonth, supab
       onStaffUpdate(updatedStaffMembers);
     });
     
+    // Force save to localStorage immediately
+    const savedStaffByMonth = JSON.parse(localStorage.getItem('staff-by-month-data') || '{}');
+    savedStaffByMonth[currentMonthIndex] = updatedStaffMembers;
+    localStorage.setItem('staff-by-month-data', JSON.stringify(savedStaffByMonth));
+    
     // Close modal
     setSelectedStaffForEdit(null);
     setIsAddingNewStaff(false);
@@ -158,7 +164,7 @@ export const useStaffManagement = (currentMonthIndex, staffMembersByMonth, supab
     });
     
     return updatedStaffMembers;
-  }, [staffMembers, selectedStaffForEdit]);
+  }, [staffMembers, selectedStaffForEdit, currentMonthIndex]);
 
   // Start adding new staff
   const startAddingNewStaff = useCallback(() => {
@@ -174,11 +180,11 @@ export const useStaffManagement = (currentMonthIndex, staffMembersByMonth, supab
     setShowStaffEditModal(true);
   }, []);
 
-  console.log('useStaffManagement returning staffMembers:', staffMembers);
   
   return {
-    staffMembers,
+    staffMembers: staffMembers,
     setStaffMembers,
+    hasLoadedFromDb,
     isAddingNewStaff,
     setIsAddingNewStaff,
     selectedStaffForEdit,

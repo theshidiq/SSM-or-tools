@@ -62,21 +62,32 @@ export const useScheduleData = (
     }
   }, []);
 
-  // Clear localStorage when database is empty
+  // Clear localStorage when database is explicitly deleted (not just null)
+  const [hasExplicitlyDeletedData, setHasExplicitlyDeletedData] = useState(false);
+  
   useEffect(() => {
-    if (supabaseScheduleData === null) {
-      // Database is empty, clear localStorage to sync
-      console.log('Database is empty, clearing localStorage cache...');
+    if (supabaseScheduleData === null && hasExplicitlyDeletedData) {
+      // Database is empty due to explicit deletion, clear localStorage to sync
+      console.log('CLEARING: Database explicitly deleted, clearing localStorage cache...');
       localStorage.removeItem(STORAGE_KEYS.SCHEDULE);
       localStorage.removeItem(STORAGE_KEYS.STAFF_BY_MONTH);
       localStorage.removeItem(STORAGE_KEYS.CURRENT_MONTH);
+      
+      // Also remove old localStorage keys that might exist from previous versions
+      localStorage.removeItem('shift_schedules_by_month');
+      localStorage.removeItem('shift_staff_by_month'); 
+      localStorage.removeItem('shift_schedule_data');
+      localStorage.removeItem('shift_staff_members');
       
       // Reset to default state
       setSchedulesByMonth({});
       setStaffMembersByMonth({});
       setSchedule(initializeSchedule(defaultStaffMembersArray, generateDateRange(currentMonthIndex)));
+      
+      // Reset the flag
+      setHasExplicitlyDeletedData(false);
     }
-  }, [supabaseScheduleData, currentMonthIndex]);
+  }, [supabaseScheduleData, currentMonthIndex, hasExplicitlyDeletedData]);
 
   // Handle month switching - separate effects to avoid circular dependencies
   useEffect(() => {
@@ -210,6 +221,7 @@ export const useScheduleData = (
     setStaffMembersByMonth,
     updateSchedule,
     updateShift,
-    scheduleAutoSave
+    scheduleAutoSave,
+    setHasExplicitlyDeletedData
   };
 };
