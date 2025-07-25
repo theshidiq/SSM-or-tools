@@ -1,21 +1,63 @@
 import { addDays, format } from 'date-fns';
 
 // Month periods configuration (21st to 20th of next month)
-export const monthPeriods = [
+export let monthPeriods = [
   { start: new Date(2025, 0, 21), end: new Date(2025, 1, 20), label: '1月・2月' }, // Jan-Feb
-  { start: new Date(2025, 1, 21), end: new Date(2025, 2, 20), label: '2月・3月' }, // Feb-Mar
-  { start: new Date(2025, 2, 21), end: new Date(2025, 3, 20), label: '3月・4月' }, // Mar-Apr
-  { start: new Date(2025, 3, 21), end: new Date(2025, 4, 20), label: '4月・5月' }, // Apr-May
-  { start: new Date(2025, 4, 21), end: new Date(2025, 5, 20), label: '5月・6月' }, // May-Jun
-  { start: new Date(2025, 5, 21), end: new Date(2025, 6, 20), label: '6月・7月' }, // Jun-Jul
-  { start: new Date(2025, 6, 21), end: new Date(2025, 7, 20), label: '7月・8月' }, // Jul-Aug (current)
 ];
+
+// Function to add next period
+export const addNextPeriod = () => {
+  const lastPeriod = monthPeriods[monthPeriods.length - 1];
+  if (!lastPeriod || !lastPeriod.end) {
+    console.error('Cannot add next period - no valid last period found');
+    return 0;
+  }
+  
+  const lastEndDate = new Date(lastPeriod.end);
+  
+  // Next period starts the day after the last period ends
+  const nextStartDate = new Date(lastEndDate);
+  nextStartDate.setDate(nextStartDate.getDate() + 1);
+  
+  // Next period ends after one month
+  const nextEndDate = new Date(nextStartDate);
+  nextEndDate.setMonth(nextEndDate.getMonth() + 1);
+  nextEndDate.setDate(nextEndDate.getDate() - 1);
+  
+  // Generate label based on months
+  const startMonth = nextStartDate.getMonth() + 1;
+  const endMonth = nextEndDate.getMonth() + 1;
+  const startMonthName = ['', '1月', '2月', '3月', '4月', '5月', '6月', '7月', '8月', '9月', '10月', '11月', '12月'][startMonth];
+  const endMonthName = ['', '1月', '2月', '3月', '4月', '5月', '6月', '7月', '8月', '9月', '10月', '11月', '12月'][endMonth];
+  
+  const newPeriod = {
+    start: nextStartDate,
+    end: nextEndDate,
+    label: `${startMonthName}・${endMonthName}`
+  };
+  
+  monthPeriods.push(newPeriod);
+  console.log('Added new period:', newPeriod, 'Total periods:', monthPeriods.length);
+  return monthPeriods.length - 1; // Return the new period index
+};
 
 // Generate date range based on current month index
 export const generateDateRange = (monthIndex) => {
-  const period = monthPeriods[monthIndex];
-  const dates = [];
+  // Bounds check for monthIndex
+  if (monthIndex < 0 || monthIndex >= monthPeriods.length || monthPeriods[monthIndex] === undefined) {
+    console.warn(`Invalid monthIndex: ${monthIndex}. Using default month (0).`);
+    monthIndex = 0;
+  }
   
+  const period = monthPeriods[monthIndex];
+  if (!period || !period.start || !period.end) {
+    console.error(`Invalid period for monthIndex ${monthIndex}:`, period);
+    // Fallback to first available period
+    const fallbackPeriod = monthPeriods[0];
+    return generateDateRange(0);
+  }
+  
+  const dates = [];
   let currentDate = new Date(period.start);
   while (currentDate <= period.end) {
     dates.push(new Date(currentDate));
@@ -64,39 +106,33 @@ export const isDateWithinWorkPeriod = (date, staff) => {
 };
 
 // Dynamic dropdown positioning logic
-export const getDropdownPosition = (date, columnIndex, rowIndex) => {
-  const day = date.getDate();
-  const month = date.getMonth() + 1; // getMonth() returns 0-11, so add 1
+export const getDropdownPosition = (staffIndex, dateIndex, totalStaff, totalDates) => {
+  // Simple positioning to ensure dropdown is always visible
+  // Position below the cell by default, to the left if near right edge
+  const isRightSide = staffIndex >= totalStaff - 3; // Last 3 columns
+  const isBottomHalf = dateIndex >= totalDates - 5; // Last 5 rows
   
-  // Check if date is between 18-20 (inclusive)
-  if (day >= 18 && day <= 20) {
-    // Display on right for columns 1-9, on left for columns 10-12
-    if (columnIndex <= 9) {
-      return 'right';
-    } else {
-      // For last columns, check specific rows
-      if (rowIndex === 0 || rowIndex === 1) { // 1st and 2nd rows - use 0% positioning
-        return 'left-elevated-top';
-      }
-      return 'left';
-    }
-  } else if (day >= 21 && day <= 31) {
-    // Display below for first part of month
-    return 'below';
-  } else if (day >= 1 && day <= 17) {
-    // Normal dropdown positioning for middle dates
-    return 'center';
+  if (isRightSide && isBottomHalf) {
+    return { left: '-120px', top: '-150px' }; // Above and to the left
+  } else if (isRightSide) {
+    return { left: '-120px', top: '100%' }; // Below and to the left
+  } else if (isBottomHalf) {
+    return { left: '0px', top: '-150px' }; // Above and to the right
+  } else {
+    return { left: '0px', top: '100%' }; // Below and to the right (default)
   }
-  
-  // Default fallback
-  return 'center';
 };
 
-// Get date label for staff work period boundaries
-export const getDateLabel = (date, staff) => {
-  if (!staff.startPeriod) return null;
+// Get date label for staff work period boundaries or just formatted date
+export const getDateLabel = (date, staff = null) => {
+  if (!date) return '';
   
   const currentDate = new Date(date);
+  
+  // If no staff provided, just return formatted date
+  if (!staff || !staff.startPeriod) {
+    return format(currentDate, 'd');
+  }
   
   // Check if it's the start date
   const startDate = new Date(
@@ -122,5 +158,6 @@ export const getDateLabel = (date, staff) => {
     }
   }
   
-  return null;
+  // If no special boundary date, return formatted date
+  return format(currentDate, 'd');
 };

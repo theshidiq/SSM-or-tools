@@ -1,9 +1,12 @@
-import { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { migrateStaffMembers } from '../utils/staffUtils';
 import { defaultStaffMembersArray } from '../constants/staffConstants';
 
 export const useStaffManagement = (currentMonthIndex, staffMembersByMonth, supabaseScheduleData) => {
-  const [staffMembers, setStaffMembers] = useState(() => defaultStaffMembersArray);
+  const [staffMembers, setStaffMembers] = useState(() => {
+    console.log('Initializing staffMembers with defaults:', defaultStaffMembersArray);
+    return defaultStaffMembersArray;
+  });
   const [isAddingNewStaff, setIsAddingNewStaff] = useState(false);
   const [selectedStaffForEdit, setSelectedStaffForEdit] = useState(null);
   const [showStaffEditModal, setShowStaffEditModal] = useState(false);
@@ -17,19 +20,31 @@ export const useStaffManagement = (currentMonthIndex, staffMembersByMonth, supab
 
   // Load staff members for current month
   useEffect(() => {
+    console.log('Loading staff for month:', currentMonthIndex, 'supabaseScheduleData:', supabaseScheduleData);
     const savedStaffMembers = staffMembersByMonth[currentMonthIndex];
     
     if (savedStaffMembers) {
+      console.log('Using saved staff members:', savedStaffMembers);
       setStaffMembers(migrateStaffMembers(savedStaffMembers));
     } else if (supabaseScheduleData && supabaseScheduleData.schedule_data && supabaseScheduleData.schedule_data._staff_members) {
       // Use staff members from database if available
+      console.log('Using staff from database:', supabaseScheduleData.schedule_data._staff_members);
       const migratedStaffFromDb = migrateStaffMembers(supabaseScheduleData.schedule_data._staff_members);
       setStaffMembers(migratedStaffFromDb);
     } else {
       // If no saved staff members for this month, use the default staff members
+      console.log('Using default staff members:', defaultStaffMembersArray);
       setStaffMembers(defaultStaffMembersArray);
     }
   }, [currentMonthIndex, staffMembersByMonth, supabaseScheduleData]);
+
+  // Force reset to default staff when database is empty
+  useEffect(() => {
+    if (supabaseScheduleData === null) {
+      console.log('Database is empty, using default staff from useState initial state');
+      setStaffMembers(defaultStaffMembersArray);
+    }
+  }, [supabaseScheduleData]);
 
   // Create new staff member
   const createNewStaff = useCallback((staffData, schedule, dateRange, onScheduleUpdate, onStaffUpdate) => {
@@ -159,6 +174,8 @@ export const useStaffManagement = (currentMonthIndex, staffMembersByMonth, supab
     setShowStaffEditModal(true);
   }, []);
 
+  console.log('useStaffManagement returning staffMembers:', staffMembers);
+  
   return {
     staffMembers,
     setStaffMembers,

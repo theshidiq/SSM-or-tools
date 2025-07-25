@@ -3,8 +3,13 @@ import { isStaffActiveInCurrentPeriod } from './staffUtils';
 
 // Calculate vacation days for a staff member
 export const calculateVacationDays = (staffId, schedule, dateRange) => {
+  if (!staffId || !schedule || !Array.isArray(dateRange)) {
+    return 0;
+  }
+  
   let vacationDays = 0;
   dateRange.forEach(date => {
+    if (!date) return;
     const dateKey = format(date, 'yyyy-MM-dd');
     // Safe access to schedule data
     const staffSchedule = schedule[staffId];
@@ -21,19 +26,26 @@ export const calculateVacationDays = (staffId, schedule, dateRange) => {
 };
 
 // Generate comprehensive statistics for all staff
-export const generateStatistics = (staffMembers, schedule, dateRange) => {
+export const generateStatistics = (schedule, staffMembers, dateRange) => {
   const stats = {
-    totalDays: dateRange.length,
+    totalDays: dateRange ? dateRange.length : 0,
     staffStats: {}
   };
 
+  // Ensure staffMembers is an array and dateRange exists
+  if (!Array.isArray(staffMembers) || !dateRange || !schedule) {
+    return stats;
+  }
+
   // Only calculate stats for active staff members
-  const activeStaff = staffMembers.filter(staff => isStaffActiveInCurrentPeriod(staff, dateRange));
+  const activeStaff = staffMembers.filter(staff => staff && isStaffActiveInCurrentPeriod(staff, dateRange));
   
   activeStaff.forEach(staff => {
+    if (!staff || !staff.id) return;
+    
     stats.staffStats[staff.id] = {
-      name: staff.name,
-      position: staff.position,
+      name: staff.name || 'Unknown',
+      position: staff.position || '',
       early: 0,
       normal: 0, 
       late: 0,
@@ -45,14 +57,17 @@ export const generateStatistics = (staffMembers, schedule, dateRange) => {
     };
 
     dateRange.forEach(date => {
+      if (!date) return;
+      
       const dateKey = format(date, 'yyyy-MM-dd');
       // Safe access to schedule data
       const staffSchedule = schedule[staff.id];
       const shift = staffSchedule && staffSchedule[dateKey] ? staffSchedule[dateKey] : '';
       
-      // Count shifts with mapping: special->normal, unavailable->off, holiday->off
+      // Count shifts with mapping: blank/empty->normal, special->normal, unavailable->off, holiday->off
       // Exclude medamayaki and zensai from all statistics
       let countedShift = shift;
+      if (shift === '' || shift === undefined || shift === null) countedShift = 'normal'; // Blank counts as normal
       if (shift === 'special') countedShift = 'normal';
       if (shift === 'unavailable') countedShift = 'off';
       if (shift === 'holiday') countedShift = 'off';
@@ -66,8 +81,8 @@ export const generateStatistics = (staffMembers, schedule, dateRange) => {
         stats.staffStats[staff.id][countedShift]++;
       }
       
-      // Count work days (anything that's not off, unavailable, holiday, or blank)
-      if (shift && shift !== 'off' && shift !== 'unavailable' && shift !== 'holiday' && shift !== 'medamayaki' && shift !== 'zensai') {
+      // Count work days (blank counts as working, off/unavailable/holiday don't)
+      if (countedShift !== 'off' && shift !== 'medamayaki' && shift !== 'zensai') {
         stats.staffStats[staff.id].workDays++;
       }
     });

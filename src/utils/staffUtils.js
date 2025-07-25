@@ -92,8 +92,10 @@ export const isStaffActiveInCurrentPeriod = (staff, dateRange = []) => {
 // Get ordered staff members with special ordering (中田 at end)
 export const getOrderedStaffMembers = (staffMembers, dateRange = []) => {
   try {
+    console.log('getOrderedStaffMembers called with:', staffMembers);
     // Defensive check
     if (!staffMembers || !Array.isArray(staffMembers) || staffMembers.length === 0) {
+      console.log('No staff members available, returning empty array');
       return []; // Return empty array if no staff members
     }
     

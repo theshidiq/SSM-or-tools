@@ -32,7 +32,8 @@ export const useScheduleData = (
   currentMonthIndex,
   supabaseScheduleData,
   currentScheduleId,
-  setCurrentScheduleId
+  setCurrentScheduleId,
+  onSaveSchedule
 ) => {
   // Schedule states
   const [schedule, setSchedule] = useState(() => 
@@ -61,23 +62,27 @@ export const useScheduleData = (
     }
   }, []);
 
-  // Handle month switching
+  // Clear localStorage when database is empty
   useEffect(() => {
-    // Save current month data before switching
-    if (schedule && Object.keys(schedule).length > 0) {
-      const currentMonthKey = currentMonthIndex.toString();
-      setSchedulesByMonth(prev => {
-        const updated = {
-          ...prev,
-          [currentMonthKey]: schedule
-        };
-        saveToLocalStorage(STORAGE_KEYS.SCHEDULE, updated);
-        return updated;
-      });
+    if (supabaseScheduleData === null) {
+      // Database is empty, clear localStorage to sync
+      console.log('Database is empty, clearing localStorage cache...');
+      localStorage.removeItem(STORAGE_KEYS.SCHEDULE);
+      localStorage.removeItem(STORAGE_KEYS.STAFF_BY_MONTH);
+      localStorage.removeItem(STORAGE_KEYS.CURRENT_MONTH);
+      
+      // Reset to default state
+      setSchedulesByMonth({});
+      setStaffMembersByMonth({});
+      setSchedule(initializeSchedule(defaultStaffMembersArray, generateDateRange(currentMonthIndex)));
     }
-    
+  }, [supabaseScheduleData, currentMonthIndex]);
+
+  // Handle month switching - separate effects to avoid circular dependencies
+  useEffect(() => {
     // Load schedule for new month
-    const savedSchedule = schedulesByMonth[currentMonthIndex];
+    const savedSchedules = loadFromLocalStorage(STORAGE_KEYS.SCHEDULE) || {};
+    const savedSchedule = savedSchedules[currentMonthIndex];
     
     if (savedSchedule) {
       setSchedule(savedSchedule);
@@ -110,7 +115,7 @@ export const useScheduleData = (
         setSchedule(initializeSchedule(defaultStaffMembersArray, generateDateRange(currentMonthIndex)));
       }
     }
-  }, [currentMonthIndex, schedulesByMonth, supabaseScheduleData]);
+  }, [currentMonthIndex, supabaseScheduleData]);
 
   // Update schedule ID when supabase data changes
   useEffect(() => {
@@ -119,46 +124,68 @@ export const useScheduleData = (
     }
   }, [supabaseScheduleData?.id, supabaseScheduleData?.updated_at, currentMonthIndex, currentScheduleId, setCurrentScheduleId]);
 
-  // Auto-save function with debouncing
+  // Use useRef to store current month index to avoid dependencies
+  const currentMonthRef = useRef(currentMonthIndex);
+  currentMonthRef.current = currentMonthIndex;
+
+  // Auto-save function with debouncing - no dependencies to prevent re-creation
   const scheduleAutoSave = useCallback((newScheduleData, newStaffMembers = null) => {
     // Clear existing timer
     if (autoSaveTimeoutRef.current) {
       clearTimeout(autoSaveTimeoutRef.current);
     }
 
+    // Use refs to get current values without dependencies
+    const currentSchedulesByMonth = loadFromLocalStorage(STORAGE_KEYS.SCHEDULE) || {};
+    const currentStaffByMonth = loadFromLocalStorage(STORAGE_KEYS.STAFF_BY_MONTH) || {};
+
     // Immediately save to localStorage as backup
     saveToLocalStorage(STORAGE_KEYS.SCHEDULE, {
-      ...schedulesByMonth,
-      [currentMonthIndex]: newScheduleData
+      ...currentSchedulesByMonth,
+      [currentMonthRef.current]: newScheduleData
     });
 
     if (newStaffMembers) {
       saveToLocalStorage(STORAGE_KEYS.STAFF_BY_MONTH, {
-        ...staffMembersByMonth,
-        [currentMonthIndex]: newStaffMembers
+        ...currentStaffByMonth,
+        [currentMonthRef.current]: newStaffMembers
       });
     }
 
     // Set debounced auto-save timer (2 seconds)
-    autoSaveTimeoutRef.current = setTimeout(() => {
-      // This would integrate with your existing save mechanism
+    autoSaveTimeoutRef.current = setTimeout(async () => {
       console.log('Auto-saving to database...', newScheduleData);
+      
+      if (onSaveSchedule && typeof onSaveSchedule === 'function') {
+        try {
+          // Get current staff members for this month
+          const currentStaffByMonth = loadFromLocalStorage(STORAGE_KEYS.STAFF_BY_MONTH) || {};
+          const currentMonthStaff = currentStaffByMonth[currentMonthRef.current] || [];
+          
+          // Prepare data in the format expected by the database
+          const saveData = {
+            ...newScheduleData,
+            _staff_members: newStaffMembers || currentMonthStaff
+          };
+          
+          await onSaveSchedule(saveData);
+          console.log('✅ Successfully saved to database');
+        } catch (error) {
+          console.error('❌ Failed to save to database:', error);
+        }
+      } else {
+        console.warn('⚠️ onSaveSchedule function not available');
+      }
     }, 2000);
-  }, [schedulesByMonth, staffMembersByMonth, currentMonthIndex]);
+  }, [onSaveSchedule]); // Include onSaveSchedule dependency
 
   // Update schedule with auto-save
   const updateSchedule = useCallback((newSchedule) => {
     setSchedule(newSchedule);
     
-    // Update cached schedule for current month
-    setSchedulesByMonth(prev => ({
-      ...prev,
-      [currentMonthIndex]: newSchedule
-    }));
-    
-    // Auto-save
+    // Auto-save (this will handle localStorage updates)
     scheduleAutoSave(newSchedule);
-  }, [currentMonthIndex, scheduleAutoSave]);
+  }, [scheduleAutoSave]);
 
   // Update shift for specific staff and date
   const updateShift = useCallback((staffId, dateKey, shiftValue) => {

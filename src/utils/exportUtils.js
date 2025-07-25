@@ -9,12 +9,15 @@ export const exportToCSV = (staffMembers, dateRange, schedule) => {
   const rows = [headers];
 
   dateRange.forEach(date => {
-    const dateKey = format(date, 'yyyy-MM-dd');
+    const validDate = new Date(date);
+    if (isNaN(validDate.getTime())) return; // Skip invalid dates
+    
+    const dateKey = format(validDate, 'yyyy-MM-dd');
     const row = [
-      `${format(date, 'dd-MMM')} (${format(date, 'EEE', { locale: ja })})`,
+      `${format(validDate, 'dd-MMM')} (${format(validDate, 'EEE', { locale: ja })})`,
       ...staffMembers.map(staff => {
         // Check if date is within work period
-        if (!isDateWithinWorkPeriod(date, staff)) {
+        if (!isDateWithinWorkPeriod(validDate, staff)) {
           return '-'; // Show dash for dates outside work period
         }
         const shift = schedule[staff.id]?.[dateKey] || '';
@@ -63,7 +66,12 @@ export const generatePrintHTML = (staffMembers, dateRange, schedule) => {
       </head>
       <body>
         <h1>🍣 Japanese Restaurant Shift Schedule</h1>
-        <p>期間: ${format(dateRange[0], 'yyyy年M月d日')} ~ ${format(dateRange[dateRange.length - 1], 'yyyy年M月d日')}</p>
+        <p>期間: ${dateRange && dateRange.length > 0 ? (() => {
+          const startDate = new Date(dateRange[0]);
+          const endDate = new Date(dateRange[dateRange.length - 1]);
+          if (isNaN(startDate.getTime()) || isNaN(endDate.getTime())) return '';
+          return `${format(startDate, 'yyyy年M月d日')} ~ ${format(endDate, 'yyyy年M月d日')}`;
+        })() : ''}</p>
         <table>
           <thead>
             <tr>
@@ -73,13 +81,16 @@ export const generatePrintHTML = (staffMembers, dateRange, schedule) => {
           </thead>
           <tbody>
             ${dateRange.map(date => {
-              const dateKey = format(date, 'yyyy-MM-dd');
+              const validDate = new Date(date);
+              if (isNaN(validDate.getTime())) return ''; // Skip invalid dates
+              
+              const dateKey = format(validDate, 'yyyy-MM-dd');
               return `
                 <tr>
-                  <td class="date-header">${format(date, 'dd-MMM')}<br><small>${format(date, 'EEE', { locale: ja })}</small></td>
+                  <td class="date-header">${format(validDate, 'dd-MMM')}<br><small>${format(validDate, 'EEE', { locale: ja })}</small></td>
                   ${staffMembers.map(staff => {
                     // Check if date is within work period
-                    if (!isDateWithinWorkPeriod(date, staff)) {
+                    if (!isDateWithinWorkPeriod(validDate, staff)) {
                       return '<td class="not-working">-</td>'; // Show dash for dates outside work period
                     }
                     const shift = schedule[staff.id]?.[dateKey] || '';
