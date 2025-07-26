@@ -38,8 +38,8 @@ const StaffEditModal = ({
       }));
     }
     
-    // If 派遣 is selected, set both periods to current year
-    if (editingStaffData.status === '派遣') {
+    // If 派遣 or パート is selected, set both periods to current year
+    if (editingStaffData.status === '派遣' || editingStaffData.status === 'パート') {
       setEditingStaffData(prev => ({
         ...prev,
         startPeriod: {
@@ -274,6 +274,35 @@ const StaffEditModal = ({
                         required
                       />
                       <span className="text-sm text-gray-700">派遣</span>
+                    </label>
+                    <label className="flex items-center">
+                      <input
+                        type="radio"
+                        name="status"
+                        value="パート"
+                        checked={editingStaffData.status === 'パート'}
+                        onChange={(e) => {
+                          const currentYear = new Date().getFullYear();
+                          setEditingStaffData(prev => ({ 
+                            ...prev, 
+                            status: e.target.value,
+                            // If パート is selected, set both periods to current year (same as 派遣)
+                            ...(e.target.value === 'パート' ? {
+                              startPeriod: {
+                                ...prev.startPeriod,
+                                year: currentYear
+                              },
+                              endPeriod: {
+                                ...prev.endPeriod,
+                                year: currentYear
+                              }
+                            } : {})
+                          }));
+                        }}
+                        className="mr-2 text-blue-600 focus:ring-blue-500"
+                        required
+                      />
+                      <span className="text-sm text-gray-700">パート</span>
                     </label>
                   </div>
                 </div>

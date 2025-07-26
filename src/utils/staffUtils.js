@@ -89,7 +89,7 @@ export const isStaffActiveInCurrentPeriod = (staff, dateRange = []) => {
   }
 };
 
-// Get ordered staff members with special ordering (中田 at end)
+// Get ordered staff members with special ordering (パート at end, then 中田 at very end)
 export const getOrderedStaffMembers = (staffMembers, dateRange = []) => {
   try {
     // Defensive check
@@ -111,13 +111,18 @@ export const getOrderedStaffMembers = (staffMembers, dateRange = []) => {
     // If no active staff found but we have staff members, return all staff (fallback)
     if (activeStaff.length === 0 && staffMembers.length > 0) {
       const nakataStaff = staffMembers.find(staff => staff && staff.name === '中田');
-      const otherStaff = staffMembers.filter(staff => staff && staff.name !== '中田');
-      return nakataStaff ? [...otherStaff, nakataStaff] : staffMembers;
+      const partTimeStaff = staffMembers.filter(staff => staff && staff.status === 'パート' && staff.name !== '中田');
+      const otherStaff = staffMembers.filter(staff => staff && staff.status !== 'パート' && staff.name !== '中田');
+      return [...otherStaff, ...partTimeStaff, ...(nakataStaff ? [nakataStaff] : [])];
     }
     
+    // Separate staff by type: regular staff, part-time staff, and 中田
     const nakataStaff = activeStaff.find(staff => staff && staff.name === '中田');
-    const otherStaff = activeStaff.filter(staff => staff && staff.name !== '中田');
-    return nakataStaff ? [...otherStaff, nakataStaff] : activeStaff;
+    const partTimeStaff = activeStaff.filter(staff => staff && staff.status === 'パート' && staff.name !== '中田');
+    const otherStaff = activeStaff.filter(staff => staff && staff.status !== 'パート' && staff.name !== '中田');
+    
+    // Order: regular staff first, then part-time staff, then 中田 at the very end
+    return [...otherStaff, ...partTimeStaff, ...(nakataStaff ? [nakataStaff] : [])];
   } catch (error) {
     console.error('Error in getOrderedStaffMembers:', error);
     return staffMembers || []; // Return original staff members or empty array

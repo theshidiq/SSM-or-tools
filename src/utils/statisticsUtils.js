@@ -64,6 +64,7 @@ export const generateStatistics = (schedule, staffMembers, dateRange) => {
       const staffSchedule = schedule[staff.id];
       const shift = staffSchedule && staffSchedule[dateKey] ? staffSchedule[dateKey] : '';
       
+      
       // Count shifts with proper mapping
       // Exclude medamayaki and zensai from all statistics
       if (shift === 'medamayaki' || shift === 'zensai' || shift === '◎' || shift === '▣') {
@@ -74,22 +75,27 @@ export const generateStatistics = (schedule, staffMembers, dateRange) => {
       // Handle both symbol characters and key names
       let countedShift = shift;
       if (shift === '' || shift === undefined || shift === null) {
-        countedShift = 'normal'; // Blank counts as normal
-      } else if (shift === 'special' || shift === '●') {
-        countedShift = 'normal'; // Special counts as normal
-      } else if (shift === 'unavailable' || shift === '⊘') {
-        countedShift = 'off'; // Unavailable counts as off
-      } else if (shift === '△') {
-        countedShift = 'early'; // Triangle symbol
-      } else if (shift === '×') {
-        countedShift = 'off'; // Cross symbol
-      } else if (shift === '★') {
-        countedShift = 'holiday'; // Star symbol
-      } else if (shift === '◇') {
-        countedShift = 'late'; // Diamond symbol
-      } else if (shift === '◎') {
+        // For パート staff, empty cells default to unavailable
+        if (staff.status === 'パート') {
+          countedShift = 'off'; // Count as day off for パート
+        } else {
+          countedShift = 'normal'; // Blank counts as normal for other staff
+        }
+      } else if (shift === 'normal' || shift === 'special' || shift === '●') {
+        countedShift = 'normal'; // Normal/Special counts as normal
+      } else if (shift === 'early' || shift === '△') {
+        countedShift = 'early'; // Early shift or Triangle symbol
+      } else if (shift === 'off' || shift === 'unavailable' || shift === '×' || shift === '⊘') {
+        countedShift = 'off'; // Off/Unavailable/Cross symbol
+      } else if (shift === 'holiday' || shift === '★') {
+        countedShift = 'holiday'; // Holiday or Star symbol
+      } else if (shift === 'late' || shift === '◇') {
+        countedShift = 'late'; // Late shift or Diamond symbol
+      } else if (shift === '○') {
+        countedShift = 'normal'; // Circle symbol for パート normal shift
+      } else if (shift === 'medamayaki' || shift === '◎') {
         countedShift = 'medamayaki'; // Will be excluded above
-      } else if (shift === '▣') {
+      } else if (shift === 'zensai' || shift === '▣') {
         countedShift = 'zensai'; // Will be excluded above
       }
       // Keep other values as they are
@@ -98,14 +104,20 @@ export const generateStatistics = (schedule, staffMembers, dateRange) => {
         stats.staffStats[staff.id][countedShift]++;
       }
       
-      // Count work days (blank counts as working, off/unavailable/holiday don't count as work days)
-      if (countedShift !== 'off' && countedShift !== 'holiday' && shift !== 'medamayaki' && shift !== 'zensai' && shift !== '◎' && shift !== '▣') {
+      // Count work days (blank counts as working for non-パート, off/unavailable/holiday don't count as work days)
+      // For パート staff, empty cells are unavailable and don't count as work days
+      const isWorkDay = staff.status === 'パート' ? 
+        (shift !== '' && shift !== null && shift !== undefined && countedShift !== 'off' && countedShift !== 'holiday') :
+        (countedShift !== 'off' && countedShift !== 'holiday');
+      
+      if (isWorkDay && shift !== 'medamayaki' && shift !== 'zensai' && shift !== '◎' && shift !== '▣') {
         stats.staffStats[staff.id].workDays++;
       }
     });
     
     // Calculate vacation days using the dedicated function
     stats.staffStats[staff.id].vacationDays = calculateVacationDays(staff.id, schedule, dateRange);
+    
   });
 
   return stats;

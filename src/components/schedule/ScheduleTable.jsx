@@ -32,7 +32,12 @@ const ScheduleTable = ({
   const [customInputText, setCustomInputText] = useState('');
 
   // Function to get symbol color based on the cell value
-  const getSymbolColor = (value) => {
+  const getSymbolColor = (value, staff) => {
+    // For パート staff, if value is empty, default to unavailable
+    if (staff?.status === 'パート' && (!value || value === '')) {
+      return shiftSymbols.unavailable.color;
+    }
+    
     if (!value) return 'text-gray-400'; // Empty/blank cells
     
     // Find the shift type by symbol
@@ -44,6 +49,21 @@ const ScheduleTable = ({
     
     // For custom text (not a predefined symbol)
     return 'text-gray-700';
+  };
+
+  // Function to get display value for cell
+  const getCellDisplayValue = (value, staff) => {
+    // For パート staff, if value is empty, default to unavailable symbol
+    if (staff?.status === 'パート' && (!value || value === '')) {
+      return shiftSymbols.unavailable.symbol;
+    }
+    
+    // For late shift, don't display symbol (show as background color only)
+    if (value === 'late') {
+      return '';
+    }
+    
+    return value;
   };
 
   const handleShiftClick = (staffId, dateKey, currentValue) => {
@@ -67,9 +87,16 @@ const ScheduleTable = ({
 
   const handleShiftSelect = (staffId, dateKey, shiftKey) => {
     // Handle different shift types
+    const staff = staffMembers.find(s => s.id === staffId);
     let shiftValue;
+    
     if (shiftKey === 'normal') {
-      shiftValue = ''; // Normal shift shows as blank
+      // For パート staff, normal shift shows circle symbol
+      if (staff?.status === 'パート') {
+        shiftValue = shiftSymbols[shiftKey]?.symbol || '○'; // Store circle symbol
+      } else {
+        shiftValue = ''; // Normal shift shows as blank for other staff
+      }
     } else if (shiftKey === 'late') {
       shiftValue = 'late'; // Late shift stores as 'late' key, not symbol
     } else {
@@ -87,6 +114,46 @@ const ScheduleTable = ({
     setEditingCell(null);
     setShowDropdown(null);
     setCustomInputText('');
+  };
+
+  // Helper function to check if date is start/end for 派遣 staff
+  const getStaffPeriodLabel = (staff, date) => {
+    if (staff.status !== '派遣' || !staff.startPeriod) {
+      return null;
+    }
+
+    const currentDate = new Date(date);
+    currentDate.setHours(0, 0, 0, 0);
+
+    // Check if it's start date
+    if (staff.startPeriod) {
+      const startDate = new Date(
+        staff.startPeriod.year,
+        staff.startPeriod.month - 1,
+        staff.startPeriod.day || 1
+      );
+      startDate.setHours(0, 0, 0, 0);
+      
+      if (currentDate.getTime() === startDate.getTime()) {
+        return 'START';
+      }
+    }
+
+    // Check if it's end date
+    if (staff.endPeriod) {
+      const endDate = new Date(
+        staff.endPeriod.year,
+        staff.endPeriod.month - 1,
+        staff.endPeriod.day || 1
+      );
+      endDate.setHours(0, 0, 0, 0);
+      
+      if (currentDate.getTime() === endDate.getTime()) {
+        return 'END';
+      }
+    }
+
+    return null;
   };
 
   const handleCustomTextSubmit = (staffId, dateKey) => {
@@ -269,6 +336,7 @@ const ScheduleTable = ({
                   const cellValue = schedule[staff.id]?.[dateKey] || '';
                   const isActiveForDate = isDateWithinWorkPeriod(date, staff);
                   const isDropdownOpen = showDropdown === cellKey;
+                  const periodLabel = getStaffPeriodLabel(staff, date);
                   
                   const isEditingThis = editingCell === cellKey;
 
@@ -328,8 +396,14 @@ const ScheduleTable = ({
                             }}
                             title={`${staff.name} - ${format(date, 'M/d')}`}
                           >
-                            <span className={`text-2xl font-bold select-none ${getSymbolColor(cellValue)}`}>
-                              {cellValue === 'late' ? '' : cellValue}
+                            <span className={`${
+                              periodLabel ? 'text-xs font-bold' : 'text-2xl font-bold'
+                            } select-none ${
+                              periodLabel === 'START' ? 'text-green-600' : 
+                              periodLabel === 'END' ? 'text-red-600' : 
+                              getSymbolColor(cellValue, staff)
+                            }`}>
+                              {periodLabel || getCellDisplayValue(cellValue, staff)}
                             </span>
                           </button>
                           
@@ -341,18 +415,43 @@ const ScheduleTable = ({
                               onClick={(e) => e.stopPropagation()}
                             >
                               <div className="py-1">
-                                {/* Normal/Blank Shift as Default */}
-                                <button
-                                  onClick={() => handleShiftSelect(staff.id, dateKey, 'normal')}
-                                  className="w-full text-left px-3 py-2 text-base hover:bg-gray-50 border-b border-gray-100 flex items-center gap-2"
-                                >
-                                  <span className="text-gray-600 font-medium">（空白）</span>
-                                  <span className="text-gray-500">Normal Shift</span>
-                                </button>
-                                
-                                {/* Other Shift Options */}
-                                {getAvailableShifts(staff.status).filter(key => key !== 'normal').map(shiftKey => {
+                                {/* Show available shifts for this staff type */}
+                                {getAvailableShifts(staff.status).map(shiftKey => {
                                   const shift = shiftSymbols[shiftKey];
+                                  
+                                  // For パート staff, show normal shift as circle with proper label
+                                  if (staff.status === 'パート' && shiftKey === 'normal') {
+                                    return (
+                                      <button
+                                        key={shiftKey}
+                                        onClick={() => handleShiftSelect(staff.id, dateKey, shiftKey)}
+                                        className="w-full text-left px-3 py-2 text-base hover:bg-gray-50 border-b border-gray-100 flex items-center gap-2"
+                                      >
+                                        <span className={`font-bold ${shift.color}`}>
+                                          {shift.symbol}
+                                        </span>
+                                        <span className="text-gray-700">
+                                          Circle (Normal)
+                                        </span>
+                                      </button>
+                                    );
+                                  }
+                                  
+                                  // For other staff types, show normal as blank
+                                  if (staff.status !== 'パート' && shiftKey === 'normal') {
+                                    return (
+                                      <button
+                                        key={shiftKey}
+                                        onClick={() => handleShiftSelect(staff.id, dateKey, shiftKey)}
+                                        className="w-full text-left px-3 py-2 text-base hover:bg-gray-50 border-b border-gray-100 flex items-center gap-2"
+                                      >
+                                        <span className="text-gray-600 font-medium">（空白）</span>
+                                        <span className="text-gray-500">Normal Shift</span>
+                                      </button>
+                                    );
+                                  }
+                                  
+                                  // For all other shifts, show normally
                                   return (
                                     <button
                                       key={shiftKey}
@@ -426,17 +525,27 @@ const ScheduleTable = ({
             {orderedStaffMembers.map((staff, staffIndex) => {
               if (!staff || !staff.id) return null;
               
-              // Calculate day off count for this staff member
+              // Calculate day off count to match statistics dashboard total
+              // Total = (early × 0.5) + (off × 1) + (holiday × 1)
               let dayOffCount = 0;
               dateRange.forEach(date => {
                 const dateKey = date.toISOString().split('T')[0];
                 const cellValue = schedule[staff.id]?.[dateKey] || '';
                 
-                // Cross (×) = 1 day off, Triangle (△) = 0.5 day off
-                if (cellValue === '×') {
-                  dayOffCount += 1;
-                } else if (cellValue === '△') {
-                  dayOffCount += 0.5;
+                // For パート staff: empty cells and unavailable symbol count as day off
+                if (staff.status === 'パート') {
+                  if (cellValue === '' || cellValue === '⊘' || cellValue === '×') {
+                    dayOffCount += 1;
+                  }
+                } else {
+                  // Match statistics calculation: Triangle (△) = 0.5, Cross (×) = 1, Star (★) = 1
+                  if (cellValue === '×') {
+                    dayOffCount += 1;
+                  } else if (cellValue === '△') {
+                    dayOffCount += 0.5;
+                  } else if (cellValue === '★') {
+                    dayOffCount += 1;
+                  }
                 }
               });
               

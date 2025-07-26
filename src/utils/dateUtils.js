@@ -1,8 +1,9 @@
 import { addDays, format } from 'date-fns';
 
 // Month periods configuration (21st to 20th of next month)
+// Using UTC dates to ensure consistent ISO string representation
 export let monthPeriods = [
-  { start: new Date(2025, 0, 21), end: new Date(2025, 1, 20), label: '1月・2月' }, // Jan-Feb
+  { start: new Date(Date.UTC(2025, 0, 21)), end: new Date(Date.UTC(2025, 1, 20)), label: '1月・2月' }, // Jan-Feb
 ];
 
 // Function to add next period
@@ -17,16 +18,18 @@ export const addNextPeriod = () => {
   
   // Next period starts the day after the last period ends
   const nextStartDate = new Date(lastEndDate);
-  nextStartDate.setDate(nextStartDate.getDate() + 1);
+  nextStartDate.setUTCDate(nextStartDate.getUTCDate() + 1);
+  nextStartDate.setUTCHours(0, 0, 0, 0); // Ensure midnight UTC
   
   // Next period ends after one month
   const nextEndDate = new Date(nextStartDate);
-  nextEndDate.setMonth(nextEndDate.getMonth() + 1);
-  nextEndDate.setDate(nextEndDate.getDate() - 1);
+  nextEndDate.setUTCMonth(nextEndDate.getUTCMonth() + 1);
+  nextEndDate.setUTCDate(nextEndDate.getUTCDate() - 1);
+  nextEndDate.setUTCHours(0, 0, 0, 0); // Ensure midnight UTC
   
   // Generate label based on months
-  const startMonth = nextStartDate.getMonth() + 1;
-  const endMonth = nextEndDate.getMonth() + 1;
+  const startMonth = nextStartDate.getUTCMonth() + 1;
+  const endMonth = nextEndDate.getUTCMonth() + 1;
   const startMonthName = ['', '1月', '2月', '3月', '4月', '5月', '6月', '7月', '8月', '9月', '10月', '11月', '12月'][startMonth];
   const endMonthName = ['', '1月', '2月', '3月', '4月', '5月', '6月', '7月', '8月', '9月', '10月', '11月', '12月'][endMonth];
   
@@ -59,7 +62,10 @@ export const generateDateRange = (monthIndex) => {
   
   const dates = [];
   let currentDate = new Date(period.start);
-  while (currentDate <= period.end) {
+  
+  const endDate = new Date(period.end);
+  
+  while (currentDate <= endDate) {
     dates.push(new Date(currentDate));
     currentDate = addDays(currentDate, 1);
   }

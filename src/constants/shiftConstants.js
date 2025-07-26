@@ -1,7 +1,7 @@
 // Shift symbols and their properties
 export const shiftSymbols = {
   early: { symbol: '△', label: 'Early Shift', color: 'text-blue-600' },
-  normal: { symbol: '', label: 'Normal Shift', color: 'text-gray-600' },
+  normal: { symbol: '○', label: 'Normal Shift', color: 'text-gray-600' },
   late: { symbol: '◇', label: 'Late Shift', color: 'text-purple-600' },
   special: { symbol: '●', label: 'Special Shift', color: 'text-green-600' },
   medamayaki: { symbol: '◎', label: '目玉焼き', color: 'text-orange-600' },
@@ -14,7 +14,8 @@ export const shiftSymbols = {
 // Staff status types
 export const staffStatus = {
   EMPLOYEE: '社員',
-  TEMP: '派遣'
+  TEMP: '派遣',
+  PART_TIME: 'パート'
 };
 
 // Shift access rules based on staff status
@@ -25,6 +26,9 @@ export const getAvailableShifts = (status) => {
   if (status === '社員') {
     // 社員 staff get late shift + new options (目玉焼き, 前菜)
     return ['normal', 'off', 'early', 'late', 'medamayaki', 'zensai', 'holiday'];
+  } else if (status === 'パート') {
+    // パート staff get special limited options: unavailable, normal (circle), cross
+    return ['unavailable', 'normal', 'off'];
   } else {
     // 派遣 staff get standard options (no late shift, no special symbols)
     return ['normal', 'off', 'early', 'holiday'];

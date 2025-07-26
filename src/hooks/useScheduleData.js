@@ -165,7 +165,6 @@ export const useScheduleData = (
 
     // Set debounced auto-save timer (2 seconds)
     autoSaveTimeoutRef.current = setTimeout(async () => {
-      console.log('Auto-saving to database...', newScheduleData);
       
       if (onSaveSchedule && typeof onSaveSchedule === 'function') {
         try {
@@ -173,14 +172,41 @@ export const useScheduleData = (
           const currentStaffByMonth = loadFromLocalStorage(STORAGE_KEYS.STAFF_BY_MONTH) || {};
           const currentMonthStaff = currentStaffByMonth[currentMonthRef.current] || [];
           
+          // Filter schedule data to only include currently active staff
+          const activeStaffIds = (newStaffMembers || currentMonthStaff).map(staff => staff.id);
+          const filteredScheduleData = {};
+          
+          // Only include schedule data for active staff members
+          activeStaffIds.forEach(staffId => {
+            if (newScheduleData[staffId]) {
+              filteredScheduleData[staffId] = newScheduleData[staffId];
+            }
+          });
+          
+          // Also filter by current date range to remove old dates
+          const currentDateRange = generateDateRange(currentMonthRef.current);
+          const validDateKeys = currentDateRange.map(date => date.toISOString().split('T')[0]);
+          
+          // Clean up dates that are outside current period
+          const dateFilteredScheduleData = {};
+          activeStaffIds.forEach(staffId => {
+            if (filteredScheduleData[staffId]) {
+              dateFilteredScheduleData[staffId] = {};
+              validDateKeys.forEach(dateKey => {
+                if (filteredScheduleData[staffId][dateKey] !== undefined) {
+                  dateFilteredScheduleData[staffId][dateKey] = filteredScheduleData[staffId][dateKey];
+                }
+              });
+            }
+          });
+          
           // Prepare data in the format expected by the database
           const saveData = {
-            ...newScheduleData,
+            ...dateFilteredScheduleData,
             _staff_members: newStaffMembers || currentMonthStaff
           };
           
           await onSaveSchedule(saveData);
-          console.log('✅ Successfully saved to database');
         } catch (error) {
           console.error('❌ Failed to save to database:', error);
         }
@@ -192,10 +218,23 @@ export const useScheduleData = (
 
   // Update schedule with auto-save
   const updateSchedule = useCallback((newSchedule) => {
-    setSchedule(newSchedule);
+    // Get current active staff for filtering
+    const currentStaffByMonth = loadFromLocalStorage(STORAGE_KEYS.STAFF_BY_MONTH) || {};
+    const currentMonthStaff = currentStaffByMonth[currentMonthRef.current] || [];
+    const activeStaffIds = currentMonthStaff.map(staff => staff.id);
+    
+    // Filter schedule to only include active staff
+    const filteredSchedule = {};
+    activeStaffIds.forEach(staffId => {
+      if (newSchedule[staffId]) {
+        filteredSchedule[staffId] = newSchedule[staffId];
+      }
+    });
+    
+    setSchedule(filteredSchedule);
     
     // Auto-save (this will handle localStorage updates)
-    scheduleAutoSave(newSchedule);
+    scheduleAutoSave(filteredSchedule);
   }, [scheduleAutoSave]);
 
   // Update shift for specific staff and date
@@ -207,7 +246,6 @@ export const useScheduleData = (
         [dateKey]: shiftValue
       }
     };
-    
     updateSchedule(newSchedule);
   }, [schedule, updateSchedule]);
 
