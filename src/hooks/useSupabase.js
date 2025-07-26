@@ -22,12 +22,105 @@ export const useSupabase = () => {
     }
   }, [])
 
-  // Save schedule data
+  // Clean up old schedule records (keep only the most recent ones)
+  const cleanupOldSchedules = useCallback(async (keepCount = 3) => {
+    try {
+      console.log('🧹 Starting database cleanup...');
+      
+      // Get all schedules ordered by updated_at (newest first)
+      const { data: allSchedules, error: fetchError } = await supabase
+        .from('schedules')
+        .select('id, updated_at')
+        .order('updated_at', { ascending: false });
+      
+      if (fetchError) throw fetchError;
+      
+      console.log(`📊 Found ${allSchedules?.length || 0} total records in database`);
+      
+      if (allSchedules && allSchedules.length > keepCount) {
+        // Get IDs of schedules to delete (keep only the newest ones)
+        const schedulesToDelete = allSchedules.slice(keepCount);
+        const idsToDelete = schedulesToDelete.map(schedule => schedule.id);
+        
+        console.log(`🗑️ Deleting ${idsToDelete.length} old schedule records...`);
+        
+        // Delete old schedules in batches to avoid timeout
+        const batchSize = 50;
+        for (let i = 0; i < idsToDelete.length; i += batchSize) {
+          const batch = idsToDelete.slice(i, i + batchSize);
+          const { error: deleteError } = await supabase
+            .from('schedules')
+            .delete()
+            .in('id', batch);
+          
+          if (deleteError) throw deleteError;
+          console.log(`🔄 Deleted batch ${Math.floor(i/batchSize) + 1}/${Math.ceil(idsToDelete.length/batchSize)}`);
+        }
+        
+        console.log(`✅ Successfully deleted ${idsToDelete.length} old records. Kept ${keepCount} most recent.`);
+      } else {
+        console.log('✅ No cleanup needed. Record count within limit.');
+      }
+    } catch (err) {
+      console.error('❌ Database cleanup failed:', err);
+      // Don't throw error - cleanup failure shouldn't prevent saving
+    }
+  }, []);
+
+  // One-time massive cleanup for existing bloated database
+  const massiveCleanup = useCallback(async () => {
+    try {
+      console.log('💥 Starting MASSIVE database cleanup...');
+      
+      // Get count first
+      const { data: allSchedules, error: fetchError } = await supabase
+        .from('schedules')
+        .select('id, updated_at')
+        .order('updated_at', { ascending: false });
+      
+      if (fetchError) throw fetchError;
+      
+      console.log(`📊 Found ${allSchedules?.length || 0} total records. This might take a while...`);
+      
+      if (allSchedules && allSchedules.length > 1) {
+        // Keep only the very latest record
+        const schedulesToDelete = allSchedules.slice(1);
+        const idsToDelete = schedulesToDelete.map(schedule => schedule.id);
+        
+        console.log(`🗑️ Deleting ${idsToDelete.length} old records, keeping only the latest...`);
+        
+        // Delete in smaller batches to avoid timeout
+        const batchSize = 20;
+        for (let i = 0; i < idsToDelete.length; i += batchSize) {
+          const batch = idsToDelete.slice(i, i + batchSize);
+          const { error: deleteError } = await supabase
+            .from('schedules')
+            .delete()
+            .in('id', batch);
+          
+          if (deleteError) throw deleteError;
+          
+          const progress = Math.round(((i + batch.length) / idsToDelete.length) * 100);
+          console.log(`🔄 Progress: ${progress}% (${i + batch.length}/${idsToDelete.length})`);
+        }
+        
+        console.log(`🎉 MASSIVE CLEANUP COMPLETE! Deleted ${idsToDelete.length} records. Database is now lean!`);
+      }
+    } catch (err) {
+      console.error('❌ Massive cleanup failed:', err);
+      throw err;
+    }
+  }, []);
+
+  // Save schedule data with automatic cleanup
   const saveScheduleData = useCallback(async (data, scheduleId = null) => {
     setIsLoading(true)
     setError(null)
     
     try {
+      // Always run cleanup before saving to keep database lean
+      await cleanupOldSchedules(3); // Keep only 3 most recent records
+      
       if (scheduleId) {
         // Update existing schedule
         const { data: updatedData, error } = await supabase
@@ -63,7 +156,7 @@ export const useSupabase = () => {
     } finally {
       setIsLoading(false)
     }
-  }, [])
+  }, [cleanupOldSchedules])
 
   // Load schedule data
   const loadScheduleData = useCallback(async (scheduleId = null) => {
@@ -170,6 +263,8 @@ export const useSupabase = () => {
     autoSave,
     subscribeToScheduleUpdates,
     checkConnection,
+    cleanupOldSchedules,
+    massiveCleanup,
     
     // Utilities
     clearError: () => setError(null)
