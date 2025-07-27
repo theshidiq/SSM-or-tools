@@ -40,7 +40,8 @@ const NavigationToolbar = ({
   handleExport,
   handlePrint,
   handleAddTable,
-  handleDeletePeriod
+  handleDeletePeriod,
+  syncLocalStorageToDatabase
 }) => {
   return (
     <div className="toolbar-section mb-6">
@@ -50,16 +51,18 @@ const NavigationToolbar = ({
         <div className="flex items-center gap-3">
           {/* Previous Month Button */}
           <button
-            onClick={() => onMonthChange(currentMonthIndex - 1)}
-            disabled={currentMonthIndex === 0}
+            onClick={() => {
+              onMonthChange(currentMonthIndex - 1);
+            }}
+            disabled={currentMonthIndex <= 0}
             className={`flex items-center px-3 py-2 h-10 text-sm font-medium rounded-lg border transition-all duration-200 ${
-              currentMonthIndex === 0
+              currentMonthIndex <= 0
                 ? 'border-gray-200 bg-gray-50 text-gray-400 cursor-not-allowed'
                 : 'border-gray-300 bg-white hover:border-gray-400'
             }`}
             title="Previous period"
           >
-            <ChevronLeft size={16} className={currentMonthIndex === 0 ? 'text-gray-400' : 'text-gray-600 hover:text-gray-800'} />
+            <ChevronLeft size={16} className={currentMonthIndex <= 0 ? 'text-gray-400' : 'text-gray-600 hover:text-gray-800'} />
           </button>
           
           {/* Month Picker */}
@@ -101,7 +104,9 @@ const NavigationToolbar = ({
           
           {/* Next Month Button */}
           <button
-            onClick={() => onMonthChange(currentMonthIndex + 1)}
+            onClick={() => {
+              onMonthChange(currentMonthIndex + 1);
+            }}
             disabled={currentMonthIndex >= monthPeriods.length - 1}
             className={`flex items-center px-3 py-2 h-10 text-sm font-medium rounded-lg border transition-all duration-200 ${
               currentMonthIndex >= monthPeriods.length - 1
@@ -173,6 +178,22 @@ const NavigationToolbar = ({
             title="Manual Save"
           >
             <Save size={16} className="text-blue-600 hover:text-blue-700" />
+          </button>
+
+          {/* Sync LocalStorage to Database */}
+          <button
+            onClick={async () => {
+              try {
+                await syncLocalStorageToDatabase();
+                alert('✅ Data synced to database!');
+              } catch (error) {
+                alert('❌ Sync failed: ' + error.message);
+              }
+            }}
+            className="flex items-center px-3 py-2 h-10 text-sm font-medium rounded-lg border border-gray-300 bg-white hover:border-gray-400 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500 transition-all duration-200"
+            title="Sync LocalStorage to Database"
+          >
+            <RotateCcw size={16} className="text-orange-600 hover:text-orange-700" />
           </button>
           
           {/* Delete Columns */}

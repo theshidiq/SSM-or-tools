@@ -5,6 +5,25 @@ import { isDateWithinWorkPeriod } from './dateUtils';
 
 // Export schedule to CSV format
 export const exportToCSV = (staffMembers, dateRange, schedule) => {
+  // Validate input parameters
+  if (!Array.isArray(staffMembers)) {
+    console.error('exportToCSV: staffMembers is not an array:', staffMembers);
+    alert('スタッフデータの読み込みに失敗しました。ページを再読み込みしてください。');
+    return;
+  }
+  
+  if (!Array.isArray(dateRange) || dateRange.length === 0) {
+    console.error('exportToCSV: dateRange is invalid:', dateRange);
+    alert('日付範囲が正しくありません。');
+    return;
+  }
+  
+  if (!schedule || typeof schedule !== 'object') {
+    console.error('exportToCSV: schedule is invalid:', schedule);
+    alert('スケジュールデータが正しくありません。');
+    return;
+  }
+
   const headers = ['Date / 日付', ...staffMembers.map(staff => staff?.name || 'Unknown')];
   const rows = [headers];
 
@@ -43,6 +62,22 @@ export const exportToCSV = (staffMembers, dateRange, schedule) => {
 
 // Generate print-friendly HTML content
 export const generatePrintHTML = (staffMembers, dateRange, schedule) => {
+  // Validate input parameters
+  if (!Array.isArray(staffMembers)) {
+    console.error('generatePrintHTML: staffMembers is not an array:', staffMembers);
+    return '<html><body><h1>Error: スタッフデータの読み込みに失敗しました</h1></body></html>';
+  }
+  
+  if (!Array.isArray(dateRange) || dateRange.length === 0) {
+    console.error('generatePrintHTML: dateRange is invalid:', dateRange);
+    return '<html><body><h1>Error: 日付範囲が正しくありません</h1></body></html>';
+  }
+  
+  if (!schedule || typeof schedule !== 'object') {
+    console.error('generatePrintHTML: schedule is invalid:', schedule);
+    return '<html><body><h1>Error: スケジュールデータが正しくありません</h1></body></html>';
+  }
+
   return `
     <!DOCTYPE html>
     <html>
@@ -112,6 +147,25 @@ export const generatePrintHTML = (staffMembers, dateRange, schedule) => {
 
 // Print schedule
 export const printSchedule = (staffMembers, dateRange, schedule) => {
+  // Validate input parameters
+  if (!Array.isArray(staffMembers)) {
+    console.error('printSchedule: staffMembers is not an array:', staffMembers);
+    alert('スタッフデータの読み込みに失敗しました。ページを再読み込みしてください。');
+    return;
+  }
+  
+  if (!Array.isArray(dateRange) || dateRange.length === 0) {
+    console.error('printSchedule: dateRange is invalid:', dateRange);
+    alert('日付範囲が正しくありません。');
+    return;
+  }
+  
+  if (!schedule || typeof schedule !== 'object') {
+    console.error('printSchedule: schedule is invalid:', schedule);
+    alert('スケジュールデータが正しくありません。');
+    return;
+  }
+
   const printContent = generatePrintHTML(staffMembers, dateRange, schedule);
   const printWindow = window.open('', '_blank');
   

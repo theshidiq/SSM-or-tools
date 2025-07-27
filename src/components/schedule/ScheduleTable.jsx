@@ -29,6 +29,7 @@ const ScheduleTable = ({
   scheduleAutoSave,
   editStaffName
 }) => {
+
   const [customInputText, setCustomInputText] = useState('');
 
   // Function to get symbol color based on the cell value
@@ -229,8 +230,7 @@ const ScheduleTable = ({
             
             {/* Staff Column Headers */}
             {orderedStaffMembers.map((staff, staffIndex) => {
-              if (!staff || !staff.id) return null;
-              
+              if (!staff) return null;
               return (
                 <th 
                   key={staff.id}
@@ -302,7 +302,7 @@ const ScheduleTable = ({
         </thead>
 
         {/* Table Body: Date Rows */}
-        <tbody>
+        <tbody>          
           {dateRange.map((date, dateIndex) => {
             const dateKey = date.toISOString().split('T')[0];
             const isWeekend = date.getDay() === 0 || date.getDay() === 6;
@@ -330,15 +330,12 @@ const ScheduleTable = ({
 
                 {/* Staff Shift Cells */}
                 {orderedStaffMembers.map((staff, staffIndex) => {
-                  if (!staff || !staff.id) return null;
+                  if (!staff) return null;
                   
                   const cellKey = `${staff.id}-${dateKey}`;
                   const cellValue = schedule[staff.id]?.[dateKey] || '';
                   const isActiveForDate = isDateWithinWorkPeriod(date, staff);
-                  const isDropdownOpen = showDropdown === cellKey;
-                  const periodLabel = getStaffPeriodLabel(staff, date);
                   
-                  const isEditingThis = editingCell === cellKey;
 
                   return (
                     <td 
@@ -362,151 +359,19 @@ const ScheduleTable = ({
                         <div className="w-full h-full flex items-center justify-center text-gray-400">
                           <span className="text-xs">-</span>
                         </div>
-                      ) : isEditingThis ? (
-                        <div className="w-full h-full flex items-center justify-center p-1">
-                          <input
-                            type="text"
-                            value={customText}
-                            onChange={(e) => setCustomText(e.target.value)}
-                            onBlur={() => handleCustomTextSubmit(staff.id, dateKey)}
-                            onKeyDown={(e) => {
-                              if (e.key === 'Enter') {
-                                handleCustomTextSubmit(staff.id, dateKey);
-                              } else if (e.key === 'Escape') {
-                                setEditingCell(null);
-                                setCustomText('');
-                              }
-                            }}
-                            className="w-full h-full text-center text-xs border border-blue-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
-                            autoFocus
-                            placeholder="テキスト"
-                          />
-                        </div>
                       ) : (
-                        <>
-                          <button
-                            className={`w-full h-full flex items-center justify-center cursor-pointer transition-all duration-200 ${
-                              cellValue === 'late' ? '' : 'hover:bg-blue-100'
-                            } ${
-                              isDropdownOpen ? 'bg-blue-100' : ''
-                            }`}
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleShiftClick(staff.id, dateKey, cellValue);
-                            }}
-                            title={`${staff.name} - ${format(date, 'M/d')}`}
-                          >
-                            <span className={`${
-                              periodLabel ? 'text-xs font-bold' : 'text-2xl font-bold'
-                            } select-none ${
-                              periodLabel === 'START' ? 'text-green-600' : 
-                              periodLabel === 'END' ? 'text-red-600' : 
-                              getSymbolColor(cellValue, staff)
-                            }`}>
-                              {periodLabel || getCellDisplayValue(cellValue, staff)}
-                            </span>
-                          </button>
-                          
-                          {/* Shift Selection Dropdown */}
-                          {isDropdownOpen && (
-                            <div 
-                              className="shift-dropdown absolute bg-white border border-gray-300 rounded-lg shadow-lg z-50 min-w-[120px]"
-                              style={getDropdownPosition(staffIndex, dateIndex, orderedStaffMembers.length, dateRange.length)}
-                              onClick={(e) => e.stopPropagation()}
-                            >
-                              <div className="py-1">
-                                {/* Show available shifts for this staff type */}
-                                {getAvailableShifts(staff.status).map(shiftKey => {
-                                  const shift = shiftSymbols[shiftKey];
-                                  
-                                  // For パート staff, show normal shift as circle with proper label
-                                  if (staff.status === 'パート' && shiftKey === 'normal') {
-                                    return (
-                                      <button
-                                        key={shiftKey}
-                                        onClick={() => handleShiftSelect(staff.id, dateKey, shiftKey)}
-                                        className="w-full text-left px-3 py-2 text-base hover:bg-gray-50 border-b border-gray-100 flex items-center gap-2"
-                                      >
-                                        <span className={`font-bold ${shift.color}`}>
-                                          {shift.symbol}
-                                        </span>
-                                        <span className="text-gray-700">
-                                          Circle (Normal)
-                                        </span>
-                                      </button>
-                                    );
-                                  }
-                                  
-                                  // For other staff types, show normal as blank
-                                  if (staff.status !== 'パート' && shiftKey === 'normal') {
-                                    return (
-                                      <button
-                                        key={shiftKey}
-                                        onClick={() => handleShiftSelect(staff.id, dateKey, shiftKey)}
-                                        className="w-full text-left px-3 py-2 text-base hover:bg-gray-50 border-b border-gray-100 flex items-center gap-2"
-                                      >
-                                        <span className="text-gray-600 font-medium">（空白）</span>
-                                        <span className="text-gray-500">Normal Shift</span>
-                                      </button>
-                                    );
-                                  }
-                                  
-                                  // For all other shifts, show normally
-                                  return (
-                                    <button
-                                      key={shiftKey}
-                                      onClick={() => handleShiftSelect(staff.id, dateKey, shiftKey)}
-                                      className="w-full text-left px-3 py-2 text-base hover:bg-gray-50 flex items-center gap-2"
-                                    >
-                                      <span className={`font-bold ${shift.color}`}>
-                                        {shift.symbol}
-                                      </span>
-                                      <span className="text-gray-700">
-                                        {shift.label}
-                                      </span>
-                                    </button>
-                                  );
-                                })}
-                                
-                                {/* Custom Text Input - Always visible */}
-                                <div className="border-t border-gray-100 p-2">
-                                  <div className="flex flex-col gap-2">
-                                    <input
-                                      type="text"
-                                      value={customInputText}
-                                      onChange={(e) => setCustomInputText(e.target.value)}
-                                      onKeyDown={(e) => {
-                                        if (e.key === 'Enter') {
-                                          handleCustomTextSave(staff.id, dateKey);
-                                        } else if (e.key === 'Escape') {
-                                          handleCustomTextCancel();
-                                        }
-                                      }}
-                                      className="w-full px-2 py-1 text-sm border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
-                                      placeholder="カスタムテキスト..."
-                                    />
-                                    <div className="flex items-center gap-1">
-                                      <button
-                                        onClick={handleCustomTextCancel}
-                                        className="flex-1 px-4 py-2 text-sm text-white bg-red-600 hover:bg-red-700 flex items-center justify-center transition-colors duration-200"
-                                        title="キャンセル"
-                                      >
-                                        <X size={16} />
-                                      </button>
-                                      <button
-                                        onClick={() => handleCustomTextSave(staff.id, dateKey)}
-                                        className="flex-1 px-4 py-2 text-sm text-white bg-green-600 hover:bg-green-700 flex items-center justify-center transition-colors duration-200"
-                                        title="保存"
-                                      >
-                                        <Check size={16} />
-                                      </button>
-                                    </div>
-                                  </div>
-                                </div>
-                              </div>
-                            </div>
-                          )}
-                        </>
+                        <button
+                          className="w-full h-full flex items-center justify-center cursor-pointer transition-all duration-200 hover:bg-blue-100"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleShiftClick(staff.id, dateKey, cellValue);
+                          }}
+                          title={`${staff.name} - ${format(date, 'M/d')}`}
+                        >
+                          <span className="text-2xl font-bold select-none text-gray-700">
+                            {getCellDisplayValue(cellValue, staff)}
+                          </span>
+                        </button>
                       )}
                     </td>
                   );
@@ -523,7 +388,7 @@ const ScheduleTable = ({
               休日数
             </td>
             {orderedStaffMembers.map((staff, staffIndex) => {
-              if (!staff || !staff.id) return null;
+              if (!staff) return null;
               
               // Calculate day off count to match statistics dashboard total
               // Total = (early × 0.5) + (off × 1) + (holiday × 1)

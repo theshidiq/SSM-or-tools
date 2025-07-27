@@ -24,7 +24,7 @@ const StaffEditModal = ({
 }) => {
   // Set default year values
   useEffect(() => {
-    if (!showStaffEditModal) return; // Don't run effect if modal is not shown
+    if (!showStaffEditModal || !editingStaffData) return; // Don't run effect if modal is not shown or editingStaffData is undefined
     const currentYear = new Date().getFullYear();
     
     // Set current year as default for start period if not already set
@@ -52,17 +52,26 @@ const StaffEditModal = ({
         }
       }));
     }
-  }, [editingStaffData.status, showStaffEditModal]);
+  }, [editingStaffData?.status, showStaffEditModal]);
 
   if (!showStaffEditModal) return null;
+
+  // Provide default values for editingStaffData to prevent crashes
+  const safeEditingStaffData = editingStaffData || {
+    name: '',
+    position: '',
+    status: '社員',
+    startPeriod: null,
+    endPeriod: null
+  };
 
   const handleSubmit = (e) => {
     e.preventDefault();
     
     if (isAddingNewStaff) {
-      handleCreateStaff(editingStaffData);
+      handleCreateStaff(safeEditingStaffData);
     } else if (selectedStaffForEdit) {
-      updateStaff(editingStaffData, (newStaff) => {
+      updateStaff(selectedStaffForEdit.id, safeEditingStaffData, (newStaff) => {
         setStaffMembersByMonth(prev => ({
           ...prev,
           [currentMonthIndex]: newStaff
@@ -201,7 +210,7 @@ const StaffEditModal = ({
                   </label>
                   <input
                     type="text"
-                    value={editingStaffData.name}
+                    value={safeEditingStaffData.name}
                     onChange={(e) => setEditingStaffData(prev => ({ ...prev, name: e.target.value }))}
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                     required
@@ -216,7 +225,7 @@ const StaffEditModal = ({
                   </label>
                   <input
                     type="text"
-                    value={editingStaffData.position}
+                    value={safeEditingStaffData.position}
                     onChange={(e) => setEditingStaffData(prev => ({ ...prev, position: e.target.value }))}
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                     placeholder="例: Server, Kitchen, Manager"
@@ -234,7 +243,7 @@ const StaffEditModal = ({
                         type="radio"
                         name="status"
                         value="社員"
-                        checked={editingStaffData.status === '社員'}
+                        checked={safeEditingStaffData.status === '社員'}
                         onChange={(e) => {
                           setEditingStaffData(prev => ({ 
                             ...prev, 
@@ -251,7 +260,7 @@ const StaffEditModal = ({
                         type="radio"
                         name="status"
                         value="派遣"
-                        checked={editingStaffData.status === '派遣'}
+                        checked={safeEditingStaffData.status === '派遣'}
                         onChange={(e) => {
                           const currentYear = new Date().getFullYear();
                           setEditingStaffData(prev => ({ 
@@ -280,7 +289,7 @@ const StaffEditModal = ({
                         type="radio"
                         name="status"
                         value="パート"
-                        checked={editingStaffData.status === 'パート'}
+                        checked={safeEditingStaffData.status === 'パート'}
                         onChange={(e) => {
                           const currentYear = new Date().getFullYear();
                           setEditingStaffData(prev => ({ 
@@ -314,7 +323,7 @@ const StaffEditModal = ({
                   </label>
                   <div className="grid grid-cols-3 gap-2">
                     <select
-                      value={editingStaffData.startPeriod?.year || ''}
+                      value={safeEditingStaffData.startPeriod?.year || ''}
                       onChange={(e) => setEditingStaffData(prev => ({
                         ...prev,
                         startPeriod: {
@@ -336,7 +345,7 @@ const StaffEditModal = ({
                       })}
                     </select>
                     <select
-                      value={editingStaffData.startPeriod?.month || ''}
+                      value={safeEditingStaffData.startPeriod?.month || ''}
                       onChange={(e) => setEditingStaffData(prev => ({
                         ...prev,
                         startPeriod: {
@@ -354,7 +363,7 @@ const StaffEditModal = ({
                       ))}
                     </select>
                     <select
-                      value={editingStaffData.startPeriod?.day || ''}
+                      value={safeEditingStaffData.startPeriod?.day || ''}
                       onChange={(e) => setEditingStaffData(prev => ({
                         ...prev,
                         startPeriod: {
@@ -381,7 +390,7 @@ const StaffEditModal = ({
                   </label>
                   <div className="grid grid-cols-3 gap-2">
                     <select
-                      value={editingStaffData.endPeriod?.year || ''}
+                      value={safeEditingStaffData.endPeriod?.year || ''}
                       onChange={(e) => setEditingStaffData(prev => ({
                         ...prev,
                         endPeriod: e.target.value ? {
@@ -402,7 +411,7 @@ const StaffEditModal = ({
                       })}
                     </select>
                     <select
-                      value={editingStaffData.endPeriod?.month || ''}
+                      value={safeEditingStaffData.endPeriod?.month || ''}
                       onChange={(e) => setEditingStaffData(prev => ({
                         ...prev,
                         endPeriod: prev.endPeriod || e.target.value ? {
@@ -420,7 +429,7 @@ const StaffEditModal = ({
                       ))}
                     </select>
                     <select
-                      value={editingStaffData.endPeriod?.day || ''}
+                      value={safeEditingStaffData.endPeriod?.day || ''}
                       onChange={(e) => setEditingStaffData(prev => ({
                         ...prev,
                         endPeriod: prev.endPeriod || e.target.value ? {

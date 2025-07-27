@@ -4,6 +4,11 @@ import { addDays, format } from 'date-fns';
 // Using UTC dates to ensure consistent ISO string representation
 export let monthPeriods = [
   { start: new Date(Date.UTC(2025, 0, 21)), end: new Date(Date.UTC(2025, 1, 20)), label: '1月・2月' }, // Jan-Feb
+  { start: new Date(Date.UTC(2025, 1, 21)), end: new Date(Date.UTC(2025, 2, 20)), label: '2月・3月' }, // Feb-Mar
+  { start: new Date(Date.UTC(2025, 2, 21)), end: new Date(Date.UTC(2025, 3, 20)), label: '3月・4月' }, // Mar-Apr
+  { start: new Date(Date.UTC(2025, 3, 21)), end: new Date(Date.UTC(2025, 4, 20)), label: '4月・5月' }, // Apr-May
+  { start: new Date(Date.UTC(2025, 4, 21)), end: new Date(Date.UTC(2025, 5, 20)), label: '5月・6月' }, // May-Jun
+  { start: new Date(Date.UTC(2025, 5, 21)), end: new Date(Date.UTC(2025, 6, 20)), label: '6月・7月' }, // Jun-Jul
 ];
 
 // Function to add next period
@@ -40,7 +45,6 @@ export const addNextPeriod = () => {
   };
   
   monthPeriods.push(newPeriod);
-  console.log('Added new period:', newPeriod, 'Total periods:', monthPeriods.length);
   return monthPeriods.length - 1; // Return the new period index
 };
 
@@ -48,7 +52,6 @@ export const addNextPeriod = () => {
 export const generateDateRange = (monthIndex) => {
   // Bounds check for monthIndex
   if (monthIndex < 0 || monthIndex >= monthPeriods.length || monthPeriods[monthIndex] === undefined) {
-    console.warn(`Invalid monthIndex: ${monthIndex}. Using default month (0).`);
     monthIndex = 0;
   }
   

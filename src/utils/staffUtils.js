@@ -171,19 +171,25 @@ export const migrateScheduleData = (scheduleData, staffMembers) => {
   return migratedSchedule;
 };
 
-// Initialize schedule data structure
-export const initializeSchedule = (staffMembers, dateRange) => {
-  const scheduleData = {};
+// Initialize schedule data structure (only for missing entries, preserves existing data)
+export const initializeSchedule = (staffMembers, dateRange, existingSchedule = {}) => {
+  const scheduleData = { ...existingSchedule }; // Start with existing data
   
   // Create schedule structure for each staff member
   staffMembers.forEach(staff => {
     if (staff && staff.id) {
-      scheduleData[staff.id] = {};
+      // Only initialize if staff doesn't exist in schedule
+      if (!scheduleData[staff.id]) {
+        scheduleData[staff.id] = {};
+      }
       
-      // Initialize all dates for this staff member
+      // Initialize missing dates for this staff member
       dateRange.forEach(date => {
         const dateKey = date.toISOString().split('T')[0]; // Format: YYYY-MM-DD
-        scheduleData[staff.id][dateKey] = ''; // Start with blank
+        // Only initialize if date doesn't exist (preserves existing data)
+        if (scheduleData[staff.id][dateKey] === undefined) {
+          scheduleData[staff.id][dateKey] = ''; // Start with blank
+        }
       });
     }
   });

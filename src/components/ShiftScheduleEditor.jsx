@@ -67,7 +67,8 @@ const ShiftScheduleEditor = ({
     updateSchedule,
     updateShift,
     scheduleAutoSave,
-    setHasExplicitlyDeletedData
+    setHasExplicitlyDeletedData,
+    syncLocalStorageToDatabase
   } = useScheduleData(currentMonthIndex, supabaseScheduleData, currentScheduleId, setCurrentScheduleId, onSaveSchedule);
 
   const {
@@ -101,7 +102,9 @@ const ShiftScheduleEditor = ({
     if (!staffMembers || staffMembers.length === 0) {
       return [];
     }
-    return getOrderedStaffMembers(staffMembers, dateRange);
+    
+    const ordered = getOrderedStaffMembers(staffMembers, dateRange);
+    return ordered;
   }, [staffMembers, dateRange, isLoading]);
 
   // Check if we have any data at all (including localStorage as backup)
@@ -130,14 +133,23 @@ const ShiftScheduleEditor = ({
 
   // Event handlers
   const handleMonthChange = useCallback((newMonthIndex) => {
-    if (newMonthIndex >= 0 && newMonthIndex <= 11) {
+    
+    // Save current data before switching
+    if (schedule && Object.keys(schedule).length > 0 && staffMembers && staffMembers.length > 0) {
+      scheduleAutoSave(schedule, staffMembers);
+    }
+    
+    // Allow navigation to any valid period index (not just 0-11)
+    if (newMonthIndex >= 0 && newMonthIndex < monthPeriods.length) {
       setCurrentMonthIndex(newMonthIndex);
       setShowMonthPicker(false);
       setShowDropdown(null);
       setEditingCell(null);
       exitEditMode();
+    } else {
+      console.warn(`⚠️ NAVIGATION: Invalid month index ${newMonthIndex}. Available: 0-${monthPeriods.length - 1}`);
     }
-  }, []);
+  }, [currentMonthIndex, schedule, staffMembers, scheduleAutoSave]);
 
   const addNewColumn = () => {
     startAddingNewStaff();
@@ -179,19 +191,17 @@ const ShiftScheduleEditor = ({
 
   const handleExport = () => {
     exportToCSV(
-      schedule,
       orderedStaffMembers,
       dateRange,
-      monthPeriods[currentMonthIndex]?.label || 'Schedule'
+      schedule
     );
   };
 
   const handlePrint = () => {
     printSchedule(
-      schedule,
       orderedStaffMembers,
       dateRange,
-      monthPeriods[currentMonthIndex]?.label || 'Schedule'
+      schedule
     );
   };
 
@@ -396,6 +406,7 @@ const ShiftScheduleEditor = ({
         handlePrint={handlePrint}
         handleAddTable={handleAddTable}
         handleDeletePeriod={handleDeletePeriod}
+        syncLocalStorageToDatabase={syncLocalStorageToDatabase}
       />
 
       {/* Schedule Table */}
