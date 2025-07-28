@@ -35,6 +35,13 @@ const ShiftScheduleEditor = ({
 
   // UI state
   const [showDropdown, setShowDropdown] = useState(null);
+  
+  // Debug wrapper for setShowDropdown
+  const setShowDropdownDebug = (value) => {
+    console.log('🔥 DEBUG: setShowDropdown called with:', value);
+    console.log('🔥 DEBUG: Previous showDropdown value:', showDropdown);
+    setShowDropdown(value);
+  };
   const [editingCell, setEditingCell] = useState(null);
   const [showMonthPicker, setShowMonthPicker] = useState(false);
   const [editingColumn, setEditingColumn] = useState(null);
@@ -126,6 +133,11 @@ const ShiftScheduleEditor = ({
     [schedule, staffMembers, dateRange]
   );
 
+  // Debug showDropdown state changes
+  useEffect(() => {
+    console.log('🔥 DEBUG: showDropdown state changed to:', showDropdown);
+  }, [showDropdown]);
+
   // Error handling
   useEffect(() => {
     setError(externalError);
@@ -143,7 +155,7 @@ const ShiftScheduleEditor = ({
     if (newMonthIndex >= 0 && newMonthIndex < monthPeriods.length) {
       setCurrentMonthIndex(newMonthIndex);
       setShowMonthPicker(false);
-      setShowDropdown(null);
+      setShowDropdownDebug(null);
       setEditingCell(null);
       exitEditMode();
     } else {
@@ -295,7 +307,7 @@ const ShiftScheduleEditor = ({
         if (!event || !event.target) return;
         
         if (showDropdown && event.target.closest && !event.target.closest('.shift-dropdown')) {
-          setShowDropdown(null);
+          setShowDropdownDebug(null);
         }
         
         if (showMonthPicker && event.target.closest && !event.target.closest('.month-picker')) {
@@ -420,7 +432,7 @@ const ShiftScheduleEditor = ({
         setEditingNames={setEditingNames}
         setEditingSpecificColumn={setEditingSpecificColumn}
         showDropdown={showDropdown}
-        setShowDropdown={setShowDropdown}
+        setShowDropdown={setShowDropdownDebug}
         updateShift={updateShift}
         customText={customText}
         setCustomText={setCustomText}
@@ -434,6 +446,15 @@ const ShiftScheduleEditor = ({
         scheduleAutoSave={scheduleAutoSave}
         editStaffName={editStaffName}
       />
+      
+      {/* Debug info */}
+      {console.log('🔥 DEBUG: Data passed to ScheduleTable:', {
+        orderedStaffMembers: orderedStaffMembers,
+        dateRangeLength: dateRange?.length,
+        scheduleKeys: schedule ? Object.keys(schedule) : [],
+        showDropdown: showDropdown,
+        staffMembersLength: staffMembers?.length
+      })}
 
       {/* Statistics Dashboard */}
       <StatisticsDashboard statistics={statistics} staffMembers={staffMembers} dateRange={dateRange} />
@@ -459,6 +480,175 @@ const ShiftScheduleEditor = ({
         currentMonthIndex={currentMonthIndex}
         scheduleAutoSave={scheduleAutoSave}
       />
+
+      {/* Shift Dropdown Portal */}
+      {showDropdown && (() => {
+        console.log('🔥 DEBUG: Dropdown rendering triggered! showDropdown =', showDropdown);
+        
+        // Parse staffId and dateKey correctly - dateKey is always at the end in YYYY-MM-DD format (10 chars)
+        // Expected format: "uuid-with-hyphens-YYYY-MM-DD"
+        const dateKey = showDropdown.slice(-10); // Extract last 10 characters (YYYY-MM-DD)
+        const staffId = showDropdown.slice(0, -11); // Everything except the last 11 characters (-YYYY-MM-DD)
+        console.log('🔥 DEBUG: Parsed dropdown data:', { staffId, dateKey, showDropdown });
+        
+        const staff = orderedStaffMembers.find(s => s.id === staffId);
+        console.log('🔥 DEBUG: Found staff for dropdown:', staff);
+        console.log('🔥 DEBUG: orderedStaffMembers:', orderedStaffMembers);
+        
+        const date = new Date(dateKey);
+        console.log('🔥 DEBUG: Parsed date:', date);
+        
+        if (!staff) {
+          console.log('🔥 DEBUG: No staff found, returning null');
+          return null;
+        }
+        
+        const status = staff?.status || '派遣';
+        console.log('🔥 DEBUG: Staff status:', status);
+        
+        const availableShifts = getAvailableShifts(status);
+        console.log('🔥 DEBUG: Available shifts for dropdown:', availableShifts);
+        
+        // Find the cell element for positioning
+        console.log('🔥 DEBUG: Looking for cell element with data-cell-key:', showDropdown);
+        const cellElement = document.querySelector(`[data-cell-key="${showDropdown}"]`);
+        console.log('🔥 DEBUG: Found cell element:', cellElement);
+        
+        if (!cellElement) {
+          console.log('🔥 DEBUG: No cell element found, returning null');
+          return null;
+        }
+        
+        const cellRect = cellElement.getBoundingClientRect();
+        
+        // Calculate dropdown position using proper indices
+        const staffIndex = orderedStaffMembers.findIndex(s => s.id === staffId);
+        const dateIndex = dateRange.findIndex(d => d.toISOString().split('T')[0] === dateKey);
+        
+        // Dynamic dropdown positioning based on cell location
+        const isRightSide = staffIndex >= orderedStaffMembers.length - 3; // Last 3 columns
+        const isBottomHalf = dateIndex >= dateRange.length - 5; // Last 5 rows
+        
+        // Calculate dropdown position
+        let dropdownStyle = {
+          position: 'fixed',
+          backgroundColor: 'white',
+          border: '1px solid #d1d5db',
+          borderRadius: '0.5rem',
+          boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.1)',
+          padding: '0.5rem 0',
+          minWidth: '120px',
+          zIndex: 1000
+        };
+        
+        if (isRightSide && isBottomHalf) {
+          // Position above and to the left
+          dropdownStyle = {
+            ...dropdownStyle,
+            right: window.innerWidth - cellRect.right,
+            bottom: window.innerHeight - cellRect.top + 4,
+          };
+        } else if (isRightSide) {
+          // Position below and to the left
+          dropdownStyle = {
+            ...dropdownStyle,
+            right: window.innerWidth - cellRect.right,
+            top: cellRect.bottom + 4,
+          };
+        } else if (isBottomHalf) {
+          // Position above and to the right
+          dropdownStyle = {
+            ...dropdownStyle,
+            left: cellRect.left,
+            bottom: window.innerHeight - cellRect.top + 4,
+          };
+        } else {
+          // Default: below and to the right
+          dropdownStyle = {
+            ...dropdownStyle,
+            left: cellRect.left,
+            top: cellRect.bottom + 4,
+          };
+        }
+        
+        
+        return (
+          <div 
+            className="shift-dropdown"
+            style={dropdownStyle}
+            onClick={e => e.stopPropagation()}
+          >
+            {availableShifts.map((key) => {
+              const value = shiftSymbols[key];
+              if (!value) return null;
+              
+              return (
+                <div
+                  key={key}
+                  className="flex items-center px-3 py-2 hover:bg-gray-100 cursor-pointer"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    // Handle different shift types like in ScheduleTable
+                    let shiftValue;
+                    const staff = staffMembers.find(s => s.id === staffId);
+                    
+                    if (key === 'normal') {
+                      // For パート staff, normal shift shows circle symbol
+                      if (staff?.status === 'パート') {
+                        shiftValue = shiftSymbols[key]?.symbol || '○';
+                      } else {
+                        shiftValue = ''; // Normal shift shows as blank for other staff
+                      }
+                    } else if (key === 'late') {
+                      shiftValue = 'late'; // Late shift stores as 'late' key, not symbol
+                    } else {
+                      shiftValue = shiftSymbols[key]?.symbol || key;
+                    }
+                    
+                    updateShift(staffId, dateKey, shiftValue);
+                    setShowDropdownDebug(null);
+                  }}
+                >
+                  <span className={`text-lg font-bold mr-3 ${value.color}`}>
+                    {value.symbol}
+                  </span>
+                  <span className="text-sm">{value.label}</span>
+                </div>
+              );
+            })}
+            
+            {/* Custom Text Input Section */}
+            {editingCell === showDropdown && (
+              <div className="border-t border-gray-200 p-2">
+                <div className="text-xs text-gray-500 mb-2">Custom text:</div>
+                <input
+                  type="text"
+                  value={customText}
+                  onChange={(e) => setCustomText(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      const finalText = customText.trim() || '';
+                      updateShift(staffId, dateKey, finalText);
+                      setEditingCell(null);
+                      setShowDropdownDebug(null);
+                      setCustomText('');
+                    } else if (e.key === 'Escape') {
+                      setEditingCell(null);
+                      setShowDropdownDebug(null);
+                      setCustomText('');
+                    }
+                  }}
+                  onClick={(e) => e.stopPropagation()}
+                  placeholder="Type custom text..."
+                  className="w-full px-3 py-2 text-sm border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
+                  autoFocus
+                />
+                <div className="text-xs text-gray-400 mt-1">Press Enter to save, Escape to cancel</div>
+              </div>
+            )}
+          </div>
+        );
+      })()}
 
       {/* Delete Period Modal */}
       <StatusModal

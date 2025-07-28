@@ -68,20 +68,34 @@ const ScheduleTable = ({
   };
 
   const handleShiftClick = (staffId, dateKey, currentValue) => {
-    const cellKey = `${staffId}-${dateKey}`;
+    console.log('🔥 DEBUG: handleShiftClick called with:', { staffId, dateKey, currentValue });
     
+    const cellKey = `${staffId}-${dateKey}`;
+    console.log('🔥 DEBUG: cellKey generated:', cellKey);
+    console.log('🔥 DEBUG: Current showDropdown state:', showDropdown);
+    
+    // If clicking a custom text cell or clicking the same cell again, enter edit mode
     if (currentValue === '自由' || showDropdown === cellKey) {
+      console.log('🔥 DEBUG: Entering custom text edit mode');
       setCustomText(currentValue === '自由' ? '' : currentValue);
       setEditingCell(cellKey);
-      setShowDropdown(null);
+      setShowDropdown(cellKey); // Keep dropdown open for editing
     } else {
       const staff = staffMembers.find(s => s.id === staffId);
+      console.log('🔥 DEBUG: Found staff:', staff);
+      
       const status = staff?.status || '派遣';
+      console.log('🔥 DEBUG: Staff status:', status);
+      
       const availableShifts = getAvailableShifts(status);
+      console.log('🔥 DEBUG: Available shifts:', availableShifts);
       
       if (availableShifts.length > 0) {
+        console.log('🔥 DEBUG: Setting showDropdown to:', cellKey);
         setShowDropdown(cellKey);
         setEditingCell(null);
+      } else {
+        console.log('🔥 DEBUG: No available shifts found');
       }
     }
   };
@@ -330,11 +344,25 @@ const ScheduleTable = ({
 
                 {/* Staff Shift Cells */}
                 {orderedStaffMembers.map((staff, staffIndex) => {
-                  if (!staff) return null;
+                  if (!staff) {
+                    console.log('🔥 DEBUG: Skipping null staff at index', staffIndex);
+                    return null;
+                  }
                   
                   const cellKey = `${staff.id}-${dateKey}`;
                   const cellValue = schedule[staff.id]?.[dateKey] || '';
                   const isActiveForDate = isDateWithinWorkPeriod(date, staff);
+                  
+                  console.log('🔥 DEBUG: Rendering cell:', {
+                    staffId: staff.id,
+                    staffName: staff.name,
+                    dateKey,
+                    cellKey,
+                    cellValue,
+                    isActiveForDate,
+                    staffIndex,
+                    staffObject: staff
+                  });
                   
 
                   return (
@@ -355,24 +383,41 @@ const ScheduleTable = ({
                         padding: '0'
                       }}
                     >
-                      {!isActiveForDate ? (
-                        <div className="w-full h-full flex items-center justify-center text-gray-400">
-                          <span className="text-xs">-</span>
-                        </div>
-                      ) : (
-                        <button
-                          className="w-full h-full flex items-center justify-center cursor-pointer transition-all duration-200 hover:bg-blue-100"
-                          onClick={(e) => {
-                            e.stopPropagation();
+                      <button
+                        className={`w-full h-full flex items-center justify-center transition-all duration-200 ${
+                          !isActiveForDate 
+                            ? 'cursor-not-allowed text-gray-400' 
+                            : 'cursor-pointer hover:bg-blue-100'
+                        }`}
+                        onClick={(e) => {
+                          console.log('🔥 DEBUG: Button clicked!', {
+                            staffId: staff.id,
+                            staffName: staff.name,
+                            dateKey,
+                            cellValue,
+                            isActiveForDate,
+                            cellKey,
+                            event: e
+                          });
+                          
+                          e.stopPropagation();
+                          
+                          if (isActiveForDate) {
+                            console.log('🔥 DEBUG: Date is active, calling handleShiftClick');
                             handleShiftClick(staff.id, dateKey, cellValue);
-                          }}
-                          title={`${staff.name} - ${format(date, 'M/d')}`}
-                        >
-                          <span className="text-2xl font-bold select-none text-gray-700">
-                            {getCellDisplayValue(cellValue, staff)}
-                          </span>
-                        </button>
-                      )}
+                          } else {
+                            console.log('🔥 DEBUG: Date is not active, click ignored');
+                          }
+                        }}
+                        title={`${staff.name} - ${format(date, 'M/d')}${!isActiveForDate ? ' (Inactive)' : ''}`}
+                        data-cell-key={cellKey}
+                      >
+                        <span className={`text-2xl font-bold select-none ${
+                          !isActiveForDate ? 'text-gray-400' : 'text-gray-700'
+                        }`}>
+                          {!isActiveForDate ? '-' : getCellDisplayValue(cellValue, staff)}
+                        </span>
+                      </button>
                     </td>
                   );
                 })}
