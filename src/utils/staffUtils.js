@@ -50,18 +50,22 @@ export const migrateStaffMembers = (staffMembersData) => {
 
 // Check if staff is active in current period
 export const isStaffActiveInCurrentPeriod = (staff, dateRange = []) => {
-  if (!staff || !staff.startPeriod || !dateRange.length) return true;
+  // If no staff data or no date range, include the staff member
+  if (!staff || !dateRange.length) return true;
+  
+  // If staff has no start period defined, include them (legacy data)
+  if (!staff.startPeriod) return true;
   
   try {
     const periodStart = dateRange[0];
     const periodEnd = dateRange[dateRange.length - 1];
     
-    // Create start date from staff startPeriod
-    const staffStartDate = new Date(
+    // Create start date from staff startPeriod - use UTC to match dateRange
+    const staffStartDate = new Date(Date.UTC(
       staff.startPeriod.year,
       staff.startPeriod.month - 1, // month is 0-indexed
       staff.startPeriod.day || 1
-    );
+    ));
     
     // Check if staff starts after period ends
     if (staffStartDate > periodEnd) {
@@ -70,11 +74,11 @@ export const isStaffActiveInCurrentPeriod = (staff, dateRange = []) => {
     
     // Check if staff has ended before period starts
     if (staff.endPeriod) {
-      const staffEndDate = new Date(
+      const staffEndDate = new Date(Date.UTC(
         staff.endPeriod.year,
         staff.endPeriod.month - 1, // month is 0-indexed  
         staff.endPeriod.day || 31
-      );
+      ));
       
       // If staff ended before period starts
       if (staffEndDate < periodStart) {

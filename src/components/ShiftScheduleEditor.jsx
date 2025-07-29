@@ -36,10 +36,8 @@ const ShiftScheduleEditor = ({
   // UI state
   const [showDropdown, setShowDropdown] = useState(null);
   
-  // Debug wrapper for setShowDropdown
+  // Wrapper for setShowDropdown
   const setShowDropdownDebug = (value) => {
-    console.log('🔥 DEBUG: setShowDropdown called with:', value);
-    console.log('🔥 DEBUG: Previous showDropdown value:', showDropdown);
     setShowDropdown(value);
   };
   const [editingCell, setEditingCell] = useState(null);
@@ -112,7 +110,7 @@ const ShiftScheduleEditor = ({
     
     const ordered = getOrderedStaffMembers(staffMembers, dateRange);
     return ordered;
-  }, [staffMembers, dateRange, isLoading]);
+  }, [staffMembers, dateRange, isLoading, hasLoadedFromDb]);
 
   // Check if we have any data at all (including localStorage as backup)
   const localStaffData = useMemo(() => {
@@ -133,9 +131,9 @@ const ShiftScheduleEditor = ({
     [schedule, staffMembers, dateRange]
   );
 
-  // Debug showDropdown state changes
+  // State effect for showDropdown (removed debug logs)
   useEffect(() => {
-    console.log('🔥 DEBUG: showDropdown state changed to:', showDropdown);
+    // Effect for showDropdown state changes
   }, [showDropdown]);
 
   // Error handling
@@ -222,6 +220,8 @@ const ShiftScheduleEditor = ({
     const newPeriodIndex = addNextPeriod();
     setCurrentMonthIndex(newPeriodIndex);
   };
+
+
 
   const handleDeletePeriod = () => {
     const periodLabel = monthPeriods[currentMonthIndex]?.label || 'current period';
@@ -447,14 +447,7 @@ const ShiftScheduleEditor = ({
         editStaffName={editStaffName}
       />
       
-      {/* Debug info */}
-      {console.log('🔥 DEBUG: Data passed to ScheduleTable:', {
-        orderedStaffMembers: orderedStaffMembers,
-        dateRangeLength: dateRange?.length,
-        scheduleKeys: schedule ? Object.keys(schedule) : [],
-        showDropdown: showDropdown,
-        staffMembersLength: staffMembers?.length
-      })}
+      {/* ScheduleTable data debug removed */}
 
       {/* Statistics Dashboard */}
       <StatisticsDashboard statistics={statistics} staffMembers={staffMembers} dateRange={dateRange} />
@@ -483,39 +476,25 @@ const ShiftScheduleEditor = ({
 
       {/* Shift Dropdown Portal */}
       {showDropdown && (() => {
-        console.log('🔥 DEBUG: Dropdown rendering triggered! showDropdown =', showDropdown);
-        
         // Parse staffId and dateKey correctly - dateKey is always at the end in YYYY-MM-DD format (10 chars)
         // Expected format: "uuid-with-hyphens-YYYY-MM-DD"
         const dateKey = showDropdown.slice(-10); // Extract last 10 characters (YYYY-MM-DD)
         const staffId = showDropdown.slice(0, -11); // Everything except the last 11 characters (-YYYY-MM-DD)
-        console.log('🔥 DEBUG: Parsed dropdown data:', { staffId, dateKey, showDropdown });
         
         const staff = orderedStaffMembers.find(s => s.id === staffId);
-        console.log('🔥 DEBUG: Found staff for dropdown:', staff);
-        console.log('🔥 DEBUG: orderedStaffMembers:', orderedStaffMembers);
-        
         const date = new Date(dateKey);
-        console.log('🔥 DEBUG: Parsed date:', date);
         
         if (!staff) {
-          console.log('🔥 DEBUG: No staff found, returning null');
           return null;
         }
         
         const status = staff?.status || '派遣';
-        console.log('🔥 DEBUG: Staff status:', status);
-        
         const availableShifts = getAvailableShifts(status);
-        console.log('🔥 DEBUG: Available shifts for dropdown:', availableShifts);
         
         // Find the cell element for positioning
-        console.log('🔥 DEBUG: Looking for cell element with data-cell-key:', showDropdown);
         const cellElement = document.querySelector(`[data-cell-key="${showDropdown}"]`);
-        console.log('🔥 DEBUG: Found cell element:', cellElement);
         
         if (!cellElement) {
-          console.log('🔥 DEBUG: No cell element found, returning null');
           return null;
         }
         
@@ -662,6 +641,7 @@ const ShiftScheduleEditor = ({
         cancelText="Cancel"
         autoCloseDelay={deleteModal.type === 'success' ? 2000 : null}
       />
+
     </div>
   );
 };

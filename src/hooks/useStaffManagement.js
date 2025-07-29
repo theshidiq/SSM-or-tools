@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { migrateStaffMembers } from '../utils/staffUtils';
 import { optimizedStorage, performanceMonitor } from '../utils/storageUtils';
+import { defaultStaffMembersArray } from '../constants/staffConstants';
 
 // Keep legacy function for backward compatibility during transition
 const loadFromLocalStorage = (key) => {
@@ -39,6 +40,7 @@ export const useStaffManagement = (currentMonthIndex, supabaseScheduleData) => {
         setHasLoadedFromDb(true);
         // Development mode only: log load success
         if (process.env.NODE_ENV === 'development') {
+          console.log('✅ Loaded staff from optimized storage:', localStaff.length, 'members');
         }
         return;
       }
@@ -71,21 +73,35 @@ export const useStaffManagement = (currentMonthIndex, supabaseScheduleData) => {
           // Save to optimized storage for future use
           optimizedStorage.saveStaffData(currentMonthIndex, extractedStaff);
         } else {
-          setStaffMembers([]);
+          // No staff data found anywhere, use defaults
+          setStaffMembers(defaultStaffMembersArray);
+          optimizedStorage.saveStaffData(currentMonthIndex, defaultStaffMembersArray);
         }
       }
       setHasLoadedFromDb(true);
     } else if (supabaseScheduleData === null) {
       // Database is explicitly null (no connection or empty)
-      // Use optimized storage data if available
-      const fallbackStaff = optimizedStorage.getStaffData(currentMonthIndex) || [];
+      // Use optimized storage data if available, otherwise use default staff
+      const fallbackStaff = optimizedStorage.getStaffData(currentMonthIndex) || defaultStaffMembersArray;
       setStaffMembers(fallbackStaff);
+      
+      // If we're using default staff data, save it to optimized storage
+      if (!optimizedStorage.getStaffData(currentMonthIndex)) {
+        optimizedStorage.saveStaffData(currentMonthIndex, defaultStaffMembersArray);
+      }
+      
       setHasLoadedFromDb(true);
     } else if (supabaseScheduleData && !supabaseScheduleData.schedule_data) {
       // Database exists but has no schedule data
-      // Use optimized storage data if available
-      const fallbackStaff = optimizedStorage.getStaffData(currentMonthIndex) || [];
+      // Use optimized storage data if available, otherwise use default staff
+      const fallbackStaff = optimizedStorage.getStaffData(currentMonthIndex) || defaultStaffMembersArray;
       setStaffMembers(fallbackStaff);
+      
+      // If we're using default staff data, save it to optimized storage
+      if (!optimizedStorage.getStaffData(currentMonthIndex)) {
+        optimizedStorage.saveStaffData(currentMonthIndex, defaultStaffMembersArray);
+      }
+      
       setHasLoadedFromDb(true);
     }
   }, [currentMonthIndex, supabaseScheduleData]);
