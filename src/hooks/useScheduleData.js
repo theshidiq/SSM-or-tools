@@ -1,4 +1,5 @@
-import { useState, useEffect, useCallback, useRef, useMemo, flushSync } from 'react';
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
+import { flushSync } from 'react-dom';
 import { generateDateRange } from '../utils/dateUtils';
 import { initializeSchedule, migrateScheduleData, migrateStaffMembers } from '../utils/staffUtils';
 import { defaultStaffMembersArray } from '../constants/staffConstants';
@@ -311,13 +312,8 @@ export const useScheduleData = (
 
   // Update schedule with auto-save
   const updateSchedule = useCallback((newSchedule, staffForSave = null) => {
-    console.log('🏗️ updateSchedule called with:', Object.keys(newSchedule).length, 'staff members');
-    console.log('📋 New schedule object keys:', Object.keys(newSchedule));
-    
     // Skip filtering if this is an initialization call (just pass through the schedule as-is)
     if (Object.keys(newSchedule).length > 0) {
-      console.log('✅ Calling setSchedule with new data (using flushSync for immediate update)');
-      
       // Use flushSync to force immediate synchronous update
       // This ensures bulk operations update all selected cells immediately
       flushSync(() => {

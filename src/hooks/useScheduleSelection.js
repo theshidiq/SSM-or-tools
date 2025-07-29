@@ -192,20 +192,14 @@ const useScheduleSelection = (scheduleData, updateShift, staffMembers, dates, up
   const applyToSelected = useCallback((shiftValue) => {
     if (selectedCells.size === 0) return;
     
-    console.log('🔧 applyToSelected called with:', shiftValue);
-    console.log('📋 Selected cells:', Array.from(selectedCells));
-    console.log('📊 Current scheduleData:', scheduleData);
-    
     // CRITICAL FIX: Ensure we have the latest schedule data and apply all updates
     if (updateSchedule && typeof updateSchedule === 'function') {
       try {
         // Create completely new schedule object to ensure React detects the change
         const newSchedule = JSON.parse(JSON.stringify(scheduleData)); // Deep clone to avoid mutations
         
-        let actualUpdatesApplied = 0;
         selectedCells.forEach(cellKey => {
           const { staffId, dateKey } = parseCellKey(cellKey);
-          console.log(`🎯 Updating: ${staffId} -> ${dateKey} = ${shiftValue}`);
           
           // Ensure staff exists in schedule
           if (!newSchedule[staffId]) {
@@ -213,16 +207,8 @@ const useScheduleSelection = (scheduleData, updateShift, staffMembers, dates, up
           }
           
           // Apply the update
-          const oldValue = newSchedule[staffId][dateKey];
           newSchedule[staffId][dateKey] = shiftValue;
-          actualUpdatesApplied++;
-          
-          console.log(`   📝 Changed from "${oldValue}" to "${shiftValue}"`);
         });
-        
-        console.log('🔄 Applying batched update to', selectedCells.size, 'cells');
-        console.log('📊 Actually applied', actualUpdatesApplied, 'updates');
-        console.log('📊 New schedule object (sample):', Object.keys(newSchedule).slice(0, 3));
         
         // Verify changes were made before calling updateSchedule
         const hasChanges = Array.from(selectedCells).some(cellKey => {
@@ -231,15 +217,11 @@ const useScheduleSelection = (scheduleData, updateShift, staffMembers, dates, up
         });
         
         if (hasChanges) {
-          console.log('✅ Changes detected, calling updateSchedule');
           updateSchedule(newSchedule);
-        } else {
-          console.log('⚠️ No changes detected in schedule data');
         }
       } catch (error) {
-        console.error('❌ Error in applyToSelected:', error);
+        console.error('Error in bulk operation:', error);
         // Fallback to individual updates if batch update fails
-        console.log('🔄 Falling back to individual updates due to error');
         selectedCells.forEach(cellKey => {
           const { staffId, dateKey } = parseCellKey(cellKey);
           updateShift(staffId, dateKey, shiftValue);
@@ -247,14 +229,11 @@ const useScheduleSelection = (scheduleData, updateShift, staffMembers, dates, up
       }
     } else {
       // Fallback to individual updates if updateSchedule is not available
-      console.log('⚠️ updateSchedule not available, using fallback individual updates');
       selectedCells.forEach(cellKey => {
         const { staffId, dateKey } = parseCellKey(cellKey);
         updateShift(staffId, dateKey, shiftValue);
       });
     }
-    
-    console.log('✅ applyToSelected completed');
   }, [selectedCells, parseCellKey, updateShift, scheduleData, updateSchedule]);
 
   /**
