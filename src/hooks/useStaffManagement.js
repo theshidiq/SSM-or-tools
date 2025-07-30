@@ -2,6 +2,9 @@ import { useState, useEffect, useCallback } from "react";
 import {
   migrateStaffMembers,
   isStaffActiveInCurrentPeriod,
+  cleanupStaffData,
+  cleanupAllPeriodsStaffData,
+  fixStaffDataInconsistencies,
 } from "../utils/staffUtils";
 import { optimizedStorage, performanceMonitor } from "../utils/storageUtils";
 import { defaultStaffMembersArray } from "../constants/staffConstants";
@@ -41,7 +44,7 @@ export const useStaffManagement = (currentMonthIndex, supabaseScheduleData) => {
     try {
       if (localStaff && Array.isArray(localStaff) && localStaff.length > 0) {
         // Check if we need to inherit any missing staff from previous periods
-        let inheritedStaff = [...localStaff];
+        const inheritedStaff = [...localStaff];
         let hasInheritedNewStaff = false;
 
         try {
@@ -95,9 +98,8 @@ export const useStaffManagement = (currentMonthIndex, supabaseScheduleData) => {
 
               // Add missing staff who should be active but aren't in local storage
               activeInheritedStaff.forEach((staff) => {
-                if (
-                  !inheritedStaff.find((existing) => existing.id === staff.id)
-                ) {
+                const existingStaff = inheritedStaff.find((existing) => existing.id === staff.id);
+                if (!existingStaff) {
                   inheritedStaff.push(staff);
                   hasInheritedNewStaff = true;
 
@@ -105,6 +107,16 @@ export const useStaffManagement = (currentMonthIndex, supabaseScheduleData) => {
                     console.log(
                       `➕ Inherited missing staff ${staff.name} to period ${currentMonthIndex}`,
                     );
+                  }
+                } else {
+                  // Staff exists but check if we need to update with newer data
+                  // Priority: current period > later periods > earlier periods
+                  // We only update if the inherited staff has newer or more complete data
+                  if (process.env.NODE_ENV === "development" && staff.name === "大城") {
+                    console.log(`🔄 Found existing ${staff.name} - keeping current data:`, {
+                      existing: { status: existingStaff.status, period: `current-${currentMonthIndex}` },
+                      inherited: { status: staff.status, period: `period-${i}` }
+                    });
                   }
                 }
               });
@@ -114,15 +126,91 @@ export const useStaffManagement = (currentMonthIndex, supabaseScheduleData) => {
           console.warn("Error checking for missing inherited staff:", error);
         }
 
-        setStaffMembers(inheritedStaff);
+        // Clean up the inherited staff to remove any duplicates
+        const cleanedStaff = cleanupStaffData(inheritedStaff);
+        setStaffMembers(cleanedStaff);
 
-        // If we inherited new staff, save the updated list
-        if (hasInheritedNewStaff) {
-          optimizedStorage.saveStaffData(currentMonthIndex, inheritedStaff);
+        // If we inherited new staff or cleaned up duplicates, save the updated list
+        if (hasInheritedNewStaff || cleanedStaff.length !== inheritedStaff.length) {
+          optimizedStorage.saveStaffData(currentMonthIndex, cleanedStaff);
         }
 
         setHasLoadedFromDb(true);
         // Development mode only: log load success
+        // Also check if any staff from later periods should be backfilled to this period
+        try {
+          let hasBackfilledStaff = false;
+
+          // Check all later periods for staff that should be active in current period
+          for (let i = currentMonthIndex + 1; i < 6; i++) {
+            const laterPeriodStaff = optimizedStorage.getStaffData(i);
+            if (
+              laterPeriodStaff &&
+              Array.isArray(laterPeriodStaff) &&
+              laterPeriodStaff.length > 0
+            ) {
+              const currentDateRange = generateDateRange(currentMonthIndex);
+
+              laterPeriodStaff.forEach((staff) => {
+                if (!staff) return;
+
+                const shouldBeActiveInCurrentPeriod =
+                  isStaffActiveInCurrentPeriod(staff, currentDateRange);
+                const alreadyExists = inheritedStaff.find(
+                  (existing) => existing.id === staff.id,
+                );
+
+                // Debug logging for 高野 and 大城
+                if (
+                  (staff.name === "高野" || staff.name === "大城") &&
+                  process.env.NODE_ENV === "development"
+                ) {
+                  console.log(
+                    `🔍 Checking ${staff.name} for backfill to period ${currentMonthIndex}:`,
+                    {
+                      shouldBeActiveInCurrentPeriod,
+                      alreadyExists: !!alreadyExists,
+                      startPeriod: staff.startPeriod,
+                      endPeriod: staff.endPeriod,
+                    },
+                  );
+                }
+
+                if (shouldBeActiveInCurrentPeriod && !alreadyExists) {
+                  inheritedStaff.push(staff);
+                  hasBackfilledStaff = true;
+
+                  if (process.env.NODE_ENV === "development") {
+                    console.log(
+                      `⬅️ Backfilled ${staff.name} from later period ${i} to current period ${currentMonthIndex}`,
+                    );
+                  }
+                } else if (shouldBeActiveInCurrentPeriod && alreadyExists && staff.name === "大城") {
+                  // Debug existing staff vs backfilled staff
+                  if (process.env.NODE_ENV === "development") {
+                    console.log(`🔄 ${staff.name} already exists - NOT overwriting:`, {
+                      existing: { status: alreadyExists.status, period: `current-${currentMonthIndex}` },
+                      backfill: { status: staff.status, period: `later-${i}` }
+                    });
+                  }
+                }
+              });
+            }
+          }
+
+          // If we backfilled staff, update the storage and state
+          if (hasBackfilledStaff) {
+            optimizedStorage.saveStaffData(currentMonthIndex, inheritedStaff);
+            setStaffMembers(inheritedStaff);
+            hasInheritedNewStaff = true;
+          }
+        } catch (error) {
+          console.warn(
+            "Error checking for backfill from later periods:",
+            error,
+          );
+        }
+
         if (process.env.NODE_ENV === "development") {
           console.log(
             "✅ Loaded staff from optimized storage:",
@@ -144,7 +232,7 @@ export const useStaffManagement = (currentMonthIndex, supabaseScheduleData) => {
 
     // Priority 1.5: Check for staff from previous periods who should still be active
     // This handles staff continuity across periods based on their work dates
-    let inheritedStaff = [];
+    const inheritedStaff = [];
     try {
       // Look through previous periods to find staff who should still be active
       for (
@@ -190,18 +278,38 @@ export const useStaffManagement = (currentMonthIndex, supabaseScheduleData) => {
           });
 
           // Merge with existing inherited staff, avoiding duplicates by ID
+          // Prioritize staff from later periods (more recent data)
           activeInheritedStaff.forEach((staff) => {
-            if (!inheritedStaff.find((existing) => existing.id === staff.id)) {
+            const existingIndex = inheritedStaff.findIndex((existing) => existing.id === staff.id);
+            if (existingIndex === -1) {
+              // Staff doesn't exist, add it
               inheritedStaff.push(staff);
+            } else {
+              // Staff exists, update with data from later period (more recent)
+              if (i > currentMonthIndex) {
+                // This is from a later period, so it might have more recent data
+                // But only update if the staff from later period has updated info
+                const existingStaff = inheritedStaff[existingIndex];
+                if (process.env.NODE_ENV === "development" && staff.name === "大城") {
+                  console.log(`🔄 Comparing ${staff.name} data:`, {
+                    existing: { status: existingStaff.status, from: `period-${existingIndex}` },
+                    new: { status: staff.status, from: `period-${i}` },
+                    action: "keeping existing (priority to current period)"
+                  });
+                }
+                // Keep existing staff data (don't overwrite with older data)
+              }
             }
           });
         }
       }
 
       if (inheritedStaff.length > 0) {
-        setStaffMembers(inheritedStaff);
-        // Save inherited staff to current period storage for future loads
-        optimizedStorage.saveStaffData(currentMonthIndex, inheritedStaff);
+        // Clean up inherited staff to remove duplicates
+        const cleanedInheritedStaff = cleanupStaffData(inheritedStaff);
+        setStaffMembers(cleanedInheritedStaff);
+        // Save cleaned inherited staff to current period storage for future loads
+        optimizedStorage.saveStaffData(currentMonthIndex, cleanedInheritedStaff);
         setHasLoadedFromDb(true);
 
         if (process.env.NODE_ENV === "development") {
@@ -317,6 +425,36 @@ export const useStaffManagement = (currentMonthIndex, supabaseScheduleData) => {
       // Save to optimized storage
       optimizedStorage.saveStaffData(currentMonthIndex, updatedStaff);
 
+      // Also check if this staff should be added to earlier periods based on their start date
+      if (newStaff.startPeriod) {
+        try {
+          for (let i = 0; i < currentMonthIndex; i++) {
+            const periodDateRange = generateDateRange(i);
+            const shouldBeActiveInPeriod = isStaffActiveInCurrentPeriod(
+              newStaff,
+              periodDateRange,
+            );
+
+            if (shouldBeActiveInPeriod) {
+              const periodStaff = optimizedStorage.getStaffData(i) || [];
+              // Check if staff is not already in this period
+              if (!periodStaff.find((staff) => staff.id === newStaff.id)) {
+                const updatedPeriodStaff = [...periodStaff, newStaff];
+                optimizedStorage.saveStaffData(i, updatedPeriodStaff);
+
+                if (process.env.NODE_ENV === "development") {
+                  console.log(
+                    `🔄 Backfilled staff ${newStaff.name} to earlier period ${i}`,
+                  );
+                }
+              }
+            }
+          }
+        } catch (error) {
+          console.warn("Error backfilling staff to earlier periods:", error);
+        }
+      }
+
       if (process.env.NODE_ENV === "development") {
         console.log(
           `➕ Added staff member: ${newStaff.name} to period ${currentMonthIndex}`,
@@ -334,12 +472,40 @@ export const useStaffManagement = (currentMonthIndex, supabaseScheduleData) => {
       );
       setStaffMembers(updatedStaff);
 
-      // Save to optimized storage
+      // Save to optimized storage for current period
       optimizedStorage.saveStaffData(currentMonthIndex, updatedStaff);
+
+      // Also update this staff in all periods where they should be active
+      // This prevents inheritance from overwriting the updated data
+      const updatedStaffMember = updatedStaff.find(s => s.id === staffId);
+      if (updatedStaffMember) {
+        try {
+          for (let i = 0; i < 6; i++) {
+            if (i === currentMonthIndex) continue; // Already saved above
+            
+            const periodStaff = optimizedStorage.getStaffData(i);
+            if (periodStaff && Array.isArray(periodStaff)) {
+              const staffIndex = periodStaff.findIndex(s => s.id === staffId);
+              if (staffIndex !== -1) {
+                // Update the staff data in this period too
+                const updatedPeriodStaff = [...periodStaff];
+                updatedPeriodStaff[staffIndex] = { ...updatedPeriodStaff[staffIndex], ...updatedData };
+                optimizedStorage.saveStaffData(i, updatedPeriodStaff);
+                
+                if (process.env.NODE_ENV === "development") {
+                  console.log(`🔄 Updated ${updatedStaffMember.name} in period ${i} to maintain consistency`);
+                }
+              }
+            }
+          }
+        } catch (error) {
+          console.warn("Error updating staff across periods:", error);
+        }
+      }
 
       if (process.env.NODE_ENV === "development") {
         console.log(
-          `🔄 Updated staff member: ${staffId} in period ${currentMonthIndex}`,
+          `🔄 Updated staff member: ${staffId} in period ${currentMonthIndex} and synced to all periods`,
         );
       }
       if (onSuccess) onSuccess(updatedStaff);
@@ -454,6 +620,39 @@ export const useStaffManagement = (currentMonthIndex, supabaseScheduleData) => {
       // Save to optimized storage
       optimizedStorage.saveStaffData(currentMonthIndex, newStaffMembers);
 
+      // Also check if this staff should be added to earlier periods based on their start date
+      if (newStaff.startPeriod) {
+        try {
+          for (let i = 0; i < currentMonthIndex; i++) {
+            const periodDateRange = generateDateRange(i);
+            const shouldBeActiveInPeriod = isStaffActiveInCurrentPeriod(
+              newStaff,
+              periodDateRange,
+            );
+
+            if (shouldBeActiveInPeriod) {
+              const periodStaff = optimizedStorage.getStaffData(i) || [];
+              // Check if staff is not already in this period
+              if (!periodStaff.find((staff) => staff.id === newStaff.id)) {
+                const updatedPeriodStaff = [...periodStaff, newStaff];
+                optimizedStorage.saveStaffData(i, updatedPeriodStaff);
+
+                if (process.env.NODE_ENV === "development") {
+                  console.log(
+                    `🔄 Backfilled new staff ${newStaff.name} to earlier period ${i}`,
+                  );
+                }
+              }
+            }
+          }
+        } catch (error) {
+          console.warn(
+            "Error backfilling new staff to earlier periods:",
+            error,
+          );
+        }
+      }
+
       if (process.env.NODE_ENV === "development") {
         console.log(
           `🆕 Created new staff member: ${newStaff.name} in period ${currentMonthIndex}`,
@@ -524,6 +723,28 @@ export const useStaffManagement = (currentMonthIndex, supabaseScheduleData) => {
     setShowStaffEditModal(true);
   }, []);
 
+  // Clean up all periods staff data
+  const cleanupAllPeriods = useCallback(() => {
+    const totalCleaned = cleanupAllPeriodsStaffData(optimizedStorage);
+    // Refresh current period after cleanup
+    const currentStaff = optimizedStorage.getStaffData(currentMonthIndex);
+    if (currentStaff) {
+      setStaffMembers(currentStaff);
+    }
+    return totalCleaned;
+  }, [currentMonthIndex]);
+
+  // Fix staff data inconsistencies across periods
+  const fixStaffInconsistencies = useCallback(() => {
+    const fixedCount = fixStaffDataInconsistencies(optimizedStorage);
+    // Refresh current period after fixing
+    const currentStaff = optimizedStorage.getStaffData(currentMonthIndex);
+    if (currentStaff) {
+      setStaffMembers(currentStaff);
+    }
+    return fixedCount;
+  }, [currentMonthIndex]);
+
   return {
     staffMembers,
     setStaffMembers,
@@ -544,5 +765,7 @@ export const useStaffManagement = (currentMonthIndex, supabaseScheduleData) => {
     createNewStaff,
     handleCreateStaff,
     startAddingNewStaff,
+    cleanupAllPeriods,
+    fixStaffInconsistencies,
   };
 };

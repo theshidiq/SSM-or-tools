@@ -43,11 +43,11 @@ const NavigationToolbar = ({
       // Only handle keyboard navigation when no input elements are focused
       // and no modals are open
       const activeElement = document.activeElement;
-      const isInputFocused = 
-        activeElement?.tagName === 'INPUT' ||
-        activeElement?.tagName === 'TEXTAREA' ||
-        activeElement?.contentEditable === 'true' ||
-        activeElement?.closest('.shift-dropdown') ||
+      const isInputFocused =
+        activeElement?.tagName === "INPUT" ||
+        activeElement?.tagName === "TEXTAREA" ||
+        activeElement?.contentEditable === "true" ||
+        activeElement?.closest(".shift-dropdown") ||
         activeElement?.closest('[role="dialog"]') ||
         showMonthPicker;
 
@@ -56,13 +56,13 @@ const NavigationToolbar = ({
       }
 
       // Handle arrow key navigation
-      if (event.key === 'ArrowLeft') {
+      if (event.key === "ArrowLeft") {
         event.preventDefault();
         // Navigate to previous period if possible
         if (currentMonthIndex > 0) {
           onMonthChange(currentMonthIndex - 1);
         }
-      } else if (event.key === 'ArrowRight') {
+      } else if (event.key === "ArrowRight") {
         event.preventDefault();
         // Navigate to next period if possible
         if (currentMonthIndex < monthPeriods.length - 1) {
@@ -72,11 +72,11 @@ const NavigationToolbar = ({
     };
 
     // Add event listener to document
-    document.addEventListener('keydown', handleKeyDown);
+    document.addEventListener("keydown", handleKeyDown);
 
     // Cleanup event listener on unmount
     return () => {
-      document.removeEventListener('keydown', handleKeyDown);
+      document.removeEventListener("keydown", handleKeyDown);
     };
   }, [currentMonthIndex, onMonthChange, showMonthPicker]);
   return (

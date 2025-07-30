@@ -115,10 +115,23 @@ const ShiftScheduleEditor = ({
     deleteStaff,
     startAddingNewStaff,
     updateStaff,
+    cleanupAllPeriods,
+    fixStaffInconsistencies,
   } = useStaffManagement(currentMonthIndex, supabaseScheduleData);
 
   // Check if we're still loading - wait until both database and staff are ready
   const isLoading = supabaseScheduleData === undefined || !hasLoadedFromDb;
+
+  // Expose cleanup functions to global window for debugging (development only)
+  useEffect(() => {
+    if (process.env.NODE_ENV === "development") {
+      window.cleanupAllPeriods = cleanupAllPeriods;
+      window.fixStaffInconsistencies = fixStaffInconsistencies;
+      console.log("🔧 Dev tools available:");
+      console.log("  - window.cleanupAllPeriods() - Remove duplicate entries");
+      console.log("  - window.fixStaffInconsistencies() - Fix status inconsistencies");
+    }
+  }, [cleanupAllPeriods, fixStaffInconsistencies]);
 
   // Calculate derived data
   const orderedStaffMembers = useMemo(() => {

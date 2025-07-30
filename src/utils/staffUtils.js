@@ -102,7 +102,39 @@ export const isStaffActiveInCurrentPeriod = (staff, dateRange = []) => {
   }
 };
 
-// Get ordered staff members with special ordering (パート at end, then 中田 at very end)
+// Helper function to sort staff by start date (earliest first, no start date goes to end)
+const sortByStartDate = (staffArray) => {
+  return staffArray.sort((a, b) => {
+    // If neither has start period, maintain original order
+    if (!a.startPeriod && !b.startPeriod) return 0;
+
+    // Staff without start period goes to end
+    if (!a.startPeriod) return 1;
+    if (!b.startPeriod) return -1;
+
+    // Compare by year, then month, then day
+    const aYear = a.startPeriod.year || 2018;
+    const bYear = b.startPeriod.year || 2018;
+
+    if (aYear !== bYear) {
+      return aYear - bYear;
+    }
+
+    const aMonth = a.startPeriod.month || 1;
+    const bMonth = b.startPeriod.month || 1;
+
+    if (aMonth !== bMonth) {
+      return aMonth - bMonth;
+    }
+
+    const aDay = a.startPeriod.day || 1;
+    const bDay = b.startPeriod.day || 1;
+
+    return aDay - bDay;
+  });
+};
+
+// Get ordered staff members with special ordering (社員 > 派遣 > パート, sorted by start date within each group, then 中田 at very end)
 export const getOrderedStaffMembers = (staffMembers, dateRange = []) => {
   try {
     // Defensive check
@@ -113,6 +145,7 @@ export const getOrderedStaffMembers = (staffMembers, dateRange = []) => {
     ) {
       return []; // Return empty array if no staff members
     }
+
 
     // First filter out staff who are not active in the current period
     const activeStaff = staffMembers.filter((staff) => {
@@ -130,36 +163,61 @@ export const getOrderedStaffMembers = (staffMembers, dateRange = []) => {
       const nakataStaff = staffMembers.find(
         (staff) => staff && staff.name === "中田",
       );
-      const partTimeStaff = staffMembers.filter(
-        (staff) => staff && staff.status === "パート" && staff.name !== "中田",
+      const shainnStaff = sortByStartDate(
+        staffMembers.filter(
+          (staff) => staff && staff.status === "社員" && staff.name !== "中田",
+        ),
       );
-      const otherStaff = staffMembers.filter(
-        (staff) => staff && staff.status !== "パート" && staff.name !== "中田",
+      const hakennStaff = sortByStartDate(
+        staffMembers.filter(
+          (staff) => staff && staff.status === "派遣" && staff.name !== "中田",
+        ),
+      );
+      const partTimeStaff = sortByStartDate(
+        staffMembers.filter(
+          (staff) =>
+            staff && staff.status === "パート" && staff.name !== "中田",
+        ),
       );
       return [
-        ...otherStaff,
+        ...shainnStaff,
+        ...hakennStaff,
         ...partTimeStaff,
         ...(nakataStaff ? [nakataStaff] : []),
       ];
     }
 
-    // Separate staff by type: regular staff, part-time staff, and 中田
+    // Separate staff by status: 社員, 派遣, パート, and 中田
     const nakataStaff = activeStaff.find(
       (staff) => staff && staff.name === "中田",
     );
-    const partTimeStaff = activeStaff.filter(
-      (staff) => staff && staff.status === "パート" && staff.name !== "中田",
+    const shainnStaff = sortByStartDate(
+      activeStaff.filter(
+        (staff) => staff && staff.status === "社員" && staff.name !== "中田",
+      ),
     );
-    const otherStaff = activeStaff.filter(
-      (staff) => staff && staff.status !== "パート" && staff.name !== "中田",
+    const hakennStaff = sortByStartDate(
+      activeStaff.filter(
+        (staff) => staff && staff.status === "派遣" && staff.name !== "中田",
+      ),
+    );
+    const partTimeStaff = sortByStartDate(
+      activeStaff.filter(
+        (staff) => staff && staff.status === "パート" && staff.name !== "中田",
+      ),
     );
 
-    // Order: regular staff first, then part-time staff, then 中田 at the very end
-    return [
-      ...otherStaff,
+
+    // Order: 社員 first, then 派遣, then パート (each sorted by start date), then 中田 at the very end
+    const finalOrder = [
+      ...shainnStaff,
+      ...hakennStaff,
       ...partTimeStaff,
       ...(nakataStaff ? [nakataStaff] : []),
     ];
+
+
+    return finalOrder;
   } catch (error) {
     console.error("Error in getOrderedStaffMembers:", error);
     return staffMembers || []; // Return original staff members or empty array
@@ -206,6 +264,143 @@ export const migrateScheduleData = (scheduleData, staffMembers) => {
   });
 
   return migratedSchedule;
+};
+
+// Clean up staff data by removing duplicates based on ID and name
+export const cleanupStaffData = (staffMembers) => {
+  if (!Array.isArray(staffMembers)) return [];
+  
+  const seenIds = new Set();
+  const seenNames = new Set();
+  const cleanedStaff = [];
+  
+  staffMembers.forEach((staff) => {
+    if (!staff || !staff.id || !staff.name) return;
+    
+    // Skip if we've already seen this ID or name
+    if (seenIds.has(staff.id) || seenNames.has(staff.name)) {
+      console.log(`🧹 Removing duplicate staff: ${staff.name} (${staff.id})`);
+      return;
+    }
+    
+    seenIds.add(staff.id);
+    seenNames.add(staff.name);
+    cleanedStaff.push(staff);
+  });
+  
+  if (staffMembers.length !== cleanedStaff.length) {
+    console.log(`🧹 Cleaned staff data: ${staffMembers.length} → ${cleanedStaff.length} members`);
+  }
+  return cleanedStaff;
+};
+
+// Clean up all periods in local storage
+export const cleanupAllPeriodsStaffData = (optimizedStorage) => {
+  console.log("🧹 Starting cleanup of all periods...");
+  let totalCleaned = 0;
+  
+  for (let periodIndex = 0; periodIndex < 6; periodIndex++) {
+    const staffData = optimizedStorage.getStaffData(periodIndex);
+    if (staffData && Array.isArray(staffData)) {
+      const cleanedData = cleanupStaffData(staffData);
+      if (cleanedData.length !== staffData.length) {
+        optimizedStorage.saveStaffData(periodIndex, cleanedData);
+        totalCleaned += (staffData.length - cleanedData.length);
+        console.log(`🧹 Period ${periodIndex}: ${staffData.length} → ${cleanedData.length} staff members`);
+      }
+    }
+  }
+  
+  console.log(`🧹 Cleanup complete! Removed ${totalCleaned} duplicate entries total.`);
+  return totalCleaned;
+};
+
+// Fix staff data inconsistencies across periods
+export const fixStaffDataInconsistencies = (optimizedStorage) => {
+  console.log("🔧 Starting staff data consistency fix...");
+  
+  // Build a map of staff by ID across all periods
+  const staffMap = new Map();
+  
+  // First pass: collect all staff data from all periods
+  for (let periodIndex = 0; periodIndex < 6; periodIndex++) {
+    const staffData = optimizedStorage.getStaffData(periodIndex);
+    if (staffData && Array.isArray(staffData)) {
+      staffData.forEach(staff => {
+        if (staff && staff.id) {
+          if (!staffMap.has(staff.id)) {
+            staffMap.set(staff.id, []);
+          }
+          staffMap.get(staff.id).push({
+            ...staff,
+            periodIndex,
+            lastModified: staff.lastModified || 0
+          });
+        }
+      });
+    }
+  }
+  
+  let fixedCount = 0;
+  
+  // Second pass: fix inconsistencies by using the most recent data
+  staffMap.forEach((staffVersions, staffId) => {
+    if (staffVersions.length > 1) {
+      // Sort by lastModified (if available) or by period index (later periods are more recent)
+      const sortedVersions = staffVersions.sort((a, b) => {
+        if (a.lastModified && b.lastModified) {
+          return b.lastModified - a.lastModified; // Most recent first
+        }
+        return b.periodIndex - a.periodIndex; // Later period first
+      });
+      
+      const mostRecentVersion = sortedVersions[0];
+      const staffName = mostRecentVersion.name;
+      
+      // Check if there are any inconsistencies
+      const hasInconsistencies = staffVersions.some(version => 
+        version.status !== mostRecentVersion.status ||
+        JSON.stringify(version.startPeriod) !== JSON.stringify(mostRecentVersion.startPeriod) ||
+        JSON.stringify(version.endPeriod) !== JSON.stringify(mostRecentVersion.endPeriod)
+      );
+      
+      if (hasInconsistencies) {
+        console.log(`🔧 Fixing inconsistencies for ${staffName}:`, {
+          correctData: {
+            status: mostRecentVersion.status,
+            startPeriod: mostRecentVersion.startPeriod,
+            endPeriod: mostRecentVersion.endPeriod
+          },
+          fromPeriod: mostRecentVersion.periodIndex
+        });
+        
+        // Update all periods with the correct data
+        staffVersions.forEach(version => {
+          const periodStaff = optimizedStorage.getStaffData(version.periodIndex);
+          if (periodStaff && Array.isArray(periodStaff)) {
+            const staffIndex = periodStaff.findIndex(s => s.id === staffId);
+            if (staffIndex !== -1) {
+              const updatedStaff = [...periodStaff];
+              updatedStaff[staffIndex] = {
+                ...updatedStaff[staffIndex],
+                status: mostRecentVersion.status,
+                startPeriod: mostRecentVersion.startPeriod,
+                endPeriod: mostRecentVersion.endPeriod,
+                lastModified: Date.now()
+              };
+              optimizedStorage.saveStaffData(version.periodIndex, updatedStaff);
+              fixedCount++;
+              
+              console.log(`  ✅ Updated ${staffName} in period ${version.periodIndex}`);
+            }
+          }
+        });
+      }
+    }
+  });
+  
+  console.log(`🔧 Consistency fix complete! Fixed ${fixedCount} inconsistencies.`);
+  return fixedCount;
 };
 
 // Initialize schedule data structure (only for missing entries, preserves existing data)
