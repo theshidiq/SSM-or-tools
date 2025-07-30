@@ -28,19 +28,19 @@ const QUOTA_CHECK_INTERVAL = 30 * 1000; // Check every 30 seconds
 export const STORAGE_KEYS = {
   // Period-based schedule data: "schedule-0", "schedule-1", etc.
   getScheduleKey: (periodIndex) => `schedule-${periodIndex}`,
-  
+
   // Period-based staff data: "staff-0", "staff-1", etc.
   getStaffKey: (periodIndex) => `staff-${periodIndex}`,
-  
+
   // Metadata keys
-  CURRENT_PERIOD: 'current-period-index',
-  CACHE_VERSION: 'cache-version',
-  STORAGE_METADATA: 'storage-metadata',
-  
+  CURRENT_PERIOD: "current-period-index",
+  CACHE_VERSION: "cache-version",
+  STORAGE_METADATA: "storage-metadata",
+
   // Legacy keys for migration
-  LEGACY_SCHEDULE: 'shift-schedule-data',
-  LEGACY_STAFF: 'staff-by-month-data',
-  LEGACY_CURRENT: 'current-month-index'
+  LEGACY_SCHEDULE: "shift-schedule-data",
+  LEGACY_STAFF: "staff-by-month-data",
+  LEGACY_CURRENT: "current-month-index",
 };
 
 /**
@@ -52,11 +52,11 @@ class CacheEntry {
     this.timestamp = timestamp;
     this.accessed = timestamp;
   }
-  
+
   isExpired(ttl = CACHE_TTL) {
     return Date.now() - this.timestamp > ttl;
   }
-  
+
   touch() {
     this.accessed = Date.now();
   }
@@ -74,9 +74,9 @@ export const storageQuota = {
     if (now - lastQuotaCheck < QUOTA_CHECK_INTERVAL && storageQuotaExceeded) {
       return { available: false, exceeded: true, usage: null };
     }
-    
+
     lastQuotaCheck = now;
-    
+
     try {
       // Estimate storage usage
       let totalSize = 0;
@@ -85,36 +85,36 @@ export const storageQuota = {
         const value = localStorage.getItem(key);
         totalSize += key.length + (value ? value.length : 0);
       }
-      
+
       // Test write to check if quota is exceeded
-      const testKey = '_quota_test_' + Date.now();
-      const testData = 'test';
+      const testKey = "_quota_test_" + Date.now();
+      const testData = "test";
       localStorage.setItem(testKey, testData);
       localStorage.removeItem(testKey);
-      
+
       storageQuotaExceeded = false;
-      
+
       return {
         available: true,
         exceeded: false,
         usage: {
           totalSize,
-          estimatedMB: (totalSize / (1024 * 1024)).toFixed(2)
-        }
+          estimatedMB: (totalSize / (1024 * 1024)).toFixed(2),
+        },
       };
     } catch (error) {
       storageQuotaExceeded = true;
-      console.warn('❌ localStorage quota exceeded or unavailable:', error);
-      
+      console.warn("❌ localStorage quota exceeded or unavailable:", error);
+
       return {
         available: false,
         exceeded: true,
         usage: null,
-        error: error.message
+        error: error.message,
       };
     }
   },
-  
+
   /**
    * Clean up old cache entries and unused data
    */
@@ -126,33 +126,35 @@ export const storageQuota = {
           memoryCache.delete(key);
         }
       });
-      
+
       // Clean up old localStorage test keys
       const keysToRemove = [];
       for (let i = 0; i < localStorage.length; i++) {
         const key = localStorage.key(i);
-        if (key && key.startsWith('_quota_test_')) {
+        if (key && key.startsWith("_quota_test_")) {
           keysToRemove.push(key);
         }
       }
-      
-      keysToRemove.forEach(key => {
+
+      keysToRemove.forEach((key) => {
         try {
           localStorage.removeItem(key);
         } catch (e) {
           // Ignore cleanup errors
         }
       });
-      
+
       // Development mode only: log cleanup results
-      if (process.env.NODE_ENV === 'development') {
-        console.log(`🧹 Storage cleanup: removed ${keysToRemove.length} test keys, ${memoryCache.size} cache entries remaining`);
+      if (process.env.NODE_ENV === "development") {
+        console.log(
+          `🧹 Storage cleanup: removed ${keysToRemove.length} test keys, ${memoryCache.size} cache entries remaining`,
+        );
       }
     } catch (error) {
-      console.warn('⚠️ Storage cleanup failed:', error);
+      console.warn("⚠️ Storage cleanup failed:", error);
     }
   },
-  
+
   /**
    * Get storage usage statistics
    */
@@ -160,19 +162,23 @@ export const storageQuota = {
     const quota = this.checkQuota();
     const cacheStats = {
       entries: memoryCache.size,
-      oldestEntry: Math.min(...Array.from(memoryCache.values()).map(e => e.timestamp)),
-      newestEntry: Math.max(...Array.from(memoryCache.values()).map(e => e.timestamp))
+      oldestEntry: Math.min(
+        ...Array.from(memoryCache.values()).map((e) => e.timestamp),
+      ),
+      newestEntry: Math.max(
+        ...Array.from(memoryCache.values()).map((e) => e.timestamp),
+      ),
     };
-    
+
     return {
       localStorage: quota,
       memoryCache: cacheStats,
       writeQueue: {
         pending: writeQueue.size,
-        hasTimeout: writeTimeoutId !== null
-      }
+        hasTimeout: writeTimeoutId !== null,
+      },
     };
-  }
+  },
 };
 
 /**
@@ -185,66 +191,66 @@ export const memCache = {
   get(key) {
     const entry = memoryCache.get(key);
     if (!entry) return null;
-    
+
     if (entry.isExpired()) {
       memoryCache.delete(key);
       return null;
     }
-    
+
     entry.touch();
     return entry.data;
   },
-  
+
   /**
    * Set data in memory cache
    */
   set(key, data) {
     memoryCache.set(key, new CacheEntry(data));
-    
+
     // Prevent memory cache from growing too large
     if (memoryCache.size > 50) {
       this.evictOldest();
     }
   },
-  
+
   /**
    * Remove from memory cache
    */
   delete(key) {
     return memoryCache.delete(key);
   },
-  
+
   /**
    * Clear all cache entries
    */
   clear() {
     memoryCache.clear();
   },
-  
+
   /**
    * Evict oldest cache entries
    */
   evictOldest() {
     const entries = Array.from(memoryCache.entries());
     entries.sort((a, b) => a[1].accessed - b[1].accessed);
-    
+
     // Remove oldest 25% of entries
     const toRemove = Math.floor(entries.length * 0.25);
     for (let i = 0; i < toRemove; i++) {
       memoryCache.delete(entries[i][0]);
     }
   },
-  
+
   /**
    * Invalidate cache for specific period
    */
   invalidatePeriod(periodIndex) {
     const scheduleKey = STORAGE_KEYS.getScheduleKey(periodIndex);
     const staffKey = STORAGE_KEYS.getStaffKey(periodIndex);
-    
+
     this.delete(scheduleKey);
     this.delete(staffKey);
-  }
+  },
 };
 
 /**
@@ -260,16 +266,16 @@ const rawStorage = {
       return null;
     }
   },
-  
+
   set(key, data) {
     try {
       localStorage.setItem(key, JSON.stringify(data));
       return true;
     } catch (error) {
-      if (error.name === 'QuotaExceededError' || error.code === 22) {
+      if (error.name === "QuotaExceededError" || error.code === 22) {
         storageQuotaExceeded = true;
         console.error(`❌ localStorage quota exceeded while saving "${key}"`);
-        
+
         // Attempt cleanup and retry once
         storageQuota.cleanup();
         try {
@@ -277,13 +283,16 @@ const rawStorage = {
           storageQuotaExceeded = false;
           return true;
         } catch (retryError) {
-          console.error(`❌ localStorage save failed after cleanup for "${key}":`, retryError);
+          console.error(
+            `❌ localStorage save failed after cleanup for "${key}":`,
+            retryError,
+          );
         }
       }
       return false;
     }
   },
-  
+
   remove(key) {
     try {
       localStorage.removeItem(key);
@@ -292,7 +301,7 @@ const rawStorage = {
       console.warn(`⚠️ Failed to remove localStorage key "${key}":`, error);
       return false;
     }
-  }
+  },
 };
 
 /**
@@ -304,28 +313,28 @@ export const batchWriter = {
    */
   queueWrite(key, data) {
     writeQueue.set(key, data);
-    
+
     // Cancel existing timeout
     if (writeTimeoutId) {
       clearTimeout(writeTimeoutId);
     }
-    
+
     // Set new timeout for batch write
     writeTimeoutId = setTimeout(() => {
       this.flushWrites();
     }, WRITE_DEBOUNCE_DELAY);
   },
-  
+
   /**
    * Force flush all queued writes
    */
   flushWrites() {
     if (writeQueue.size === 0) return;
-    
+
     const startTime = performance.now();
     let successCount = 0;
     let errorCount = 0;
-    
+
     // Process all queued writes
     writeQueue.forEach((data, key) => {
       if (rawStorage.set(key, data)) {
@@ -336,24 +345,24 @@ export const batchWriter = {
         errorCount++;
       }
     });
-    
+
     const duration = performance.now() - startTime;
-    
+
     // Only log batch write details in development mode
-    if (process.env.NODE_ENV === 'development') {
+    if (process.env.NODE_ENV === "development") {
     }
-    
+
     // Clear queue and timeout
     writeQueue.clear();
     writeTimeoutId = null;
   },
-  
+
   /**
    * Get pending write count
    */
   getPendingCount() {
     return writeQueue.size;
-  }
+  },
 };
 
 /**
@@ -365,84 +374,84 @@ export const optimizedStorage = {
    */
   getScheduleData(periodIndex) {
     const key = STORAGE_KEYS.getScheduleKey(periodIndex);
-    
+
     // Try memory cache first
     let data = memCache.get(key);
     if (data !== null) {
       return data;
     }
-    
+
     // Fallback to localStorage
     data = rawStorage.get(key);
     if (data !== null) {
       memCache.set(key, data);
     }
-    
+
     return data || {};
   },
-  
+
   /**
    * Save schedule data for a specific period
    */
   saveScheduleData(periodIndex, data) {
     const key = STORAGE_KEYS.getScheduleKey(periodIndex);
-    
+
     // Update memory cache immediately
     memCache.set(key, data);
-    
+
     // Queue for batch write to localStorage
     batchWriter.queueWrite(key, data);
   },
-  
+
   /**
    * Get staff data for a specific period
    */
   getStaffData(periodIndex) {
     const key = STORAGE_KEYS.getStaffKey(periodIndex);
-    
+
     // Try memory cache first
     let data = memCache.get(key);
     if (data !== null) {
       return data;
     }
-    
+
     // Fallback to localStorage
     data = rawStorage.get(key);
     if (data !== null) {
       memCache.set(key, data);
     }
-    
+
     return data || [];
   },
-  
+
   /**
    * Save staff data for a specific period
    */
   saveStaffData(periodIndex, data) {
     const key = STORAGE_KEYS.getStaffKey(periodIndex);
-    
+
     // Update memory cache immediately
     memCache.set(key, data);
-    
+
     // Queue for batch write to localStorage
     batchWriter.queueWrite(key, data);
   },
-  
+
   /**
    * Get current period index
    */
   getCurrentPeriod() {
     const cached = memCache.get(STORAGE_KEYS.CURRENT_PERIOD);
     if (cached !== null) return cached;
-    
+
     const stored = rawStorage.get(STORAGE_KEYS.CURRENT_PERIOD);
     if (stored !== null) {
       memCache.set(STORAGE_KEYS.CURRENT_PERIOD, stored);
     }
-    
+
     return stored || 0;
   },
-  
+
   /**
    * Save current period index
    */
@@ -450,26 +459,26 @@ export const optimizedStorage = {
     memCache.set(STORAGE_KEYS.CURRENT_PERIOD, periodIndex);
     batchWriter.queueWrite(STORAGE_KEYS.CURRENT_PERIOD, periodIndex);
   },
-  
+
   /**
    * Clear all data for a specific period
    */
   clearPeriodData(periodIndex) {
     const scheduleKey = STORAGE_KEYS.getScheduleKey(periodIndex);
     const staffKey = STORAGE_KEYS.getStaffKey(periodIndex);
-    
+
     // Clear from memory cache
     memCache.delete(scheduleKey);
     memCache.delete(staffKey);
-    
+
     // Remove from localStorage
     rawStorage.remove(scheduleKey);
     rawStorage.remove(staffKey);
-    
+
     // Remove from write queue if pending
     writeQueue.delete(scheduleKey);
     writeQueue.delete(staffKey);
-  }
+  },
 };
 
 /**
@@ -480,106 +489,112 @@ export const migrationUtils = {
    * Check if legacy data exists
    */
   hasLegacyData() {
-    return rawStorage.get(STORAGE_KEYS.LEGACY_SCHEDULE) !== null ||
-           rawStorage.get(STORAGE_KEYS.LEGACY_STAFF) !== null;
+    return (
+      rawStorage.get(STORAGE_KEYS.LEGACY_SCHEDULE) !== null ||
+      rawStorage.get(STORAGE_KEYS.LEGACY_STAFF) !== null
+    );
   },
-  
+
   /**
    * Migrate legacy data to new period-based format
    */
   migrateLegacyData() {
-    if (process.env.NODE_ENV === 'development') {
-      console.log('🔄 Starting legacy data migration...');
+    if (process.env.NODE_ENV === "development") {
+      console.log("🔄 Starting legacy data migration...");
     }
-    
+
     const legacySchedule = rawStorage.get(STORAGE_KEYS.LEGACY_SCHEDULE) || {};
     const legacyStaff = rawStorage.get(STORAGE_KEYS.LEGACY_STAFF) || {};
     const legacyCurrent = rawStorage.get(STORAGE_KEYS.LEGACY_CURRENT) || 0;
-    
+
     let migratedPeriods = 0;
-    
+
     // Migrate schedule data
-    Object.keys(legacySchedule).forEach(periodIndex => {
+    Object.keys(legacySchedule).forEach((periodIndex) => {
       const scheduleData = legacySchedule[periodIndex];
       if (scheduleData && Object.keys(scheduleData).length > 0) {
         optimizedStorage.saveScheduleData(parseInt(periodIndex), scheduleData);
         migratedPeriods++;
       }
     });
-    
+
     // Migrate staff data
-    Object.keys(legacyStaff).forEach(periodIndex => {
+    Object.keys(legacyStaff).forEach((periodIndex) => {
       const staffData = legacyStaff[periodIndex];
       if (staffData && Array.isArray(staffData) && staffData.length > 0) {
         optimizedStorage.saveStaffData(parseInt(periodIndex), staffData);
       }
     });
-    
+
     // Migrate current period
-    if (typeof legacyCurrent === 'number') {
+    if (typeof legacyCurrent === "number") {
       optimizedStorage.saveCurrentPeriod(legacyCurrent);
     }
-    
+
     // Force flush all migration writes
     batchWriter.flushWrites();
-    
-    if (process.env.NODE_ENV === 'development') {
-      console.log(`✅ Migration completed: ${migratedPeriods} periods migrated`);
+
+    if (process.env.NODE_ENV === "development") {
+      console.log(
+        `✅ Migration completed: ${migratedPeriods} periods migrated`,
+      );
     }
-    
+
     return { migratedPeriods, currentPeriod: legacyCurrent };
   },
-  
+
   /**
    * Clean up legacy data after successful migration
    */
   cleanupLegacyData() {
-    if (process.env.NODE_ENV === 'development') {
-      console.log('🧹 Cleaning up legacy storage keys...');
+    if (process.env.NODE_ENV === "development") {
+      console.log("🧹 Cleaning up legacy storage keys...");
     }
-    
+
     const keysToRemove = [
       STORAGE_KEYS.LEGACY_SCHEDULE,
       STORAGE_KEYS.LEGACY_STAFF,
       STORAGE_KEYS.LEGACY_CURRENT,
       // Additional legacy keys mentioned in the original code
-      'shift_schedules_by_month',
-      'shift_staff_by_month',
-      'shift_schedule_data',
-      'shift_staff_members'
+      "shift_schedules_by_month",
+      "shift_staff_by_month",
+      "shift_schedule_data",
+      "shift_staff_members",
     ];
-    
+
     let removedCount = 0;
-    keysToRemove.forEach(key => {
+    keysToRemove.forEach((key) => {
       if (rawStorage.remove(key)) {
         removedCount++;
       }
     });
-    
-    if (process.env.NODE_ENV === 'development') {
+
+    if (process.env.NODE_ENV === "development") {
       console.log(`✅ Legacy cleanup completed: ${removedCount} keys removed`);
     }
   },
-  
+
   /**
    * Verify migration integrity
    */
   verifyMigration() {
     const legacySchedule = rawStorage.get(STORAGE_KEYS.LEGACY_SCHEDULE) || {};
     const errors = [];
-    
+
     // Check that all legacy periods have been migrated
-    Object.keys(legacySchedule).forEach(periodIndex => {
+    Object.keys(legacySchedule).forEach((periodIndex) => {
       const legacyData = legacySchedule[periodIndex];
-      const migratedData = optimizedStorage.getScheduleData(parseInt(periodIndex));
-      
+      const migratedData = optimizedStorage.getScheduleData(
+        parseInt(periodIndex),
+      );
+
       if (Object.keys(legacyData).length > Object.keys(migratedData).length) {
         errors.push(`Period ${periodIndex}: missing data in migration`);
       }
     });
-    
+
     return { success: errors.length === 0, errors };
-  }
+  },
 };
 
 /**
@@ -591,20 +606,20 @@ export const performanceMonitor = {
    */
   getMetrics() {
     const storageStats = storageQuota.getUsageStats();
-    
+
     return {
       ...storageStats,
       migration: {
-        hasLegacyData: migrationUtils.hasLegacyData()
+        hasLegacyData: migrationUtils.hasLegacyData(),
       },
       performance: {
         cacheHitRate: this.getCacheHitRate(),
         averageWriteDelay: WRITE_DEBOUNCE_DELAY,
-        quotaExceeded: storageQuotaExceeded
-      }
+        quotaExceeded: storageQuotaExceeded,
+      },
     };
   },
-  
+
   /**
    * Calculate cache hit rate (placeholder - would need tracking)
    */
@@ -613,23 +628,26 @@ export const performanceMonitor = {
     // For now, return estimated based on cache size
     return memoryCache.size > 0 ? 0.85 : 0;
   },
-  
+
   /**
    * Log performance summary (development mode only)
    */
   logSummary() {
     // Performance summary logging disabled
-  }
+  },
 };
 
 // Automatic cleanup interval
-setInterval(() => {
-  storageQuota.cleanup();
-}, 5 * 60 * 1000); // Every 5 minutes
+setInterval(
+  () => {
+    storageQuota.cleanup();
+  },
+  5 * 60 * 1000,
+); // Every 5 minutes
 
 // Flush writes on page unload
-if (typeof window !== 'undefined') {
-  window.addEventListener('beforeunload', () => {
+if (typeof window !== "undefined") {
+  window.addEventListener("beforeunload", () => {
     batchWriter.flushWrites();
   });
 }

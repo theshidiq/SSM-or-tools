@@ -100,6 +100,16 @@ The app uses a hybrid local/remote storage approach:
 - Configurable via environment variables
 - Handles authentication and error recovery
 
+#### Photo Import Feature
+- **AI-Powered OCR**: Uses Google Vision API for analyzing handwritten schedules
+- **Table Detection**: Automatically identifies table structure and cell boundaries
+- **Symbol Recognition**: Recognizes shift symbols (△, ○, ▽, ×) and converts to schedule data
+- **Japanese Support**: Full support for Japanese staff names and text
+- **Smart Mapping**: Maps detected staff to existing members or creates new ones
+- **Interactive Review**: Edit and correct detected data before importing
+- **Mobile Optimized**: Camera capture and touch-friendly interface
+- **Fallback Handling**: Graceful degradation when API is not configured
+
 ## Environment Configuration
 
 ### Required Environment Variables
@@ -107,6 +117,9 @@ The app uses a hybrid local/remote storage approach:
 # Supabase (optional - app works without)
 REACT_APP_SUPABASE_URL=your_supabase_url
 REACT_APP_SUPABASE_ANON_KEY=your_supabase_anon_key
+
+# Google Vision API for Photo Import (optional)
+REACT_APP_GOOGLE_VISION_API_KEY=your_google_vision_api_key
 
 # Google Sheets (optional)
 REACT_APP_GOOGLE_SHEETS_API_KEY=your_api_key

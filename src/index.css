@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Noto+Sans+JP:wght@300;400;500;600;700&display=swap');
+@import url("https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Noto+Sans+JP:wght@300;400;500;600;700&display=swap");
 
 @tailwind base;
 @tailwind components;
@@ -12,8 +12,19 @@
   }
 
   body {
-    font-family: 'Inter', 'Noto Sans JP', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
-      'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
+    font-family:
+      "Inter",
+      "Noto Sans JP",
+      -apple-system,
+      BlinkMacSystemFont,
+      "Segoe UI",
+      "Roboto",
+      "Oxygen",
+      "Ubuntu",
+      "Cantarell",
+      "Fira Sans",
+      "Droid Sans",
+      "Helvetica Neue",
       sans-serif;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
@@ -22,7 +33,7 @@
 
   /* Japanese text styling */
   .japanese-text {
-    font-family: 'Noto Sans JP', sans-serif;
+    font-family: "Noto Sans JP", sans-serif;
     font-weight: 400;
     letter-spacing: 0.02em;
   }
@@ -99,16 +110,24 @@
   }
 
   .header::before {
-    content: '';
+    content: "";
     @apply absolute inset-0 bg-gradient-to-r from-transparent via-white/10 to-transparent;
-    background-image: 
-      radial-gradient(circle at 20% 20%, rgba(255,255,255,0.1) 0%, transparent 50%),
-      radial-gradient(circle at 80% 80%, rgba(255,255,255,0.1) 0%, transparent 50%);
+    background-image:
+      radial-gradient(
+        circle at 20% 20%,
+        rgba(255, 255, 255, 0.1) 0%,
+        transparent 50%
+      ),
+      radial-gradient(
+        circle at 80% 80%,
+        rgba(255, 255, 255, 0.1) 0%,
+        transparent 50%
+      );
   }
 
   .header h1 {
     @apply text-2xl lg:text-3xl font-bold mb-2 relative z-10;
-    text-shadow: 0 2px 4px rgba(0,0,0,0.3);
+    text-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
   }
 
   .header p {
@@ -182,7 +201,7 @@
 
   .shift-table th {
     @apply px-4 py-4 bg-gradient-to-r from-gray-600 to-gray-700 text-white text-left text-xs font-semibold uppercase tracking-wider border-b border-gray-500;
-    text-shadow: 0 1px 2px rgba(0,0,0,0.3);
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
     position: sticky !important;
     top: 0 !important;
     z-index: 250 !important;
@@ -348,17 +367,34 @@
     @apply animate-bounce-subtle;
   }
 
+  /* Bulk toolbar slide up animation */
+  @keyframes slideUpFromBottom {
+    from {
+      transform: translateX(-50%) translateY(100%);
+      opacity: 0;
+    }
+    to {
+      transform: translateX(-50%) translateY(0);
+      opacity: 1;
+    }
+  }
+
+  .animate-slide-up-toolbar {
+    animation: slideUpFromBottom 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94)
+      forwards;
+  }
+
   /* Responsive utilities */
   @media (max-width: 768px) {
     .shift-table th,
     .shift-table td {
       @apply px-2 py-2 text-xs;
     }
-    
+
     .shift-card {
       @apply p-1 m-0.5;
     }
-    
+
     .btn {
       @apply px-3 py-1.5 text-xs;
     }

@@ -1,7 +1,7 @@
-import React, { useEffect } from 'react';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import ShiftScheduleEditor from './components/ShiftScheduleEditor.jsx';
-import { useSupabase } from './hooks/useSupabase.js';
+import React, { useEffect } from "react";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import ShiftScheduleEditor from "./components/ShiftScheduleEditor.jsx";
+import { useSupabase } from "./hooks/useSupabase.js";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -24,7 +24,7 @@ function AppContent() {
     scheduleData,
     saveScheduleData,
     loadScheduleData,
-    checkConnection
+    checkConnection,
   } = useSupabase();
 
   // Load initial data
@@ -34,16 +34,16 @@ function AppContent() {
         await checkConnection();
         await loadScheduleData(); // Load latest schedule
       } catch (err) {
-        console.error('Failed to initialize data:', err);
+        console.error("Failed to initialize data:", err);
       }
     };
-    
+
     initializeData();
   }, [checkConnection, loadScheduleData]);
 
   return (
     <div className="App">
-      <ShiftScheduleEditor 
+      <ShiftScheduleEditor
         supabaseScheduleData={scheduleData}
         isConnected={isConnected}
         error={error}

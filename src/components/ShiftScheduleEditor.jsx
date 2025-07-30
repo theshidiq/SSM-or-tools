@@ -1,32 +1,48 @@
-import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
-import { format, addDays } from 'date-fns';
-import { ja } from 'date-fns/locale';
+import React, {
+  useState,
+  useEffect,
+  useMemo,
+  useCallback,
+  useRef,
+} from "react";
+import { format, addDays } from "date-fns";
+import { ja } from "date-fns/locale";
 
 // Import extracted utilities and constants
-import { shiftSymbols, getAvailableShifts } from '../constants/shiftConstants';
-import { monthPeriods, getDropdownPosition, getDateLabel, isDateWithinWorkPeriod, addNextPeriod } from '../utils/dateUtils';
-import { getOrderedStaffMembers, migrateScheduleData, migrateStaffMembers } from '../utils/staffUtils';
-import { generateStatistics } from '../utils/statisticsUtils';
-import { exportToCSV, printSchedule } from '../utils/exportUtils';
+import { shiftSymbols, getAvailableShifts } from "../constants/shiftConstants";
+import {
+  monthPeriods,
+  getDropdownPosition,
+  getDateLabel,
+  isDateWithinWorkPeriod,
+  addNextPeriod,
+} from "../utils/dateUtils";
+import {
+  getOrderedStaffMembers,
+  migrateScheduleData,
+  migrateStaffMembers,
+} from "../utils/staffUtils";
+import { generateStatistics } from "../utils/statisticsUtils";
+import { exportToCSV, printSchedule } from "../utils/exportUtils";
 
 // Import extracted components
-import ErrorDisplay from './schedule/ErrorDisplay';
-import StatisticsDashboard from './schedule/StatisticsDashboard';
-import NavigationToolbar from './schedule/NavigationToolbar';
-import ScheduleTable from './schedule/ScheduleTable';
-import StaffEditModal from './schedule/StaffEditModal';
-import StatusModal from './common/StatusModal';
+import { useScheduleData } from "../hooks/useScheduleData";
+import { useStaffManagement } from "../hooks/useStaffManagement";
+import ErrorDisplay from "./schedule/ErrorDisplay";
+import StatisticsDashboard from "./schedule/StatisticsDashboard";
+import NavigationToolbar from "./schedule/NavigationToolbar";
+import ScheduleTable from "./schedule/ScheduleTable";
+import StaffEditModal from "./schedule/StaffEditModal";
+import StatusModal from "./common/StatusModal";
 
 // Import custom hooks
-import { useScheduleData } from '../hooks/useScheduleData';
-import { useStaffManagement } from '../hooks/useStaffManagement';
 
-const ShiftScheduleEditor = ({ 
-  supabaseScheduleData, 
-  isConnected, 
+const ShiftScheduleEditor = ({
+  supabaseScheduleData,
+  isConnected,
   error: externalError,
   onSaveSchedule,
-  onDeleteSchedule 
+  onDeleteSchedule,
 }) => {
   // Main state
   const [currentMonthIndex, setCurrentMonthIndex] = useState(0); // 0 = January-February (0-indexed)
@@ -35,7 +51,7 @@ const ShiftScheduleEditor = ({
 
   // UI state
   const [showDropdown, setShowDropdown] = useState(null);
-  
+
   // Wrapper for setShowDropdown
   const setShowDropdownDebug = (value) => {
     setShowDropdown(value);
@@ -44,18 +60,18 @@ const ShiftScheduleEditor = ({
   const [showMonthPicker, setShowMonthPicker] = useState(false);
   const [editingColumn, setEditingColumn] = useState(null);
   const [editingSpecificColumn, setEditingSpecificColumn] = useState(null);
-  const [editingColumnName, setEditingColumnName] = useState('');
+  const [editingColumnName, setEditingColumnName] = useState("");
   const [editingNames, setEditingNames] = useState({});
   const [justEnteredEditMode, setJustEnteredEditMode] = useState(false);
-  const [customText, setCustomText] = useState('');
-  const [exportFormat, setExportFormat] = useState('csv');
-  
+  const [customText, setCustomText] = useState("");
+  const [exportFormat, setExportFormat] = useState("csv");
+
   // Modal states
   const [deleteModal, setDeleteModal] = useState({
     isOpen: false,
-    type: 'confirm',
-    title: '',
-    message: ''
+    type: "confirm",
+    title: "",
+    message: "",
   });
 
   // Refs
@@ -73,8 +89,14 @@ const ShiftScheduleEditor = ({
     updateShift,
     scheduleAutoSave,
     setHasExplicitlyDeletedData,
-    syncLocalStorageToDatabase
-  } = useScheduleData(currentMonthIndex, supabaseScheduleData, currentScheduleId, setCurrentScheduleId, onSaveSchedule);
+    syncLocalStorageToDatabase,
+  } = useScheduleData(
+    currentMonthIndex,
+    supabaseScheduleData,
+    currentScheduleId,
+    setCurrentScheduleId,
+    onSaveSchedule,
+  );
 
   const {
     staffMembers,
@@ -92,12 +114,12 @@ const ShiftScheduleEditor = ({
     editStaffName,
     deleteStaff,
     startAddingNewStaff,
-    updateStaff
+    updateStaff,
   } = useStaffManagement(currentMonthIndex, supabaseScheduleData);
 
   // Check if we're still loading - wait until both database and staff are ready
   const isLoading = supabaseScheduleData === undefined || !hasLoadedFromDb;
-  
+
   // Calculate derived data
   const orderedStaffMembers = useMemo(() => {
     if (isLoading) {
@@ -107,7 +129,7 @@ const ShiftScheduleEditor = ({
     if (!staffMembers || staffMembers.length === 0) {
       return [];
     }
-    
+
     const ordered = getOrderedStaffMembers(staffMembers, dateRange);
     return ordered;
   }, [staffMembers, dateRange, isLoading, hasLoadedFromDb]);
@@ -115,20 +137,25 @@ const ShiftScheduleEditor = ({
   // Check if we have any data at all (including localStorage as backup)
   const localStaffData = useMemo(() => {
     try {
-      const savedStaffByMonth = JSON.parse(localStorage.getItem('staff-by-month-data') || '{}');
+      const savedStaffByMonth = JSON.parse(
+        localStorage.getItem("staff-by-month-data") || "{}",
+      );
       return savedStaffByMonth[currentMonthIndex] || [];
     } catch {
       return [];
     }
   }, [currentMonthIndex]);
-  
-  const hasAnyStaffData = (staffMembers && staffMembers.length > 0) || 
-    (supabaseScheduleData && supabaseScheduleData.schedule_data && supabaseScheduleData.schedule_data._staff_members) ||
+
+  const hasAnyStaffData =
+    (staffMembers && staffMembers.length > 0) ||
+    (supabaseScheduleData &&
+      supabaseScheduleData.schedule_data &&
+      supabaseScheduleData.schedule_data._staff_members) ||
     (localStaffData && localStaffData.length > 0);
 
-  const statistics = useMemo(() => 
-    generateStatistics(schedule, staffMembers, dateRange), 
-    [schedule, staffMembers, dateRange]
+  const statistics = useMemo(
+    () => generateStatistics(schedule, staffMembers, dateRange),
+    [schedule, staffMembers, dateRange],
   );
 
   // State effect for showDropdown (removed debug logs)
@@ -142,42 +169,54 @@ const ShiftScheduleEditor = ({
   }, [externalError]);
 
   // Event handlers
-  const handleMonthChange = useCallback((newMonthIndex) => {
-    
-    // Save current data before switching
-    if (schedule && Object.keys(schedule).length > 0 && staffMembers && staffMembers.length > 0) {
-      scheduleAutoSave(schedule, staffMembers);
-    }
-    
-    // Allow navigation to any valid period index (not just 0-11)
-    if (newMonthIndex >= 0 && newMonthIndex < monthPeriods.length) {
-      setCurrentMonthIndex(newMonthIndex);
-      setShowMonthPicker(false);
-      setShowDropdownDebug(null);
-      setEditingCell(null);
-      exitEditMode();
-    } else {
-      console.warn(`⚠️ NAVIGATION: Invalid month index ${newMonthIndex}. Available: 0-${monthPeriods.length - 1}`);
-    }
-  }, [currentMonthIndex, schedule, staffMembers, scheduleAutoSave]);
+  const handleMonthChange = useCallback(
+    (newMonthIndex) => {
+      // Save current data before switching
+      if (
+        schedule &&
+        Object.keys(schedule).length > 0 &&
+        staffMembers &&
+        staffMembers.length > 0
+      ) {
+        scheduleAutoSave(schedule, staffMembers);
+      }
+
+      // Allow navigation to any valid period index (not just 0-11)
+      if (newMonthIndex >= 0 && newMonthIndex < monthPeriods.length) {
+        setCurrentMonthIndex(newMonthIndex);
+        setShowMonthPicker(false);
+        setShowDropdownDebug(null);
+        setEditingCell(null);
+        exitEditMode();
+      } else {
+        console.warn(
+          `⚠️ NAVIGATION: Invalid month index ${newMonthIndex}. Available: 0-${monthPeriods.length - 1}`,
+        );
+      }
+    },
+    [currentMonthIndex, schedule, staffMembers, scheduleAutoSave],
+  );
 
   const addNewColumn = () => {
     startAddingNewStaff();
   };
 
-  const editColumnName = useCallback((staffId, newName) => {
-    editStaffName(staffId, newName, (newStaff) => {
-      setStaffMembersByMonth(prev => ({
-        ...prev,
-        [currentMonthIndex]: newStaff
-      }));
-    });
-  }, [editStaffName, setStaffMembersByMonth, currentMonthIndex]);
+  const editColumnName = useCallback(
+    (staffId, newName) => {
+      editStaffName(staffId, newName, (newStaff) => {
+        setStaffMembersByMonth((prev) => ({
+          ...prev,
+          [currentMonthIndex]: newStaff,
+        }));
+      });
+    },
+    [editStaffName, setStaffMembersByMonth, currentMonthIndex],
+  );
 
   const exitEditMode = () => {
     setEditingColumn(null);
     setEditingSpecificColumn(null);
-    setEditingColumnName('');
+    setEditingColumnName("");
   };
 
   const handleCreateStaff = (staffData) => {
@@ -187,32 +226,24 @@ const ShiftScheduleEditor = ({
       dateRange,
       updateSchedule,
       (newStaff) => {
-        setStaffMembersByMonth(prev => ({
+        setStaffMembersByMonth((prev) => ({
           ...prev,
-          [currentMonthIndex]: newStaff
+          [currentMonthIndex]: newStaff,
         }));
-      }
+      },
     );
-    
+
     setTimeout(() => {
       scheduleAutoSave(newSchedule, newStaffMembers);
     }, 0);
   };
 
   const handleExport = () => {
-    exportToCSV(
-      orderedStaffMembers,
-      dateRange,
-      schedule
-    );
+    exportToCSV(orderedStaffMembers, dateRange, schedule);
   };
 
   const handlePrint = () => {
-    printSchedule(
-      orderedStaffMembers,
-      dateRange,
-      schedule
-    );
+    printSchedule(orderedStaffMembers, dateRange, schedule);
   };
 
   const handleAddTable = () => {
@@ -221,17 +252,16 @@ const ShiftScheduleEditor = ({
     setCurrentMonthIndex(newPeriodIndex);
   };
 
-
-
   const handleDeletePeriod = () => {
-    const periodLabel = monthPeriods[currentMonthIndex]?.label || 'current period';
-    
+    const periodLabel =
+      monthPeriods[currentMonthIndex]?.label || "current period";
+
     // Show confirmation modal
     setDeleteModal({
       isOpen: true,
-      type: 'confirm',
-      title: 'Clear Schedule Data',
-      message: `Are you sure you want to clear all schedule data (shift assignments) for ${periodLabel}? This will remove all shift entries but preserve staff configuration. This action cannot be undone.`
+      type: "confirm",
+      title: "Clear Schedule Data",
+      message: `Are you sure you want to clear all schedule data (shift assignments) for ${periodLabel}? This will remove all shift entries but preserve staff configuration. This action cannot be undone.`,
     });
   };
 
@@ -239,54 +269,54 @@ const ShiftScheduleEditor = ({
     // Show loading modal
     setDeleteModal({
       isOpen: true,
-      type: 'loading',
-      title: 'Clearing Schedule Data',
-      message: 'Please wait while we clear the schedule data...'
+      type: "loading",
+      title: "Clearing Schedule Data",
+      message: "Please wait while we clear the schedule data...",
     });
 
     try {
       // Step 1: Clear only schedule data (cell values) for current period, preserve staff configuration
       const clearedSchedule = {};
-      
+
       // Clear schedule data for current period but keep staff structure
-      Object.keys(schedule).forEach(staffId => {
+      Object.keys(schedule).forEach((staffId) => {
         clearedSchedule[staffId] = {};
         // Initialize empty dates for current period
-        dateRange.forEach(date => {
-          const dateKey = date.toISOString().split('T')[0];
-          clearedSchedule[staffId][dateKey] = '';
+        dateRange.forEach((date) => {
+          const dateKey = date.toISOString().split("T")[0];
+          clearedSchedule[staffId][dateKey] = "";
         });
       });
-      
+
       // Step 2: Update local state
       updateSchedule(clearedSchedule);
 
       // Step 3: Auto-save will handle database update with cleared data but preserved staff
-      await new Promise(resolve => {
+      await new Promise((resolve) => {
         scheduleAutoSave(clearedSchedule, staffMembers);
         setTimeout(resolve, 1000); // Give time for auto-save
       });
 
       // Simulate some processing time for visual feedback
-      await new Promise(resolve => setTimeout(resolve, 500));
-      
+      await new Promise((resolve) => setTimeout(resolve, 500));
+
       // Show success modal
       setDeleteModal({
         isOpen: true,
-        type: 'success',
-        title: 'Success!',
-        message: 'Schedule data has been cleared. Staff configuration preserved.'
+        type: "success",
+        title: "Success!",
+        message:
+          "Schedule data has been cleared. Staff configuration preserved.",
       });
-
     } catch (error) {
-      console.error('❌ Failed to clear schedule data:', error);
-      
+      console.error("❌ Failed to clear schedule data:", error);
+
       // Show error modal
       setDeleteModal({
         isOpen: true,
-        type: 'error',
-        title: 'Error',
-        message: 'Failed to clear schedule data. Please try again.'
+        type: "error",
+        title: "Error",
+        message: "Failed to clear schedule data. Please try again.",
       });
     }
   };
@@ -294,9 +324,9 @@ const ShiftScheduleEditor = ({
   const closeDeleteModal = () => {
     setDeleteModal({
       isOpen: false,
-      type: 'confirm',
-      title: '',
-      message: ''
+      type: "confirm",
+      title: "",
+      message: "",
     });
   };
 
@@ -305,24 +335,35 @@ const ShiftScheduleEditor = ({
     const handleClickOutside = (event) => {
       try {
         if (!event || !event.target) return;
-        
-        if (showDropdown && event.target.closest && !event.target.closest('.shift-dropdown')) {
+
+        if (
+          showDropdown &&
+          event.target.closest &&
+          !event.target.closest(".shift-dropdown")
+        ) {
           setShowDropdownDebug(null);
         }
-        
-        if (showMonthPicker && event.target.closest && !event.target.closest('.month-picker')) {
+
+        if (
+          showMonthPicker &&
+          event.target.closest &&
+          !event.target.closest(".month-picker")
+        ) {
           setShowMonthPicker(false);
         }
-        
+
         // Exit edit mode when clicking outside table header
-        if ((editingColumn === 'delete-mode' || editingColumn === 'edit-name-mode' || editingSpecificColumn) && 
-            event.target.closest && 
-            !event.target.closest('th') && 
-            !event.target.closest('button') && 
-            !justEnteredEditMode) {
-          
-          if (editingColumn === 'edit-name-mode') {
-            Object.keys(editingNames).forEach(staffId => {
+        if (
+          (editingColumn === "delete-mode" ||
+            editingColumn === "edit-name-mode" ||
+            editingSpecificColumn) &&
+          event.target.closest &&
+          !event.target.closest("th") &&
+          !event.target.closest("button") &&
+          !justEnteredEditMode
+        ) {
+          if (editingColumn === "edit-name-mode") {
+            Object.keys(editingNames).forEach((staffId) => {
               const newName = editingNames[staffId];
               if (newName && newName.trim()) {
                 editColumnName(staffId, newName.trim());
@@ -331,16 +372,24 @@ const ShiftScheduleEditor = ({
           }
           exitEditMode();
         }
-        
+
         setJustEnteredEditMode(false);
       } catch (error) {
-        console.error('Error in handleClickOutside:', error);
+        console.error("Error in handleClickOutside:", error);
       }
     };
 
-    document.addEventListener('click', handleClickOutside);
-    return () => document.removeEventListener('click', handleClickOutside);
-  }, [showDropdown, showMonthPicker, editingColumn, editingSpecificColumn, justEnteredEditMode, editingNames, editColumnName]);
+    document.addEventListener("click", handleClickOutside);
+    return () => document.removeEventListener("click", handleClickOutside);
+  }, [
+    showDropdown,
+    showMonthPicker,
+    editingColumn,
+    editingSpecificColumn,
+    justEnteredEditMode,
+    editingNames,
+    editColumnName,
+  ]);
 
   // Don't render anything until data is loaded
   if (isLoading) {
@@ -361,7 +410,8 @@ const ShiftScheduleEditor = ({
         <div className="flex flex-col items-center justify-center py-16 space-y-4">
           <div className="text-gray-600 text-lg">No schedule data found</div>
           <div className="text-gray-500 text-center max-w-md">
-            Start by adding staff members to create your shift schedule. You can manage their information, positions, and work periods.
+            Start by adding staff members to create your shift schedule. You can
+            manage their information, positions, and work periods.
           </div>
           <button
             onClick={() => setShowStaffEditModal(true)}
@@ -446,11 +496,15 @@ const ShiftScheduleEditor = ({
         scheduleAutoSave={scheduleAutoSave}
         editStaffName={editStaffName}
       />
-      
+
       {/* ScheduleTable data debug removed */}
 
       {/* Statistics Dashboard */}
-      <StatisticsDashboard statistics={statistics} staffMembers={staffMembers} dateRange={dateRange} />
+      <StatisticsDashboard
+        statistics={statistics}
+        staffMembers={staffMembers}
+        dateRange={dateRange}
+      />
 
       {/* Staff Edit Modal */}
       <StaffEditModal
@@ -475,159 +529,171 @@ const ShiftScheduleEditor = ({
       />
 
       {/* Shift Dropdown Portal */}
-      {showDropdown && (() => {
-        // Parse staffId and dateKey correctly - dateKey is always at the end in YYYY-MM-DD format (10 chars)
-        // Expected format: "uuid-with-hyphens-YYYY-MM-DD"
-        const dateKey = showDropdown.slice(-10); // Extract last 10 characters (YYYY-MM-DD)
-        const staffId = showDropdown.slice(0, -11); // Everything except the last 11 characters (-YYYY-MM-DD)
-        
-        const staff = orderedStaffMembers.find(s => s.id === staffId);
-        const date = new Date(dateKey);
-        
-        if (!staff) {
-          return null;
-        }
-        
-        const status = staff?.status || '派遣';
-        const availableShifts = getAvailableShifts(status);
-        
-        // Find the cell element for positioning
-        const cellElement = document.querySelector(`[data-cell-key="${showDropdown}"]`);
-        
-        if (!cellElement) {
-          return null;
-        }
-        
-        const cellRect = cellElement.getBoundingClientRect();
-        
-        // Calculate dropdown position using proper indices
-        const staffIndex = orderedStaffMembers.findIndex(s => s.id === staffId);
-        const dateIndex = dateRange.findIndex(d => d.toISOString().split('T')[0] === dateKey);
-        
-        // Dynamic dropdown positioning based on cell location
-        const isRightSide = staffIndex >= orderedStaffMembers.length - 3; // Last 3 columns
-        const isBottomHalf = dateIndex >= dateRange.length - 5; // Last 5 rows
-        
-        // Calculate dropdown position
-        let dropdownStyle = {
-          position: 'fixed',
-          backgroundColor: 'white',
-          border: '1px solid #d1d5db',
-          borderRadius: '0.5rem',
-          boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.1)',
-          padding: '0.5rem 0',
-          minWidth: '120px',
-          zIndex: 1000
-        };
-        
-        if (isRightSide && isBottomHalf) {
-          // Position above and to the left
-          dropdownStyle = {
-            ...dropdownStyle,
-            right: window.innerWidth - cellRect.right,
-            bottom: window.innerHeight - cellRect.top + 4,
+      {showDropdown &&
+        (() => {
+          // Parse staffId and dateKey correctly - dateKey is always at the end in YYYY-MM-DD format (10 chars)
+          // Expected format: "uuid-with-hyphens-YYYY-MM-DD"
+          const dateKey = showDropdown.slice(-10); // Extract last 10 characters (YYYY-MM-DD)
+          const staffId = showDropdown.slice(0, -11); // Everything except the last 11 characters (-YYYY-MM-DD)
+
+          const staff = orderedStaffMembers.find((s) => s.id === staffId);
+          const date = new Date(dateKey);
+
+          if (!staff) {
+            return null;
+          }
+
+          const status = staff?.status || "派遣";
+          const availableShifts = getAvailableShifts(status);
+
+          // Find the cell element for positioning
+          const cellElement = document.querySelector(
+            `[data-cell-key="${showDropdown}"]`,
+          );
+
+          if (!cellElement) {
+            return null;
+          }
+
+          const cellRect = cellElement.getBoundingClientRect();
+
+          // Calculate dropdown position using proper indices
+          const staffIndex = orderedStaffMembers.findIndex(
+            (s) => s.id === staffId,
+          );
+          const dateIndex = dateRange.findIndex(
+            (d) => d.toISOString().split("T")[0] === dateKey,
+          );
+
+          // Dynamic dropdown positioning - prioritize side positioning to avoid covering cells below
+          const isRightSide = staffIndex >= orderedStaffMembers.length - 2; // Last 2 columns
+          const isLeftSide = staffIndex === 0; // First column
+          const hasSpaceRight = cellRect.right + 140 < window.innerWidth; // 140px = dropdown width + margin
+          const hasSpaceLeft = cellRect.left - 140 > 0;
+
+          // Calculate dropdown position
+          let dropdownStyle = {
+            position: "fixed",
+            backgroundColor: "white",
+            border: "1px solid #d1d5db",
+            borderRadius: "0.5rem",
+            boxShadow: "0 10px 15px -3px rgba(0, 0, 0, 0.1)",
+            padding: "0.5rem 0",
+            minWidth: "120px",
+            zIndex: 1000,
           };
-        } else if (isRightSide) {
-          // Position below and to the left
-          dropdownStyle = {
-            ...dropdownStyle,
-            right: window.innerWidth - cellRect.right,
-            top: cellRect.bottom + 4,
-          };
-        } else if (isBottomHalf) {
-          // Position above and to the right
-          dropdownStyle = {
-            ...dropdownStyle,
-            left: cellRect.left,
-            bottom: window.innerHeight - cellRect.top + 4,
-          };
-        } else {
-          // Default: below and to the right
-          dropdownStyle = {
-            ...dropdownStyle,
-            left: cellRect.left,
-            top: cellRect.bottom + 4,
-          };
-        }
-        
-        
-        return (
-          <div 
-            className="shift-dropdown"
-            style={dropdownStyle}
-            onClick={e => e.stopPropagation()}
-          >
-            {availableShifts.map((key) => {
-              const value = shiftSymbols[key];
-              if (!value) return null;
-              
-              return (
-                <div
-                  key={key}
-                  className="flex items-center px-3 py-2 hover:bg-gray-100 cursor-pointer"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    // Handle different shift types like in ScheduleTable
-                    let shiftValue;
-                    const staff = staffMembers.find(s => s.id === staffId);
-                    
-                    if (key === 'normal') {
-                      // For パート staff, normal shift shows circle symbol
-                      if (staff?.status === 'パート') {
-                        shiftValue = shiftSymbols[key]?.symbol || '○';
+
+          // Prioritize side positioning to avoid covering cells below
+          if (hasSpaceRight && !isRightSide) {
+            // Position to the right side of the cell
+            dropdownStyle = {
+              ...dropdownStyle,
+              left: cellRect.right + 8,
+              top: cellRect.top,
+            };
+          } else if (hasSpaceLeft && !isLeftSide) {
+            // Position to the left side of the cell
+            dropdownStyle = {
+              ...dropdownStyle,
+              right: window.innerWidth - cellRect.left + 8,
+              top: cellRect.top,
+            };
+          } else if (dateIndex >= dateRange.length - 3) {
+            // If in bottom rows, position above
+            dropdownStyle = {
+              ...dropdownStyle,
+              left: cellRect.left,
+              bottom: window.innerHeight - cellRect.top + 4,
+            };
+          } else {
+            // Fallback: position below but slightly offset to minimize coverage
+            dropdownStyle = {
+              ...dropdownStyle,
+              left: cellRect.right + 4,
+              top: cellRect.bottom + 4,
+            };
+          }
+
+          return (
+            <div
+              className="shift-dropdown"
+              style={dropdownStyle}
+              onClick={(e) => e.stopPropagation()}
+            >
+              {availableShifts.map((key) => {
+                const value = shiftSymbols[key];
+                if (!value) return null;
+
+                return (
+                  <div
+                    key={key}
+                    className="flex items-center px-3 py-2 hover:bg-gray-100 cursor-pointer"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      // Handle different shift types like in ScheduleTable
+                      let shiftValue;
+                      const staff = staffMembers.find((s) => s.id === staffId);
+
+                      if (key === "normal") {
+                        // For パート staff, normal shift shows circle symbol
+                        if (staff?.status === "パート") {
+                          shiftValue = shiftSymbols[key]?.symbol || "○";
+                        } else {
+                          shiftValue = ""; // Normal shift shows as blank for other staff
+                        }
+                      } else if (key === "late") {
+                        shiftValue = "late"; // Late shift stores as 'late' key, not symbol
                       } else {
-                        shiftValue = ''; // Normal shift shows as blank for other staff
+                        shiftValue = shiftSymbols[key]?.symbol || key;
                       }
-                    } else if (key === 'late') {
-                      shiftValue = 'late'; // Late shift stores as 'late' key, not symbol
-                    } else {
-                      shiftValue = shiftSymbols[key]?.symbol || key;
-                    }
-                    
-                    updateShift(staffId, dateKey, shiftValue);
-                    setShowDropdownDebug(null);
-                  }}
-                >
-                  <span className={`text-lg font-bold mr-3 ${value.color}`}>
-                    {value.symbol}
-                  </span>
-                  <span className="text-sm">{value.label}</span>
+
+                      updateShift(staffId, dateKey, shiftValue);
+                      setShowDropdownDebug(null);
+                    }}
+                  >
+                    <span className={`text-lg font-bold mr-3 ${value.color}`}>
+                      {value.symbol || "　"}
+                      {/* Use full-width space for empty normal shift */}
+                    </span>
+                    <span className="text-sm">{value.label}</span>
+                  </div>
+                );
+              })}
+
+              {/* Custom Text Input Section */}
+              {editingCell === showDropdown && (
+                <div className="border-t border-gray-200 p-2">
+                  <div className="text-xs text-gray-500 mb-2">Custom text:</div>
+                  <input
+                    type="text"
+                    value={customText}
+                    onChange={(e) => setCustomText(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") {
+                        const finalText = customText.trim() || "";
+                        updateShift(staffId, dateKey, finalText);
+                        setEditingCell(null);
+                        setShowDropdownDebug(null);
+                        setCustomText("");
+                      } else if (e.key === "Escape") {
+                        setEditingCell(null);
+                        setShowDropdownDebug(null);
+                        setCustomText("");
+                      }
+                    }}
+                    onClick={(e) => e.stopPropagation()}
+                    placeholder="Type custom text..."
+                    className="w-full px-3 py-2 text-sm border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
+                    autoFocus
+                  />
+                  <div className="text-xs text-gray-400 mt-1">
+                    Press Enter to save, Escape to cancel
+                  </div>
                 </div>
-              );
-            })}
-            
-            {/* Custom Text Input Section */}
-            {editingCell === showDropdown && (
-              <div className="border-t border-gray-200 p-2">
-                <div className="text-xs text-gray-500 mb-2">Custom text:</div>
-                <input
-                  type="text"
-                  value={customText}
-                  onChange={(e) => setCustomText(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') {
-                      const finalText = customText.trim() || '';
-                      updateShift(staffId, dateKey, finalText);
-                      setEditingCell(null);
-                      setShowDropdownDebug(null);
-                      setCustomText('');
-                    } else if (e.key === 'Escape') {
-                      setEditingCell(null);
-                      setShowDropdownDebug(null);
-                      setCustomText('');
-                    }
-                  }}
-                  onClick={(e) => e.stopPropagation()}
-                  placeholder="Type custom text..."
-                  className="w-full px-3 py-2 text-sm border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
-                  autoFocus
-                />
-                <div className="text-xs text-gray-400 mt-1">Press Enter to save, Escape to cancel</div>
-              </div>
-            )}
-          </div>
-        );
-      })()}
+              )}
+            </div>
+          );
+        })()}
 
       {/* Delete Period Modal */}
       <StatusModal
@@ -639,9 +705,8 @@ const ShiftScheduleEditor = ({
         type={deleteModal.type}
         confirmText="Delete"
         cancelText="Cancel"
-        autoCloseDelay={deleteModal.type === 'success' ? 2000 : null}
+        autoCloseDelay={deleteModal.type === "success" ? 2000 : null}
       />
-
     </div>
   );
 };

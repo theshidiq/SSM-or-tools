@@ -1,27 +1,27 @@
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { supabase } from '../utils/supabase';
-import { validateScheduleData } from '../utils/dataTransformation';
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { supabase } from "../utils/supabase";
+import { validateScheduleData } from "../utils/dataTransformation";
 
 // Query key constants
 const QUERY_KEYS = {
-  schedules: ['schedules'],
-  schedule: (id) => ['schedules', id],
+  schedules: ["schedules"],
+  schedule: (id) => ["schedules", id],
 };
 
 // Supabase operations
 const scheduleOperations = {
   // Fetch schedule by ID or latest
   fetchSchedule: async (scheduleId = null) => {
-    let query = supabase.from('schedules').select('*');
-    
+    let query = supabase.from("schedules").select("*");
+
     if (scheduleId) {
-      query = query.eq('id', scheduleId);
+      query = query.eq("id", scheduleId);
     } else {
-      query = query.order('updated_at', { ascending: false }).limit(1);
+      query = query.order("updated_at", { ascending: false }).limit(1);
     }
-    
+
     const { data, error } = await query;
-    
+
     if (error) throw error;
     return data?.[0] || null;
   },
@@ -31,8 +31,8 @@ const scheduleOperations = {
     // Handle both old format (just schedule data) and new format (object with schedule_data and staff_members)
     let dataToSave;
     let staffMembers = null;
-    
-    if (scheduleData && typeof scheduleData === 'object') {
+
+    if (scheduleData && typeof scheduleData === "object") {
       if (scheduleData.schedule_data) {
         // New format: { schedule_data: {...}, staff_members: [...] }
         dataToSave = scheduleData.schedule_data;
@@ -48,7 +48,7 @@ const scheduleOperations = {
     // Validate only the schedule data part
     const validationErrors = validateScheduleData(dataToSave);
     if (validationErrors.length > 0) {
-      throw new Error(`Validation failed: ${validationErrors.join(', ')}`);
+      throw new Error(`Validation failed: ${validationErrors.join(", ")}`);
     }
 
     // Prepare the data to save to database
@@ -56,31 +56,33 @@ const scheduleOperations = {
     const dbData = {
       schedule_data: {
         ...dataToSave,
-        _staff_members: staffMembers // Store staff members as a special key
+        _staff_members: staffMembers, // Store staff members as a special key
       },
-      updated_at: new Date().toISOString()
+      updated_at: new Date().toISOString(),
     };
 
     if (scheduleId) {
       // Update existing schedule
       const { data, error } = await supabase
-        .from('schedules')
+        .from("schedules")
         .update(dbData)
-        .eq('id', scheduleId)
+        .eq("id", scheduleId)
         .select();
-      
+
       if (error) throw error;
       return data[0];
     } else {
       // Create new schedule
       const { data, error } = await supabase
-        .from('schedules')
-        .insert([{
-          ...dbData,
-          created_at: new Date().toISOString()
-        }])
+        .from("schedules")
+        .insert([
+          {
+            ...dbData,
+            created_at: new Date().toISOString(),
+          },
+        ])
         .select();
-      
+
       if (error) throw error;
       return data[0];
     }
@@ -89,14 +91,14 @@ const scheduleOperations = {
   // Delete schedule
   deleteSchedule: async (scheduleId) => {
     if (!scheduleId) {
-      throw new Error('Schedule ID is required for deletion');
+      throw new Error("Schedule ID is required for deletion");
     }
-    
+
     const { error } = await supabase
-      .from('schedules')
+      .from("schedules")
       .delete()
-      .eq('id', scheduleId);
-    
+      .eq("id", scheduleId);
+
     if (error) throw error;
     return true;
   },
@@ -105,39 +107,45 @@ const scheduleOperations = {
   deleteAllSchedules: async () => {
     // Method 1: Try to delete all with neq (not equal) to a non-existent value
     const { error: deleteError1 } = await supabase
-      .from('schedules')
+      .from("schedules")
       .delete()
-      .neq('id', '00000000-0000-0000-0000-000000000000'); // Delete all records that don't have this fake ID
-    
+      .neq("id", "00000000-0000-0000-0000-000000000000"); // Delete all records that don't have this fake ID
+
     if (!deleteError1) {
       return true; // Success with method 1
     }
-    
+
     // Method 2: Fallback - Get all IDs and delete them
     const { data: allRecords, error: fetchError } = await supabase
-      .from('schedules')
-      .select('id');
-    
+      .from("schedules")
+      .select("id");
+
     if (fetchError) throw fetchError;
-    
+
     if (allRecords && allRecords.length > 0) {
       const { error: deleteError2 } = await supabase
-        .from('schedules')
+        .from("schedules")
         .delete()
-        .in('id', allRecords.map(record => record.id));
-      
+        .in(
+          "id",
+          allRecords.map((record) => record.id),
+        );
+
       if (deleteError2) throw deleteError2;
     }
-    
+
     return true;
   },
 
   // Check connection
   checkConnection: async () => {
-    const { data, error } = await supabase.from('schedules').select('count').limit(1);
+    const { data, error } = await supabase
+      .from("schedules")
+      .select("count")
+      .limit(1);
     if (error) throw error;
     return true;
-  }
+  },
 };
 
 // Custom hook for schedule management with React Query
@@ -149,9 +157,11 @@ export const useScheduleQuery = (scheduleId = null) => {
     data: scheduleData,
     isLoading,
     error,
-    refetch
+    refetch,
   } = useQuery({
-    queryKey: scheduleId ? QUERY_KEYS.schedule(scheduleId) : QUERY_KEYS.schedules,
+    queryKey: scheduleId
+      ? QUERY_KEYS.schedule(scheduleId)
+      : QUERY_KEYS.schedules,
     queryFn: () => scheduleOperations.fetchSchedule(scheduleId),
     staleTime: 30 * 1000, // 30 seconds - relatively fresh for real-time updates
     cacheTime: 5 * 60 * 1000, // 5 minutes
@@ -181,10 +191,10 @@ export const useScheduleQuery = (scheduleId = null) => {
     mutationFn: scheduleOperations.saveSchedule,
     onMutate: async ({ scheduleData, scheduleId: mutationScheduleId }) => {
       // Cancel any outgoing refetches
-      const queryKey = mutationScheduleId ? 
-        QUERY_KEYS.schedule(mutationScheduleId) : 
-        QUERY_KEYS.schedules;
-      
+      const queryKey = mutationScheduleId
+        ? QUERY_KEYS.schedule(mutationScheduleId)
+        : QUERY_KEYS.schedules;
+
       await queryClient.cancelQueries({ queryKey });
 
       // Snapshot the previous value
@@ -193,7 +203,7 @@ export const useScheduleQuery = (scheduleId = null) => {
       // Handle both old and new data formats
       let actualScheduleData;
       let staffMembers = null;
-      
+
       if (scheduleData && scheduleData.schedule_data) {
         // New format: { schedule_data: {...}, staff_members: [...] }
         actualScheduleData = scheduleData.schedule_data;
@@ -210,9 +220,9 @@ export const useScheduleQuery = (scheduleId = null) => {
             id: mutationScheduleId || null, // Use null instead of temp-id for new records
             schedule_data: {
               ...actualScheduleData,
-              _staff_members: staffMembers
+              _staff_members: staffMembers,
             },
-            updated_at: new Date().toISOString()
+            updated_at: new Date().toISOString(),
           };
           return newData;
         }
@@ -220,9 +230,9 @@ export const useScheduleQuery = (scheduleId = null) => {
           ...old,
           schedule_data: {
             ...actualScheduleData,
-            _staff_members: staffMembers
+            _staff_members: staffMembers,
           },
-          updated_at: new Date().toISOString()
+          updated_at: new Date().toISOString(),
         };
         return updatedData;
       });
@@ -237,10 +247,10 @@ export const useScheduleQuery = (scheduleId = null) => {
     },
     onSuccess: (data, variables, context) => {
       // Update with real server response
-      const queryKey = data.id ? 
-        QUERY_KEYS.schedule(data.id) : 
-        QUERY_KEYS.schedules;
-      
+      const queryKey = data.id
+        ? QUERY_KEYS.schedule(data.id)
+        : QUERY_KEYS.schedules;
+
       queryClient.setQueryData(queryKey, data);
     },
     onSettled: () => {
@@ -251,7 +261,7 @@ export const useScheduleQuery = (scheduleId = null) => {
 
   // Connection check query
   const { data: isConnected = false } = useQuery({
-    queryKey: ['connection'],
+    queryKey: ["connection"],
     queryFn: scheduleOperations.checkConnection,
     staleTime: 30 * 1000,
     retry: 3,
@@ -267,7 +277,7 @@ export const useScheduleQuery = (scheduleId = null) => {
           {
             onSuccess: resolve,
             onError: reject,
-          }
+          },
         );
       }, delay);
 
@@ -280,28 +290,28 @@ export const useScheduleQuery = (scheduleId = null) => {
     // Data
     scheduleData,
     isConnected,
-    
+
     // Loading states
     isLoading,
     isSaving: saveMutation.isPending,
-    
+
     // Error states
     error: error || saveMutation.error,
-    
+
     // Functions
-    saveSchedule: (scheduleData, targetScheduleId) => 
+    saveSchedule: (scheduleData, targetScheduleId) =>
       saveMutation.mutateAsync({ scheduleData, scheduleId: targetScheduleId }),
     deleteSchedule: (scheduleId) => deleteMutation.mutateAsync(scheduleId),
     deleteAllSchedules: () => deleteAllMutation.mutateAsync(),
     autoSave,
     refetch,
-    
+
     // Utils
     clearError: () => {
       queryClient.resetQueries({ queryKey: QUERY_KEYS.schedules });
       saveMutation.reset();
     },
-    
+
     // Status helpers
     isModified: false, // React Query handles this through optimistic updates
     lastSyncTime: scheduleData?.updated_at,

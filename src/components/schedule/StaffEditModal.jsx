@@ -1,6 +1,6 @@
-import React, { useEffect } from 'react';
-import { X } from 'lucide-react';
-import { isDateWithinWorkPeriod } from '../../utils/dateUtils';
+import React, { useEffect } from "react";
+import { X } from "lucide-react";
+import { isDateWithinWorkPeriod } from "../../utils/dateUtils";
 
 const StaffEditModal = ({
   showStaffEditModal,
@@ -20,36 +20,39 @@ const StaffEditModal = ({
   updateSchedule,
   setStaffMembersByMonth,
   currentMonthIndex,
-  scheduleAutoSave
+  scheduleAutoSave,
 }) => {
   // Set default year values
   useEffect(() => {
     if (!showStaffEditModal || !editingStaffData) return; // Don't run effect if modal is not shown or editingStaffData is undefined
     const currentYear = new Date().getFullYear();
-    
+
     // Set current year as default for start period if not already set
     if (!editingStaffData.startPeriod?.year) {
-      setEditingStaffData(prev => ({
+      setEditingStaffData((prev) => ({
         ...prev,
         startPeriod: {
           ...prev.startPeriod,
-          year: currentYear
-        }
+          year: currentYear,
+        },
       }));
     }
-    
+
     // If 派遣 or パート is selected, set both periods to current year
-    if (editingStaffData.status === '派遣' || editingStaffData.status === 'パート') {
-      setEditingStaffData(prev => ({
+    if (
+      editingStaffData.status === "派遣" ||
+      editingStaffData.status === "パート"
+    ) {
+      setEditingStaffData((prev) => ({
         ...prev,
         startPeriod: {
           ...prev.startPeriod,
-          year: currentYear
+          year: currentYear,
         },
         endPeriod: {
           ...prev.endPeriod,
-          year: currentYear
-        }
+          year: currentYear,
+        },
       }));
     }
   }, [editingStaffData?.status, showStaffEditModal]);
@@ -58,26 +61,26 @@ const StaffEditModal = ({
 
   // Provide default values for editingStaffData to prevent crashes
   const safeEditingStaffData = editingStaffData || {
-    name: '',
-    position: '',
-    status: '社員',
+    name: "",
+    position: "",
+    status: "社員",
     startPeriod: null,
-    endPeriod: null
+    endPeriod: null,
   };
 
   const handleSubmit = (e) => {
     e.preventDefault();
-    
+
     if (isAddingNewStaff) {
       handleCreateStaff(safeEditingStaffData);
     } else if (selectedStaffForEdit) {
       updateStaff(selectedStaffForEdit.id, safeEditingStaffData, (newStaff) => {
-        setStaffMembersByMonth(prev => ({
+        setStaffMembersByMonth((prev) => ({
           ...prev,
-          [currentMonthIndex]: newStaff
+          [currentMonthIndex]: newStaff,
         }));
       });
-      
+
       setTimeout(() => {
         scheduleAutoSave(schedule, staffMembers);
       }, 0);
@@ -85,23 +88,23 @@ const StaffEditModal = ({
   };
 
   const handleDeleteStaff = (staffId) => {
-    const confirmed = window.confirm('本当にこのスタッフを削除しますか？');
+    const confirmed = window.confirm("本当にこのスタッフを削除しますか？");
     if (confirmed) {
       const { newStaffMembers, newSchedule } = deleteStaff(
         staffId,
         schedule,
         updateSchedule,
         (newStaff) => {
-          setStaffMembersByMonth(prev => ({
+          setStaffMembersByMonth((prev) => ({
             ...prev,
-            [currentMonthIndex]: newStaff
+            [currentMonthIndex]: newStaff,
           }));
-        }
+        },
       );
-      
+
       setShowStaffEditModal(false);
       setSelectedStaffForEdit(null);
-      
+
       setTimeout(() => {
         scheduleAutoSave(newSchedule, newStaffMembers);
       }, 0);
@@ -112,10 +115,10 @@ const StaffEditModal = ({
     setSelectedStaffForEdit(staff);
     setEditingStaffData({
       name: staff.name,
-      position: staff.position || '',
-      status: staff.status || '社員',
+      position: staff.position || "",
+      status: staff.status || "社員",
       startPeriod: staff.startPeriod || null,
-      endPeriod: staff.endPeriod || null
+      endPeriod: staff.endPeriod || null,
     });
     setIsAddingNewStaff(false);
   };
@@ -124,11 +127,11 @@ const StaffEditModal = ({
     setIsAddingNewStaff(true);
     setSelectedStaffForEdit(null);
     setEditingStaffData({
-      name: '',
-      position: '',
-      status: '社員',
+      name: "",
+      position: "",
+      status: "社員",
       startPeriod: null,
-      endPeriod: null
+      endPeriod: null,
     });
   };
 
@@ -153,7 +156,9 @@ const StaffEditModal = ({
           {/* Left Panel - Staff List */}
           <div className="space-y-4">
             <div className="flex items-center justify-between">
-              <h3 className="text-lg font-semibold text-gray-700">スタッフ一覧</h3>
+              <h3 className="text-lg font-semibold text-gray-700">
+                スタッフ一覧
+              </h3>
               <button
                 onClick={startAddingNew}
                 className="px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2 transition-colors"
@@ -164,25 +169,33 @@ const StaffEditModal = ({
 
             <div className="space-y-2 max-h-[50vh] overflow-y-auto">
               {staffMembers.map((staff) => {
-                const isActive = isDateWithinWorkPeriod(dateRange[0], staff) || 
-                                isDateWithinWorkPeriod(dateRange[dateRange.length - 1], staff);
-                
+                const isActive =
+                  isDateWithinWorkPeriod(dateRange[0], staff) ||
+                  isDateWithinWorkPeriod(
+                    dateRange[dateRange.length - 1],
+                    staff,
+                  );
+
                 return (
                   <div
                     key={staff.id}
                     onClick={() => handleStaffSelect(staff)}
                     className={`p-3 border rounded-lg cursor-pointer transition-all ${
                       selectedStaffForEdit?.id === staff.id
-                        ? 'border-blue-500 bg-blue-50'
-                        : 'border-gray-200 hover:border-gray-300 hover:bg-gray-50'
-                    } ${!isActive ? 'opacity-60' : ''}`}
+                        ? "border-blue-500 bg-blue-50"
+                        : "border-gray-200 hover:border-gray-300 hover:bg-gray-50"
+                    } ${!isActive ? "opacity-60" : ""}`}
                   >
                     <div className="flex items-center justify-between">
                       <div>
-                        <div className="font-medium text-gray-800">{staff.name}</div>
+                        <div className="font-medium text-gray-800">
+                          {staff.name}
+                        </div>
                         <div className="text-sm text-gray-600">
                           {staff.position} • {staff.status}
-                          {!isActive && <span className=" text-orange-600"> (期間外)</span>}
+                          {!isActive && (
+                            <span className=" text-orange-600"> (期間外)</span>
+                          )}
                         </div>
                       </div>
                       {selectedStaffForEdit?.id === staff.id && (
@@ -198,7 +211,11 @@ const StaffEditModal = ({
           {/* Right Panel - Staff Form */}
           <div className="space-y-4">
             <h3 className="text-lg font-semibold text-gray-700">
-              {isAddingNewStaff ? 'スタッフ追加' : selectedStaffForEdit ? 'スタッフ編集' : 'スタッフを選択してください'}
+              {isAddingNewStaff
+                ? "スタッフ追加"
+                : selectedStaffForEdit
+                  ? "スタッフ編集"
+                  : "スタッフを選択してください"}
             </h3>
 
             {(isAddingNewStaff || selectedStaffForEdit) && (
@@ -211,7 +228,12 @@ const StaffEditModal = ({
                   <input
                     type="text"
                     value={safeEditingStaffData.name}
-                    onChange={(e) => setEditingStaffData(prev => ({ ...prev, name: e.target.value }))}
+                    onChange={(e) =>
+                      setEditingStaffData((prev) => ({
+                        ...prev,
+                        name: e.target.value,
+                      }))
+                    }
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                     required
                     placeholder="スタッフ名を入力"
@@ -226,7 +248,12 @@ const StaffEditModal = ({
                   <input
                     type="text"
                     value={safeEditingStaffData.position}
-                    onChange={(e) => setEditingStaffData(prev => ({ ...prev, position: e.target.value }))}
+                    onChange={(e) =>
+                      setEditingStaffData((prev) => ({
+                        ...prev,
+                        position: e.target.value,
+                      }))
+                    }
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                     placeholder="例: Server, Kitchen, Manager"
                   />
@@ -243,11 +270,11 @@ const StaffEditModal = ({
                         type="radio"
                         name="status"
                         value="社員"
-                        checked={safeEditingStaffData.status === '社員'}
+                        checked={safeEditingStaffData.status === "社員"}
                         onChange={(e) => {
-                          setEditingStaffData(prev => ({ 
-                            ...prev, 
-                            status: e.target.value
+                          setEditingStaffData((prev) => ({
+                            ...prev,
+                            status: e.target.value,
                           }));
                         }}
                         className="mr-2 text-blue-600 focus:ring-blue-500"
@@ -260,23 +287,25 @@ const StaffEditModal = ({
                         type="radio"
                         name="status"
                         value="派遣"
-                        checked={safeEditingStaffData.status === '派遣'}
+                        checked={safeEditingStaffData.status === "派遣"}
                         onChange={(e) => {
                           const currentYear = new Date().getFullYear();
-                          setEditingStaffData(prev => ({ 
-                            ...prev, 
+                          setEditingStaffData((prev) => ({
+                            ...prev,
                             status: e.target.value,
                             // If 派遣 is selected, set both periods to current year
-                            ...(e.target.value === '派遣' ? {
-                              startPeriod: {
-                                ...prev.startPeriod,
-                                year: currentYear
-                              },
-                              endPeriod: {
-                                ...prev.endPeriod,
-                                year: currentYear
-                              }
-                            } : {})
+                            ...(e.target.value === "派遣"
+                              ? {
+                                  startPeriod: {
+                                    ...prev.startPeriod,
+                                    year: currentYear,
+                                  },
+                                  endPeriod: {
+                                    ...prev.endPeriod,
+                                    year: currentYear,
+                                  },
+                                }
+                              : {}),
                           }));
                         }}
                         className="mr-2 text-blue-600 focus:ring-blue-500"
@@ -289,23 +318,25 @@ const StaffEditModal = ({
                         type="radio"
                         name="status"
                         value="パート"
-                        checked={safeEditingStaffData.status === 'パート'}
+                        checked={safeEditingStaffData.status === "パート"}
                         onChange={(e) => {
                           const currentYear = new Date().getFullYear();
-                          setEditingStaffData(prev => ({ 
-                            ...prev, 
+                          setEditingStaffData((prev) => ({
+                            ...prev,
                             status: e.target.value,
                             // If パート is selected, set both periods to current year (same as 派遣)
-                            ...(e.target.value === 'パート' ? {
-                              startPeriod: {
-                                ...prev.startPeriod,
-                                year: currentYear
-                              },
-                              endPeriod: {
-                                ...prev.endPeriod,
-                                year: currentYear
-                              }
-                            } : {})
+                            ...(e.target.value === "パート"
+                              ? {
+                                  startPeriod: {
+                                    ...prev.startPeriod,
+                                    year: currentYear,
+                                  },
+                                  endPeriod: {
+                                    ...prev.endPeriod,
+                                    year: currentYear,
+                                  },
+                                }
+                              : {}),
                           }));
                         }}
                         className="mr-2 text-blue-600 focus:ring-blue-500"
@@ -323,14 +354,18 @@ const StaffEditModal = ({
                   </label>
                   <div className="grid grid-cols-3 gap-2">
                     <select
-                      value={safeEditingStaffData.startPeriod?.year || ''}
-                      onChange={(e) => setEditingStaffData(prev => ({
-                        ...prev,
-                        startPeriod: {
-                          ...prev.startPeriod,
-                          year: e.target.value ? parseInt(e.target.value) : null
-                        }
-                      }))}
+                      value={safeEditingStaffData.startPeriod?.year || ""}
+                      onChange={(e) =>
+                        setEditingStaffData((prev) => ({
+                          ...prev,
+                          startPeriod: {
+                            ...prev.startPeriod,
+                            year: e.target.value
+                              ? parseInt(e.target.value)
+                              : null,
+                          },
+                        }))
+                      }
                       className="px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                     >
                       <option value="">年</option>
@@ -345,14 +380,18 @@ const StaffEditModal = ({
                       })}
                     </select>
                     <select
-                      value={safeEditingStaffData.startPeriod?.month || ''}
-                      onChange={(e) => setEditingStaffData(prev => ({
-                        ...prev,
-                        startPeriod: {
-                          ...prev.startPeriod,
-                          month: e.target.value ? parseInt(e.target.value) : null
-                        }
-                      }))}
+                      value={safeEditingStaffData.startPeriod?.month || ""}
+                      onChange={(e) =>
+                        setEditingStaffData((prev) => ({
+                          ...prev,
+                          startPeriod: {
+                            ...prev.startPeriod,
+                            month: e.target.value
+                              ? parseInt(e.target.value)
+                              : null,
+                          },
+                        }))
+                      }
                       className="px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                     >
                       <option value="">月</option>
@@ -363,14 +402,18 @@ const StaffEditModal = ({
                       ))}
                     </select>
                     <select
-                      value={safeEditingStaffData.startPeriod?.day || ''}
-                      onChange={(e) => setEditingStaffData(prev => ({
-                        ...prev,
-                        startPeriod: {
-                          ...prev.startPeriod,
-                          day: e.target.value ? parseInt(e.target.value) : null
-                        }
-                      }))}
+                      value={safeEditingStaffData.startPeriod?.day || ""}
+                      onChange={(e) =>
+                        setEditingStaffData((prev) => ({
+                          ...prev,
+                          startPeriod: {
+                            ...prev.startPeriod,
+                            day: e.target.value
+                              ? parseInt(e.target.value)
+                              : null,
+                          },
+                        }))
+                      }
                       className="px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                     >
                       <option value="">日</option>
@@ -390,14 +433,18 @@ const StaffEditModal = ({
                   </label>
                   <div className="grid grid-cols-3 gap-2">
                     <select
-                      value={safeEditingStaffData.endPeriod?.year || ''}
-                      onChange={(e) => setEditingStaffData(prev => ({
-                        ...prev,
-                        endPeriod: e.target.value ? {
-                          ...prev.endPeriod,
-                          year: parseInt(e.target.value)
-                        } : null
-                      }))}
+                      value={safeEditingStaffData.endPeriod?.year || ""}
+                      onChange={(e) =>
+                        setEditingStaffData((prev) => ({
+                          ...prev,
+                          endPeriod: e.target.value
+                            ? {
+                                ...prev.endPeriod,
+                                year: parseInt(e.target.value),
+                              }
+                            : null,
+                        }))
+                      }
                       className="px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                     >
                       <option value="">年</option>
@@ -411,14 +458,21 @@ const StaffEditModal = ({
                       })}
                     </select>
                     <select
-                      value={safeEditingStaffData.endPeriod?.month || ''}
-                      onChange={(e) => setEditingStaffData(prev => ({
-                        ...prev,
-                        endPeriod: prev.endPeriod || e.target.value ? {
-                          ...prev.endPeriod,
-                          month: e.target.value ? parseInt(e.target.value) : null
-                        } : null
-                      }))}
+                      value={safeEditingStaffData.endPeriod?.month || ""}
+                      onChange={(e) =>
+                        setEditingStaffData((prev) => ({
+                          ...prev,
+                          endPeriod:
+                            prev.endPeriod || e.target.value
+                              ? {
+                                  ...prev.endPeriod,
+                                  month: e.target.value
+                                    ? parseInt(e.target.value)
+                                    : null,
+                                }
+                              : null,
+                        }))
+                      }
                       className="px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                     >
                       <option value="">月</option>
@@ -429,14 +483,21 @@ const StaffEditModal = ({
                       ))}
                     </select>
                     <select
-                      value={safeEditingStaffData.endPeriod?.day || ''}
-                      onChange={(e) => setEditingStaffData(prev => ({
-                        ...prev,
-                        endPeriod: prev.endPeriod || e.target.value ? {
-                          ...prev.endPeriod,
-                          day: e.target.value ? parseInt(e.target.value) : null
-                        } : null
-                      }))}
+                      value={safeEditingStaffData.endPeriod?.day || ""}
+                      onChange={(e) =>
+                        setEditingStaffData((prev) => ({
+                          ...prev,
+                          endPeriod:
+                            prev.endPeriod || e.target.value
+                              ? {
+                                  ...prev.endPeriod,
+                                  day: e.target.value
+                                    ? parseInt(e.target.value)
+                                    : null,
+                                }
+                              : null,
+                        }))
+                      }
                       className="px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                     >
                       <option value="">日</option>
@@ -461,7 +522,7 @@ const StaffEditModal = ({
                   >
                     キャンセル
                   </button>
-                  
+
                   {selectedStaffForEdit && !isAddingNewStaff && (
                     <button
                       type="button"
@@ -471,12 +532,12 @@ const StaffEditModal = ({
                       削除
                     </button>
                   )}
-                  
+
                   <button
                     type="submit"
                     className="flex-1 px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 transition-colors"
                   >
-                    {isAddingNewStaff ? '追加' : '更新'}
+                    {isAddingNewStaff ? "追加" : "更新"}
                   </button>
                 </div>
               </form>

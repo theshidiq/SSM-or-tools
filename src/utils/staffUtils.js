@@ -5,43 +5,48 @@ export const migrateStaffMembers = (staffMembersData) => {
   if (!staffMembersData || !Array.isArray(staffMembersData)) {
     return [];
   }
-  
+
   const uuidMap = {
-    'chef': '01934d2c-8a7b-7000-8000-1a2b3c4d5e6f',
-    'iseki': '01934d2c-8a7b-7001-8001-2b3c4d5e6f7a', 
-    'yogi': '01934d2c-8a7b-7002-8002-3c4d5e6f7a8b',
-    'tanabe': '01934d2c-8a7b-7003-8003-4d5e6f7a8b9c',
-    'koto': '01934d2c-8a7b-7004-8004-5e6f7a8b9c0d',
-    'koike': '01934d2c-8a7b-7005-8005-6f7a8b9c0d1e',
-    'kishi': '01934d2c-8a7b-7006-8006-7a8b9c0d1e2f',
-    'kamal': '01934d2c-8a7b-7007-8007-8b9c0d1e2f3a',
-    'takano': '01934d2c-8a7b-7008-8008-9c0d1e2f3a4b',
-    'yasui': '01934d2c-8a7b-7009-8009-0d1e2f3a4b5c',
-    'nakata': '01934d2c-8a7b-700a-800a-1e2f3a4b5c6d'
+    chef: "01934d2c-8a7b-7000-8000-1a2b3c4d5e6f",
+    iseki: "01934d2c-8a7b-7001-8001-2b3c4d5e6f7a",
+    yogi: "01934d2c-8a7b-7002-8002-3c4d5e6f7a8b",
+    tanabe: "01934d2c-8a7b-7003-8003-4d5e6f7a8b9c",
+    koto: "01934d2c-8a7b-7004-8004-5e6f7a8b9c0d",
+    koike: "01934d2c-8a7b-7005-8005-6f7a8b9c0d1e",
+    kishi: "01934d2c-8a7b-7006-8006-7a8b9c0d1e2f",
+    kamal: "01934d2c-8a7b-7007-8007-8b9c0d1e2f3a",
+    takano: "01934d2c-8a7b-7008-8008-9c0d1e2f3a4b",
+    yasui: "01934d2c-8a7b-7009-8009-0d1e2f3a4b5c",
+    nakata: "01934d2c-8a7b-700a-800a-1e2f3a4b5c6d",
   };
 
-  return staffMembersData.map(staff => {
-    if (typeof staff === 'string') {
+  return staffMembersData.map((staff) => {
+    if (typeof staff === "string") {
       // Legacy string format - convert to object with UUID
       const staffId = staff.toLowerCase();
       return {
-        id: uuidMap[staffId] || `temp-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+        id:
+          uuidMap[staffId] ||
+          `temp-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
         name: staff,
-        position: 'Staff',
-        color: 'position-staff',
-        status: '派遣',
+        position: "Staff",
+        color: "position-staff",
+        status: "派遣",
         startPeriod: { year: 2018, month: 4, day: 1 },
-        endPeriod: null
+        endPeriod: null,
       };
-    } else if (staff && typeof staff === 'object') {
+    } else if (staff && typeof staff === "object") {
       // Already object format - ensure it has proper UUID
-      const staffKey = staff.name?.toLowerCase().replace(/\s+/g, '');
+      const staffKey = staff.name?.toLowerCase().replace(/\s+/g, "");
       return {
         ...staff,
-        id: staff.id || uuidMap[staffKey] || `temp-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-        status: staff.status || '派遣',
+        id:
+          staff.id ||
+          uuidMap[staffKey] ||
+          `temp-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+        status: staff.status || "派遣",
         startPeriod: staff.startPeriod || { year: 2018, month: 4, day: 1 },
-        endPeriod: staff.endPeriod || null
+        endPeriod: staff.endPeriod || null,
       };
     }
     return staff;
@@ -52,43 +57,47 @@ export const migrateStaffMembers = (staffMembersData) => {
 export const isStaffActiveInCurrentPeriod = (staff, dateRange = []) => {
   // If no staff data or no date range, include the staff member
   if (!staff || !dateRange.length) return true;
-  
+
   // If staff has no start period defined, include them (legacy data)
   if (!staff.startPeriod) return true;
-  
+
   try {
     const periodStart = dateRange[0];
     const periodEnd = dateRange[dateRange.length - 1];
-    
+
     // Create start date from staff startPeriod - use UTC to match dateRange
-    const staffStartDate = new Date(Date.UTC(
-      staff.startPeriod.year,
-      staff.startPeriod.month - 1, // month is 0-indexed
-      staff.startPeriod.day || 1
-    ));
-    
+    const staffStartDate = new Date(
+      Date.UTC(
+        staff.startPeriod.year,
+        staff.startPeriod.month - 1, // month is 0-indexed
+        staff.startPeriod.day || 1,
+      ),
+    );
+
     // Check if staff starts after period ends
     if (staffStartDate > periodEnd) {
       return false;
     }
-    
+
     // Check if staff has ended before period starts
     if (staff.endPeriod) {
-      const staffEndDate = new Date(Date.UTC(
-        staff.endPeriod.year,
-        staff.endPeriod.month - 1, // month is 0-indexed  
-        staff.endPeriod.day || 31
-      ));
-      
+      const staffEndDate = new Date(
+        Date.UTC(
+          staff.endPeriod.year,
+          staff.endPeriod.month - 1, // month is 0-indexed
+          staff.endPeriod.day || 31,
+        ),
+      );
+
       // If staff ended before period starts
       if (staffEndDate < periodStart) {
         return false;
       }
     }
-    
+
     return true;
   } catch (error) {
-    console.warn('Error checking staff activity:', error, staff);
+    console.warn("Error checking staff activity:", error, staff);
     return true; // Default to showing staff if there's an error
   }
 };
@@ -97,67 +106,91 @@ export const isStaffActiveInCurrentPeriod = (staff, dateRange = []) => {
 export const getOrderedStaffMembers = (staffMembers, dateRange = []) => {
   try {
     // Defensive check
-    if (!staffMembers || !Array.isArray(staffMembers) || staffMembers.length === 0) {
+    if (
+      !staffMembers ||
+      !Array.isArray(staffMembers) ||
+      staffMembers.length === 0
+    ) {
       return []; // Return empty array if no staff members
     }
-    
+
     // First filter out staff who are not active in the current period
-    const activeStaff = staffMembers.filter(staff => {
+    const activeStaff = staffMembers.filter((staff) => {
       try {
         return staff && isStaffActiveInCurrentPeriod(staff, dateRange);
       } catch (error) {
         // If there's an error checking activity, include the staff member
-        console.warn('Error checking staff activity:', error, staff);
+        console.warn("Error checking staff activity:", error, staff);
         return true;
       }
     });
-    
+
     // If no active staff found but we have staff members, return all staff (fallback)
     if (activeStaff.length === 0 && staffMembers.length > 0) {
-      const nakataStaff = staffMembers.find(staff => staff && staff.name === '中田');
-      const partTimeStaff = staffMembers.filter(staff => staff && staff.status === 'パート' && staff.name !== '中田');
-      const otherStaff = staffMembers.filter(staff => staff && staff.status !== 'パート' && staff.name !== '中田');
-      return [...otherStaff, ...partTimeStaff, ...(nakataStaff ? [nakataStaff] : [])];
+      const nakataStaff = staffMembers.find(
+        (staff) => staff && staff.name === "中田",
+      );
+      const partTimeStaff = staffMembers.filter(
+        (staff) => staff && staff.status === "パート" && staff.name !== "中田",
+      );
+      const otherStaff = staffMembers.filter(
+        (staff) => staff && staff.status !== "パート" && staff.name !== "中田",
+      );
+      return [
+        ...otherStaff,
+        ...partTimeStaff,
+        ...(nakataStaff ? [nakataStaff] : []),
+      ];
     }
-    
+
     // Separate staff by type: regular staff, part-time staff, and 中田
-    const nakataStaff = activeStaff.find(staff => staff && staff.name === '中田');
-    const partTimeStaff = activeStaff.filter(staff => staff && staff.status === 'パート' && staff.name !== '中田');
-    const otherStaff = activeStaff.filter(staff => staff && staff.status !== 'パート' && staff.name !== '中田');
-    
+    const nakataStaff = activeStaff.find(
+      (staff) => staff && staff.name === "中田",
+    );
+    const partTimeStaff = activeStaff.filter(
+      (staff) => staff && staff.status === "パート" && staff.name !== "中田",
+    );
+    const otherStaff = activeStaff.filter(
+      (staff) => staff && staff.status !== "パート" && staff.name !== "中田",
+    );
+
     // Order: regular staff first, then part-time staff, then 中田 at the very end
-    return [...otherStaff, ...partTimeStaff, ...(nakataStaff ? [nakataStaff] : [])];
+    return [
+      ...otherStaff,
+      ...partTimeStaff,
+      ...(nakataStaff ? [nakataStaff] : []),
+    ];
   } catch (error) {
-    console.error('Error in getOrderedStaffMembers:', error);
+    console.error("Error in getOrderedStaffMembers:", error);
     return staffMembers || []; // Return original staff members or empty array
   }
 };
 
 // Migrate legacy schedule data from string IDs to UUIDs
 export const migrateScheduleData = (scheduleData, staffMembers) => {
-  if (!scheduleData || typeof scheduleData !== 'object') {
+  if (!scheduleData || typeof scheduleData !== "object") {
     return {};
   }
 
   const uuidMap = {
-    'chef': '01934d2c-8a7b-7000-8000-1a2b3c4d5e6f',
-    'iseki': '01934d2c-8a7b-7001-8001-2b3c4d5e6f7a', 
-    'yogi': '01934d2c-8a7b-7002-8002-3c4d5e6f7a8b',
-    'tanabe': '01934d2c-8a7b-7003-8003-4d5e6f7a8b9c',
-    'koto': '01934d2c-8a7b-7004-8004-5e6f7a8b9c0d',
-    'koike': '01934d2c-8a7b-7005-8005-6f7a8b9c0d1e',
-    'kishi': '01934d2c-8a7b-7006-8006-7a8b9c0d1e2f',
-    'kamal': '01934d2c-8a7b-7007-8007-8b9c0d1e2f3a',
-    'takano': '01934d2c-8a7b-7008-8008-9c0d1e2f3a4b',
-    'yasui': '01934d2c-8a7b-7009-8009-0d1e2f3a4b5c',
-    'nakata': '01934d2c-8a7b-700a-800a-1e2f3a4b5c6d'
+    chef: "01934d2c-8a7b-7000-8000-1a2b3c4d5e6f",
+    iseki: "01934d2c-8a7b-7001-8001-2b3c4d5e6f7a",
+    yogi: "01934d2c-8a7b-7002-8002-3c4d5e6f7a8b",
+    tanabe: "01934d2c-8a7b-7003-8003-4d5e6f7a8b9c",
+    koto: "01934d2c-8a7b-7004-8004-5e6f7a8b9c0d",
+    koike: "01934d2c-8a7b-7005-8005-6f7a8b9c0d1e",
+    kishi: "01934d2c-8a7b-7006-8006-7a8b9c0d1e2f",
+    kamal: "01934d2c-8a7b-7007-8007-8b9c0d1e2f3a",
+    takano: "01934d2c-8a7b-7008-8008-9c0d1e2f3a4b",
+    yasui: "01934d2c-8a7b-7009-8009-0d1e2f3a4b5c",
+    nakata: "01934d2c-8a7b-700a-800a-1e2f3a4b5c6d",
   };
 
   const migratedSchedule = {};
-  
+
   // First, copy all UUID-based entries as-is
-  Object.keys(scheduleData).forEach(key => {
-    if (key.startsWith('01934d2c-') || key === '_staff_members') {
+  Object.keys(scheduleData).forEach((key) => {
+    if (key.startsWith("01934d2c-") || key === "_staff_members") {
       migratedSchedule[key] = scheduleData[key];
     } else if (uuidMap[key]) {
       // Migrate legacy string IDs to UUIDs
@@ -166,7 +199,7 @@ export const migrateScheduleData = (scheduleData, staffMembers) => {
   });
 
   // Ensure all current staff members have schedule entries
-  staffMembers.forEach(staff => {
+  staffMembers.forEach((staff) => {
     if (staff && staff.id && !migratedSchedule[staff.id]) {
       migratedSchedule[staff.id] = {};
     }
@@ -176,27 +209,31 @@ export const migrateScheduleData = (scheduleData, staffMembers) => {
 };
 
 // Initialize schedule data structure (only for missing entries, preserves existing data)
-export const initializeSchedule = (staffMembers, dateRange, existingSchedule = {}) => {
+export const initializeSchedule = (
+  staffMembers,
+  dateRange,
+  existingSchedule = {},
+) => {
   const scheduleData = { ...existingSchedule }; // Start with existing data
-  
+
   // Create schedule structure for each staff member
-  staffMembers.forEach(staff => {
+  staffMembers.forEach((staff) => {
     if (staff && staff.id) {
       // Only initialize if staff doesn't exist in schedule
       if (!scheduleData[staff.id]) {
         scheduleData[staff.id] = {};
       }
-      
+
       // Initialize missing dates for this staff member
-      dateRange.forEach(date => {
-        const dateKey = date.toISOString().split('T')[0]; // Format: YYYY-MM-DD
+      dateRange.forEach((date) => {
+        const dateKey = date.toISOString().split("T")[0]; // Format: YYYY-MM-DD
         // Only initialize if date doesn't exist (preserves existing data)
         if (scheduleData[staff.id][dateKey] === undefined) {
-          scheduleData[staff.id][dateKey] = ''; // Start with blank
+          scheduleData[staff.id][dateKey] = ""; // Start with blank
         }
       });
     }
   });
-  
+
   return scheduleData;
 };
