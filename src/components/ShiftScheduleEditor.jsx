@@ -158,10 +158,18 @@ const ShiftScheduleEditor = ({
     [schedule, staffMembers, dateRange],
   );
 
-  // State effect for showDropdown (removed debug logs)
+  // Initialize custom text when dropdown opens
   useEffect(() => {
-    // Effect for showDropdown state changes
-  }, [showDropdown]);
+    if (showDropdown && !editingCell) {
+      // Parse cell key to get current value
+      const dateKey = showDropdown.slice(-10);
+      const staffId = showDropdown.slice(0, -11);
+      const currentCellValue = schedule[staffId]?.[dateKey] || "";
+
+      // Initialize custom text with current cell value
+      setCustomText(currentCellValue);
+    }
+  }, [showDropdown, editingCell, schedule]);
 
   // Error handling
   useEffect(() => {
@@ -461,14 +469,10 @@ const ShiftScheduleEditor = ({
         setJustEnteredEditMode={setJustEnteredEditMode}
         addNewColumn={addNewColumn}
         setShowStaffEditModal={setShowStaffEditModal}
-        scheduleAutoSave={scheduleAutoSave}
-        schedule={schedule}
-        staffMembers={staffMembers}
         handleExport={handleExport}
         handlePrint={handlePrint}
         handleAddTable={handleAddTable}
         handleDeletePeriod={handleDeletePeriod}
-        syncLocalStorageToDatabase={syncLocalStorageToDatabase}
       />
 
       {/* Schedule Table */}
@@ -652,45 +656,52 @@ const ShiftScheduleEditor = ({
                     }}
                   >
                     <span className={`text-lg font-bold mr-3 ${value.color}`}>
-                      {value.symbol || "　"}
-                      {/* Use full-width space for empty normal shift */}
+                      {(() => {
+                        // For パート staff, show circle for normal shift in dropdown
+                        if (key === "normal" && staff?.status === "パート") {
+                          return "○";
+                        }
+                        return value.symbol || "　";
+                      })()}
                     </span>
                     <span className="text-sm">{value.label}</span>
                   </div>
                 );
               })}
 
-              {/* Custom Text Input Section */}
-              {editingCell === showDropdown && (
-                <div className="border-t border-gray-200 p-2">
-                  <div className="text-xs text-gray-500 mb-2">Custom text:</div>
-                  <input
-                    type="text"
-                    value={customText}
-                    onChange={(e) => setCustomText(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter") {
-                        const finalText = customText.trim() || "";
-                        updateShift(staffId, dateKey, finalText);
-                        setEditingCell(null);
-                        setShowDropdownDebug(null);
-                        setCustomText("");
-                      } else if (e.key === "Escape") {
-                        setEditingCell(null);
-                        setShowDropdownDebug(null);
-                        setCustomText("");
-                      }
-                    }}
-                    onClick={(e) => e.stopPropagation()}
-                    placeholder="Type custom text..."
-                    className="w-full px-3 py-2 text-sm border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
-                    autoFocus
-                  />
-                  <div className="text-xs text-gray-400 mt-1">
-                    Press Enter to save, Escape to cancel
-                  </div>
+              {/* Direct Custom Text Input Section */}
+              <div className="border-t border-gray-200 p-2">
+                <div className="text-xs text-gray-500 mb-2">Custom text:</div>
+                <input
+                  type="text"
+                  value={customText}
+                  onChange={(e) => setCustomText(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      const finalText = customText.trim() || "";
+                      updateShift(staffId, dateKey, finalText);
+                      setEditingCell(null);
+                      setShowDropdownDebug(null);
+                      setCustomText("");
+                    } else if (e.key === "Escape") {
+                      setEditingCell(null);
+                      setShowDropdownDebug(null);
+                      setCustomText("");
+                    }
+                  }}
+                  onFocus={() => {
+                    // Set editing cell when text input is focused
+                    setEditingCell(showDropdown);
+                  }}
+                  onClick={(e) => e.stopPropagation()}
+                  placeholder="Type custom text..."
+                  className="w-full px-3 py-2 text-sm border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
+                  autoFocus={editingCell === showDropdown}
+                />
+                <div className="text-xs text-gray-400 mt-1">
+                  Press Enter to save, Escape to cancel
                 </div>
-              )}
+              </div>
             </div>
           );
         })()}

@@ -88,6 +88,14 @@ const ScheduleTable = ({
   const [isDragging, setIsDragging] = useState(false);
   const [dragStartCell, setDragStartCell] = useState(null);
 
+  // UX improvements for dropdown behavior
+  const [lastClickTime, setLastClickTime] = useState(0);
+  const [lastClickedCell, setLastClickedCell] = useState(null);
+  const [dropdownDelay, setDropdownDelay] = useState(null);
+  const CLICK_TIME_GAP_THRESHOLD = 1000; // 1 second
+  const DROPDOWN_DELAY_TIME = 300; // 300ms delay
+  const DOUBLE_CLICK_TIME = 400; // 400ms for double-click detection
+
   // Handle dropdown visibility based on cell selection - only hide when multiple cells
   useEffect(() => {
     if (selectedCells.size > 1) {
@@ -134,43 +142,101 @@ const ScheduleTable = ({
     return value;
   };
 
-  // Enhanced cell click handler with selection support
+  // Enhanced cell click handler with improved UX
   const handleShiftClick = useCallback(
     (staffId, dateKey, currentValue, event) => {
       event.preventDefault();
       event.stopPropagation();
 
       const cellKey = getCellKey(staffId, dateKey);
+      const currentTime = Date.now();
+
+      // Clear any pending dropdown delay
+      if (dropdownDelay) {
+        clearTimeout(dropdownDelay);
+        setDropdownDelay(null);
+      }
 
       // Handle selection with modifier keys FIRST
       if (event.shiftKey) {
         // Extend selection using shift key (adds to existing selection)
         startSelection(staffId, dateKey, true, false);
-        return; // Don't continue with dropdown logic
+        setShowDropdown(null); // Close dropdown when using modifier keys
+        return;
       }
 
       if (event.ctrlKey || event.metaKey) {
         // Toggle individual cell selection with ctrl/cmd key
         startSelection(staffId, dateKey, false, true);
-        return; // Don't continue with dropdown logic
+        setShowDropdown(null); // Close dropdown when using modifier keys
+        return;
       }
 
       // For regular clicks, always start with selection
       startSelection(staffId, dateKey, false, false);
 
-      // Show dropdown for single cell clicks
-      if (!isCellSelected(staffId, dateKey)) {
-        // If clicking a custom text cell or clicking the same cell again, enter edit mode
-        if (currentValue === "自由" || showDropdown === cellKey) {
-          setCustomText(currentValue === "自由" ? "" : currentValue);
-          setEditingCell(cellKey);
-          setShowDropdown(cellKey); // Keep dropdown open for editing
-        } else {
-          const staff = staffMembers.find((s) => s.id === staffId);
-          const status = staff?.status || "派遣";
-          const availableShifts = getAvailableShifts(status);
+      // UX Improvement 1: Double-click and time gap detection for same cell clicks
+      if (lastClickedCell === cellKey) {
+        const timeSinceLastClick = currentTime - lastClickTime;
 
-          if (availableShifts.length > 0) {
+        if (timeSinceLastClick <= DOUBLE_CLICK_TIME) {
+          // Double-click detected - enter custom text mode immediately
+          setCustomText(currentValue || "");
+          setEditingCell(cellKey);
+          setShowDropdown(cellKey);
+          setLastClickTime(currentTime);
+          return;
+        } else if (timeSinceLastClick > CLICK_TIME_GAP_THRESHOLD) {
+          // Time gap detected - close dropdown and don't show it again
+          setShowDropdown(null);
+          setLastClickTime(currentTime);
+          return;
+        } else if (showDropdown === cellKey) {
+          // Quick successive clicks on same cell with dropdown open - toggle dropdown
+          setShowDropdown(null);
+          setLastClickTime(currentTime);
+          return;
+        }
+      }
+
+      // Update last click tracking
+      setLastClickTime(currentTime);
+      setLastClickedCell(cellKey);
+
+      // Handle dropdown display logic
+      if (!isCellSelected(staffId, dateKey)) {
+        // If clicking a cell with custom text (not just "自由"), enter edit mode immediately
+        const isCustomText =
+          currentValue &&
+          !Object.values(shiftSymbols).some(
+            (shift) => shift.symbol === currentValue || currentValue === "late",
+          );
+        if (isCustomText) {
+          setCustomText(currentValue);
+          setEditingCell(cellKey);
+          setShowDropdown(cellKey);
+          return;
+        }
+
+        const staff = staffMembers.find((s) => s.id === staffId);
+        const status = staff?.status || "派遣";
+        const availableShifts = getAvailableShifts(status);
+
+        if (availableShifts.length > 0) {
+          // UX Improvement 2: Delayed dropdown for cell switching
+          if (showDropdown && showDropdown !== cellKey) {
+            // User is switching from another cell - add delay
+            const delayTimeout = setTimeout(() => {
+              setShowDropdown(cellKey);
+              setEditingCell(null);
+              setDropdownDelay(null);
+            }, DROPDOWN_DELAY_TIME);
+
+            setDropdownDelay(delayTimeout);
+            // Temporarily hide current dropdown
+            setShowDropdown(null);
+          } else {
+            // First click or same cell - show immediately
             setShowDropdown(cellKey);
             setEditingCell(null);
           }
@@ -186,6 +252,9 @@ const ScheduleTable = ({
       setEditingCell,
       setShowDropdown,
       staffMembers,
+      lastClickTime,
+      lastClickedCell,
+      dropdownDelay,
     ],
   );
 
@@ -348,13 +417,18 @@ const ScheduleTable = ({
         ) {
           clearSelection();
           setContextMenu(null);
+          // Clear dropdown delay when clicking outside
+          if (dropdownDelay) {
+            clearTimeout(dropdownDelay);
+            setDropdownDelay(null);
+          }
         }
       }
     };
 
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, [clearSelection, tableRef]);
+  }, [clearSelection, tableRef, dropdownDelay]);
 
   // Auto-deselect cells when user scrolls to Statistics section
   useEffect(() => {
@@ -368,6 +442,11 @@ const ScheduleTable = ({
           if (entry.isIntersecting && selectedCells.size > 0) {
             clearSelection();
             setContextMenu(null);
+            // Clear dropdown delay when scrolling
+            if (dropdownDelay) {
+              clearTimeout(dropdownDelay);
+              setDropdownDelay(null);
+            }
           }
         });
       },
@@ -384,7 +463,16 @@ const ScheduleTable = ({
     return () => {
       observer.disconnect();
     };
-  }, [selectedCells.size, clearSelection]);
+  }, [selectedCells.size, clearSelection, dropdownDelay]);
+
+  // Cleanup dropdown delay timeout on unmount
+  useEffect(() => {
+    return () => {
+      if (dropdownDelay) {
+        clearTimeout(dropdownDelay);
+      }
+    };
+  }, [dropdownDelay]);
 
   const handleDeleteStaff = (staffId) => {
     const { newStaffMembers, newSchedule } = deleteStaff(

@@ -1,8 +1,6 @@
 import React from "react";
 import {
   Download,
-  Save,
-  RotateCcw,
   Calendar,
   Users,
   UserPlus,
@@ -34,14 +32,10 @@ const NavigationToolbar = ({
   setJustEnteredEditMode,
   addNewColumn,
   setShowStaffEditModal,
-  scheduleAutoSave,
-  schedule,
-  staffMembers,
   handleExport,
   handlePrint,
   handleAddTable,
   handleDeletePeriod,
-  syncLocalStorageToDatabase,
 }) => {
   return (
     <div className="toolbar-section mb-6">
@@ -190,37 +184,6 @@ const NavigationToolbar = ({
             <Users
               size={16}
               className="text-purple-600 hover:text-purple-700"
-            />
-          </button>
-
-          {/* Manual Save */}
-          <button
-            onClick={() => {
-              scheduleAutoSave(schedule, staffMembers);
-              alert("✅ Schedule saved!");
-            }}
-            className="flex items-center px-3 py-2 h-10 text-sm font-medium rounded-lg border border-gray-300 bg-white hover:border-gray-400 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500 transition-all duration-200"
-            title="Manual Save"
-          >
-            <Save size={16} className="text-blue-600 hover:text-blue-700" />
-          </button>
-
-          {/* Sync LocalStorage to Database */}
-          <button
-            onClick={async () => {
-              try {
-                await syncLocalStorageToDatabase();
-                alert("✅ Data synced to database!");
-              } catch (error) {
-                alert("❌ Sync failed: " + error.message);
-              }
-            }}
-            className="flex items-center px-3 py-2 h-10 text-sm font-medium rounded-lg border border-gray-300 bg-white hover:border-gray-400 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500 transition-all duration-200"
-            title="Sync LocalStorage to Database"
-          >
-            <RotateCcw
-              size={16}
-              className="text-orange-600 hover:text-orange-700"
             />
           </button>
 
