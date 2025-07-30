@@ -289,9 +289,10 @@ const ScheduleTable = ({
     setCustomInputText("");
   };
 
-  // Helper function to check if date is start/end for 派遣 staff
+  // Helper function to check if date is start/end for all staff types
   const getStaffPeriodLabel = (staff, date) => {
-    if (staff.status !== "派遣" || !staff.startPeriod) {
+    // Early return if staff has no period data at all
+    if (!staff || (!staff.startPeriod && !staff.endPeriod)) {
       return null;
     }
 
@@ -299,7 +300,11 @@ const ScheduleTable = ({
     currentDate.setHours(0, 0, 0, 0);
 
     // Check if it's start date
-    if (staff.startPeriod) {
+    if (
+      staff.startPeriod &&
+      staff.startPeriod.year &&
+      staff.startPeriod.month
+    ) {
       const startDate = new Date(
         staff.startPeriod.year,
         staff.startPeriod.month - 1,
@@ -313,7 +318,7 @@ const ScheduleTable = ({
     }
 
     // Check if it's end date
-    if (staff.endPeriod) {
+    if (staff.endPeriod && staff.endPeriod.year && staff.endPeriod.month) {
       const endDate = new Date(
         staff.endPeriod.year,
         staff.endPeriod.month - 1,
@@ -915,16 +920,16 @@ const ScheduleTable = ({
                               <div className="absolute top-0 right-0 w-2 h-2 bg-blue-500 rounded-full transform translate-x-1 -translate-y-1"></div>
                             )}
 
-                          {/* Period labels for 派遣 staff start/end dates */}
+                          {/* Period labels for all staff start/end dates */}
                           {(() => {
                             const periodLabel = getStaffPeriodLabel(
                               staff,
                               date,
                             );
-                            if (periodLabel && isActiveForDate) {
+                            if (periodLabel) {
                               return (
                                 <div
-                                  className={`absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 text-xs font-bold px-2 py-1 rounded ${
+                                  className={`absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 text-xs font-bold px-2 py-1 rounded z-10 ${
                                     periodLabel === "START"
                                       ? "bg-green-500 text-white"
                                       : "bg-red-500 text-white"

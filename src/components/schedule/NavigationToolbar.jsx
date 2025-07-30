@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useEffect } from "react";
 import {
   Download,
   Calendar,
@@ -37,6 +37,48 @@ const NavigationToolbar = ({
   handleAddTable,
   handleDeletePeriod,
 }) => {
+  // Keyboard navigation for period switching
+  useEffect(() => {
+    const handleKeyDown = (event) => {
+      // Only handle keyboard navigation when no input elements are focused
+      // and no modals are open
+      const activeElement = document.activeElement;
+      const isInputFocused = 
+        activeElement?.tagName === 'INPUT' ||
+        activeElement?.tagName === 'TEXTAREA' ||
+        activeElement?.contentEditable === 'true' ||
+        activeElement?.closest('.shift-dropdown') ||
+        activeElement?.closest('[role="dialog"]') ||
+        showMonthPicker;
+
+      if (isInputFocused) {
+        return;
+      }
+
+      // Handle arrow key navigation
+      if (event.key === 'ArrowLeft') {
+        event.preventDefault();
+        // Navigate to previous period if possible
+        if (currentMonthIndex > 0) {
+          onMonthChange(currentMonthIndex - 1);
+        }
+      } else if (event.key === 'ArrowRight') {
+        event.preventDefault();
+        // Navigate to next period if possible
+        if (currentMonthIndex < monthPeriods.length - 1) {
+          onMonthChange(currentMonthIndex + 1);
+        }
+      }
+    };
+
+    // Add event listener to document
+    document.addEventListener('keydown', handleKeyDown);
+
+    // Cleanup event listener on unmount
+    return () => {
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [currentMonthIndex, onMonthChange, showMonthPicker]);
   return (
     <div className="toolbar-section mb-6">
       <div className="w-4/5 mx-auto flex items-center bg-white p-4 rounded-lg border border-gray-200 shadow-sm">
@@ -53,7 +95,7 @@ const NavigationToolbar = ({
                 ? "border-gray-200 bg-gray-50 text-gray-400 cursor-not-allowed"
                 : "border-gray-300 bg-white hover:border-gray-400"
             }`}
-            title="Previous period"
+            title="Previous period (← Left Arrow)"
           >
             <ChevronLeft
               size={16}
@@ -70,7 +112,7 @@ const NavigationToolbar = ({
             <button
               onClick={() => setShowMonthPicker(!showMonthPicker)}
               className="month-picker flex items-center px-3 py-2 h-10 text-sm font-medium rounded-lg border border-gray-300 bg-white hover:border-gray-400 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-all duration-200"
-              title="Select month"
+              title="Select month (Use ← → arrow keys to navigate periods)"
             >
               <Calendar
                 size={16}
@@ -116,7 +158,7 @@ const NavigationToolbar = ({
                 ? "border-gray-200 bg-gray-50 text-gray-400 cursor-not-allowed"
                 : "border-gray-300 bg-white hover:border-gray-400"
             }`}
-            title="Next period"
+            title="Next period (→ Right Arrow)"
           >
             <ChevronRight
               size={16}

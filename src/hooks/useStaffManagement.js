@@ -1,7 +1,11 @@
 import { useState, useEffect, useCallback } from "react";
-import { migrateStaffMembers } from "../utils/staffUtils";
+import {
+  migrateStaffMembers,
+  isStaffActiveInCurrentPeriod,
+} from "../utils/staffUtils";
 import { optimizedStorage, performanceMonitor } from "../utils/storageUtils";
 import { defaultStaffMembersArray } from "../constants/staffConstants";
+import { generateDateRange } from "../utils/dateUtils";
 
 // Keep legacy function for backward compatibility during transition
 const loadFromLocalStorage = (key) => {
@@ -36,24 +40,186 @@ export const useStaffManagement = (currentMonthIndex, supabaseScheduleData) => {
 
     try {
       if (localStaff && Array.isArray(localStaff) && localStaff.length > 0) {
-        setStaffMembers(localStaff);
+        // Check if we need to inherit any missing staff from previous periods
+        let inheritedStaff = [...localStaff];
+        let hasInheritedNewStaff = false;
+
+        try {
+          // Look through previous periods to find staff who should still be active but are missing
+          for (
+            let i = Math.max(0, currentMonthIndex - 6);
+            i < currentMonthIndex;
+            i++
+          ) {
+            const periodStaff = optimizedStorage.getStaffData(i);
+            if (
+              periodStaff &&
+              Array.isArray(periodStaff) &&
+              periodStaff.length > 0
+            ) {
+              // Check each staff member to see if they should be active in current period
+              const currentDateRange = generateDateRange(currentMonthIndex);
+              const activeInheritedStaff = periodStaff.filter((staff) => {
+                if (!staff) return false;
+
+                const isActive = isStaffActiveInCurrentPeriod(
+                  staff,
+                  currentDateRange,
+                );
+
+                // Debug logging for 高野
+                if (
+                  staff.name === "高野" &&
+                  process.env.NODE_ENV === "development"
+                ) {
+                  console.log(
+                    `🔍 Checking 高野 for period ${currentMonthIndex}:`,
+                    {
+                      isActive,
+                      startPeriod: staff.startPeriod,
+                      endPeriod: staff.endPeriod,
+                      currentDateRange: {
+                        start: currentDateRange[0]
+                          ?.toISOString?.()
+                          ?.split("T")[0],
+                        end: currentDateRange[currentDateRange.length - 1]
+                          ?.toISOString?.()
+                          ?.split("T")[0],
+                      },
+                    },
+                  );
+                }
+
+                return isActive;
+              });
+
+              // Add missing staff who should be active but aren't in local storage
+              activeInheritedStaff.forEach((staff) => {
+                if (
+                  !inheritedStaff.find((existing) => existing.id === staff.id)
+                ) {
+                  inheritedStaff.push(staff);
+                  hasInheritedNewStaff = true;
+
+                  if (process.env.NODE_ENV === "development") {
+                    console.log(
+                      `➕ Inherited missing staff ${staff.name} to period ${currentMonthIndex}`,
+                    );
+                  }
+                }
+              });
+            }
+          }
+        } catch (error) {
+          console.warn("Error checking for missing inherited staff:", error);
+        }
+
+        setStaffMembers(inheritedStaff);
+
+        // If we inherited new staff, save the updated list
+        if (hasInheritedNewStaff) {
+          optimizedStorage.saveStaffData(currentMonthIndex, inheritedStaff);
+        }
+
         setHasLoadedFromDb(true);
         // Development mode only: log load success
         if (process.env.NODE_ENV === "development") {
           console.log(
             "✅ Loaded staff from optimized storage:",
-            localStaff.length,
+            inheritedStaff.length,
             "members",
+            hasInheritedNewStaff ? "(with inherited staff)" : "",
           );
           console.log(
             "Staff members:",
-            localStaff.map((s) => s.name),
+            inheritedStaff.map((s) => s.name),
           );
         }
         return;
       }
     } catch (error) {
       console.warn("Error loading staff from optimized storage:", error);
+      // Continue to database fallback
+    }
+
+    // Priority 1.5: Check for staff from previous periods who should still be active
+    // This handles staff continuity across periods based on their work dates
+    let inheritedStaff = [];
+    try {
+      // Look through previous periods to find staff who should still be active
+      for (
+        let i = Math.max(0, currentMonthIndex - 6);
+        i < currentMonthIndex;
+        i++
+      ) {
+        const periodStaff = optimizedStorage.getStaffData(i);
+        if (
+          periodStaff &&
+          Array.isArray(periodStaff) &&
+          periodStaff.length > 0
+        ) {
+          // Check each staff member to see if they should be active in current period
+          const currentDateRange = generateDateRange(currentMonthIndex);
+          const activeInheritedStaff = periodStaff.filter((staff) => {
+            if (!staff) return false;
+
+            const isActive = isStaffActiveInCurrentPeriod(
+              staff,
+              currentDateRange,
+            );
+
+            // Debug logging for 高野
+            if (
+              staff.name === "高野" &&
+              process.env.NODE_ENV === "development"
+            ) {
+              console.log(`🔍 Checking 高野 for period ${currentMonthIndex}:`, {
+                isActive,
+                startPeriod: staff.startPeriod,
+                endPeriod: staff.endPeriod,
+                currentDateRange: {
+                  start: currentDateRange[0]?.toISOString?.()?.split("T")[0],
+                  end: currentDateRange[currentDateRange.length - 1]
+                    ?.toISOString?.()
+                    ?.split("T")[0],
+                },
+              });
+            }
+
+            return isActive;
+          });
+
+          // Merge with existing inherited staff, avoiding duplicates by ID
+          activeInheritedStaff.forEach((staff) => {
+            if (!inheritedStaff.find((existing) => existing.id === staff.id)) {
+              inheritedStaff.push(staff);
+            }
+          });
+        }
+      }
+
+      if (inheritedStaff.length > 0) {
+        setStaffMembers(inheritedStaff);
+        // Save inherited staff to current period storage for future loads
+        optimizedStorage.saveStaffData(currentMonthIndex, inheritedStaff);
+        setHasLoadedFromDb(true);
+
+        if (process.env.NODE_ENV === "development") {
+          console.log(
+            `📋 Inherited ${inheritedStaff.length} active staff members for period ${currentMonthIndex}:`,
+            inheritedStaff.map((s) => s.name),
+          );
+        }
+        return;
+      } else {
+        if (process.env.NODE_ENV === "development") {
+          console.log(
+            `📋 No staff inherited for period ${currentMonthIndex} - continuing to database fallback`,
+          );
+        }
+      }
+    } catch (error) {
+      console.warn("Error checking inherited staff:", error);
       // Continue to database fallback
     }
 
