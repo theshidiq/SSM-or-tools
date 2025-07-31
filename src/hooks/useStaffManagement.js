@@ -24,6 +24,7 @@ const loadFromLocalStorage = (key) => {
 export const useStaffManagement = (currentMonthIndex, supabaseScheduleData) => {
   const [staffMembers, setStaffMembers] = useState([]);
   const [hasLoadedFromDb, setHasLoadedFromDb] = useState(false);
+  const [skipEffectUntil, setSkipEffectUntil] = useState(0); // Timestamp to skip effect until
 
   // Get persistent lastUpdateTime from localStorage, falls back to 0 if not found
   const getLastUpdateTime = () => {
@@ -65,6 +66,40 @@ export const useStaffManagement = (currentMonthIndex, supabaseScheduleData) => {
   });
 
   useEffect(() => {
+    // Skip effect if we're in a cooldown period after recent updates
+    const now = Date.now();
+    if (now < skipEffectUntil) {
+      console.log(
+        "⏭️ Skipping useEffect - in cooldown period after recent update",
+        {
+          cooldownUntil: new Date(skipEffectUntil).toISOString(),
+          currentMonthIndex,
+        },
+      );
+      return;
+    }
+
+    // Don't run the effect if we already have staff members loaded and it's been recent
+    // This prevents overwriting current state after updates
+    if (staffMembers.length > 0 && hasLoadedFromDb) {
+      const persistentLastUpdate = getLastUpdateTime();
+      const timeSinceLastUpdate = Date.now() - persistentLastUpdate;
+      const isRecentUpdate = timeSinceLastUpdate < 60000; // 60 seconds
+      
+      if (isRecentUpdate && persistentLastUpdate > 0) {
+        console.log(
+          "⏭️ Skipping useEffect - staff already loaded and recent update detected",
+          {
+            timeSinceLastUpdate: Math.round(timeSinceLastUpdate / 1000) + "s",
+            lastUpdateTime: new Date(persistentLastUpdate).toISOString(),
+            currentMonthIndex,
+            currentStaffCount: staffMembers.length
+          },
+        );
+        return; // Exit early to prevent overwriting current state
+      }
+    }
+
     // Check for recent updates using persistent timestamp
     const persistentLastUpdate = getLastUpdateTime();
     const timeSinceLastUpdate = Date.now() - persistentLastUpdate;
@@ -80,15 +115,17 @@ export const useStaffManagement = (currentMonthIndex, supabaseScheduleData) => {
         },
       );
 
-      // Load the current staff data without inheritance to prevent overwrites
-      const currentStaff = optimizedStorage.getStaffData(currentMonthIndex);
-      if (
-        currentStaff &&
-        Array.isArray(currentStaff) &&
-        currentStaff.length > 0
-      ) {
-        setStaffMembers(currentStaff);
-        setHasLoadedFromDb(true);
+      // Only load from storage if we don't already have current staff data
+      if (staffMembers.length === 0) {
+        const currentStaff = optimizedStorage.getStaffData(currentMonthIndex);
+        if (
+          currentStaff &&
+          Array.isArray(currentStaff) &&
+          currentStaff.length > 0
+        ) {
+          setStaffMembers(currentStaff);
+          setHasLoadedFromDb(true);
+        }
       }
       return; // Exit early to prevent any data loading that might overwrite updates
     }
@@ -642,7 +679,11 @@ export const useStaffManagement = (currentMonthIndex, supabaseScheduleData) => {
       console.log("✅ useStaffManagement: Calling onSuccess callback");
 
       // Set the last update time to prevent inheritance from overriding
-      setLastUpdateTimePersistent(Date.now());
+      const updateTime = Date.now();
+      setLastUpdateTimePersistent(updateTime);
+      
+      // Set cooldown period to prevent useEffect from overriding our updates
+      setSkipEffectUntil(updateTime + 30000); // Skip for 30 seconds after update
 
       if (onSuccess) onSuccess(updatedStaff);
     },
@@ -709,7 +750,11 @@ export const useStaffManagement = (currentMonthIndex, supabaseScheduleData) => {
       optimizedStorage.saveStaffData(currentMonthIndex, reorderedStaff);
 
       // Set update timestamp to prevent inheritance from overwriting
-      setLastUpdateTimePersistent(Date.now());
+      const updateTime = Date.now();
+      setLastUpdateTimePersistent(updateTime);
+      
+      // Set cooldown period to prevent useEffect from overriding our updates
+      setSkipEffectUntil(updateTime + 30000); // Skip for 30 seconds after update
 
       if (onSuccess) onSuccess(reorderedStaff);
     },
@@ -838,7 +883,11 @@ export const useStaffManagement = (currentMonthIndex, supabaseScheduleData) => {
         });
 
         // Set update timestamp to prevent inheritance from overwriting
-        setLastUpdateTimePersistent(Date.now());
+        const updateTime = Date.now();
+        setLastUpdateTimePersistent(updateTime);
+        
+        // Set cooldown period to prevent useEffect from overriding our updates
+        setSkipEffectUntil(updateTime + 30000); // Skip for 30 seconds after update
 
         // Log performance metrics after staff operations (development mode only)
         performanceMonitor.logSummary();
