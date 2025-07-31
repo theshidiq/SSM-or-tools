@@ -124,14 +124,15 @@ const StaffEditModal = ({
 
   const handleStaffSelect = (staff) => {
     // Find the most current staff data from the staffMembers array
-    const currentStaffData =
-      staffMembers.find((s) => s.id === staff.id) || staff;
+    // The parent hook should already ensure this data is up-to-date
+    const currentStaffData = staffMembers.find((s) => s.id === staff.id) || staff;
 
     console.log("📋 Modal: Staff selected", {
       id: currentStaffData.id,
       name: currentStaffData.name,
       status: currentStaffData.status,
       position: currentStaffData.position,
+      startPeriod: currentStaffData.startPeriod,
     });
 
     setSelectedStaffForEdit(currentStaffData);

@@ -1040,17 +1040,24 @@ const ShiftScheduleEditor = ({
                   <button
                     key={staff.id}
                     onClick={() => {
-                      setSelectedStaffForEdit(staff);
+                      // Use the latest staff data from current staffMembers array to avoid stale data
+                      const freshStaffData = staffMembers.find(s => s.id === staff.id) || staff;
+                      console.log("🎯 Staff selection: Using fresh data", {
+                        original: { id: staff.id, startPeriod: staff.startPeriod },
+                        fresh: { id: freshStaffData.id, startPeriod: freshStaffData.startPeriod }
+                      });
+                      
+                      setSelectedStaffForEdit(freshStaffData);
                       setEditingStaffData({
-                        name: staff.name,
-                        position: staff.position || "Staff",
-                        status: staff.status || "社員",
-                        startPeriod: staff.startPeriod || {
+                        name: freshStaffData.name,
+                        position: freshStaffData.position || "Staff",
+                        status: freshStaffData.status || "社員",
+                        startPeriod: freshStaffData.startPeriod || {
                           year: new Date().getFullYear(),
                           month: new Date().getMonth() + 1,
                           day: 1,
                         },
-                        endPeriod: staff.endPeriod || null,
+                        endPeriod: freshStaffData.endPeriod || null,
                       });
                     }}
                     className="w-full p-3 text-left border border-gray-200 rounded-lg hover:border-blue-300 hover:bg-blue-50 transition-colors"

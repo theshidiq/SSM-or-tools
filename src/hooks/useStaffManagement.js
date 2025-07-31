@@ -68,7 +68,7 @@ export const useStaffManagement = (currentMonthIndex, supabaseScheduleData) => {
     // Check for recent updates using persistent timestamp
     const persistentLastUpdate = getLastUpdateTime();
     const timeSinceLastUpdate = Date.now() - persistentLastUpdate;
-    const skipInheritance = timeSinceLastUpdate < 30000; // 30 second cooldown for safety after refresh
+    const skipInheritance = timeSinceLastUpdate < 60000; // Increased to 60 seconds for better safety
 
     if (skipInheritance && persistentLastUpdate > 0) {
       console.log(
@@ -101,7 +101,7 @@ export const useStaffManagement = (currentMonthIndex, supabaseScheduleData) => {
         // Additional safety check: if any staff member has been modified recently, skip inheritance
         const hasRecentlyModifiedStaff = localStaff.some(
           (staff) =>
-            staff.lastModified && Date.now() - staff.lastModified < 30000, // 30 seconds
+            staff.lastModified && Date.now() - staff.lastModified < 120000, // Increased to 2 minutes
         );
 
         if (hasRecentlyModifiedStaff) {
@@ -183,20 +183,26 @@ export const useStaffManagement = (currentMonthIndex, supabaseScheduleData) => {
                       );
                     }
                   } else {
-                    // Staff exists - check if we need to update with newer data
+                    // Staff exists - be very conservative about overwriting current data
                     // Priority: current period > later periods > earlier periods
-                    // Only update if the inherited staff has newer lastModified timestamp
                     const currentStaff = existingStaff;
                     const inheritedStaffData = staff;
 
-                    // If the inherited staff has a more recent lastModified timestamp, update
-                    if (
+                    // Only update if ALL conditions are met:
+                    // 1. Both have lastModified timestamps
+                    // 2. Inherited data is significantly newer (more than 1 minute)
+                    // 3. Current data doesn't have a recent lastModified (within last 2 minutes)
+                    const currentTime = Date.now();
+                    const currentIsRecent = currentStaff.lastModified && 
+                      (currentTime - currentStaff.lastModified) < 120000; // 2 minutes
+                    
+                    const inheritedIsSignificantlyNewer = 
                       inheritedStaffData.lastModified &&
                       currentStaff.lastModified &&
-                      inheritedStaffData.lastModified >
-                        currentStaff.lastModified
-                    ) {
-                      // Replace the existing staff with newer data
+                      (inheritedStaffData.lastModified - currentStaff.lastModified) > 60000; // 1 minute
+
+                    // Never overwrite recently modified current staff data
+                    if (!currentIsRecent && inheritedIsSignificantlyNewer) {
                       const staffIndex = inheritedStaff.findIndex(
                         (s) => s.id === inheritedStaffData.id,
                       );
@@ -205,10 +211,25 @@ export const useStaffManagement = (currentMonthIndex, supabaseScheduleData) => {
                         hasInheritedNewStaff = true;
                         if (process.env.NODE_ENV === "development") {
                           console.log(
-                            `🔄 Updated existing staff ${inheritedStaffData.name} with newer data from period ${i}`,
+                            `🔄 Updated existing staff ${inheritedStaffData.name} with significantly newer data from period ${i}`,
+                            {
+                              currentLastModified: new Date(currentStaff.lastModified).toISOString(),
+                              inheritedLastModified: new Date(inheritedStaffData.lastModified).toISOString(),
+                              ageDifferenceMinutes: Math.round((inheritedStaffData.lastModified - currentStaff.lastModified) / 60000)
+                            }
                           );
                         }
                       }
+                    } else if (process.env.NODE_ENV === "development") {
+                      console.log(
+                        `⏭️ Skipping inheritance for ${inheritedStaffData.name} - current data is recent or inherited data is not significantly newer`,
+                        {
+                          currentIsRecent,
+                          inheritedIsSignificantlyNewer,
+                          currentLastModified: currentStaff.lastModified ? new Date(currentStaff.lastModified).toISOString() : 'none',
+                          inheritedLastModified: inheritedStaffData.lastModified ? new Date(inheritedStaffData.lastModified).toISOString() : 'none'
+                        }
+                      );
                     }
                   }
                 });
