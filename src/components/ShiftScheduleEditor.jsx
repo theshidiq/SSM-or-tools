@@ -127,9 +127,6 @@ const ShiftScheduleEditor = ({
     if (process.env.NODE_ENV === "development") {
       window.cleanupAllPeriods = cleanupAllPeriods;
       window.fixStaffInconsistencies = fixStaffInconsistencies;
-      console.log("🔧 Dev tools available:");
-      console.log("  - window.cleanupAllPeriods() - Remove duplicate entries");
-      console.log("  - window.fixStaffInconsistencies() - Fix status inconsistencies");
     }
   }, [cleanupAllPeriods, fixStaffInconsistencies]);
 

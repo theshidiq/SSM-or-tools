@@ -146,7 +146,6 @@ export const getOrderedStaffMembers = (staffMembers, dateRange = []) => {
       return []; // Return empty array if no staff members
     }
 
-
     // First filter out staff who are not active in the current period
     const activeStaff = staffMembers.filter((staff) => {
       try {
@@ -207,7 +206,6 @@ export const getOrderedStaffMembers = (staffMembers, dateRange = []) => {
       ),
     );
 
-
     // Order: 社員 first, then 派遣, then パート (each sorted by start date), then 中田 at the very end
     const finalOrder = [
       ...shainnStaff,
@@ -215,7 +213,6 @@ export const getOrderedStaffMembers = (staffMembers, dateRange = []) => {
       ...partTimeStaff,
       ...(nakataStaff ? [nakataStaff] : []),
     ];
-
 
     return finalOrder;
   } catch (error) {
@@ -269,28 +266,24 @@ export const migrateScheduleData = (scheduleData, staffMembers) => {
 // Clean up staff data by removing duplicates based on ID and name
 export const cleanupStaffData = (staffMembers) => {
   if (!Array.isArray(staffMembers)) return [];
-  
+
   const seenIds = new Set();
   const seenNames = new Set();
   const cleanedStaff = [];
-  
+
   staffMembers.forEach((staff) => {
     if (!staff || !staff.id || !staff.name) return;
-    
+
     // Skip if we've already seen this ID or name
     if (seenIds.has(staff.id) || seenNames.has(staff.name)) {
-      console.log(`🧹 Removing duplicate staff: ${staff.name} (${staff.id})`);
       return;
     }
-    
+
     seenIds.add(staff.id);
     seenNames.add(staff.name);
     cleanedStaff.push(staff);
   });
-  
-  if (staffMembers.length !== cleanedStaff.length) {
-    console.log(`🧹 Cleaned staff data: ${staffMembers.length} → ${cleanedStaff.length} members`);
-  }
+
   return cleanedStaff;
 };
 
@@ -298,35 +291,39 @@ export const cleanupStaffData = (staffMembers) => {
 export const cleanupAllPeriodsStaffData = (optimizedStorage) => {
   console.log("🧹 Starting cleanup of all periods...");
   let totalCleaned = 0;
-  
+
   for (let periodIndex = 0; periodIndex < 6; periodIndex++) {
     const staffData = optimizedStorage.getStaffData(periodIndex);
     if (staffData && Array.isArray(staffData)) {
       const cleanedData = cleanupStaffData(staffData);
       if (cleanedData.length !== staffData.length) {
         optimizedStorage.saveStaffData(periodIndex, cleanedData);
-        totalCleaned += (staffData.length - cleanedData.length);
-        console.log(`🧹 Period ${periodIndex}: ${staffData.length} → ${cleanedData.length} staff members`);
+        totalCleaned += staffData.length - cleanedData.length;
+        console.log(
+          `🧹 Period ${periodIndex}: ${staffData.length} → ${cleanedData.length} staff members`,
+        );
       }
     }
   }
-  
-  console.log(`🧹 Cleanup complete! Removed ${totalCleaned} duplicate entries total.`);
+
+  console.log(
+    `🧹 Cleanup complete! Removed ${totalCleaned} duplicate entries total.`,
+  );
   return totalCleaned;
 };
 
 // Fix staff data inconsistencies across periods
 export const fixStaffDataInconsistencies = (optimizedStorage) => {
   console.log("🔧 Starting staff data consistency fix...");
-  
+
   // Build a map of staff by ID across all periods
   const staffMap = new Map();
-  
+
   // First pass: collect all staff data from all periods
   for (let periodIndex = 0; periodIndex < 6; periodIndex++) {
     const staffData = optimizedStorage.getStaffData(periodIndex);
     if (staffData && Array.isArray(staffData)) {
-      staffData.forEach(staff => {
+      staffData.forEach((staff) => {
         if (staff && staff.id) {
           if (!staffMap.has(staff.id)) {
             staffMap.set(staff.id, []);
@@ -334,15 +331,15 @@ export const fixStaffDataInconsistencies = (optimizedStorage) => {
           staffMap.get(staff.id).push({
             ...staff,
             periodIndex,
-            lastModified: staff.lastModified || 0
+            lastModified: staff.lastModified || 0,
           });
         }
       });
     }
   }
-  
+
   let fixedCount = 0;
-  
+
   // Second pass: fix inconsistencies by using the most recent data
   staffMap.forEach((staffVersions, staffId) => {
     if (staffVersions.length > 1) {
@@ -353,32 +350,37 @@ export const fixStaffDataInconsistencies = (optimizedStorage) => {
         }
         return b.periodIndex - a.periodIndex; // Later period first
       });
-      
+
       const mostRecentVersion = sortedVersions[0];
       const staffName = mostRecentVersion.name;
-      
+
       // Check if there are any inconsistencies
-      const hasInconsistencies = staffVersions.some(version => 
-        version.status !== mostRecentVersion.status ||
-        JSON.stringify(version.startPeriod) !== JSON.stringify(mostRecentVersion.startPeriod) ||
-        JSON.stringify(version.endPeriod) !== JSON.stringify(mostRecentVersion.endPeriod)
+      const hasInconsistencies = staffVersions.some(
+        (version) =>
+          version.status !== mostRecentVersion.status ||
+          JSON.stringify(version.startPeriod) !==
+            JSON.stringify(mostRecentVersion.startPeriod) ||
+          JSON.stringify(version.endPeriod) !==
+            JSON.stringify(mostRecentVersion.endPeriod),
       );
-      
+
       if (hasInconsistencies) {
         console.log(`🔧 Fixing inconsistencies for ${staffName}:`, {
           correctData: {
             status: mostRecentVersion.status,
             startPeriod: mostRecentVersion.startPeriod,
-            endPeriod: mostRecentVersion.endPeriod
+            endPeriod: mostRecentVersion.endPeriod,
           },
-          fromPeriod: mostRecentVersion.periodIndex
+          fromPeriod: mostRecentVersion.periodIndex,
         });
-        
+
         // Update all periods with the correct data
-        staffVersions.forEach(version => {
-          const periodStaff = optimizedStorage.getStaffData(version.periodIndex);
+        staffVersions.forEach((version) => {
+          const periodStaff = optimizedStorage.getStaffData(
+            version.periodIndex,
+          );
           if (periodStaff && Array.isArray(periodStaff)) {
-            const staffIndex = periodStaff.findIndex(s => s.id === staffId);
+            const staffIndex = periodStaff.findIndex((s) => s.id === staffId);
             if (staffIndex !== -1) {
               const updatedStaff = [...periodStaff];
               updatedStaff[staffIndex] = {
@@ -386,20 +388,24 @@ export const fixStaffDataInconsistencies = (optimizedStorage) => {
                 status: mostRecentVersion.status,
                 startPeriod: mostRecentVersion.startPeriod,
                 endPeriod: mostRecentVersion.endPeriod,
-                lastModified: Date.now()
+                lastModified: Date.now(),
               };
               optimizedStorage.saveStaffData(version.periodIndex, updatedStaff);
               fixedCount++;
-              
-              console.log(`  ✅ Updated ${staffName} in period ${version.periodIndex}`);
+
+              console.log(
+                `  ✅ Updated ${staffName} in period ${version.periodIndex}`,
+              );
             }
           }
         });
       }
     }
   });
-  
-  console.log(`🔧 Consistency fix complete! Fixed ${fixedCount} inconsistencies.`);
+
+  console.log(
+    `🔧 Consistency fix complete! Fixed ${fixedCount} inconsistencies.`,
+  );
   return fixedCount;
 };
 

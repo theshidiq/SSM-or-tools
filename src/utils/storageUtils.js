@@ -312,6 +312,42 @@ export const batchWriter = {
    * Queue a write operation
    */
   queueWrite(key, data) {
+    // Check if this is staff data that might have been immediately written
+    // If so, verify that queued data is not staler than what's already in localStorage
+    if (key.startsWith("staff-")) {
+      try {
+        const currentStored = rawStorage.get(key);
+        if (
+          currentStored &&
+          Array.isArray(currentStored) &&
+          Array.isArray(data)
+        ) {
+          // Compare timestamps if available to prevent overwriting newer data with older data
+          const currentTimestamp = Math.max(
+            ...currentStored.map((s) => s.lastModified || 0),
+          );
+          const queuedTimestamp = Math.max(
+            ...data.map((s) => s.lastModified || 0),
+          );
+
+          if (currentTimestamp > queuedTimestamp) {
+            if (process.env.NODE_ENV === "development") {
+              console.log(
+                `⏭️ Skipping queued staff write for ${key} - localStorage has newer data`,
+              );
+            }
+            return; // Don't queue this write as localStorage already has newer data
+          }
+        }
+      } catch (error) {
+        // If comparison fails, proceed with queued write as fallback
+        console.warn(
+          `⚠️ Failed to compare staff data timestamps for ${key}:`,
+          error,
+        );
+      }
+    }
+
     writeQueue.set(key, data);
 
     // Cancel existing timeout
@@ -433,8 +469,21 @@ export const optimizedStorage = {
     // Update memory cache immediately
     memCache.set(key, data);
 
-    // Queue for batch write to localStorage
-    batchWriter.queueWrite(key, data);
+    // Staff data is critical - write immediately to localStorage to prevent race conditions
+    // This ensures that staff updates are immediately persistent and available for inheritance logic
+    const writeSuccess = rawStorage.set(key, data);
+
+    if (!writeSuccess) {
+      // If immediate write fails, fall back to queued write
+      console.warn(
+        `⚠️ Immediate staff data write failed for period ${periodIndex}, queuing for batch write`,
+      );
+      batchWriter.queueWrite(key, data);
+    } else if (process.env.NODE_ENV === "development") {
+      console.log(
+        `💾 Staff data immediately saved to localStorage for period ${periodIndex}`,
+      );
+    }
   },
 
   /**

@@ -22,13 +22,16 @@ const StaffEditModal = ({
   currentMonthIndex,
   scheduleAutoSave,
 }) => {
-  // Set default year values
+  // Set default year values for new staff when modal opens
   useEffect(() => {
-    if (!showStaffEditModal || !editingStaffData) return; // Don't run effect if modal is not shown or editingStaffData is undefined
+    if (!showStaffEditModal || !editingStaffData) {
+      return; // Don't run effect if modal is not shown or no data
+    }
+
     const currentYear = new Date().getFullYear();
 
-    // Set current year as default for start period if not already set
-    if (!editingStaffData.startPeriod?.year) {
+    // Only set default year if it doesn't exist AND we're not already editing existing staff
+    if (!editingStaffData.startPeriod?.year && !selectedStaffForEdit) {
       setEditingStaffData((prev) => ({
         ...prev,
         startPeriod: {
@@ -37,25 +40,9 @@ const StaffEditModal = ({
         },
       }));
     }
+  }, [showStaffEditModal, selectedStaffForEdit]);
 
-    // If 派遣 or パート is selected, set both periods to current year
-    if (
-      editingStaffData.status === "派遣" ||
-      editingStaffData.status === "パート"
-    ) {
-      setEditingStaffData((prev) => ({
-        ...prev,
-        startPeriod: {
-          ...prev.startPeriod,
-          year: currentYear,
-        },
-        endPeriod: {
-          ...prev.endPeriod,
-          year: currentYear,
-        },
-      }));
-    }
-  }, [editingStaffData?.status, showStaffEditModal]);
+  // Remove the problematic sync logic that was interfering with updates
 
   if (!showStaffEditModal) return null;
 
@@ -69,7 +56,9 @@ const StaffEditModal = ({
   };
 
   const handleSubmit = (e) => {
-    e.preventDefault();
+    if (e && e.preventDefault) {
+      e.preventDefault();
+    }
 
     if (isAddingNewStaff) {
       handleCreateStaff(safeEditingStaffData);
@@ -79,11 +68,33 @@ const StaffEditModal = ({
           ...prev,
           [currentMonthIndex]: newStaff,
         }));
+
+        // Update the modal's form state to reflect the successful update
+        const updatedStaff = newStaff.find(
+          (staff) => staff.id === selectedStaffForEdit.id,
+        );
+        if (updatedStaff) {
+          console.log(
+            "🔄 Modal: Updating form state with new staff data",
+            updatedStaff,
+          );
+          setEditingStaffData({
+            name: updatedStaff.name,
+            position: updatedStaff.position || "",
+            status: updatedStaff.status || "社員",
+            startPeriod: updatedStaff.startPeriod || null,
+            endPeriod: updatedStaff.endPeriod || null,
+          });
+
+          // Also update the selectedStaffForEdit to ensure consistency
+          setSelectedStaffForEdit(updatedStaff);
+        }
       });
 
+      // Use setTimeout to ensure the update completes before saving
       setTimeout(() => {
         scheduleAutoSave(schedule, staffMembers);
-      }, 0);
+      }, 100);
     }
   };
 
@@ -112,14 +123,28 @@ const StaffEditModal = ({
   };
 
   const handleStaffSelect = (staff) => {
-    setSelectedStaffForEdit(staff);
-    setEditingStaffData({
-      name: staff.name,
-      position: staff.position || "",
-      status: staff.status || "社員",
-      startPeriod: staff.startPeriod || null,
-      endPeriod: staff.endPeriod || null,
+    // Find the most current staff data from the staffMembers array
+    const currentStaffData =
+      staffMembers.find((s) => s.id === staff.id) || staff;
+
+    console.log("📋 Modal: Staff selected", {
+      id: currentStaffData.id,
+      name: currentStaffData.name,
+      status: currentStaffData.status,
+      position: currentStaffData.position,
     });
+
+    setSelectedStaffForEdit(currentStaffData);
+    const newEditingData = {
+      name: currentStaffData.name,
+      position: currentStaffData.position || "",
+      status: currentStaffData.status || "社員",
+      startPeriod: currentStaffData.startPeriod || null,
+      endPeriod: currentStaffData.endPeriod || null,
+    };
+
+    console.log("📝 Modal: Setting editing data", newEditingData);
+    setEditingStaffData(newEditingData);
     setIsAddingNewStaff(false);
   };
 
@@ -136,8 +161,23 @@ const StaffEditModal = ({
   };
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[9999]">
-      <div className="bg-white rounded-lg p-6 w-full max-w-4xl mx-4 h-[65vh] overflow-y-auto">
+    <div
+      className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[9999]"
+      onClick={(e) => {
+        if (e.target === e.currentTarget) {
+          // Only close if clicking the overlay itself, not its children
+          setShowStaffEditModal(false);
+          setSelectedStaffForEdit(null);
+          setIsAddingNewStaff(false);
+        }
+      }}
+    >
+      <div
+        className="bg-white rounded-lg p-6 w-full max-w-4xl mx-4 h-[65vh] overflow-y-auto"
+        onClick={(e) => {
+          e.stopPropagation(); // Prevent overlay click handler
+        }}
+      >
         <div className="flex items-center justify-between mb-6">
           <h2 className="text-xl font-bold text-gray-800">スタッフ管理</h2>
           <button
@@ -271,12 +311,12 @@ const StaffEditModal = ({
                         name="status"
                         value="社員"
                         checked={safeEditingStaffData.status === "社員"}
-                        onChange={(e) => {
+                        onChange={(e) =>
                           setEditingStaffData((prev) => ({
                             ...prev,
                             status: e.target.value,
-                          }));
-                        }}
+                          }))
+                        }
                         className="mr-2 text-blue-600 focus:ring-blue-500"
                         required
                       />
@@ -294,18 +334,14 @@ const StaffEditModal = ({
                             ...prev,
                             status: e.target.value,
                             // If 派遣 is selected, set both periods to current year
-                            ...(e.target.value === "派遣"
-                              ? {
-                                  startPeriod: {
-                                    ...prev.startPeriod,
-                                    year: currentYear,
-                                  },
-                                  endPeriod: {
-                                    ...prev.endPeriod,
-                                    year: currentYear,
-                                  },
-                                }
-                              : {}),
+                            startPeriod: {
+                              ...prev.startPeriod,
+                              year: currentYear,
+                            },
+                            endPeriod: {
+                              ...prev.endPeriod,
+                              year: currentYear,
+                            },
                           }));
                         }}
                         className="mr-2 text-blue-600 focus:ring-blue-500"
@@ -324,19 +360,15 @@ const StaffEditModal = ({
                           setEditingStaffData((prev) => ({
                             ...prev,
                             status: e.target.value,
-                            // If パート is selected, set both periods to current year (same as 派遣)
-                            ...(e.target.value === "パート"
-                              ? {
-                                  startPeriod: {
-                                    ...prev.startPeriod,
-                                    year: currentYear,
-                                  },
-                                  endPeriod: {
-                                    ...prev.endPeriod,
-                                    year: currentYear,
-                                  },
-                                }
-                              : {}),
+                            // If パート is selected, set both periods to current year
+                            startPeriod: {
+                              ...prev.startPeriod,
+                              year: currentYear,
+                            },
+                            endPeriod: {
+                              ...prev.endPeriod,
+                              year: currentYear,
+                            },
                           }));
                         }}
                         className="mr-2 text-blue-600 focus:ring-blue-500"
@@ -534,7 +566,8 @@ const StaffEditModal = ({
                   )}
 
                   <button
-                    type="submit"
+                    type="button"
+                    onClick={handleSubmit}
                     className="flex-1 px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 transition-colors"
                   >
                     {isAddingNewStaff ? "追加" : "更新"}
