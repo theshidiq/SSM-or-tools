@@ -21,6 +21,8 @@ const StaffEditModal = ({
   setStaffMembersByMonth,
   currentMonthIndex,
   scheduleAutoSave,
+  clearAndRefreshFromDatabase,
+  isRefreshingFromDatabase,
 }) => {
   // Set default year values for new staff when modal opens
   useEffect(() => {
@@ -61,9 +63,34 @@ const StaffEditModal = ({
     }
 
     if (isAddingNewStaff) {
-      handleCreateStaff(safeEditingStaffData);
+      handleCreateStaff(safeEditingStaffData, async () => {
+        // 🔧 FIX: Save to database FIRST, then refresh
+        try {
+          console.log("💾 Modal: Saving to database after staff creation...");
+          await scheduleAutoSave(schedule, staffMembers);
+          console.log("✅ Modal: Database save completed");
+
+          // Now refresh from database to ensure data consistency after staff creation
+          if (clearAndRefreshFromDatabase && typeof clearAndRefreshFromDatabase === 'function') {
+            console.log("📡 Modal: Starting database refresh after database save...");
+            const refreshSuccess = await clearAndRefreshFromDatabase();
+            if (refreshSuccess) {
+              console.log("✅ Modal: Database refresh completed successfully");
+            } else {
+              console.log("⚠️ Modal: Database refresh failed, but local data updated");
+            }
+          }
+        } catch (error) {
+          console.error("❌ Modal: Database save failed:", error);
+          // Even if database save fails, still try refresh in case there's partial data
+          if (clearAndRefreshFromDatabase && typeof clearAndRefreshFromDatabase === 'function') {
+            console.log("📡 Modal: Attempting database refresh despite save failure...");
+            await clearAndRefreshFromDatabase();
+          }
+        }
+      });
     } else if (selectedStaffForEdit) {
-      updateStaff(selectedStaffForEdit.id, safeEditingStaffData, (newStaff) => {
+      updateStaff(selectedStaffForEdit.id, safeEditingStaffData, async (newStaff) => {
         setStaffMembersByMonth((prev) => ({
           ...prev,
           [currentMonthIndex]: newStaff,
@@ -89,12 +116,32 @@ const StaffEditModal = ({
           // Also update the selectedStaffForEdit to ensure consistency
           setSelectedStaffForEdit(updatedStaff);
         }
-      });
 
-      // Use setTimeout to ensure the update completes before saving
-      setTimeout(() => {
-        scheduleAutoSave(schedule, staffMembers);
-      }, 100);
+        // 🔧 FIX: Save to database FIRST, then refresh
+        try {
+          console.log("💾 Modal: Saving to database before refresh...");
+          await scheduleAutoSave(schedule, newStaff);
+          console.log("✅ Modal: Database save completed");
+
+          // Now refresh from database to ensure data consistency
+          if (clearAndRefreshFromDatabase && typeof clearAndRefreshFromDatabase === 'function') {
+            console.log("📡 Modal: Starting database refresh after database save...");
+            const refreshSuccess = await clearAndRefreshFromDatabase();
+            if (refreshSuccess) {
+              console.log("✅ Modal: Database refresh completed successfully");
+            } else {
+              console.log("⚠️ Modal: Database refresh failed, but local data updated");
+            }
+          }
+        } catch (error) {
+          console.error("❌ Modal: Database save failed:", error);
+          // Even if database save fails, still try refresh in case there's partial data
+          if (clearAndRefreshFromDatabase && typeof clearAndRefreshFromDatabase === 'function') {
+            console.log("📡 Modal: Attempting database refresh despite save failure...");
+            await clearAndRefreshFromDatabase();
+          }
+        }
+      });
     }
   };
 
@@ -174,11 +221,22 @@ const StaffEditModal = ({
       }}
     >
       <div
-        className="bg-white rounded-lg p-6 w-full max-w-4xl mx-4 h-[65vh] overflow-y-auto"
+        className="bg-white rounded-lg p-6 w-full max-w-4xl mx-4 h-[65vh] overflow-y-auto relative"
         onClick={(e) => {
           e.stopPropagation(); // Prevent overlay click handler
         }}
       >
+        {/* Loading overlay for database refresh */}
+        {isRefreshingFromDatabase && (
+          <div className="absolute inset-0 bg-white bg-opacity-90 flex items-center justify-center z-50 rounded-lg">
+            <div className="text-center">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500 mx-auto mb-3"></div>
+              <p className="text-gray-600 text-sm">
+                Refreshing data from database...
+              </p>
+            </div>
+          </div>
+        )}
         <div className="flex items-center justify-between mb-6">
           <h2 className="text-xl font-bold text-gray-800">スタッフ管理</h2>
           <button

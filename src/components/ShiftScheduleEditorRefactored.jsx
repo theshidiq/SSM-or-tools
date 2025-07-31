@@ -1041,12 +1041,19 @@ const ShiftScheduleEditor = ({
                     key={staff.id}
                     onClick={() => {
                       // Use the latest staff data from current staffMembers array to avoid stale data
-                      const freshStaffData = staffMembers.find(s => s.id === staff.id) || staff;
+                      const freshStaffData =
+                        staffMembers.find((s) => s.id === staff.id) || staff;
                       console.log("🎯 Staff selection: Using fresh data", {
-                        original: { id: staff.id, startPeriod: staff.startPeriod },
-                        fresh: { id: freshStaffData.id, startPeriod: freshStaffData.startPeriod }
+                        original: {
+                          id: staff.id,
+                          startPeriod: staff.startPeriod,
+                        },
+                        fresh: {
+                          id: freshStaffData.id,
+                          startPeriod: freshStaffData.startPeriod,
+                        },
                       });
-                      
+
                       setSelectedStaffForEdit(freshStaffData);
                       setEditingStaffData({
                         name: freshStaffData.name,

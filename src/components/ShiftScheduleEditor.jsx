@@ -43,6 +43,7 @@ const ShiftScheduleEditor = ({
   error: externalError,
   onSaveSchedule,
   onDeleteSchedule,
+  loadScheduleData,
 }) => {
   // Main state
   const [currentMonthIndex, setCurrentMonthIndex] = useState(0); // 0 = January-February (0-indexed)
@@ -117,7 +118,13 @@ const ShiftScheduleEditor = ({
     updateStaff,
     cleanupAllPeriods,
     fixStaffInconsistencies,
-  } = useStaffManagement(currentMonthIndex, supabaseScheduleData);
+    clearAndRefreshFromDatabase,
+    isRefreshingFromDatabase,
+  } = useStaffManagement(
+    currentMonthIndex,
+    supabaseScheduleData,
+    loadScheduleData,
+  );
 
   // Check if we're still loading - wait until both database and staff are ready
   const isLoading = supabaseScheduleData === undefined || !hasLoadedFromDb;
@@ -458,6 +465,8 @@ const ShiftScheduleEditor = ({
           setStaffMembersByMonth={setStaffMembersByMonth}
           currentMonthIndex={currentMonthIndex}
           scheduleAutoSave={scheduleAutoSave}
+          clearAndRefreshFromDatabase={clearAndRefreshFromDatabase}
+          isRefreshingFromDatabase={isRefreshingFromDatabase}
         />
       </div>
     );
@@ -540,6 +549,8 @@ const ShiftScheduleEditor = ({
         setStaffMembersByMonth={setStaffMembersByMonth}
         currentMonthIndex={currentMonthIndex}
         scheduleAutoSave={scheduleAutoSave}
+        clearAndRefreshFromDatabase={clearAndRefreshFromDatabase}
+        isRefreshingFromDatabase={isRefreshingFromDatabase}
       />
 
       {/* Shift Dropdown Portal */}

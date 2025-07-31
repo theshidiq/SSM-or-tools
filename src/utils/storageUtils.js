@@ -510,6 +510,22 @@ export const optimizedStorage = {
   },
 
   /**
+   * Clear staff data only for a specific period (keeps schedule data)
+   */
+  clearStaffData(periodIndex) {
+    const staffKey = STORAGE_KEYS.getStaffKey(periodIndex);
+
+    // Clear from memory cache
+    memCache.delete(staffKey);
+
+    // Remove from localStorage
+    rawStorage.remove(staffKey);
+
+    // Remove from write queue if pending
+    writeQueue.delete(staffKey);
+  },
+
+  /**
    * Clear all data for a specific period
    */
   clearPeriodData(periodIndex) {

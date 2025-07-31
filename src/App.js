@@ -48,6 +48,7 @@ function AppContent() {
         isConnected={isConnected}
         error={error}
         onSaveSchedule={saveScheduleData}
+        loadScheduleData={loadScheduleData}
       />
     </div>
   );

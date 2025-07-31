@@ -21,10 +21,17 @@ const loadFromLocalStorage = (key) => {
   }
 };
 
-export const useStaffManagement = (currentMonthIndex, supabaseScheduleData) => {
+export const useStaffManagement = (
+  currentMonthIndex,
+  supabaseScheduleData,
+  loadScheduleData,
+) => {
   const [staffMembers, setStaffMembers] = useState([]);
   const [hasLoadedFromDb, setHasLoadedFromDb] = useState(false);
   const [skipEffectUntil, setSkipEffectUntil] = useState(0); // Timestamp to skip effect until
+  const [hasInitiallyLoaded, setHasInitiallyLoaded] = useState(false); // Track if we've loaded data in this session
+  const [isRefreshingFromDatabase, setIsRefreshingFromDatabase] =
+    useState(false); // Loading state for database refresh
 
   // Get persistent lastUpdateTime from localStorage, falls back to 0 if not found
   const getLastUpdateTime = () => {
@@ -81,11 +88,12 @@ export const useStaffManagement = (currentMonthIndex, supabaseScheduleData) => {
 
     // Don't run the effect if we already have staff members loaded and it's been recent
     // This prevents overwriting current state after updates
-    if (staffMembers.length > 0 && hasLoadedFromDb) {
+    // BUT only if we've already initially loaded in this session (prevents running on fresh browser loads)
+    if (staffMembers.length > 0 && hasLoadedFromDb && hasInitiallyLoaded) {
       const persistentLastUpdate = getLastUpdateTime();
       const timeSinceLastUpdate = Date.now() - persistentLastUpdate;
       const isRecentUpdate = timeSinceLastUpdate < 60000; // 60 seconds
-      
+
       if (isRecentUpdate && persistentLastUpdate > 0) {
         console.log(
           "⏭️ Skipping useEffect - staff already loaded and recent update detected",
@@ -93,7 +101,7 @@ export const useStaffManagement = (currentMonthIndex, supabaseScheduleData) => {
             timeSinceLastUpdate: Math.round(timeSinceLastUpdate / 1000) + "s",
             lastUpdateTime: new Date(persistentLastUpdate).toISOString(),
             currentMonthIndex,
-            currentStaffCount: staffMembers.length
+            currentStaffCount: staffMembers.length,
           },
         );
         return; // Exit early to prevent overwriting current state
@@ -105,7 +113,7 @@ export const useStaffManagement = (currentMonthIndex, supabaseScheduleData) => {
     const timeSinceLastUpdate = Date.now() - persistentLastUpdate;
     const skipInheritance = timeSinceLastUpdate < 60000; // Increased to 60 seconds for better safety
 
-    if (skipInheritance && persistentLastUpdate > 0) {
+    if (skipInheritance && persistentLastUpdate > 0 && hasInitiallyLoaded) {
       console.log(
         "⏭️ Skipping inheritance logic - recent update detected from localStorage",
         {
@@ -125,6 +133,7 @@ export const useStaffManagement = (currentMonthIndex, supabaseScheduleData) => {
         ) {
           setStaffMembers(currentStaff);
           setHasLoadedFromDb(true);
+          setHasInitiallyLoaded(true);
         }
       }
       return; // Exit early to prevent any data loading that might overwrite updates
@@ -141,12 +150,13 @@ export const useStaffManagement = (currentMonthIndex, supabaseScheduleData) => {
             staff.lastModified && Date.now() - staff.lastModified < 120000, // Increased to 2 minutes
         );
 
-        if (hasRecentlyModifiedStaff) {
+        if (hasRecentlyModifiedStaff && hasInitiallyLoaded) {
           console.log(
             "⏭️ Skipping inheritance - found recently modified staff in localStorage",
           );
           setStaffMembers(localStaff);
           setHasLoadedFromDb(true);
+          setHasInitiallyLoaded(true);
           return;
         }
 
@@ -230,13 +240,16 @@ export const useStaffManagement = (currentMonthIndex, supabaseScheduleData) => {
                     // 2. Inherited data is significantly newer (more than 1 minute)
                     // 3. Current data doesn't have a recent lastModified (within last 2 minutes)
                     const currentTime = Date.now();
-                    const currentIsRecent = currentStaff.lastModified && 
-                      (currentTime - currentStaff.lastModified) < 120000; // 2 minutes
-                    
-                    const inheritedIsSignificantlyNewer = 
+                    const currentIsRecent =
+                      currentStaff.lastModified &&
+                      currentTime - currentStaff.lastModified < 120000; // 2 minutes
+
+                    const inheritedIsSignificantlyNewer =
                       inheritedStaffData.lastModified &&
                       currentStaff.lastModified &&
-                      (inheritedStaffData.lastModified - currentStaff.lastModified) > 60000; // 1 minute
+                      inheritedStaffData.lastModified -
+                        currentStaff.lastModified >
+                        60000; // 1 minute
 
                     // Never overwrite recently modified current staff data
                     if (!currentIsRecent && inheritedIsSignificantlyNewer) {
@@ -250,10 +263,18 @@ export const useStaffManagement = (currentMonthIndex, supabaseScheduleData) => {
                           console.log(
                             `🔄 Updated existing staff ${inheritedStaffData.name} with significantly newer data from period ${i}`,
                             {
-                              currentLastModified: new Date(currentStaff.lastModified).toISOString(),
-                              inheritedLastModified: new Date(inheritedStaffData.lastModified).toISOString(),
-                              ageDifferenceMinutes: Math.round((inheritedStaffData.lastModified - currentStaff.lastModified) / 60000)
-                            }
+                              currentLastModified: new Date(
+                                currentStaff.lastModified,
+                              ).toISOString(),
+                              inheritedLastModified: new Date(
+                                inheritedStaffData.lastModified,
+                              ).toISOString(),
+                              ageDifferenceMinutes: Math.round(
+                                (inheritedStaffData.lastModified -
+                                  currentStaff.lastModified) /
+                                  60000,
+                              ),
+                            },
                           );
                         }
                       }
@@ -263,9 +284,15 @@ export const useStaffManagement = (currentMonthIndex, supabaseScheduleData) => {
                         {
                           currentIsRecent,
                           inheritedIsSignificantlyNewer,
-                          currentLastModified: currentStaff.lastModified ? new Date(currentStaff.lastModified).toISOString() : 'none',
-                          inheritedLastModified: inheritedStaffData.lastModified ? new Date(inheritedStaffData.lastModified).toISOString() : 'none'
-                        }
+                          currentLastModified: currentStaff.lastModified
+                            ? new Date(currentStaff.lastModified).toISOString()
+                            : "none",
+                          inheritedLastModified: inheritedStaffData.lastModified
+                            ? new Date(
+                                inheritedStaffData.lastModified,
+                              ).toISOString()
+                            : "none",
+                        },
                       );
                     }
                   }
@@ -290,6 +317,7 @@ export const useStaffManagement = (currentMonthIndex, supabaseScheduleData) => {
         }
 
         setHasLoadedFromDb(true);
+        setHasInitiallyLoaded(true);
         // Development mode only: log load success
         // Also check if any staff from later periods should be backfilled to this period
         if (!skipInheritance) {
@@ -418,6 +446,7 @@ export const useStaffManagement = (currentMonthIndex, supabaseScheduleData) => {
           cleanedInheritedStaff,
         );
         setHasLoadedFromDb(true);
+        setHasInitiallyLoaded(true);
 
         if (process.env.NODE_ENV === "development") {
           console.log(
@@ -486,6 +515,7 @@ export const useStaffManagement = (currentMonthIndex, supabaseScheduleData) => {
         }
       }
       setHasLoadedFromDb(true);
+      setHasInitiallyLoaded(true);
     } else if (supabaseScheduleData === null) {
       // Database is explicitly null (no connection or empty)
       // Force use default staff data to override any cached data
@@ -504,6 +534,7 @@ export const useStaffManagement = (currentMonthIndex, supabaseScheduleData) => {
         defaultStaffMembersArray,
       );
       setHasLoadedFromDb(true);
+      setHasInitiallyLoaded(true);
     } else if (supabaseScheduleData && !supabaseScheduleData.schedule_data) {
       // Database exists but has no schedule data
       // Use optimized storage data if available, otherwise use default staff
@@ -521,6 +552,7 @@ export const useStaffManagement = (currentMonthIndex, supabaseScheduleData) => {
       }
 
       setHasLoadedFromDb(true);
+      setHasInitiallyLoaded(true);
     }
   }, [currentMonthIndex, supabaseScheduleData]); // Removed lastUpdateTime to prevent unnecessary re-runs
 
@@ -681,7 +713,7 @@ export const useStaffManagement = (currentMonthIndex, supabaseScheduleData) => {
       // Set the last update time to prevent inheritance from overriding
       const updateTime = Date.now();
       setLastUpdateTimePersistent(updateTime);
-      
+
       // Set cooldown period to prevent useEffect from overriding our updates
       setSkipEffectUntil(updateTime + 30000); // Skip for 30 seconds after update
 
@@ -752,7 +784,7 @@ export const useStaffManagement = (currentMonthIndex, supabaseScheduleData) => {
       // Set update timestamp to prevent inheritance from overwriting
       const updateTime = Date.now();
       setLastUpdateTimePersistent(updateTime);
-      
+
       // Set cooldown period to prevent useEffect from overriding our updates
       setSkipEffectUntil(updateTime + 30000); // Skip for 30 seconds after update
 
@@ -857,7 +889,7 @@ export const useStaffManagement = (currentMonthIndex, supabaseScheduleData) => {
 
   // Handle staff creation from modal
   const handleCreateStaff = useCallback(
-    (staffData) => {
+    (staffData, onSuccess) => {
       const newStaffId = `01934d2c-8a7b-7${Date.now().toString(16).slice(-3)}-8${Math.random().toString(16).slice(2, 5)}-${Math.random().toString(16).slice(2, 14)}`;
 
       const newStaff = {
@@ -885,12 +917,17 @@ export const useStaffManagement = (currentMonthIndex, supabaseScheduleData) => {
         // Set update timestamp to prevent inheritance from overwriting
         const updateTime = Date.now();
         setLastUpdateTimePersistent(updateTime);
-        
+
         // Set cooldown period to prevent useEffect from overriding our updates
         setSkipEffectUntil(updateTime + 30000); // Skip for 30 seconds after update
 
         // Log performance metrics after staff operations (development mode only)
         performanceMonitor.logSummary();
+
+        // Call additional success callback if provided
+        if (onSuccess && typeof onSuccess === "function") {
+          onSuccess();
+        }
       });
     },
     [addStaff, staffMembers.length],
@@ -932,10 +969,104 @@ export const useStaffManagement = (currentMonthIndex, supabaseScheduleData) => {
     return fixedCount;
   }, [currentMonthIndex]);
 
+  // Clear all staff data and refresh from database (Database as Single Source of Truth)
+  const clearAndRefreshFromDatabase = useCallback(async () => {
+    if (!loadScheduleData || typeof loadScheduleData !== "function") {
+      console.warn("⚠️ loadScheduleData function not available for refresh");
+      return false;
+    }
+
+    setIsRefreshingFromDatabase(true);
+
+    try {
+      if (process.env.NODE_ENV === "development") {
+        console.log(
+          "🔄 Starting database refresh - clearing all staff data...",
+        );
+      }
+
+      // Step 1: Clear staff data for ALL periods (schedule data stays intact)
+      for (let i = 0; i < 6; i++) {
+        optimizedStorage.clearStaffData(i);
+        if (process.env.NODE_ENV === "development") {
+          console.log(`🧹 Cleared staff data for period ${i}`);
+        }
+      }
+
+      // Step 2: Fetch fresh data from database
+      if (process.env.NODE_ENV === "development") {
+        console.log("📡 Fetching fresh data from database...");
+      }
+
+      const freshData = await loadScheduleData();
+
+      if (!freshData || !freshData.schedule_data) {
+        throw new Error("No fresh data received from database");
+      }
+
+      // Step 3: Extract and migrate staff from database
+      const { _staff_members } = freshData.schedule_data;
+      if (
+        _staff_members &&
+        Array.isArray(_staff_members) &&
+        _staff_members.length > 0
+      ) {
+        const migratedStaff = migrateStaffMembers(_staff_members);
+
+        // Step 4: Save fresh staff data to ALL periods for consistency
+        for (let i = 0; i < 6; i++) {
+          optimizedStorage.saveStaffData(i, migratedStaff);
+          if (process.env.NODE_ENV === "development") {
+            console.log(
+              `💾 Saved fresh staff data to period ${i}: ${migratedStaff.length} members`,
+            );
+          }
+        }
+
+        // Step 5: Update current state with fresh data
+        setStaffMembers(migratedStaff);
+        setHasLoadedFromDb(true);
+        setHasInitiallyLoaded(true);
+
+        if (process.env.NODE_ENV === "development") {
+          console.log("✅ Database refresh completed successfully!", {
+            staffCount: migratedStaff.length,
+            staffNames: migratedStaff.map((s) => s.name),
+          });
+        }
+
+        return true;
+      } else {
+        throw new Error("No staff members found in database");
+      }
+    } catch (error) {
+      console.error("❌ Database refresh failed:", error);
+
+      // Fallback: Try to restore from any existing localStorage data
+      const fallbackStaff = optimizedStorage.getStaffData(currentMonthIndex);
+      if (fallbackStaff && fallbackStaff.length > 0) {
+        setStaffMembers(fallbackStaff);
+        if (process.env.NODE_ENV === "development") {
+          console.log(
+            "🔄 Fallback: Restored from localStorage",
+            fallbackStaff.length,
+            "members",
+          );
+        }
+      }
+
+      return false;
+    } finally {
+      setIsRefreshingFromDatabase(false);
+    }
+  }, [loadScheduleData, currentMonthIndex]);
+
   return {
     staffMembers,
     setStaffMembers,
     hasLoadedFromDb,
+    hasInitiallyLoaded,
+    isRefreshingFromDatabase,
     isAddingNewStaff,
     setIsAddingNewStaff,
     selectedStaffForEdit,
@@ -954,5 +1085,6 @@ export const useStaffManagement = (currentMonthIndex, supabaseScheduleData) => {
     startAddingNewStaff,
     cleanupAllPeriods,
     fixStaffInconsistencies,
+    clearAndRefreshFromDatabase,
   };
 };
