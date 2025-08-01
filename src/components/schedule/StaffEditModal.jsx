@@ -44,7 +44,57 @@ const StaffEditModal = ({
     }
   }, [showStaffEditModal, selectedStaffForEdit]);
 
-  // Remove the problematic sync logic that was interfering with updates
+  // Sync selectedStaffForEdit with latest staffMembers data when staffMembers updates
+  useEffect(() => {
+    if (selectedStaffForEdit && staffMembers && staffMembers.length > 0) {
+      // Find the updated staff data from the current staffMembers array
+      const updatedStaffData = staffMembers.find(
+        (s) => s.id === selectedStaffForEdit.id,
+      );
+
+      if (updatedStaffData) {
+        // Check if the data has actually changed to avoid unnecessary updates
+        const hasChanges =
+          updatedStaffData.name !== selectedStaffForEdit.name ||
+          updatedStaffData.status !== selectedStaffForEdit.status ||
+          updatedStaffData.position !== selectedStaffForEdit.position ||
+          JSON.stringify(updatedStaffData.startPeriod) !==
+            JSON.stringify(selectedStaffForEdit.startPeriod) ||
+          JSON.stringify(updatedStaffData.endPeriod) !==
+            JSON.stringify(selectedStaffForEdit.endPeriod);
+
+        if (hasChanges) {
+          console.log(
+            "🔄 Modal: Syncing selectedStaffForEdit with updated staffMembers data",
+            {
+              oldData: {
+                name: selectedStaffForEdit.name,
+                status: selectedStaffForEdit.status,
+                startPeriod: selectedStaffForEdit.startPeriod,
+              },
+              newData: {
+                name: updatedStaffData.name,
+                status: updatedStaffData.status,
+                startPeriod: updatedStaffData.startPeriod,
+              },
+            },
+          );
+
+          // Update selectedStaffForEdit with latest data
+          setSelectedStaffForEdit(updatedStaffData);
+
+          // Also update the form state to reflect the changes
+          setEditingStaffData({
+            name: updatedStaffData.name,
+            position: updatedStaffData.position || "",
+            status: updatedStaffData.status || "社員",
+            startPeriod: updatedStaffData.startPeriod || null,
+            endPeriod: updatedStaffData.endPeriod || null,
+          });
+        }
+      }
+    }
+  }, [staffMembers, selectedStaffForEdit, setSelectedStaffForEdit, setEditingStaffData]);
 
   if (!showStaffEditModal) return null;
 
@@ -71,77 +121,105 @@ const StaffEditModal = ({
           console.log("✅ Modal: Database save completed");
 
           // Now refresh from database to ensure data consistency after staff creation
-          if (clearAndRefreshFromDatabase && typeof clearAndRefreshFromDatabase === 'function') {
-            console.log("📡 Modal: Starting database refresh after database save...");
+          if (
+            clearAndRefreshFromDatabase &&
+            typeof clearAndRefreshFromDatabase === "function"
+          ) {
+            console.log(
+              "📡 Modal: Starting database refresh after database save...",
+            );
             const refreshSuccess = await clearAndRefreshFromDatabase();
             if (refreshSuccess) {
               console.log("✅ Modal: Database refresh completed successfully");
             } else {
-              console.log("⚠️ Modal: Database refresh failed, but local data updated");
+              console.log(
+                "⚠️ Modal: Database refresh failed, but local data updated",
+              );
             }
           }
         } catch (error) {
           console.error("❌ Modal: Database save failed:", error);
           // Even if database save fails, still try refresh in case there's partial data
-          if (clearAndRefreshFromDatabase && typeof clearAndRefreshFromDatabase === 'function') {
-            console.log("📡 Modal: Attempting database refresh despite save failure...");
+          if (
+            clearAndRefreshFromDatabase &&
+            typeof clearAndRefreshFromDatabase === "function"
+          ) {
+            console.log(
+              "📡 Modal: Attempting database refresh despite save failure...",
+            );
             await clearAndRefreshFromDatabase();
           }
         }
       });
     } else if (selectedStaffForEdit) {
-      updateStaff(selectedStaffForEdit.id, safeEditingStaffData, async (newStaff) => {
-        setStaffMembersByMonth((prev) => ({
-          ...prev,
-          [currentMonthIndex]: newStaff,
-        }));
+      updateStaff(
+        selectedStaffForEdit.id,
+        safeEditingStaffData,
+        async (newStaff) => {
+          setStaffMembersByMonth((prev) => ({
+            ...prev,
+            [currentMonthIndex]: newStaff,
+          }));
 
-        // Update the modal's form state to reflect the successful update
-        const updatedStaff = newStaff.find(
-          (staff) => staff.id === selectedStaffForEdit.id,
-        );
-        if (updatedStaff) {
-          console.log(
-            "🔄 Modal: Updating form state with new staff data",
-            updatedStaff,
+          // Update the modal's form state to reflect the successful update
+          const updatedStaff = newStaff.find(
+            (staff) => staff.id === selectedStaffForEdit.id,
           );
-          setEditingStaffData({
-            name: updatedStaff.name,
-            position: updatedStaff.position || "",
-            status: updatedStaff.status || "社員",
-            startPeriod: updatedStaff.startPeriod || null,
-            endPeriod: updatedStaff.endPeriod || null,
-          });
+          if (updatedStaff) {
+            console.log(
+              "🔄 Modal: Updating form state with new staff data",
+              updatedStaff,
+            );
+            setEditingStaffData({
+              name: updatedStaff.name,
+              position: updatedStaff.position || "",
+              status: updatedStaff.status || "社員",
+              startPeriod: updatedStaff.startPeriod || null,
+              endPeriod: updatedStaff.endPeriod || null,
+            });
 
-          // Also update the selectedStaffForEdit to ensure consistency
-          setSelectedStaffForEdit(updatedStaff);
-        }
+            // Also update the selectedStaffForEdit to ensure consistency
+            setSelectedStaffForEdit(updatedStaff);
+          }
 
-        // 🔧 FIX: Save to database FIRST, then refresh
-        try {
-          console.log("💾 Modal: Saving to database before refresh...");
-          await scheduleAutoSave(schedule, newStaff);
-          console.log("✅ Modal: Database save completed");
+          // 🔧 FIX: Save to database FIRST, then refresh
+          try {
+            console.log("💾 Modal: Saving to database before refresh...");
+            await scheduleAutoSave(schedule, newStaff);
+            console.log("✅ Modal: Database save completed");
 
-          // Now refresh from database to ensure data consistency
-          if (clearAndRefreshFromDatabase && typeof clearAndRefreshFromDatabase === 'function') {
-            console.log("📡 Modal: Starting database refresh after database save...");
-            const refreshSuccess = await clearAndRefreshFromDatabase();
-            if (refreshSuccess) {
-              console.log("✅ Modal: Database refresh completed successfully");
-            } else {
-              console.log("⚠️ Modal: Database refresh failed, but local data updated");
+            // Now refresh from database to ensure data consistency
+            if (
+              clearAndRefreshFromDatabase &&
+              typeof clearAndRefreshFromDatabase === "function"
+            ) {
+              console.log(
+                "📡 Modal: Starting database refresh after database save...",
+              );
+              const refreshSuccess = await clearAndRefreshFromDatabase();
+              if (refreshSuccess) {
+                console.log("✅ Modal: Database refresh completed successfully");
+              } else {
+                console.log(
+                  "⚠️ Modal: Database refresh failed, but local data updated",
+                );
+              }
+            }
+          } catch (error) {
+            console.error("❌ Modal: Database save failed:", error);
+            // Even if database save fails, still try refresh in case there's partial data
+            if (
+              clearAndRefreshFromDatabase &&
+              typeof clearAndRefreshFromDatabase === "function"
+            ) {
+              console.log(
+                "📡 Modal: Attempting database refresh despite save failure...",
+              );
+              await clearAndRefreshFromDatabase();
             }
           }
-        } catch (error) {
-          console.error("❌ Modal: Database save failed:", error);
-          // Even if database save fails, still try refresh in case there's partial data
-          if (clearAndRefreshFromDatabase && typeof clearAndRefreshFromDatabase === 'function') {
-            console.log("📡 Modal: Attempting database refresh despite save failure...");
-            await clearAndRefreshFromDatabase();
-          }
-        }
-      });
+        },
+      );
     }
   };
 
@@ -170,9 +248,14 @@ const StaffEditModal = ({
   };
 
   const handleStaffSelect = (staff) => {
-    // Find the most current staff data from the staffMembers array
-    // The parent hook should already ensure this data is up-to-date
-    const currentStaffData = staffMembers.find((s) => s.id === staff.id) || staff;
+    // ALWAYS use the most current staff data from the staffMembers array
+    // This ensures we get the latest data even after database refresh
+    const currentStaffData = staffMembers.find((s) => s.id === staff.id);
+    
+    if (!currentStaffData) {
+      console.warn("⚠️ Modal: Staff not found in current staffMembers array", staff.id);
+      return;
+    }
 
     console.log("📋 Modal: Staff selected", {
       id: currentStaffData.id,
