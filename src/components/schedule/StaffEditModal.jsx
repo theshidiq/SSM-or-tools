@@ -1,4 +1,4 @@
-import React, { useEffect } from "react";
+import React, { useEffect, useRef } from "react";
 import { X } from "lucide-react";
 import { isDateWithinWorkPeriod } from "../../utils/dateUtils";
 
@@ -24,6 +24,25 @@ const StaffEditModal = ({
   clearAndRefreshFromDatabase,
   isRefreshingFromDatabase,
 }) => {
+  // Track if user is actively editing to prevent overwriting their changes
+  const [isUserEditing, setIsUserEditing] = React.useState(false);
+  
+  // Ref for the name input field to enable auto-focus
+  const nameInputRef = useRef(null);
+
+  // Reset editing flag when modal closes and focus name input when modal opens
+  useEffect(() => {
+    if (!showStaffEditModal) {
+      setIsUserEditing(false);
+    } else {
+      // Focus the name input when modal opens
+      setTimeout(() => {
+        if (nameInputRef.current) {
+          nameInputRef.current.focus();
+        }
+      }, 100); // Small delay to ensure modal is fully rendered
+    }
+  }, [showStaffEditModal]);
   // Set default year values for new staff when modal opens
   useEffect(() => {
     if (!showStaffEditModal || !editingStaffData) {
@@ -45,7 +64,13 @@ const StaffEditModal = ({
   }, [showStaffEditModal, selectedStaffForEdit]);
 
   // Sync selectedStaffForEdit with latest staffMembers data when staffMembers updates
+  // BUT only when user is not actively editing to prevent overwriting their changes
   useEffect(() => {
+    // Skip sync if user is actively editing the form
+    if (isUserEditing) {
+      return;
+    }
+
     if (selectedStaffForEdit && staffMembers && staffMembers.length > 0) {
       // Find the updated staff data from the current staffMembers array
       const updatedStaffData = staffMembers.find(
@@ -64,39 +89,35 @@ const StaffEditModal = ({
             JSON.stringify(selectedStaffForEdit.endPeriod);
 
         if (hasChanges) {
-          console.log(
-            "🔄 Modal: Syncing selectedStaffForEdit with updated staffMembers data",
-            {
-              oldData: {
-                name: selectedStaffForEdit.name,
-                status: selectedStaffForEdit.status,
-                startPeriod: selectedStaffForEdit.startPeriod,
-              },
-              newData: {
-                name: updatedStaffData.name,
-                status: updatedStaffData.status,
-                startPeriod: updatedStaffData.startPeriod,
-              },
-            },
-          );
 
           // Update selectedStaffForEdit with latest data
           setSelectedStaffForEdit(updatedStaffData);
 
-          // Also update the form state to reflect the changes
-          setEditingStaffData({
+          // Immediately update the form state to reflect the changes
+          const newEditingData = {
             name: updatedStaffData.name,
             position: updatedStaffData.position || "",
             status: updatedStaffData.status || "社員",
             startPeriod: updatedStaffData.startPeriod || null,
             endPeriod: updatedStaffData.endPeriod || null,
-          });
+          };
+          
+          setEditingStaffData(newEditingData);
         }
       }
     }
-  }, [staffMembers, selectedStaffForEdit, setSelectedStaffForEdit, setEditingStaffData]);
+  }, [staffMembers, selectedStaffForEdit, setSelectedStaffForEdit, setEditingStaffData, isUserEditing]);
 
-  if (!showStaffEditModal) return null;
+  // Helper function to update editing data and mark user as actively editing
+  const updateEditingStaffData = (updateFn) => {
+    setIsUserEditing(true);
+    setEditingStaffData(updateFn);
+    
+    // Clear the editing flag after a short delay to allow for multiple rapid changes
+    setTimeout(() => {
+      setIsUserEditing(false);
+    }, 2000); // 2 seconds after last change
+  };
 
   // Provide default values for editingStaffData to prevent crashes
   const safeEditingStaffData = editingStaffData || {
@@ -107,48 +128,28 @@ const StaffEditModal = ({
     endPeriod: null,
   };
 
+  // Create a stable key for the form that only changes when switching staff or modes
+  // This prevents unnecessary re-renders while typing
+  const formKey = `${selectedStaffForEdit?.id || 'new'}-${isAddingNewStaff ? 'add' : 'edit'}`;
+  
+
+  if (!showStaffEditModal) return null;
+
   const handleSubmit = (e) => {
     if (e && e.preventDefault) {
       e.preventDefault();
     }
 
+    // Clear editing flag since user is submitting
+    setIsUserEditing(false);
+
     if (isAddingNewStaff) {
       handleCreateStaff(safeEditingStaffData, async () => {
-        // 🔧 FIX: Save to database FIRST, then refresh
+        // Save to database
         try {
-          console.log("💾 Modal: Saving to database after staff creation...");
           await scheduleAutoSave(schedule, staffMembers);
-          console.log("✅ Modal: Database save completed");
-
-          // Now refresh from database to ensure data consistency after staff creation
-          if (
-            clearAndRefreshFromDatabase &&
-            typeof clearAndRefreshFromDatabase === "function"
-          ) {
-            console.log(
-              "📡 Modal: Starting database refresh after database save...",
-            );
-            const refreshSuccess = await clearAndRefreshFromDatabase();
-            if (refreshSuccess) {
-              console.log("✅ Modal: Database refresh completed successfully");
-            } else {
-              console.log(
-                "⚠️ Modal: Database refresh failed, but local data updated",
-              );
-            }
-          }
         } catch (error) {
           console.error("❌ Modal: Database save failed:", error);
-          // Even if database save fails, still try refresh in case there's partial data
-          if (
-            clearAndRefreshFromDatabase &&
-            typeof clearAndRefreshFromDatabase === "function"
-          ) {
-            console.log(
-              "📡 Modal: Attempting database refresh despite save failure...",
-            );
-            await clearAndRefreshFromDatabase();
-          }
         }
       });
     } else if (selectedStaffForEdit) {
@@ -166,57 +167,27 @@ const StaffEditModal = ({
             (staff) => staff.id === selectedStaffForEdit.id,
           );
           if (updatedStaff) {
-            console.log(
-              "🔄 Modal: Updating form state with new staff data",
-              updatedStaff,
-            );
-            setEditingStaffData({
+            
+            // Create new editing data object
+            const newEditingData = {
               name: updatedStaff.name,
               position: updatedStaff.position || "",
               status: updatedStaff.status || "社員",
               startPeriod: updatedStaff.startPeriod || null,
               endPeriod: updatedStaff.endPeriod || null,
-            });
+            };
 
-            // Also update the selectedStaffForEdit to ensure consistency
+            // Update both selected staff and editing data immediately
             setSelectedStaffForEdit(updatedStaff);
+            setEditingStaffData(newEditingData);
+            
           }
 
-          // 🔧 FIX: Save to database FIRST, then refresh
+          // Save to database
           try {
-            console.log("💾 Modal: Saving to database before refresh...");
             await scheduleAutoSave(schedule, newStaff);
-            console.log("✅ Modal: Database save completed");
-
-            // Now refresh from database to ensure data consistency
-            if (
-              clearAndRefreshFromDatabase &&
-              typeof clearAndRefreshFromDatabase === "function"
-            ) {
-              console.log(
-                "📡 Modal: Starting database refresh after database save...",
-              );
-              const refreshSuccess = await clearAndRefreshFromDatabase();
-              if (refreshSuccess) {
-                console.log("✅ Modal: Database refresh completed successfully");
-              } else {
-                console.log(
-                  "⚠️ Modal: Database refresh failed, but local data updated",
-                );
-              }
-            }
           } catch (error) {
             console.error("❌ Modal: Database save failed:", error);
-            // Even if database save fails, still try refresh in case there's partial data
-            if (
-              clearAndRefreshFromDatabase &&
-              typeof clearAndRefreshFromDatabase === "function"
-            ) {
-              console.log(
-                "📡 Modal: Attempting database refresh despite save failure...",
-              );
-              await clearAndRefreshFromDatabase();
-            }
           }
         },
       );
@@ -248,22 +219,17 @@ const StaffEditModal = ({
   };
 
   const handleStaffSelect = (staff) => {
+    // Clear editing flag when selecting different staff
+    setIsUserEditing(false);
+    
     // ALWAYS use the most current staff data from the staffMembers array
     // This ensures we get the latest data even after database refresh
     const currentStaffData = staffMembers.find((s) => s.id === staff.id);
     
     if (!currentStaffData) {
-      console.warn("⚠️ Modal: Staff not found in current staffMembers array", staff.id);
       return;
     }
 
-    console.log("📋 Modal: Staff selected", {
-      id: currentStaffData.id,
-      name: currentStaffData.name,
-      status: currentStaffData.status,
-      position: currentStaffData.position,
-      startPeriod: currentStaffData.startPeriod,
-    });
 
     setSelectedStaffForEdit(currentStaffData);
     const newEditingData = {
@@ -274,12 +240,20 @@ const StaffEditModal = ({
       endPeriod: currentStaffData.endPeriod || null,
     };
 
-    console.log("📝 Modal: Setting editing data", newEditingData);
     setEditingStaffData(newEditingData);
     setIsAddingNewStaff(false);
+    
+    // Focus the name input after selecting staff
+    setTimeout(() => {
+      if (nameInputRef.current) {
+        nameInputRef.current.focus();
+      }
+    }, 50);
   };
 
   const startAddingNew = () => {
+    // Clear editing flag when starting new staff creation
+    setIsUserEditing(false);
     setIsAddingNewStaff(true);
     setSelectedStaffForEdit(null);
     setEditingStaffData({
@@ -289,6 +263,13 @@ const StaffEditModal = ({
       startPeriod: null,
       endPeriod: null,
     });
+    
+    // Focus the name input when adding new staff
+    setTimeout(() => {
+      if (nameInputRef.current) {
+        nameInputRef.current.focus();
+      }
+    }, 50);
   };
 
   return (
@@ -297,6 +278,7 @@ const StaffEditModal = ({
       onClick={(e) => {
         if (e.target === e.currentTarget) {
           // Only close if clicking the overlay itself, not its children
+          setIsUserEditing(false);
           setShowStaffEditModal(false);
           setSelectedStaffForEdit(null);
           setIsAddingNewStaff(false);
@@ -324,6 +306,7 @@ const StaffEditModal = ({
           <h2 className="text-xl font-bold text-gray-800">スタッフ管理</h2>
           <button
             onClick={() => {
+              setIsUserEditing(false);
               setShowStaffEditModal(false);
               setSelectedStaffForEdit(null);
               setIsAddingNewStaff(false);
@@ -401,17 +384,22 @@ const StaffEditModal = ({
             </h3>
 
             {(isAddingNewStaff || selectedStaffForEdit) && (
-              <form onSubmit={handleSubmit} className="space-y-4">
+              <form 
+                key={formKey} 
+                onSubmit={handleSubmit} 
+                className="space-y-4"
+              >
                 {/* Name Field */}
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
                     名前 <span className="text-red-500">*</span>
                   </label>
                   <input
+                    ref={nameInputRef}
                     type="text"
                     value={safeEditingStaffData.name}
                     onChange={(e) =>
-                      setEditingStaffData((prev) => ({
+                      updateEditingStaffData((prev) => ({
                         ...prev,
                         name: e.target.value,
                       }))
@@ -431,7 +419,7 @@ const StaffEditModal = ({
                     type="text"
                     value={safeEditingStaffData.position}
                     onChange={(e) =>
-                      setEditingStaffData((prev) => ({
+                      updateEditingStaffData((prev) => ({
                         ...prev,
                         position: e.target.value,
                       }))
@@ -454,7 +442,7 @@ const StaffEditModal = ({
                         value="社員"
                         checked={safeEditingStaffData.status === "社員"}
                         onChange={(e) =>
-                          setEditingStaffData((prev) => ({
+                          updateEditingStaffData((prev) => ({
                             ...prev,
                             status: e.target.value,
                           }))
@@ -472,7 +460,7 @@ const StaffEditModal = ({
                         checked={safeEditingStaffData.status === "派遣"}
                         onChange={(e) => {
                           const currentYear = new Date().getFullYear();
-                          setEditingStaffData((prev) => ({
+                          updateEditingStaffData((prev) => ({
                             ...prev,
                             status: e.target.value,
                             // If 派遣 is selected, set both periods to current year
@@ -499,7 +487,7 @@ const StaffEditModal = ({
                         checked={safeEditingStaffData.status === "パート"}
                         onChange={(e) => {
                           const currentYear = new Date().getFullYear();
-                          setEditingStaffData((prev) => ({
+                          updateEditingStaffData((prev) => ({
                             ...prev,
                             status: e.target.value,
                             // If パート is selected, set both periods to current year
@@ -530,7 +518,7 @@ const StaffEditModal = ({
                     <select
                       value={safeEditingStaffData.startPeriod?.year || ""}
                       onChange={(e) =>
-                        setEditingStaffData((prev) => ({
+                        updateEditingStaffData((prev) => ({
                           ...prev,
                           startPeriod: {
                             ...prev.startPeriod,
@@ -556,7 +544,7 @@ const StaffEditModal = ({
                     <select
                       value={safeEditingStaffData.startPeriod?.month || ""}
                       onChange={(e) =>
-                        setEditingStaffData((prev) => ({
+                        updateEditingStaffData((prev) => ({
                           ...prev,
                           startPeriod: {
                             ...prev.startPeriod,
@@ -578,7 +566,7 @@ const StaffEditModal = ({
                     <select
                       value={safeEditingStaffData.startPeriod?.day || ""}
                       onChange={(e) =>
-                        setEditingStaffData((prev) => ({
+                        updateEditingStaffData((prev) => ({
                           ...prev,
                           startPeriod: {
                             ...prev.startPeriod,
@@ -609,7 +597,7 @@ const StaffEditModal = ({
                     <select
                       value={safeEditingStaffData.endPeriod?.year || ""}
                       onChange={(e) =>
-                        setEditingStaffData((prev) => ({
+                        updateEditingStaffData((prev) => ({
                           ...prev,
                           endPeriod: e.target.value
                             ? {
@@ -634,7 +622,7 @@ const StaffEditModal = ({
                     <select
                       value={safeEditingStaffData.endPeriod?.month || ""}
                       onChange={(e) =>
-                        setEditingStaffData((prev) => ({
+                        updateEditingStaffData((prev) => ({
                           ...prev,
                           endPeriod:
                             prev.endPeriod || e.target.value
@@ -659,7 +647,7 @@ const StaffEditModal = ({
                     <select
                       value={safeEditingStaffData.endPeriod?.day || ""}
                       onChange={(e) =>
-                        setEditingStaffData((prev) => ({
+                        updateEditingStaffData((prev) => ({
                           ...prev,
                           endPeriod:
                             prev.endPeriod || e.target.value
@@ -689,6 +677,7 @@ const StaffEditModal = ({
                   <button
                     type="button"
                     onClick={() => {
+                      setIsUserEditing(false);
                       setSelectedStaffForEdit(null);
                       setIsAddingNewStaff(false);
                     }}

@@ -1,8 +1,8 @@
 import { addDays, format } from "date-fns";
 
-// Month periods configuration (21st to 20th of next month)
+// Default month periods configuration (21st to 20th of next month)
 // Using UTC dates to ensure consistent ISO string representation
-export const monthPeriods = [
+const defaultMonthPeriods = [
   {
     start: new Date(Date.UTC(2025, 0, 21)),
     end: new Date(Date.UTC(2025, 1, 20)),
@@ -34,6 +34,46 @@ export const monthPeriods = [
     label: "6月・7月",
   }, // Jun-Jul
 ];
+
+// Storage key for persisting periods
+const PERIODS_STORAGE_KEY = "shift_manager_periods";
+
+// Function to save periods to localStorage
+const savePeriods = (periods) => {
+  try {
+    const serializedPeriods = periods.map(period => ({
+      start: period.start.toISOString(),
+      end: period.end.toISOString(),
+      label: period.label,
+    }));
+    localStorage.setItem(PERIODS_STORAGE_KEY, JSON.stringify(serializedPeriods));
+  } catch (error) {
+    console.warn("Failed to save periods to localStorage:", error);
+  }
+};
+
+// Function to load periods from localStorage
+const loadPeriods = () => {
+  try {
+    const stored = localStorage.getItem(PERIODS_STORAGE_KEY);
+    if (!stored) {
+      return [...defaultMonthPeriods];
+    }
+    
+    const serializedPeriods = JSON.parse(stored);
+    return serializedPeriods.map(period => ({
+      start: new Date(period.start),
+      end: new Date(period.end),
+      label: period.label,
+    }));
+  } catch (error) {
+    console.warn("Failed to load periods from localStorage:", error);
+    return [...defaultMonthPeriods];
+  }
+};
+
+// Initialize periods from localStorage or defaults
+export let monthPeriods = loadPeriods();
 
 // Function to add next period
 export const addNextPeriod = () => {
@@ -97,6 +137,11 @@ export const addNextPeriod = () => {
   };
 
   monthPeriods.push(newPeriod);
+  
+  // Save updated periods to localStorage
+  savePeriods(monthPeriods);
+  
+  console.log(`✅ Added new period: ${newPeriod.label} (saved to localStorage)`);
   return monthPeriods.length - 1; // Return the new period index
 };
 
@@ -169,6 +214,45 @@ export const isDateWithinWorkPeriod = (date, staff) => {
   }
 
   return true; // Within work period
+};
+
+// Function to get the current month index based on today's date
+export const getCurrentMonthIndex = () => {
+  const today = new Date();
+  const todayUTC = new Date(Date.UTC(today.getFullYear(), today.getMonth(), today.getDate()));
+  
+  // Find the period that contains today's date
+  for (let i = 0; i < monthPeriods.length; i++) {
+    const period = monthPeriods[i];
+    if (todayUTC >= period.start && todayUTC <= period.end) {
+      console.log(`📅 Current date (${todayUTC.toISOString().split('T')[0]}) falls in period ${i}: ${period.label}`);
+      return i;
+    }
+  }
+  
+  // If today's date doesn't fall in any existing period, check if it's before the first period
+  if (todayUTC < monthPeriods[0].start) {
+    console.log(`📅 Current date is before all periods, defaulting to first period: ${monthPeriods[0].label}`);
+    return 0;
+  }
+  
+  // If today's date is after all periods, return the last period
+  console.log(`📅 Current date is after all periods, defaulting to last period: ${monthPeriods[monthPeriods.length - 1].label}`);
+  return monthPeriods.length - 1;
+};
+
+// Function to reset periods to defaults (useful for testing or admin functions)
+export const resetPeriodsToDefault = () => {
+  try {
+    localStorage.removeItem(PERIODS_STORAGE_KEY);
+    monthPeriods.length = 0; // Clear existing array
+    monthPeriods.push(...defaultMonthPeriods); // Add default periods
+    console.log("✅ Periods reset to default");
+    return true;
+  } catch (error) {
+    console.error("Failed to reset periods:", error);
+    return false;
+  }
 };
 
 // Dynamic dropdown positioning logic

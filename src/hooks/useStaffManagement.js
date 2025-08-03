@@ -76,13 +76,6 @@ export const useStaffManagement = (
     // Skip effect if we're in a cooldown period after recent updates
     const now = Date.now();
     if (now < skipEffectUntil) {
-      console.log(
-        "⏭️ Skipping useEffect - in cooldown period after recent update",
-        {
-          cooldownUntil: new Date(skipEffectUntil).toISOString(),
-          currentMonthIndex,
-        },
-      );
       return;
     }
 
@@ -95,15 +88,6 @@ export const useStaffManagement = (
       const isRecentUpdate = timeSinceLastUpdate < 60000; // 60 seconds
 
       if (isRecentUpdate && persistentLastUpdate > 0) {
-        console.log(
-          "⏭️ Skipping useEffect - staff already loaded and recent update detected",
-          {
-            timeSinceLastUpdate: Math.round(timeSinceLastUpdate / 1000) + "s",
-            lastUpdateTime: new Date(persistentLastUpdate).toISOString(),
-            currentMonthIndex,
-            currentStaffCount: staffMembers.length,
-          },
-        );
         return; // Exit early to prevent overwriting current state
       }
     }
@@ -114,15 +98,6 @@ export const useStaffManagement = (
     const skipInheritance = timeSinceLastUpdate < 60000; // Increased to 60 seconds for better safety
 
     if (skipInheritance && persistentLastUpdate > 0 && hasInitiallyLoaded) {
-      console.log(
-        "⏭️ Skipping inheritance logic - recent update detected from localStorage",
-        {
-          timeSinceLastUpdate: Math.round(timeSinceLastUpdate / 1000) + "s",
-          lastUpdateTime: new Date(persistentLastUpdate).toISOString(),
-          currentMonthIndex,
-        },
-      );
-
       // Only load from storage if we don't already have current staff data
       if (staffMembers.length === 0) {
         const currentStaff = optimizedStorage.getStaffData(currentMonthIndex);
@@ -151,9 +126,6 @@ export const useStaffManagement = (
         );
 
         if (hasRecentlyModifiedStaff && hasInitiallyLoaded) {
-          console.log(
-            "⏭️ Skipping inheritance - found recently modified staff in localStorage",
-          );
           setStaffMembers(localStaff);
           setHasLoadedFromDb(true);
           setHasInitiallyLoaded(true);
@@ -194,22 +166,6 @@ export const useStaffManagement = (
                     staff.name === "高野" &&
                     process.env.NODE_ENV === "development"
                   ) {
-                    console.log(
-                      `🔍 Checking 高野 for period ${currentMonthIndex}:`,
-                      {
-                        isActive,
-                        startPeriod: staff.startPeriod,
-                        endPeriod: staff.endPeriod,
-                        currentDateRange: {
-                          start: currentDateRange[0]
-                            ?.toISOString?.()
-                            ?.split("T")[0],
-                          end: currentDateRange[currentDateRange.length - 1]
-                            ?.toISOString?.()
-                            ?.split("T")[0],
-                        },
-                      },
-                    );
                   }
 
                   return isActive;
@@ -223,12 +179,6 @@ export const useStaffManagement = (
                   if (!existingStaff) {
                     inheritedStaff.push(staff);
                     hasInheritedNewStaff = true;
-
-                    if (process.env.NODE_ENV === "development") {
-                      console.log(
-                        `➕ Inherited missing staff ${staff.name} to period ${currentMonthIndex}`,
-                      );
-                    }
                   } else {
                     // Staff exists - be very conservative about overwriting current data
                     // Priority: current period > later periods > earlier periods
@@ -259,41 +209,7 @@ export const useStaffManagement = (
                       if (staffIndex !== -1) {
                         inheritedStaff[staffIndex] = inheritedStaffData;
                         hasInheritedNewStaff = true;
-                        if (process.env.NODE_ENV === "development") {
-                          console.log(
-                            `🔄 Updated existing staff ${inheritedStaffData.name} with significantly newer data from period ${i}`,
-                            {
-                              currentLastModified: new Date(
-                                currentStaff.lastModified,
-                              ).toISOString(),
-                              inheritedLastModified: new Date(
-                                inheritedStaffData.lastModified,
-                              ).toISOString(),
-                              ageDifferenceMinutes: Math.round(
-                                (inheritedStaffData.lastModified -
-                                  currentStaff.lastModified) /
-                                  60000,
-                              ),
-                            },
-                          );
-                        }
                       }
-                    } else if (process.env.NODE_ENV === "development") {
-                      console.log(
-                        `⏭️ Skipping inheritance for ${inheritedStaffData.name} - current data is recent or inherited data is not significantly newer`,
-                        {
-                          currentIsRecent,
-                          inheritedIsSignificantlyNewer,
-                          currentLastModified: currentStaff.lastModified
-                            ? new Date(currentStaff.lastModified).toISOString()
-                            : "none",
-                          inheritedLastModified: inheritedStaffData.lastModified
-                            ? new Date(
-                                inheritedStaffData.lastModified,
-                              ).toISOString()
-                            : "none",
-                        },
-                      );
                     }
                   }
                 });
@@ -346,12 +262,6 @@ export const useStaffManagement = (
                   if (shouldBeActiveInCurrentPeriod && !alreadyExists) {
                     inheritedStaff.push(staff);
                     hasBackfilledStaff = true;
-
-                    if (process.env.NODE_ENV === "development") {
-                      console.log(
-                        `⬅️ Backfilled ${staff.name} from later period ${i} to current period ${currentMonthIndex}`,
-                      );
-                    }
                   }
                 });
               }
@@ -371,18 +281,6 @@ export const useStaffManagement = (
           }
         }
 
-        if (process.env.NODE_ENV === "development") {
-          console.log(
-            "✅ Loaded staff from optimized storage:",
-            inheritedStaff.length,
-            "members",
-            hasInheritedNewStaff ? "(with inherited staff)" : "",
-          );
-          console.log(
-            "Staff members:",
-            inheritedStaff.map((s) => s.name),
-          );
-        }
         return;
       }
     } catch (error) {
@@ -448,19 +346,8 @@ export const useStaffManagement = (
         setHasLoadedFromDb(true);
         setHasInitiallyLoaded(true);
 
-        if (process.env.NODE_ENV === "development") {
-          console.log(
-            `📋 Inherited ${inheritedStaff.length} active staff members for period ${currentMonthIndex}:`,
-            inheritedStaff.map((s) => s.name),
-          );
-        }
         return;
       } else {
-        if (process.env.NODE_ENV === "development") {
-          console.log(
-            `📋 No staff inherited for period ${currentMonthIndex} - continuing to database fallback`,
-          );
-        }
       }
     } catch (error) {
       console.warn("Error checking inherited staff:", error);
@@ -498,15 +385,6 @@ export const useStaffManagement = (
           optimizedStorage.saveStaffData(currentMonthIndex, extractedStaff);
         } else {
           // No staff data found anywhere, use defaults
-          console.log(
-            "🔄 Loading default staff from constants:",
-            defaultStaffMembersArray.length,
-            "members",
-          );
-          console.log(
-            "Default staff names:",
-            defaultStaffMembersArray.map((s) => s.name),
-          );
           setStaffMembers(defaultStaffMembersArray);
           optimizedStorage.saveStaffData(
             currentMonthIndex,
@@ -519,15 +397,6 @@ export const useStaffManagement = (
     } else if (supabaseScheduleData === null) {
       // Database is explicitly null (no connection or empty)
       // Force use default staff data to override any cached data
-      console.log(
-        "🔄 Database is null, forcing default staff data:",
-        defaultStaffMembersArray.length,
-        "members",
-      );
-      console.log(
-        "Default staff names:",
-        defaultStaffMembersArray.map((s) => s.name),
-      );
       setStaffMembers(defaultStaffMembersArray);
       optimizedStorage.saveStaffData(
         currentMonthIndex,
@@ -580,12 +449,6 @@ export const useStaffManagement = (
               if (!periodStaff.find((staff) => staff.id === newStaff.id)) {
                 const updatedPeriodStaff = [...periodStaff, newStaff];
                 optimizedStorage.saveStaffData(i, updatedPeriodStaff);
-
-                if (process.env.NODE_ENV === "development") {
-                  console.log(
-                    `🔄 Backfilled staff ${newStaff.name} to earlier period ${i}`,
-                  );
-                }
               }
             }
           }
@@ -594,11 +457,6 @@ export const useStaffManagement = (
         }
       }
 
-      if (process.env.NODE_ENV === "development") {
-        console.log(
-          `➕ Added staff member: ${newStaff.name} to period ${currentMonthIndex}`,
-        );
-      }
       if (onSuccess) onSuccess(updatedStaff);
     },
     [staffMembers, currentMonthIndex],
@@ -606,42 +464,16 @@ export const useStaffManagement = (
 
   const updateStaff = useCallback(
     (staffId, updatedData, onSuccess) => {
-      console.log("🔄 useStaffManagement: updateStaff called", {
-        staffId,
-        updatedData,
-        currentStaffMembers: staffMembers.map((s) => ({
-          id: s.id,
-          name: s.name,
-          status: s.status,
-        })),
-        currentMonthIndex,
-      });
-
-      console.log("🔍 useStaffManagement: Detailed update data:", {
-        staffId,
-        updatedData,
-        originalStaff: staffMembers.find((s) => s.id === staffId),
-      });
-
       const updatedStaff = staffMembers.map((staff) =>
         staff.id === staffId
           ? { ...staff, ...updatedData, lastModified: Date.now() }
           : staff,
       );
 
-      console.log(
-        "🔄 useStaffManagement: Setting new staff members",
-        updatedStaff.map((s) => ({ id: s.id, name: s.name, status: s.status })),
-      );
-
       setStaffMembers(updatedStaff);
 
       // Save to optimized storage for current period
       optimizedStorage.saveStaffData(currentMonthIndex, updatedStaff);
-      console.log(
-        "💾 useStaffManagement: Saved to optimized storage for period",
-        currentMonthIndex,
-      );
 
       // Verify the save was successful by directly checking localStorage
       // This bypasses memory cache to ensure data is actually persisted
@@ -657,24 +489,11 @@ export const useStaffManagement = (
       })();
 
       const verifiedStaff = verifyData?.find((s) => s.id === staffId);
-      console.log("🔍 useStaffManagement: Verification - saved staff data:", {
-        staffId,
-        savedStatus: verifiedStaff?.status,
-        savedName: verifiedStaff?.name,
-        verificationSource:
-          verifyData === optimizedStorage.getStaffData(currentMonthIndex)
-            ? "memory-cache"
-            : "localStorage-direct",
-      });
 
       // Also update this staff in all periods where they should be active
       // This prevents inheritance from overwriting the updated data
       const updatedStaffMember = updatedStaff.find((s) => s.id === staffId);
       if (updatedStaffMember) {
-        console.log(
-          "🔄 useStaffManagement: Syncing staff across all periods",
-          updatedStaffMember,
-        );
         try {
           for (let i = 0; i < 6; i++) {
             if (i === currentMonthIndex) continue; // Already saved above
@@ -691,9 +510,6 @@ export const useStaffManagement = (
                   lastModified: Date.now(),
                 };
                 optimizedStorage.saveStaffData(i, updatedPeriodStaff);
-                console.log(
-                  `💾 useStaffManagement: Updated staff in period ${i}`,
-                );
               }
             }
           }
@@ -701,14 +517,6 @@ export const useStaffManagement = (
           console.warn("Error updating staff across periods:", error);
         }
       }
-
-      if (process.env.NODE_ENV === "development") {
-        console.log(
-          `🔄 Updated staff member: ${staffId} in period ${currentMonthIndex} and synced to all periods`,
-        );
-      }
-
-      console.log("✅ useStaffManagement: Calling onSuccess callback");
 
       // Set the last update time to prevent inheritance from overriding
       const updateTime = Date.now();
@@ -740,12 +548,6 @@ export const useStaffManagement = (
       // Save to optimized storage
       optimizedStorage.saveStaffData(currentMonthIndex, newStaffMembers);
 
-      if (process.env.NODE_ENV === "development") {
-        console.log(
-          `🗑️ Deleted staff member: ${staffIdToDelete} from period ${currentMonthIndex}`,
-        );
-      }
-
       if (onSuccess) onSuccess(newStaffMembers);
 
       return { newStaffMembers, newSchedule };
@@ -762,12 +564,6 @@ export const useStaffManagement = (
 
       // Save to optimized storage
       optimizedStorage.saveStaffData(currentMonthIndex, updatedStaff);
-
-      if (process.env.NODE_ENV === "development") {
-        console.log(
-          `✏️ Edited staff name: ${staffId} -> ${newName} in period ${currentMonthIndex}`,
-        );
-      }
 
       if (onSuccess) onSuccess(updatedStaff);
     },
@@ -848,12 +644,6 @@ export const useStaffManagement = (
               if (!periodStaff.find((staff) => staff.id === newStaff.id)) {
                 const updatedPeriodStaff = [...periodStaff, newStaff];
                 optimizedStorage.saveStaffData(i, updatedPeriodStaff);
-
-                if (process.env.NODE_ENV === "development") {
-                  console.log(
-                    `🔄 Backfilled new staff ${newStaff.name} to earlier period ${i}`,
-                  );
-                }
               }
             }
           }
@@ -863,12 +653,6 @@ export const useStaffManagement = (
             error,
           );
         }
-      }
-
-      if (process.env.NODE_ENV === "development") {
-        console.log(
-          `🆕 Created new staff member: ${newStaff.name} in period ${currentMonthIndex}`,
-        );
       }
 
       // Close modal
@@ -979,24 +763,12 @@ export const useStaffManagement = (
     setIsRefreshingFromDatabase(true);
 
     try {
-      if (process.env.NODE_ENV === "development") {
-        console.log(
-          "🔄 Starting database refresh - clearing all staff data...",
-        );
-      }
-
       // Step 1: Clear staff data for ALL periods (schedule data stays intact)
       for (let i = 0; i < 6; i++) {
         optimizedStorage.clearStaffData(i);
-        if (process.env.NODE_ENV === "development") {
-          console.log(`🧹 Cleared staff data for period ${i}`);
-        }
       }
 
       // Step 2: Fetch fresh data from database
-      if (process.env.NODE_ENV === "development") {
-        console.log("📡 Fetching fresh data from database...");
-      }
 
       const freshData = await loadScheduleData();
 
@@ -1016,24 +788,12 @@ export const useStaffManagement = (
         // Step 4: Save fresh staff data to ALL periods for consistency
         for (let i = 0; i < 6; i++) {
           optimizedStorage.saveStaffData(i, migratedStaff);
-          if (process.env.NODE_ENV === "development") {
-            console.log(
-              `💾 Saved fresh staff data to period ${i}: ${migratedStaff.length} members`,
-            );
-          }
         }
 
         // Step 5: Update current state with fresh data
         setStaffMembers(migratedStaff);
         setHasLoadedFromDb(true);
         setHasInitiallyLoaded(true);
-
-        if (process.env.NODE_ENV === "development") {
-          console.log("✅ Database refresh completed successfully!", {
-            staffCount: migratedStaff.length,
-            staffNames: migratedStaff.map((s) => s.name),
-          });
-        }
 
         return true;
       } else {
@@ -1046,13 +806,6 @@ export const useStaffManagement = (
       const fallbackStaff = optimizedStorage.getStaffData(currentMonthIndex);
       if (fallbackStaff && fallbackStaff.length > 0) {
         setStaffMembers(fallbackStaff);
-        if (process.env.NODE_ENV === "development") {
-          console.log(
-            "🔄 Fallback: Restored from localStorage",
-            fallbackStaff.length,
-            "members",
-          );
-        }
       }
 
       return false;

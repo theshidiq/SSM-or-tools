@@ -5,23 +5,12 @@ import React, {
   useCallback,
   useRef,
 } from "react";
-import { format, addDays } from "date-fns";
-import { ja } from "date-fns/locale";
+// Removed unused imports: format, addDays, ja
 
 // Import extracted utilities and constants
 import { shiftSymbols, getAvailableShifts } from "../constants/shiftConstants";
-import {
-  monthPeriods,
-  getDropdownPosition,
-  getDateLabel,
-  isDateWithinWorkPeriod,
-  addNextPeriod,
-} from "../utils/dateUtils";
-import {
-  getOrderedStaffMembers,
-  migrateScheduleData,
-  migrateStaffMembers,
-} from "../utils/staffUtils";
+import { monthPeriods, addNextPeriod, getCurrentMonthIndex } from "../utils/dateUtils";
+import { getOrderedStaffMembers } from "../utils/staffUtils";
 import { generateStatistics } from "../utils/statisticsUtils";
 import { exportToCSV, printSchedule } from "../utils/exportUtils";
 
@@ -32,6 +21,7 @@ import ErrorDisplay from "./schedule/ErrorDisplay";
 import StatisticsDashboard from "./schedule/StatisticsDashboard";
 import NavigationToolbar from "./schedule/NavigationToolbar";
 import ScheduleTable from "./schedule/ScheduleTable";
+import StaffCardView from "./schedule/StaffCardView";
 import StaffEditModal from "./schedule/StaffEditModal";
 import StatusModal from "./common/StatusModal";
 
@@ -39,16 +29,22 @@ import StatusModal from "./common/StatusModal";
 
 const ShiftScheduleEditor = ({
   supabaseScheduleData,
-  isConnected,
   error: externalError,
   onSaveSchedule,
-  onDeleteSchedule,
   loadScheduleData,
 }) => {
-  // Main state
-  const [currentMonthIndex, setCurrentMonthIndex] = useState(0); // 0 = January-February (0-indexed)
+  // Main state - initialize with current month based on today's date
+  const [currentMonthIndex, setCurrentMonthIndex] = useState(() => {
+    try {
+      return getCurrentMonthIndex();
+    } catch (error) {
+      console.warn("Failed to get current month index, defaulting to 0:", error);
+      return 0;
+    }
+  });
   const [currentScheduleId, setCurrentScheduleId] = useState(null);
   const [error, setError] = useState(externalError);
+  const [viewMode, setViewMode] = useState("table"); // 'table' or 'card'
 
   // UI state
   const [showDropdown, setShowDropdown] = useState(null);
@@ -61,11 +57,9 @@ const ShiftScheduleEditor = ({
   const [showMonthPicker, setShowMonthPicker] = useState(false);
   const [editingColumn, setEditingColumn] = useState(null);
   const [editingSpecificColumn, setEditingSpecificColumn] = useState(null);
-  const [editingColumnName, setEditingColumnName] = useState("");
   const [editingNames, setEditingNames] = useState({});
   const [justEnteredEditMode, setJustEnteredEditMode] = useState(false);
   const [customText, setCustomText] = useState("");
-  const [exportFormat, setExportFormat] = useState("csv");
 
   // Modal states
   const [deleteModal, setDeleteModal] = useState({
@@ -75,22 +69,16 @@ const ShiftScheduleEditor = ({
     message: "",
   });
 
-  // Refs
-  const newColumnInputRef = useRef(null);
+  // Refs - removed unused newColumnInputRef
 
   // Custom hooks
   const {
     schedule,
-    schedulesByMonth,
-    staffMembersByMonth,
     dateRange,
-    setSchedulesByMonth,
     setStaffMembersByMonth,
     updateSchedule,
     updateShift,
     scheduleAutoSave,
-    setHasExplicitlyDeletedData,
-    syncLocalStorageToDatabase,
   } = useScheduleData(
     currentMonthIndex,
     supabaseScheduleData,
@@ -101,7 +89,6 @@ const ShiftScheduleEditor = ({
 
   const {
     staffMembers,
-    setStaffMembers,
     hasLoadedFromDb,
     isAddingNewStaff,
     setIsAddingNewStaff,
@@ -149,7 +136,7 @@ const ShiftScheduleEditor = ({
 
     const ordered = getOrderedStaffMembers(staffMembers, dateRange);
     return ordered;
-  }, [staffMembers, dateRange, isLoading, hasLoadedFromDb]);
+  }, [staffMembers, dateRange, isLoading]);
 
   // Check if we have any data at all (including localStorage as backup)
   const localStaffData = useMemo(() => {
@@ -219,7 +206,7 @@ const ShiftScheduleEditor = ({
         );
       }
     },
-    [currentMonthIndex, schedule, staffMembers, scheduleAutoSave],
+    [schedule, staffMembers, scheduleAutoSave],
   );
 
   const addNewColumn = () => {
@@ -241,7 +228,6 @@ const ShiftScheduleEditor = ({
   const exitEditMode = () => {
     setEditingColumn(null);
     setEditingSpecificColumn(null);
-    setEditingColumnName("");
   };
 
   const handleCreateStaff = (staffData) => {
@@ -288,6 +274,14 @@ const ShiftScheduleEditor = ({
       title: "Clear Schedule Data",
       message: `Are you sure you want to clear all schedule data (shift assignments) for ${periodLabel}? This will remove all shift entries but preserve staff configuration. This action cannot be undone.`,
     });
+  };
+
+  const handleViewModeChange = (newViewMode) => {
+    if (newViewMode === "table" || newViewMode === "card") {
+      setViewMode(newViewMode);
+    } else {
+      console.warn("Invalid view mode:", newViewMode);
+    }
   };
 
   const confirmDeletePeriod = async () => {
@@ -492,33 +486,43 @@ const ShiftScheduleEditor = ({
         handlePrint={handlePrint}
         handleAddTable={handleAddTable}
         handleDeletePeriod={handleDeletePeriod}
+        viewMode={viewMode}
+        onViewModeChange={handleViewModeChange}
       />
 
-      {/* Schedule Table */}
-      <ScheduleTable
-        orderedStaffMembers={orderedStaffMembers}
-        dateRange={dateRange}
-        schedule={schedule}
-        editingColumn={editingColumn}
-        editingSpecificColumn={editingSpecificColumn}
-        editingNames={editingNames}
-        setEditingNames={setEditingNames}
-        setEditingSpecificColumn={setEditingSpecificColumn}
-        showDropdown={showDropdown}
-        setShowDropdown={setShowDropdownDebug}
-        updateShift={updateShift}
-        customText={customText}
-        setCustomText={setCustomText}
-        editingCell={editingCell}
-        setEditingCell={setEditingCell}
-        deleteStaff={deleteStaff}
-        staffMembers={staffMembers}
-        updateSchedule={updateSchedule}
-        setStaffMembersByMonth={setStaffMembersByMonth}
-        currentMonthIndex={currentMonthIndex}
-        scheduleAutoSave={scheduleAutoSave}
-        editStaffName={editStaffName}
-      />
+      {/* Schedule View - Table or Card */}
+      {viewMode === "table" ? (
+        <ScheduleTable
+          orderedStaffMembers={orderedStaffMembers}
+          dateRange={dateRange}
+          schedule={schedule}
+          editingColumn={editingColumn}
+          editingSpecificColumn={editingSpecificColumn}
+          editingNames={editingNames}
+          setEditingNames={setEditingNames}
+          setEditingSpecificColumn={setEditingSpecificColumn}
+          showDropdown={showDropdown}
+          setShowDropdown={setShowDropdownDebug}
+          updateShift={updateShift}
+          customText={customText}
+          setCustomText={setCustomText}
+          editingCell={editingCell}
+          setEditingCell={setEditingCell}
+          deleteStaff={deleteStaff}
+          staffMembers={staffMembers}
+          updateSchedule={updateSchedule}
+          setStaffMembersByMonth={setStaffMembersByMonth}
+          currentMonthIndex={currentMonthIndex}
+          scheduleAutoSave={scheduleAutoSave}
+          editStaffName={editStaffName}
+        />
+      ) : (
+        <StaffCardView
+          orderedStaffMembers={orderedStaffMembers}
+          dateRange={dateRange}
+          schedule={schedule}
+        />
+      )}
 
       {/* ScheduleTable data debug removed */}
 
@@ -562,7 +566,6 @@ const ShiftScheduleEditor = ({
           const staffId = showDropdown.slice(0, -11); // Everything except the last 11 characters (-YYYY-MM-DD)
 
           const staff = orderedStaffMembers.find((s) => s.id === staffId);
-          const date = new Date(dateKey);
 
           if (!staff) {
             return null;

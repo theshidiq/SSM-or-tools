@@ -28,10 +28,6 @@ export const useSupabase = () => {
   // Clean up old schedule records (keep only the most recent ones)
   const cleanupOldSchedules = useCallback(async (keepCount = 3) => {
     try {
-      if (process.env.NODE_ENV === "development") {
-        console.log("🧹 Starting database cleanup...");
-      }
-
       // Get all schedules ordered by updated_at (newest first)
       const { data: allSchedules, error: fetchError } = await supabase
         .from("schedules")
@@ -56,16 +52,7 @@ export const useSupabase = () => {
 
           if (deleteError) throw deleteError;
         }
-
-        if (process.env.NODE_ENV === "development") {
-          console.log(
-            `✅ Successfully deleted ${idsToDelete.length} old records. Kept ${keepCount} most recent.`,
-          );
-        }
       } else {
-        if (process.env.NODE_ENV === "development") {
-          console.log("✅ No cleanup needed. Record count within limit.");
-        }
       }
     } catch (err) {
       console.error("❌ Database cleanup failed:", err);
@@ -76,10 +63,6 @@ export const useSupabase = () => {
   // One-time massive cleanup for existing bloated database
   const massiveCleanup = useCallback(async () => {
     try {
-      if (process.env.NODE_ENV === "development") {
-        console.log("💥 Starting MASSIVE database cleanup...");
-      }
-
       // Get count first
       const { data: allSchedules, error: fetchError } = await supabase
         .from("schedules")
@@ -108,12 +91,6 @@ export const useSupabase = () => {
             ((i + batch.length) / idsToDelete.length) * 100,
           );
         }
-
-        if (process.env.NODE_ENV === "development") {
-          console.log(
-            `🎉 MASSIVE CLEANUP COMPLETE! Deleted ${idsToDelete.length} records. Database is now lean!`,
-          );
-        }
       }
     } catch (err) {
       console.error("❌ Massive cleanup failed:", err);
@@ -128,8 +105,8 @@ export const useSupabase = () => {
       setError(null);
 
       try {
-        // Always run cleanup before saving to keep database lean
-        await cleanupOldSchedules(3); // Keep only 3 most recent records
+        // Skip cleanup during save to avoid interference
+        // await cleanupOldSchedules(3);
 
         if (scheduleId) {
           // Update existing schedule
@@ -143,6 +120,7 @@ export const useSupabase = () => {
             .select();
 
           if (error) throw error;
+
           setScheduleData(updatedData[0]);
           return updatedData[0];
         } else {
@@ -159,6 +137,7 @@ export const useSupabase = () => {
             .select();
 
           if (error) throw error;
+
           setScheduleData(newData[0]);
           return newData[0];
         }
@@ -234,10 +213,6 @@ export const useSupabase = () => {
           filter: scheduleId ? `id=eq.${scheduleId}` : undefined,
         },
         (payload) => {
-          if (process.env.NODE_ENV === "development") {
-            console.log("Schedule update received:", payload);
-          }
-
           if (
             payload.eventType === "UPDATE" ||
             payload.eventType === "INSERT"

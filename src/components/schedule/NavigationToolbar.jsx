@@ -18,7 +18,8 @@ import {
   Sparkles,
   TableProperties,
   X,
-  Delete,
+  Grid,
+  Eye,
 } from "lucide-react";
 import { monthPeriods } from "../../utils/dateUtils";
 
@@ -36,6 +37,8 @@ const NavigationToolbar = ({
   handlePrint,
   handleAddTable,
   handleDeletePeriod,
+  viewMode,
+  onViewModeChange,
 }) => {
   // Keyboard navigation for period switching
   useEffect(() => {
@@ -174,6 +177,37 @@ const NavigationToolbar = ({
         {/* Separator */}
         <div className="h-8 w-px bg-gray-300 mx-6"></div>
 
+        {/* View Mode Toggle */}
+        <div className="flex items-center gap-1 bg-gray-100 rounded-lg p-1">
+          <button
+            onClick={() => onViewModeChange("table")}
+            className={`flex items-center px-3 py-1.5 text-sm font-medium rounded-md transition-all duration-200 ${
+              viewMode === "table"
+                ? "bg-white text-gray-900 shadow-sm border border-gray-200"
+                : "text-gray-600 hover:text-gray-900"
+            }`}
+            title="Editor (エディター)"
+          >
+            <Table size={16} className="mr-1.5" />
+            エディター
+          </button>
+          <button
+            onClick={() => onViewModeChange("card")}
+            className={`flex items-center px-3 py-1.5 text-sm font-medium rounded-md transition-all duration-200 ${
+              viewMode === "card"
+                ? "bg-white text-gray-900 shadow-sm border border-gray-200"
+                : "text-gray-600 hover:text-gray-900"
+            }`}
+            title="View (ビュー)"
+          >
+            <Eye size={16} className="mr-1.5" />
+            ビュー
+          </button>
+        </div>
+
+        {/* Separator */}
+        <div className="h-8 w-px bg-gray-300 mx-6"></div>
+
         {/* Action Buttons Section */}
         <div className="flex items-center gap-2">
           {/* Fullscreen Toggle */}
@@ -226,26 +260,6 @@ const NavigationToolbar = ({
             <Users
               size={16}
               className="text-purple-600 hover:text-purple-700"
-            />
-          </button>
-
-          {/* Delete Columns */}
-          <button
-            onClick={() => setEditingColumn("delete-mode")}
-            className={`flex items-center px-3 py-2 h-10 text-sm font-medium rounded-lg border transition-all duration-200 ${
-              editingColumn === "delete-mode"
-                ? "border-red-300 bg-red-50 text-red-700 hover:bg-red-100"
-                : "border-gray-300 bg-white hover:border-gray-400"
-            }`}
-            title="Delete Columns"
-          >
-            <Delete
-              size={16}
-              className={
-                editingColumn === "delete-mode"
-                  ? "text-red-700"
-                  : "text-red-600 hover:text-red-700"
-              }
             />
           </button>
 

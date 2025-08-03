@@ -146,9 +146,7 @@ export const storageQuota = {
 
       // Development mode only: log cleanup results
       if (process.env.NODE_ENV === "development") {
-        console.log(
-          `🧹 Storage cleanup: removed ${keysToRemove.length} test keys, ${memoryCache.size} cache entries remaining`,
-        );
+        // Cleanup completed silently
       }
     } catch (error) {
       console.warn("⚠️ Storage cleanup failed:", error);
@@ -332,9 +330,7 @@ export const batchWriter = {
 
           if (currentTimestamp > queuedTimestamp) {
             if (process.env.NODE_ENV === "development") {
-              console.log(
-                `⏭️ Skipping queued staff write for ${key} - localStorage has newer data`,
-              );
+              // Skipping queued write - localStorage has newer data
             }
             return; // Don't queue this write as localStorage already has newer data
           }
@@ -480,9 +476,7 @@ export const optimizedStorage = {
       );
       batchWriter.queueWrite(key, data);
     } else if (process.env.NODE_ENV === "development") {
-      console.log(
-        `💾 Staff data immediately saved to localStorage for period ${periodIndex}`,
-      );
+      // Staff data immediately saved to localStorage
     }
   },
 
@@ -565,7 +559,7 @@ export const migrationUtils = {
    */
   migrateLegacyData() {
     if (process.env.NODE_ENV === "development") {
-      console.log("🔄 Starting legacy data migration...");
+      // Starting legacy data migration
     }
 
     const legacySchedule = rawStorage.get(STORAGE_KEYS.LEGACY_SCHEDULE) || {};
@@ -600,9 +594,7 @@ export const migrationUtils = {
     batchWriter.flushWrites();
 
     if (process.env.NODE_ENV === "development") {
-      console.log(
-        `✅ Migration completed: ${migratedPeriods} periods migrated`,
-      );
+      // Migration completed
     }
 
     return { migratedPeriods, currentPeriod: legacyCurrent };
@@ -613,7 +605,7 @@ export const migrationUtils = {
    */
   cleanupLegacyData() {
     if (process.env.NODE_ENV === "development") {
-      console.log("🧹 Cleaning up legacy storage keys...");
+      // Cleaning up legacy storage keys
     }
 
     const keysToRemove = [
@@ -635,7 +627,7 @@ export const migrationUtils = {
     });
 
     if (process.env.NODE_ENV === "development") {
-      console.log(`✅ Legacy cleanup completed: ${removedCount} keys removed`);
+      // Legacy cleanup completed
     }
   },
 

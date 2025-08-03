@@ -642,9 +642,28 @@ const ScheduleTable = ({
         </div>
       )}
 
+      {/* Table Header with Title and Legend */}
+      <div className="w-4/5 mx-auto mb-4">
+        <div className="bg-white border border-gray-200 rounded-t-lg px-6 py-4 border-b-0">
+          <div className="flex items-center justify-between">
+            <h2 className="text-lg font-semibold text-gray-900">調理場シフト表</h2>
+            <div className="flex items-center space-x-4 text-sm text-gray-600">
+              <div className="flex items-center space-x-1">
+                <div className="w-3 h-3 bg-blue-200 rounded border border-blue-300"></div>
+                <span>早番(△)</span>
+              </div>
+              <div className="flex items-center space-x-1">
+                <div className="w-3 h-3 bg-red-200 rounded border border-red-300"></div>
+                <span>休み(×)</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
       <div
         ref={tableRef}
-        className="table-container w-4/5 mx-auto overflow-auto border border-gray-200 rounded-lg shadow-sm mb-6"
+        className="table-container w-4/5 mx-auto overflow-auto border border-gray-200 rounded-b-lg shadow-sm mb-6"
         style={{ maxHeight: "calc(100vh - 110px)" }}
         tabIndex={0}
         onMouseUp={() => {

@@ -73,17 +73,11 @@ export const useScheduleData = (
     const performInitialLoad = async () => {
       // Check for legacy data and migrate if needed
       if (migrationUtils.hasLegacyData() && !migrationCompleted) {
-        if (process.env.NODE_ENV === "development") {
-          console.log("🔄 Performing data migration...");
-        }
         const migrationResult = migrationUtils.migrateLegacyData();
 
         // Verify migration
         const verification = migrationUtils.verifyMigration();
         if (verification.success) {
-          if (process.env.NODE_ENV === "development") {
-            console.log("✅ Migration successful");
-          }
           migrationUtils.cleanupLegacyData();
           setMigrationCompleted(true);
         } else {
@@ -115,8 +109,6 @@ export const useScheduleData = (
 
   useEffect(() => {
     if (supabaseScheduleData === null && hasExplicitlyDeletedData) {
-      console.log("🗑️ Clearing all storage due to explicit data deletion");
-
       // Clear optimized storage for all periods (0-5)
       for (let i = 0; i < 6; i++) {
         optimizedStorage.clearPeriodData(i);
@@ -239,23 +231,12 @@ export const useScheduleData = (
           ...prev,
           [currentMonthIndex]: mostRecentStaff,
         }));
-
-        if (process.env.NODE_ENV === "development") {
-          console.log(
-            `📋 Initialized period ${currentMonthIndex} with staff from previous period`,
-          );
-        }
       } else {
         const newSchedule = initializeSchedule(
           defaultStaffMembersArray,
           generateDateRange(currentMonthIndex),
         );
         setSchedule(newSchedule);
-        if (process.env.NODE_ENV === "development") {
-          console.log(
-            `📋 Initialized period ${currentMonthIndex} with default staff`,
-          );
-        }
       }
     }
   }, [currentMonthIndex, supabaseScheduleData]);
@@ -283,12 +264,6 @@ export const useScheduleData = (
   // Auto-save function with optimized storage and debouncing
   const scheduleAutoSave = useCallback(
     (newScheduleData, newStaffMembers = null) => {
-      console.log("💾 scheduleAutoSave: Called with", {
-        scheduleDataKeys: Object.keys(newScheduleData),
-        staffMembersCount: newStaffMembers ? newStaffMembers.length : 0,
-        currentMonth: currentMonthRef.current,
-      });
-
       // Clear existing timer
       if (autoSaveTimeoutRef.current) {
         clearTimeout(autoSaveTimeoutRef.current);
@@ -299,21 +274,16 @@ export const useScheduleData = (
         currentMonthRef.current,
         newScheduleData,
       );
-      console.log("💾 scheduleAutoSave: Saved schedule to optimized storage");
 
       if (newStaffMembers) {
         optimizedStorage.saveStaffData(
           currentMonthRef.current,
           newStaffMembers,
         );
-        console.log("💾 scheduleAutoSave: Saved staff to optimized storage");
       }
 
       // Set debounced auto-save timer (2 seconds)
       autoSaveTimeoutRef.current = setTimeout(async () => {
-        console.log(
-          "⏰ scheduleAutoSave: Timer fired, attempting database save",
-        );
         if (onSaveSchedule && typeof onSaveSchedule === "function") {
           try {
             // Get current staff members - prioritize passed staff, then optimized storage, then extract from schedule
@@ -321,8 +291,9 @@ export const useScheduleData = (
 
             if (currentMonthStaff.length === 0) {
               // Try optimized storage
-              currentMonthStaff =
+              const storageStaff =
                 optimizedStorage.getStaffData(currentMonthRef.current) || [];
+              currentMonthStaff = storageStaff;
             }
 
             if (
@@ -381,39 +352,18 @@ export const useScheduleData = (
             });
 
             // Prepare data in the format expected by the database
+            const finalStaffForSave = newStaffMembers || currentMonthStaff;
             const saveData = {
               ...dateFilteredScheduleData,
-              _staff_members: newStaffMembers || currentMonthStaff,
+              _staff_members: finalStaffForSave,
             };
 
-            console.log("💾 scheduleAutoSave: Prepared save data", {
-              staffCount: (newStaffMembers || currentMonthStaff).length,
-              scheduleKeys: Object.keys(dateFilteredScheduleData),
-              sampleStaff: (newStaffMembers || currentMonthStaff)
-                .slice(0, 2)
-                .map((s) => ({
-                  id: s.id,
-                  name: s.name,
-                  status: s.status,
-                })),
-            });
-
             // Prevent saving empty data that would overwrite good database records
-            const finalStaffForSave = newStaffMembers || currentMonthStaff;
             if (finalStaffForSave.length === 0) {
-              console.log(
-                "⚠️ scheduleAutoSave: No staff data to save, skipping database save",
-              );
               return;
             }
 
-            console.log(
-              "🔄 scheduleAutoSave: Calling onSaveSchedule with data",
-            );
-            await onSaveSchedule(saveData);
-            console.log(
-              "✅ scheduleAutoSave: Database save completed successfully",
-            );
+            const saveResult = await onSaveSchedule(saveData);
           } catch (error) {
             console.error("❌ Failed to save to database:", error);
           }
