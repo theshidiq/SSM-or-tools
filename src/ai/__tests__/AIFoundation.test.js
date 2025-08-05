@@ -7,7 +7,7 @@
 
 import { AIFoundation } from '../AIFoundation';
 import { extractAllDataForAI } from '../utils/DataExtractor';
-import { validateAllConstraints } from '../core/ConstraintEngine';
+import { validateAllConstraints } from '../constraints/ConstraintEngine';
 import { StaffGroupManager } from '../models/StaffGroupModel';
 import { ConstraintManager } from '../models/ConstraintModel';
 import { PreferenceManager } from '../models/PreferenceModel';
@@ -515,7 +515,12 @@ describe('Staff Group Manager Integration', () => {
     const group1 = staffGroupManager.getGroup('Group 1');
     expect(group1).toBeDefined();
     expect(group1.members).toContain('料理長');
-    expect(group1.members).toContain('古藤');
+    expect(group1.members).toContain('井関');
+    
+    const group2 = staffGroupManager.getGroup('Group 2');
+    expect(group2).toBeDefined();
+    expect(group2.members).toContain('料理長');
+    expect(group2.members).toContain('古藤');
   });
 
   test('should detect group conflicts', () => {

@@ -5,13 +5,13 @@
  * Provides structured representation of staff groups and their relationships.
  */
 
-import { STAFF_CONFLICT_GROUPS } from '../core/ConstraintEngine';
+import { STAFF_CONFLICT_GROUPS } from '../constraints/ConstraintEngine';
 
 /**
  * Class representing a staff group with conflict rules
  */
 export class StaffGroup {
-  constructor(name, members = [], conflictRules = {}) {
+  constructor(name, members = [], conflictRules = {}, coverageRule = null, proximityPattern = null) {
     this.name = name;
     this.members = [...members];
     this.conflictRules = {
@@ -23,6 +23,24 @@ export class StaffGroup {
     this.priority = 'medium';
     this.description = '';
     this.active = true;
+    
+    // New: Coverage compensation rule
+    this.coverageRule = coverageRule ? {
+      backupStaff: coverageRule.backupStaff,
+      requiredShift: coverageRule.requiredShift || 'normal',
+      description: coverageRule.description || '',
+      ...coverageRule
+    } : null;
+    
+    // New: Proximity pattern for related day offs
+    this.proximityPattern = proximityPattern ? {
+      trigger: proximityPattern.trigger,
+      condition: proximityPattern.condition || 'weekday_off',
+      target: proximityPattern.target,
+      proximity: proximityPattern.proximity || 2,
+      description: proximityPattern.description || '',
+      ...proximityPattern
+    } : null;
   }
 
   /**
@@ -239,11 +257,17 @@ export class StaffGroupManager {
    */
   initializeDefaultGroups() {
     STAFF_CONFLICT_GROUPS.forEach(groupDef => {
-      const group = new StaffGroup(groupDef.name, groupDef.members, {
-        maxSimultaneousOff: 1,
-        maxSimultaneousEarly: 1,
-        allowsConflict: false
-      });
+      const group = new StaffGroup(
+        groupDef.name, 
+        groupDef.members, 
+        {
+          maxSimultaneousOff: 1,
+          maxSimultaneousEarly: 1,
+          allowsConflict: false
+        },
+        groupDef.coverageRule,
+        groupDef.proximityPattern
+      );
       group.description = `Default conflict group: ${groupDef.members.join(', ')}`;
       group.priority = 'high';
       this.groups.set(groupDef.name, group);

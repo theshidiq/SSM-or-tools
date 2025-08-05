@@ -855,7 +855,7 @@ export class PreferenceManager {
           );
           break;
         default:
-          continue;
+          return;
       }
       
       if (preference) {

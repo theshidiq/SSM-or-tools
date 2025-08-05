@@ -9,14 +9,32 @@ import { getDaysInMonth } from '../../utils/dateUtils';
 
 /**
  * Staff groups that cannot have simultaneous off/early shifts
+ * Updated to match new group structure from AI_PREDICTION_MODEL_SPEC.md v1.1
  */
 export const STAFF_CONFLICT_GROUPS = [
-  { name: 'Group 1', members: ['料理長', '古藤'] },
-  { name: 'Group 2', members: ['井関', '小池'] },
-  { name: 'Group 3', members: ['田辺', '小池'] },
-  { name: 'Group 4', members: ['与儀', 'カマル'] },
-  { name: 'Group 5', members: ['カマル', '高野'] },
-  { name: 'Group 6', members: ['高野', '派遣スタッフ'] }
+  { name: 'Group 1', members: ['料理長', '井関'] },
+  { 
+    name: 'Group 2', 
+    members: ['料理長', '古藤'],
+    coverageRule: {
+      backupStaff: '中田',
+      requiredShift: 'normal',
+      description: 'When Group 2 member has day off, 中田 must work normal shift'
+    },
+    proximityPattern: {
+      trigger: '料理長',
+      condition: 'weekday_off',
+      target: '古藤',
+      proximity: 2,
+      description: 'When 料理長 has weekday day off, 古藤\'s day off should be within ±2 days'
+    }
+  },
+  { name: 'Group 3', members: ['井関', '小池'] },
+  { name: 'Group 4', members: ['田辺', '小池'] },
+  { name: 'Group 5', members: ['古藤', '岸'] },
+  { name: 'Group 6', members: ['与儀', 'カマル'] },
+  { name: 'Group 7', members: ['カマル', '高野'] },
+  { name: 'Group 8', members: ['高野', '派遣スタッフ'] }
 ];
 
 /**
@@ -66,7 +84,9 @@ export const VIOLATION_TYPES = {
   STAFF_GROUP_CONFLICT: 'staff_group_conflict',
   PRIORITY_RULE_VIOLATION: 'priority_rule_violation',
   INSUFFICIENT_COVERAGE: 'insufficient_coverage',
-  CONSECUTIVE_DAYS_OFF: 'consecutive_days_off'
+  CONSECUTIVE_DAYS_OFF: 'consecutive_days_off',
+  COVERAGE_COMPENSATION_VIOLATION: 'coverage_compensation_violation',
+  PROXIMITY_PATTERN_VIOLATION: 'proximity_pattern_violation'
 };
 
 /**
@@ -97,12 +117,32 @@ export const isLateShift = (shiftValue) => {
 };
 
 /**
+ * Check if a shift value represents a normal shift
+ * @param {string} shiftValue - The shift value to check
+ * @returns {boolean} True if it's a normal shift
+ */
+export const isNormalShift = (shiftValue) => {
+  return shiftValue === '' || shiftValue === '○' || shiftValue === 'normal';
+};
+
+/**
  * Check if a shift value represents a working shift
  * @param {string} shiftValue - The shift value to check
  * @returns {boolean} True if it's a working shift
  */
 export const isWorkingShift = (shiftValue) => {
   return !isOffDay(shiftValue) && shiftValue !== undefined && shiftValue !== null;
+};
+
+/**
+ * Check if a date is a weekday (Monday-Friday)
+ * @param {string} dateKey - Date in YYYY-MM-DD format
+ * @returns {boolean} True if it's a weekday
+ */
+export const isWeekday = (dateKey) => {
+  const date = new Date(dateKey);
+  const dayOfWeek = date.getDay();
+  return dayOfWeek >= 1 && dayOfWeek <= 5; // Monday = 1, Friday = 5
 };
 
 /**
@@ -445,6 +485,150 @@ export const validateConsecutiveOffDays = (staffSchedule, staffName, dateRange) 
 };
 
 /**
+ * Validate coverage compensation rules
+ * When Group 2 member (料理長 or 古藤) has day off, 中田 must work normal shift
+ * @param {Object} scheduleData - Complete schedule data for all staff
+ * @param {string} dateKey - Date in YYYY-MM-DD format
+ * @param {Array} staffMembers - Array of staff member objects
+ * @returns {Object} Validation result
+ */
+export const validateCoverageCompensation = (scheduleData, dateKey, staffMembers) => {
+  const violations = [];
+  
+  // Find Group 2 (料理長, 古藤) and 中田
+  const group2 = STAFF_CONFLICT_GROUPS.find(g => g.name === 'Group 2');
+  if (!group2 || !group2.coverageRule) {
+    return { valid: true, violations: [] };
+  }
+
+  const backupStaffName = group2.coverageRule.backupStaff;
+  const backupStaff = staffMembers.find(s => s.name === backupStaffName);
+  
+  if (!backupStaff || !scheduleData[backupStaff.id] || scheduleData[backupStaff.id][dateKey] === undefined) {
+    return { valid: true, violations: [] };
+  }
+
+  // Check if any Group 2 member has day off
+  let group2MemberOff = false;
+  const offMembers = [];
+  
+  group2.members.forEach(memberName => {
+    const staff = staffMembers.find(s => s.name === memberName);
+    if (staff && scheduleData[staff.id] && scheduleData[staff.id][dateKey] !== undefined) {
+      const shift = scheduleData[staff.id][dateKey];
+      if (isOffDay(shift)) {
+        group2MemberOff = true;
+        offMembers.push(memberName);
+      }
+    }
+  });
+
+  // If Group 2 member is off, check if 中田 has normal shift
+  if (group2MemberOff) {
+    const backupShift = scheduleData[backupStaff.id][dateKey];
+    if (!isNormalShift(backupShift)) {
+      violations.push({
+        type: VIOLATION_TYPES.COVERAGE_COMPENSATION_VIOLATION,
+        date: dateKey,
+        message: `Coverage compensation violated on ${dateKey}: ${offMembers.join(', ')} off but ${backupStaffName} not on normal shift (${backupShift})`,
+        severity: 'high',
+        details: {
+          groupMembersOff: offMembers,
+          backupStaff: backupStaffName,
+          backupShift,
+          requiredShift: 'normal',
+          coverageRule: group2.coverageRule
+        }
+      });
+    }
+  }
+
+  return {
+    valid: violations.length === 0,
+    violations
+  };
+};
+
+/**
+ * Validate proximity patterns for related day offs
+ * When 料理長 has day off in middle of week, 古藤's day off should be within ±2 days
+ * @param {Object} scheduleData - Complete schedule data for all staff
+ * @param {Array} dateRange - Array of dates for the period
+ * @param {Array} staffMembers - Array of staff member objects
+ * @returns {Object} Validation result
+ */
+export const validateProximityPatterns = (scheduleData, dateRange, staffMembers) => {
+  const violations = [];
+  
+  // Find Group 2 with proximity pattern
+  const group2 = STAFF_CONFLICT_GROUPS.find(g => g.name === 'Group 2');
+  if (!group2 || !group2.proximityPattern) {
+    return { valid: true, violations: [] };
+  }
+
+  const pattern = group2.proximityPattern;
+  const triggerStaff = staffMembers.find(s => s.name === pattern.trigger);
+  const targetStaff = staffMembers.find(s => s.name === pattern.target);
+  
+  if (!triggerStaff || !targetStaff || 
+      !scheduleData[triggerStaff.id] || !scheduleData[targetStaff.id]) {
+    return { valid: true, violations: [] };
+  }
+
+  // Find 料理長's weekday off days
+  const triggerOffDays = [];
+  dateRange.forEach(date => {
+    const dateKey = date.toISOString().split('T')[0];
+    if (isWeekday(dateKey) && 
+        scheduleData[triggerStaff.id][dateKey] !== undefined &&
+        isOffDay(scheduleData[triggerStaff.id][dateKey])) {
+      triggerOffDays.push(dateKey);
+    }
+  });
+
+  // For each 料理長 weekday off, check if 古藤's off day is within ±2 days
+  triggerOffDays.forEach(triggerOffDay => {
+    const triggerDate = new Date(triggerOffDay);
+    let targetOffWithinRange = false;
+    
+    // Check ±2 days around trigger date
+    for (let offset = -pattern.proximity; offset <= pattern.proximity; offset++) {
+      const checkDate = new Date(triggerDate);
+      checkDate.setDate(checkDate.getDate() + offset);
+      const checkDateKey = checkDate.toISOString().split('T')[0];
+      
+      if (scheduleData[targetStaff.id][checkDateKey] !== undefined &&
+          isOffDay(scheduleData[targetStaff.id][checkDateKey])) {
+        targetOffWithinRange = true;
+        break;
+      }
+    }
+
+    if (!targetOffWithinRange) {
+      violations.push({
+        type: VIOLATION_TYPES.PROXIMITY_PATTERN_VIOLATION,
+        date: triggerOffDay,
+        message: `Proximity pattern violated: ${pattern.trigger} off on ${triggerOffDay} (weekday), but ${pattern.target} has no day off within ±${pattern.proximity} days`,
+        severity: 'medium',
+        details: {
+          triggerStaff: pattern.trigger,
+          targetStaff: pattern.target,
+          triggerOffDay,
+          proximityRange: pattern.proximity,
+          condition: pattern.condition,
+          proximityPattern: pattern
+        }
+      });
+    }
+  });
+
+  return {
+    valid: violations.length === 0,
+    violations
+  };
+};
+
+/**
  * Comprehensive constraint validation for a complete schedule
  * @param {Object} scheduleData - Complete schedule data
  * @param {Array} staffMembers - Array of staff member objects
@@ -486,7 +670,7 @@ export const validateAllConstraints = (scheduleData, staffMembers, dateRange) =>
   // Validate daily constraints for each date
   dateRange.forEach(date => {
     const dateKey = date.toISOString().split('T')[0];
-    validationSummary.totalConstraintsChecked += 3; // daily limits, group conflicts, priority rules
+    validationSummary.totalConstraintsChecked += 5; // daily limits, group conflicts, priority rules, coverage compensation, proximity patterns
 
     const dailyLimitsResult = validateDailyLimits(scheduleData, dateKey, staffMembers);
     if (!dailyLimitsResult.valid) {
@@ -502,7 +686,19 @@ export const validateAllConstraints = (scheduleData, staffMembers, dateRange) =>
     if (!priorityRulesResult.valid) {
       allViolations.push(...priorityRulesResult.violations);
     }
+
+    const coverageCompensationResult = validateCoverageCompensation(scheduleData, dateKey, staffMembers);
+    if (!coverageCompensationResult.valid) {
+      allViolations.push(...coverageCompensationResult.violations);
+    }
   });
+
+  // Validate proximity patterns (needs full date range, so validate once)
+  validationSummary.totalConstraintsChecked += 1;
+  const proximityPatternsResult = validateProximityPatterns(scheduleData, dateRange, staffMembers);
+  if (!proximityPatternsResult.valid) {
+    allViolations.push(...proximityPatternsResult.violations);
+  }
 
   // Categorize violations
   allViolations.forEach(violation => {
@@ -558,7 +754,9 @@ export const validateAllConstraints = (scheduleData, staffMembers, dateRange) =>
       dailyLimits: 'checked',
       staffGroupConflicts: 'checked',
       priorityRules: 'checked',
-      consecutiveOffDays: 'checked'
+      consecutiveOffDays: 'checked',
+      coverageCompensation: 'checked',
+      proximityPatterns: 'checked'
     }
   };
 };
@@ -653,6 +851,34 @@ export const getViolationRecommendations = (violations) => {
           alternativeActions: [
             'Split consecutive days into smaller periods',
             'Redistribute some off days to different weeks'
+          ]
+        };
+        break;
+
+      case VIOLATION_TYPES.COVERAGE_COMPENSATION_VIOLATION:
+        recommendation = {
+          violation,
+          action: 'apply_coverage_compensation',
+          suggestion: `Change ${violation.details.backupStaff}'s shift to normal on ${violation.date} when ${violation.details.groupMembersOff.join(', ')} is off`,
+          priority: 'high',
+          affectedStaff: [violation.details.backupStaff],
+          alternativeActions: [
+            'Change Group 2 member from off to working shift',
+            'Arrange alternative coverage staff'
+          ]
+        };
+        break;
+
+      case VIOLATION_TYPES.PROXIMITY_PATTERN_VIOLATION:
+        recommendation = {
+          violation,
+          action: 'adjust_proximity_pattern',
+          suggestion: `Schedule ${violation.details.targetStaff}'s day off within ±${violation.details.proximityRange} days of ${violation.details.triggerStaff}'s off day (${violation.date})`,
+          priority: 'medium',
+          affectedStaff: [violation.details.targetStaff],
+          alternativeActions: [
+            'Move target staff off day closer to trigger date',
+            'Adjust trigger staff off day if more flexible'
           ]
         };
         break;

@@ -1,4 +1,4 @@
-import React, { useEffect } from "react";
+import React, { useEffect, useState } from "react";
 import {
   Download,
   Calendar,
@@ -22,6 +22,8 @@ import {
   Eye,
 } from "lucide-react";
 import { monthPeriods } from "../../utils/dateUtils";
+import { useAIAssistant } from "../../hooks/useAIAssistant";
+import AIAssistantModal from "../ai/AIAssistantModal";
 
 const NavigationToolbar = ({
   currentMonthIndex,
@@ -39,7 +41,30 @@ const NavigationToolbar = ({
   handleDeletePeriod,
   viewMode,
   onViewModeChange,
+  // AI Assistant props
+  scheduleData,
+  staffMembers,
+  updateSchedule,
 }) => {
+  const [showAIModal, setShowAIModal] = useState(false);
+  
+  const {
+    isInitialized,
+    isProcessing,
+    initializeAI,
+    autoFillSchedule
+  } = useAIAssistant(scheduleData, staffMembers, currentMonthIndex, updateSchedule);
+
+  // Initialize AI on first render
+  useEffect(() => {
+    if (!isInitialized) {
+      initializeAI();
+    }
+  }, [isInitialized, initializeAI]);
+
+  const handleAIClick = () => {
+    setShowAIModal(true);
+  };
   // Keyboard navigation for period switching
   useEffect(() => {
     const handleKeyDown = (event) => {
@@ -227,15 +252,20 @@ const NavigationToolbar = ({
 
           {/* AI Assistant */}
           <button
-            onClick={() => {
-              // TODO: Implement AI functionality
-            }}
-            className="flex items-center px-3 py-2 h-10 text-sm font-medium rounded-lg border border-gray-300 bg-white hover:border-gray-400 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500 transition-all duration-200"
+            onClick={handleAIClick}
+            className={`flex items-center px-3 py-2 h-10 text-sm font-medium rounded-lg border border-gray-300 bg-white hover:border-gray-400 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500 transition-all duration-200 ${
+              isProcessing ? 'animate-pulse' : ''
+            }`}
             title="AI Assistant"
+            disabled={isProcessing}
           >
             <Sparkles
               size={16}
-              className="text-violet-600 hover:text-violet-700"
+              className={`${
+                isProcessing 
+                  ? 'text-yellow-500 animate-spin' 
+                  : 'text-violet-600 hover:text-violet-700'
+              }`}
             />
           </button>
 
@@ -297,6 +327,14 @@ const NavigationToolbar = ({
           </button>
         </div>
       </div>
+
+      {/* AI Assistant Modal */}
+      <AIAssistantModal
+        isOpen={showAIModal}
+        onClose={() => setShowAIModal(false)}
+        onAutoFillSchedule={autoFillSchedule}
+        isProcessing={isProcessing}
+      />
     </div>
   );
 };

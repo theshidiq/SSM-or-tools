@@ -4,10 +4,10 @@
 This document defines the business rules, constraints, and considerations for the AI-powered shift prediction model in the Shift Schedule Manager application. The model aims to automatically generate optimal shift schedules based on historical patterns while respecting operational constraints and staff preferences.
 
 ## Version Information
-- **Version**: 1.0
+- **Version**: 1.2
 - **Created**: August 2025
 - **Last Updated**: August 2025
-- **Status**: Initial Specification
+- **Status**: Updated Group Structure
 
 ---
 
@@ -38,6 +38,10 @@ This document defines the business rules, constraints, and considerations for th
 - **Minimum Coverage**: Ensure adequate staffing levels are maintained daily
 - **Peak vs. Regular Days**: Consider different requirements for busy/slow days
 
+### 3. Coverage Compensation Rules
+- **中田 Coverage Rule**: When any Group 2 member (料理長 or 古藤) has day off, 中田 must work normal shift (○) to maintain kitchen leadership coverage
+- **Backup Leadership**: 中田 serves as backup kitchen leadership when senior staff is absent
+
 ---
 
 ## Staff Group Restrictions
@@ -45,37 +49,50 @@ This document defines the business rules, constraints, and considerations for th
 ### Group Definitions
 The following staff members are organized into groups that cannot have simultaneous day offs or early shifts:
 
-#### Group 1: Senior Kitchen Staff
+#### Group 1: Head Chef & Support
+- **Members**: 料理長 (Head Chef), 井関 (Iseki)
+- **Restriction**: Cannot both have day off or early shift on the same day
+
+#### Group 2: Senior Kitchen Staff
 - **Members**: 料理長 (Head Chef), 古藤 (Furuto)
 - **Restriction**: Cannot both have day off or early shift on the same day
 - **Priority**: Critical coverage group
+- **Coverage Rule**: When either 料理長 or 古藤 has day off, 中田 must have normal shift (○)
+- **Proximity Pattern**: When 料理長 has day off in middle of week, 古藤's day off should be scheduled within ±2 days for continuity
 
-#### Group 2: Kitchen Support A
+#### Group 3: Kitchen Support A
 - **Members**: 井関 (Iseki), 小池 (Koike)
 - **Restriction**: Cannot both have day off or early shift on the same day
 
-#### Group 3: Kitchen Support B  
+#### Group 4: Kitchen Support B  
 - **Members**: 田辺 (Tanabe), 小池 (Koike)
 - **Restriction**: Cannot both have day off or early shift on the same day
 - **Note**: 小池 appears in multiple groups - extra caution needed
 
-#### Group 4: Service Staff A
+#### Group 5: Kitchen Staff B
+- **Members**: 古藤 (Furuto), 岸 (Kishi)
+- **Restriction**: Cannot both have day off or early shift on the same day
+
+#### Group 6: Service Staff A
 - **Members**: 与儀 (Yogi), カマル (Kamal)
 - **Restriction**: Cannot both have day off or early shift on the same day
 
-#### Group 5: Service Staff B
+#### Group 7: Service Staff B
 - **Members**: カマル (Kamal), 高野 (Takano)  
 - **Restriction**: Cannot both have day off or early shift on the same day
 - **Note**: カマル appears in multiple groups - extra caution needed
 
-#### Group 6: Support & Temporary Staff
+#### Group 8: Support & Temporary Staff
 - **Members**: 高野 (Takano), 派遣スタッフ (Temporary Staff)
 - **Restriction**: Cannot both have day off or early shift on the same day
 
 ### Multi-Group Staff Considerations
-- **小池 (Koike)**: Appears in Groups 2 and 3 - requires careful scheduling
-- **カマル (Kamal)**: Appears in Groups 4 and 5 - requires careful scheduling  
-- **高野 (Takano)**: Appears in Groups 5 and 6 - requires careful scheduling
+- **料理長 (Head Chef)**: Appears in Groups 1 and 2 - requires careful scheduling
+- **井関 (Iseki)**: Appears in Groups 1 and 3 - requires careful scheduling
+- **古藤 (Furuto)**: Appears in Groups 2 and 5 - requires careful scheduling
+- **小池 (Koike)**: Appears in Groups 3 and 4 - requires careful scheduling
+- **カマル (Kamal)**: Appears in Groups 6 and 7 - requires careful scheduling  
+- **高野 (Takano)**: Appears in Groups 7 and 8 - requires careful scheduling
 
 ---
 
@@ -95,10 +112,12 @@ The following staff members are organized into groups that cannot have simultane
 
 ### 2. Conflict Resolution Priority Order
 1. **Group Restrictions** (highest priority)
-2. **Daily Coverage Limits**
-3. **Monthly Day-Off Limits**
-4. **Sunday Preferences**
-5. **Historical Patterns** (lowest priority)
+2. **Coverage Compensation Rules** (中田 coverage when Group 2 off)
+3. **Daily Coverage Limits**
+4. **Monthly Day-Off Limits**
+5. **Sunday Preferences**
+6. **Proximity Patterns** (古藤 near 料理長 day offs)
+7. **Historical Patterns** (lowest priority)
 
 ---
 
@@ -111,8 +130,8 @@ The following staff members are organized into groups that cannot have simultane
 - **Day-of-Week Patterns**: Recognize different staffing needs per day of week
 
 ### 2. Optimization Goals
-- **Primary**: Meet all hard constraints (group restrictions, coverage limits)
-- **Secondary**: Satisfy priority rules (Sunday preferences)
+- **Primary**: Meet all hard constraints (group restrictions, coverage limits, coverage compensation)
+- **Secondary**: Satisfy priority rules (Sunday preferences, proximity patterns)  
 - **Tertiary**: Optimize for fairness and staff satisfaction
 - **Quaternary**: Maintain historical pattern consistency where beneficial
 
@@ -180,12 +199,39 @@ const constraints = {
     maxOffOrEarly: 4
   },
   groups: [
-    { name: "Group1", members: ["料理長", "古藤"], restriction: "no_simultaneous_off_early" },
-    // ... other groups
+    { 
+      name: "Group1", 
+      members: ["料理長", "井関"], 
+      restriction: "no_simultaneous_off_early"
+    },
+    { 
+      name: "Group2", 
+      members: ["料理長", "古藤"], 
+      restriction: "no_simultaneous_off_early",
+      coverageRule: { backupStaff: "中田", requiredShift: "normal" },
+      proximityPattern: { 
+        trigger: "料理長", 
+        condition: "weekday_off", 
+        target: "古藤", 
+        proximity: "±2days" 
+      }
+    },
+    { name: "Group3", members: ["井関", "小池"] },
+    { name: "Group4", members: ["田辺", "小池"] },
+    { name: "Group5", members: ["古藤", "岸"] },
+    { name: "Group6", members: ["与儀", "カマル"] },
+    { name: "Group7", members: ["カマル", "高野"] },
+    { name: "Group8", members: ["高野", "派遣スタッフ"] }
   ],
   priorities: [
     { staff: "料理長", day: "sunday", shift: "early", weight: 0.8 },
     { staff: "与儀", day: "sunday", shift: "off", weight: 0.8 }
+  ],
+  coverageCompensation: [
+    { 
+      trigger: { group: "Group2", shift: "off" },
+      compensation: { staff: "中田", requiredShift: "normal" }
+    }
   ]
 };
 ```
@@ -199,6 +245,25 @@ const constraints = {
 ---
 
 ## Changelog
+
+### Version 1.2 (August 2025)
+- **Restructured Staff Groups**: Updated group numbering and membership
+  - Group 1: 料理長, 井関 (new)
+  - Group 2: 料理長, 古藤 (previously Group 1) - retains coverage rules and proximity patterns
+  - Group 3: 井関, 小池 (previously Group 2)
+  - Group 4: 田辺, 小池 (previously Group 3)
+  - Group 5: 古藤, 岸 (new)
+  - Group 6: 与儀, カマル (previously Group 4)
+  - Group 7: カマル, 高野 (previously Group 5)
+  - Group 8: 高野, 派遣スタッフ (previously Group 6)
+- **Updated Multi-Group Considerations**: Revised staff appearing in multiple groups
+- **Updated Coverage Compensation**: Now references Group 2 instead of Group 1
+
+### Version 1.1 (August 2025)
+- **Added Coverage Compensation Rules**: 中田 must work normal shift when Group 1 (料理長 or 古藤) has day off
+- **Added Proximity Patterns**: 古藤's day off should be within ±2 days of 料理長's weekday day off
+- **Updated Constraint Priority Order**: Added coverage compensation and proximity patterns
+- **Enhanced Technical Implementation**: Updated constraint representation with new rules
 
 ### Version 1.0 (August 2025)
 - Initial specification document

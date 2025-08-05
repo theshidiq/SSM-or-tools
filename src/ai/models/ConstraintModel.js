@@ -5,7 +5,7 @@
  * Provides structured representation of scheduling constraints and rules.
  */
 
-import { VIOLATION_TYPES, DAILY_LIMITS, getMonthlyLimits } from '../core/ConstraintEngine';
+import { VIOLATION_TYPES, DAILY_LIMITS, getMonthlyLimits } from '../constraints/ConstraintEngine';
 
 /**
  * Base constraint class
@@ -962,7 +962,7 @@ export class ConstraintManager {
           );
           break;
         default:
-          continue;
+          return;
       }
       
       // Apply common properties

@@ -5,7 +5,7 @@
  * Provides statistical analysis and pattern recognition for AI-driven scheduling.
  */
 
-import { isOffDay, isEarlyShift, isLateShift, isWorkingShift, getDayOfWeek } from './ConstraintEngine';
+import { isOffDay, isEarlyShift, isLateShift, isWorkingShift, getDayOfWeek } from "../constraints/ConstraintEngine";
 
 /**
  * Analyze staff workload distribution across periods

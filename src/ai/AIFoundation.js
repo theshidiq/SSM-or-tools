@@ -9,7 +9,7 @@
 import { extractAllDataForAI } from './utils/DataExtractor';
 import { performComprehensiveAnalysis } from './core/DataAnalyzer';
 import { recognizePatternsForAllStaff } from './core/PatternRecognizer';
-import { validateAllConstraints } from './core/ConstraintEngine';
+import { validateAllConstraints } from './constraints/ConstraintEngine';
 import { StaffGroupManager } from './models/StaffGroupModel';
 import { ConstraintManager } from './models/ConstraintModel';
 import { PreferenceManager } from './models/PreferenceModel';
@@ -612,4 +612,4 @@ export { PreferenceManager } from './models/PreferenceModel';
 export { extractAllDataForAI } from './utils/DataExtractor';
 export { performComprehensiveAnalysis } from './core/DataAnalyzer';
 export { recognizePatternsForAllStaff } from './core/PatternRecognizer';
-export { validateAllConstraints } from './core/ConstraintEngine';
+export { validateAllConstraints } from './constraints/ConstraintEngine';

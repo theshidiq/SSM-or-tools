@@ -488,6 +488,9 @@ const ShiftScheduleEditor = ({
         handleDeletePeriod={handleDeletePeriod}
         viewMode={viewMode}
         onViewModeChange={handleViewModeChange}
+        scheduleData={schedule}
+        staffMembers={staffMembers}
+        updateSchedule={updateSchedule}
       />
 
       {/* Schedule View - Table or Card */}

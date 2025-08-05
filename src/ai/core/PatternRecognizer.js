@@ -5,7 +5,7 @@
  * Uses statistical analysis and machine learning techniques to identify scheduling patterns.
  */
 
-import { isOffDay, isEarlyShift, isLateShift, isWorkingShift, getDayOfWeek } from './ConstraintEngine';
+import { isOffDay, isEarlyShift, isLateShift, isWorkingShift, getDayOfWeek } from "../constraints/ConstraintEngine";
 
 /**
  * Pattern types for classification
