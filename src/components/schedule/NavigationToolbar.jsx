@@ -52,7 +52,13 @@ const NavigationToolbar = ({
     isInitialized,
     isProcessing,
     initializeAI,
-    autoFillSchedule
+    autoFillSchedule,
+    generateAIPredictions,
+    getSystemStatus,
+    systemType,
+    systemHealth,
+    isEnhanced,
+    isMLReady
   } = useAIAssistant(scheduleData, staffMembers, currentMonthIndex, updateSchedule);
 
   // Initialize AI on first render
@@ -253,20 +259,36 @@ const NavigationToolbar = ({
           {/* AI Assistant */}
           <button
             onClick={handleAIClick}
-            className={`flex items-center px-3 py-2 h-10 text-sm font-medium rounded-lg border border-gray-300 bg-white hover:border-gray-400 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500 transition-all duration-200 ${
-              isProcessing ? 'animate-pulse' : ''
+            className={`flex items-center px-3 py-2 h-10 text-sm font-medium rounded-lg border transition-all duration-200 ${
+              isProcessing 
+                ? 'border-yellow-400 bg-yellow-50 animate-pulse' 
+                : isEnhanced && isMLReady && isMLReady()
+                  ? 'border-violet-400 bg-violet-50 hover:bg-violet-100'
+                  : 'border-gray-300 bg-white hover:border-gray-400'
+            } focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-violet-500`}
+            title={`${
+              isEnhanced 
+                ? (isMLReady && isMLReady() ? 'ハイブリッドAI (ML準備完了)' : 'ハイブリッドAI (ML初期化中)')
+                : 'AI Assistant'
             }`}
-            title="AI Assistant"
             disabled={isProcessing}
           >
             <Sparkles
               size={16}
               className={`${
                 isProcessing 
-                  ? 'text-yellow-500 animate-spin' 
-                  : 'text-violet-600 hover:text-violet-700'
+                  ? 'text-yellow-600 animate-spin' 
+                  : isEnhanced
+                    ? 'text-violet-600 hover:text-violet-700'
+                    : 'text-gray-600 hover:text-gray-700'
               }`}
             />
+            {/* ML Status Indicator */}
+            {isEnhanced && (
+              <div className={`ml-1 w-2 h-2 rounded-full ${
+                isMLReady && isMLReady() ? 'bg-green-500' : 'bg-yellow-500 animate-pulse'
+              }`} title={isMLReady && isMLReady() ? 'ML準備完了' : 'ML初期化中'} />
+            )}
           </button>
 
           {/* Add Table */}
@@ -332,8 +354,9 @@ const NavigationToolbar = ({
       <AIAssistantModal
         isOpen={showAIModal}
         onClose={() => setShowAIModal(false)}
-        onAutoFillSchedule={autoFillSchedule}
+        onAutoFillSchedule={generateAIPredictions || autoFillSchedule}
         isProcessing={isProcessing}
+        systemStatus={getSystemStatus && getSystemStatus()}
       />
     </div>
   );

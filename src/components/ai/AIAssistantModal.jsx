@@ -6,25 +6,38 @@
  */
 
 import React, { useState, useEffect } from 'react';
-import { X, Sparkles, TrendingUp, BarChart3, Lightbulb, CheckCircle } from 'lucide-react';
+import { X, Sparkles, TrendingUp, BarChart3, Lightbulb, CheckCircle, Brain, Zap, Clock, Target } from 'lucide-react';
 
 const AIAssistantModal = ({ 
   isOpen, 
   onClose, 
   onAutoFillSchedule, 
-  isProcessing 
+  isProcessing,
+  systemStatus // New prop for system status
 }) => {
   const [results, setResults] = useState(null);
+  const [trainingProgress, setTrainingProgress] = useState(null);
+  const [progressStage, setProgressStage] = useState('idle');
 
   useEffect(() => {
     if (!isOpen) {
       setResults(null);
+      setTrainingProgress(null);
+      setProgressStage('idle');
     }
   }, [isOpen]);
 
   const handleAutoFillSchedule = async () => {
-    const result = await onAutoFillSchedule();
+    setProgressStage('starting');
+    setTrainingProgress({ progress: 0, message: 'AIシステム初期化中...' });
+    
+    const result = await onAutoFillSchedule((progress) => {
+      setProgressStage(progress.stage);
+      setTrainingProgress(progress);
+    });
+    
     setResults(result);
+    setProgressStage('completed');
   };
 
   if (!isOpen) return null;
@@ -50,23 +63,62 @@ const AIAssistantModal = ({
         <div className="border-b border-gray-200"></div>
 
         {/* Content */}
-        <div className="p-4 max-h-[400px] overflow-y-auto">
+        <div className="p-4 max-h-[500px] overflow-y-auto">
           <div className="space-y-4">
+            {/* System Status Display */}
+            {systemStatus && systemStatus.type === 'enhanced' && (
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mb-4">
+                <div className="flex items-center gap-2 mb-1">
+                  <Brain size={16} className="text-blue-600" />
+                  <span className="text-sm font-medium text-blue-900">
+                    ハイブリッドAIシステム ({systemStatus.initialized ? '初期化済み' : '初期化中'})
+                  </span>
+                </div>
+                <div className="text-xs text-blue-700">
+                  MLモデル: {systemStatus.health?.mlModel?.ready ? '準備完了' : 'トレーニング必要'}
+                  {systemStatus.health?.mlModel?.accuracy > 0 && (
+                    <span> (精度: {(systemStatus.health.mlModel.accuracy * 100).toFixed(1)}%)</span>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* Training Progress */}
+            {isProcessing && trainingProgress && (
+              <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 mb-4">
+                <div className="flex items-center gap-2 mb-2">
+                  <Zap size={16} className="text-yellow-600 animate-pulse" />
+                  <span className="text-sm font-medium text-yellow-900">
+                    {trainingProgress.message || 'AI処理中...'}
+                  </span>
+                </div>
+                <div className="w-full bg-yellow-200 rounded-full h-2">
+                  <div 
+                    className="bg-yellow-600 h-2 rounded-full transition-all duration-300"
+                    style={{ width: `${trainingProgress.progress || 0}%` }}
+                  ></div>
+                </div>
+                <div className="text-xs text-yellow-700 mt-1">
+                  {trainingProgress.progress || 0}% 完了
+                </div>
+              </div>
+            )}
+
             <div className="text-center">
               <Sparkles size={32} className="text-violet-600 mx-auto mb-2" />
               <h3 className="text-lg font-medium text-gray-900 mb-2">
                 AI スケジュール自動入力
               </h3>
               <p className="text-gray-600 text-sm mb-4">
-                AIが既存のパターンを学習し、空のセルに適切なシフトを自動入力します
+                ハイブリッドAIが機械学習とビジネスルールで最適なシフトを予測します
               </p>
               <button
                 onClick={handleAutoFillSchedule}
                 disabled={isProcessing}
                 className="bg-violet-600 text-white px-6 py-2 rounded-lg hover:bg-violet-700 disabled:opacity-50 transition-colors flex items-center gap-2 mx-auto"
               >
-                <Sparkles size={16} />
-                {isProcessing ? '自動入力中...' : 'AI 自動入力を実行'}
+                <Sparkles size={16} className={isProcessing ? 'animate-spin' : ''} />
+                {isProcessing ? 'AI処理中...' : 'AI 自動入力を実行'}
               </button>
             </div>
 
@@ -90,19 +142,96 @@ const AIAssistantModal = ({
 
                 {results.success && results.data && (
                   <div className="space-y-3">
-                    <div className="bg-gray-50 rounded-lg p-3">
-                      <div className="text-sm text-gray-600 mb-1">入力されたセル数</div>
-                      <div className="text-2xl font-bold text-violet-600">
-                        {results.data.filledCells || 0}
+                    {/* Main Metrics */}
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="bg-gray-50 rounded-lg p-3">
+                        <div className="text-sm text-gray-600 mb-1 flex items-center gap-1">
+                          <Target size={12} />
+                          入力されたセル数
+                        </div>
+                        <div className="text-2xl font-bold text-violet-600">
+                          {results.data.filledCells || 0}
+                        </div>
+                      </div>
+
+                      <div className="bg-gray-50 rounded-lg p-3">
+                        <div className="text-sm text-gray-600 mb-1 flex items-center gap-1">
+                          <TrendingUp size={12} />
+                          予測精度
+                        </div>
+                        <div className="text-2xl font-bold text-green-600">
+                          {results.data.accuracy || 0}%
+                        </div>
                       </div>
                     </div>
 
-                    <div className="bg-gray-50 rounded-lg p-3">
-                      <div className="text-sm text-gray-600 mb-1">学習データ精度</div>
-                      <div className="text-2xl font-bold text-green-600">
-                        {results.data.accuracy?.toFixed(1) || '0.0'}%
+                    {/* ML System Details */}
+                    {results.data.mlUsed && (
+                      <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+                        <div className="text-sm font-medium text-blue-900 mb-2 flex items-center gap-1">
+                          <Brain size={14} />
+                          機械学習情報
+                        </div>
+                        <div className="space-y-1 text-xs text-blue-800">
+                          <div>モデル精度: {results.data.modelAccuracy || 0}%</div>
+                          <div>予測手法: {results.data.hybridMethod || 'hybrid'}</div>
+                          <div>ルール適用: {results.data.rulesApplied ? 'あり' : 'なし'}</div>
+                          {results.data.processingTime && (
+                            <div className="flex items-center gap-1">
+                              <Clock size={10} />
+                              処理時間: {results.data.processingTime}ms
+                            </div>
+                          )}
+                        </div>
                       </div>
-                    </div>
+                    )}
+
+                    {/* Performance Metrics */}
+                    {systemStatus?.health?.mlModel && (
+                      <div className="bg-gray-50 border border-gray-200 rounded-lg p-3">
+                        <div className="text-sm font-medium text-gray-900 mb-2 flex items-center gap-1">
+                          <BarChart3 size={14} />
+                          パフォーマンス
+                        </div>
+                        <div className="grid grid-cols-2 gap-2 text-xs text-gray-700">
+                          <div>
+                            メモリ使用量: {Math.round((systemStatus.health.mlModel.memoryUsage?.total || 0) / 1024 / 1024)}MB
+                          </div>
+                          <div>
+                            テンソル数: {systemStatus.health.mlModel.memoryUsage?.numTensors || 0}
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Error Information */}
+                    {results.error && results.canRetry && (
+                      <div className="bg-orange-50 border border-orange-200 rounded-lg p-3">
+                        <div className="text-sm font-medium text-orange-900 mb-1">
+                          エラー情報
+                        </div>
+                        <div className="text-xs text-orange-800 mb-2">
+                          {results.error.error}
+                        </div>
+                        {results.recommendedAction && (
+                          <div className="text-xs text-orange-700">
+                            推奨アクション: {results.recommendedAction}
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Violations and Corrections */}
+                    {results.data.violations && results.data.violations.length > 0 && (
+                      <div className="bg-orange-50 border border-orange-200 rounded-lg p-3">
+                        <div className="text-sm font-medium text-orange-900 mb-2">
+                          ルール違反と修正: {results.data.violations.length}件
+                        </div>
+                        <div className="text-xs text-orange-800">
+                          AIが自動で修正し、ビジネスルールに適合したスケジュールを生成しました。
+                        </div>
+                      </div>
+                    )}
 
                     {results.data.patterns && results.data.patterns.length > 0 && (
                       <div className="mt-4">
@@ -130,8 +259,13 @@ const AIAssistantModal = ({
         {/* Footer */}
         <div className="bg-gray-50 px-4 py-3 border-t border-gray-200">
           <div className="text-xs text-gray-500 text-center">
-            AI アシスタント - スケジュール自動入力システム v2.0
+            ハイブリッドAIアシスタント - TensorFlow + ビジネスルール v3.0
           </div>
+          {systemStatus?.type === 'enhanced' && systemStatus?.health?.mlModel && (
+            <div className="text-xs text-gray-400 text-center mt-1">
+              MLモデル: {systemStatus.health.mlModel.parameters}パラメータ, メモリ使用量: {Math.round((systemStatus.health.mlModel.memoryUsage?.total || 0) / 1024 / 1024)}MB
+            </div>
+          )}
         </div>
       </div>
     </div>

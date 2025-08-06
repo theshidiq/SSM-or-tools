@@ -980,7 +980,734 @@ export class BusinessRuleValidator {
       correctionsApplied: 0,
       successRate: 0
     };
+    // Reset enhanced features
+    this.performanceMetrics = {
+      validationSpeed: 0,
+      cacheHitRate: 0,
+      averageComplexity: 0
+    };
+    
+    this.validationCache.clear();
+    this.lastEfficiencyBreakdown = null;
+    this.lastSatisfactionBreakdown = null;
+    
     this.status = 'idle';
-    console.log('🔄 BusinessRuleValidator reset completed');
+    console.log('🔄 BusinessRuleValidator reset completed with enhanced cleanup');
+  }
+
+  // ============================================================================
+  // ENHANCED HELPER METHODS FOR COMPREHENSIVE VALIDATION
+  // ============================================================================
+
+  /**
+   * Estimate shift end time for rest hour calculation
+   * @param {string} shift - Shift symbol
+   * @returns {number} End hour (24-hour format)
+   */
+  estimateShiftEndTime(shift) {
+    const shiftTimes = {
+      '△': 15, // Early shift: 6:00-15:00
+      '○': 22, // Normal shift: 10:00-22:00  
+      '▽': 24, // Late shift: 18:00-24:00
+      '': 22   // Default normal hours
+    };
+    return shiftTimes[shift] || 22;
+  }
+
+  /**
+   * Estimate shift start time for rest hour calculation
+   * @param {string} shift - Shift symbol
+   * @returns {number} Start hour (24-hour format)
+   */
+  estimateShiftStartTime(shift) {
+    const shiftTimes = {
+      '△': 6,  // Early shift: 6:00-15:00
+      '○': 10, // Normal shift: 10:00-22:00
+      '▽': 18, // Late shift: 18:00-24:00
+      '': 10   // Default normal hours
+    };
+    return shiftTimes[shift] || 10;
+  }
+
+  /**
+   * Group dates by week for weekly pattern analysis
+   * @param {Array} dateRange - Date range
+   * @returns {Array} Array of weekly date groups
+   */
+  groupDatesByWeek(dateRange) {
+    const weeks = [];
+    let currentWeek = [];
+    let currentWeekStart = null;
+
+    dateRange.forEach(date => {
+      const dayOfWeek = date.getDay();
+      
+      // Start new week on Monday (or first date)
+      if (currentWeekStart === null || (dayOfWeek === 1 && currentWeek.length > 0)) {
+        if (currentWeek.length > 0) {
+          weeks.push([...currentWeek]);
+        }
+        currentWeek = [date];
+        currentWeekStart = date;
+      } else {
+        currentWeek.push(date);
+      }
+    });
+
+    // Add final week
+    if (currentWeek.length > 0) {
+      weeks.push(currentWeek);
+    }
+
+    return weeks;
+  }
+
+  /**
+   * Check if date is a holiday (simplified implementation)
+   * @param {Date} date - Date to check
+   * @returns {boolean} Is holiday
+   */
+  isHoliday(date) {
+    // This is a simplified implementation
+    // In a real system, this would check against a holiday calendar
+    const month = date.getMonth() + 1;
+    const day = date.getDate();
+    
+    // Japanese national holidays (simplified)
+    const holidays = [
+      '1-1',   // New Year's Day
+      '2-11',  // National Foundation Day
+      '4-29',  // Showa Day
+      '5-3',   // Constitution Memorial Day
+      '5-4',   // Greenery Day
+      '5-5',   // Children's Day
+      '8-11',  // Mountain Day
+      '11-3',  // Culture Day
+      '11-23', // Labor Thanksgiving Day
+      '12-23'  // Emperor's Birthday
+    ];
+    
+    return holidays.includes(`${month}-${day}`);
+  }
+
+  /**
+   * Count peak days (weekends and holidays) in date range
+   * @param {Array} dateRange - Date range
+   * @returns {number} Number of peak days
+   */
+  countPeakDays(dateRange) {
+    return dateRange.filter(date => {
+      const dayOfWeek = date.getDay();
+      const isWeekend = dayOfWeek === 0 || dayOfWeek === 6;
+      const isHoliday = this.isHoliday(date);
+      return isWeekend || isHoliday;
+    }).length;
+  }
+
+  /**
+   * Calculate schedule flexibility score
+   * @param {Object} schedule - Schedule data
+   * @param {Array} staffMembers - Staff member data
+   * @param {Array} dateRange - Date range
+   * @returns {number} Flexibility score (0-100)
+   */
+  calculateFlexibilityScore(schedule, staffMembers, dateRange) {
+    let flexibilityScore = 0;
+    const shiftTypes = ['△', '○', '▽', '', '×'];
+    
+    staffMembers.forEach(staff => {
+      if (!schedule[staff.id]) return;
+      
+      const staffShifts = Object.values(schedule[staff.id]);
+      const uniqueShifts = new Set(staffShifts.filter(s => s !== undefined));
+      
+      // Higher score for staff with variety in shift types
+      flexibilityScore += (uniqueShifts.size / shiftTypes.length) * 100;
+    });
+    
+    return staffMembers.length > 0 ? flexibilityScore / staffMembers.length : 0;
+  }
+
+  /**
+   * Analyze staff work patterns for satisfaction calculation
+   * @param {Object} staffSchedule - Individual staff schedule
+   * @param {Object} staff - Staff member data
+   * @param {Array} dateRange - Date range
+   * @returns {Object} Work pattern analysis
+   */
+  analyzeStaffWorkPatterns(staffSchedule, staff, dateRange) {
+    const patterns = {
+      workDays: 0,
+      offDays: 0,
+      weekendWork: 0,
+      totalWeekends: 0,
+      consecutiveWorkStreaks: [],
+      consecutiveOffStreaks: [],
+      shiftVariety: {},
+      peakDayWork: 0,
+      totalPeakDays: 0
+    };
+
+    let currentWorkStreak = 0;
+    let currentOffStreak = 0;
+
+    dateRange.forEach(date => {
+      const dateKey = date.toISOString().split('T')[0];
+      const shift = staffSchedule[dateKey];
+      const dayOfWeek = date.getDay();
+      const isWeekend = dayOfWeek === 0 || dayOfWeek === 6;
+      const isPeakDay = isWeekend || this.isHoliday(date);
+
+      if (isWeekend) patterns.totalWeekends++;
+      if (isPeakDay) patterns.totalPeakDays++;
+
+      if (shift !== undefined && isWorkingShift(shift)) {
+        patterns.workDays++;
+        if (isWeekend) patterns.weekendWork++;
+        if (isPeakDay) patterns.peakDayWork++;
+        
+        patterns.shiftVariety[shift] = (patterns.shiftVariety[shift] || 0) + 1;
+        
+        currentWorkStreak++;
+        if (currentOffStreak > 0) {
+          patterns.consecutiveOffStreaks.push(currentOffStreak);
+          currentOffStreak = 0;
+        }
+      } else if (shift !== undefined && isOffDay(shift)) {
+        patterns.offDays++;
+        currentOffStreak++;
+        if (currentWorkStreak > 0) {
+          patterns.consecutiveWorkStreaks.push(currentWorkStreak);
+          currentWorkStreak = 0;
+        }
+      } else {
+        // Empty cell - handle based on staff type
+        if (staff.status === '社員') {
+          // For regular staff, empty usually means work
+          patterns.workDays++;
+          currentWorkStreak++;
+        } else {
+          // For part-time, empty might mean unavailable
+          patterns.offDays++;
+          currentOffStreak++;
+        }
+      }
+    });
+
+    // Add final streaks
+    if (currentWorkStreak > 0) patterns.consecutiveWorkStreaks.push(currentWorkStreak);
+    if (currentOffStreak > 0) patterns.consecutiveOffStreaks.push(currentOffStreak);
+
+    return patterns;
+  }
+
+  /**
+   * Calculate schedule consistency score
+   * @param {Object} workPatterns - Work pattern analysis
+   * @returns {number} Consistency score (0-100)
+   */
+  calculateScheduleConsistency(workPatterns) {
+    // Look for consistent patterns vs erratic scheduling
+    const workStreaks = workPatterns.consecutiveWorkStreaks;
+    const offStreaks = workPatterns.consecutiveOffStreaks;
+    
+    if (workStreaks.length === 0) return 50; // No work pattern to analyze
+    
+    // Calculate variance in work streaks (lower variance = more consistent)
+    const avgWorkStreak = workStreaks.reduce((a, b) => a + b, 0) / workStreaks.length;
+    const workVariance = workStreaks.reduce((sum, streak) => sum + Math.pow(streak - avgWorkStreak, 2), 0) / workStreaks.length;
+    
+    // Calculate variance in off streaks
+    let offVariance = 0;
+    if (offStreaks.length > 0) {
+      const avgOffStreak = offStreaks.reduce((a, b) => a + b, 0) / offStreaks.length;
+      offVariance = offStreaks.reduce((sum, streak) => sum + Math.pow(streak - avgOffStreak, 2), 0) / offStreaks.length;
+    }
+    
+    // Lower variance = higher consistency score
+    const consistencyScore = Math.max(0, 100 - (Math.sqrt(workVariance + offVariance) * 10));
+    return Math.min(100, consistencyScore);
+  }
+
+  /**
+   * Calculate preference compliance for staff with priority rules
+   * @param {Object} staffSchedule - Individual staff schedule
+   * @param {Object} staff - Staff member data
+   * @param {Array} dateRange - Date range
+   * @returns {number} Compliance score (0-1)
+   */
+  async calculatePreferenceCompliance(staffSchedule, staff, dateRange) {
+    const rules = PRIORITY_RULES[staff.name];
+    if (!rules || !rules.preferredShifts) return 0.8; // Default good score if no rules
+    
+    let totalPreferences = 0;
+    let matchedPreferences = 0;
+    
+    dateRange.forEach(date => {
+      const dateKey = date.toISOString().split('T')[0];
+      const actualShift = staffSchedule[dateKey];
+      const dayOfWeek = getDayOfWeek(dateKey);
+      
+      // Find matching preference rules for this day
+      const dayPreferences = rules.preferredShifts.filter(pref => pref.day === dayOfWeek);
+      
+      dayPreferences.forEach(pref => {
+        totalPreferences++;
+        
+        let expectedShift = '';
+        switch (pref.shift) {
+          case 'early': expectedShift = '△'; break;
+          case 'off': expectedShift = '×'; break;
+          case 'late': expectedShift = '▽'; break;
+          default: expectedShift = '';
+        }
+        
+        if (actualShift === expectedShift || 
+            (pref.shift === 'normal' && (actualShift === '' || actualShift === '○'))) {
+          matchedPreferences++;
+        }
+      });
+    });
+    
+    return totalPreferences > 0 ? matchedPreferences / totalPreferences : 0.8;
+  }
+
+  /**
+   * Assess quality of consecutive days off
+   * @param {Object} workPatterns - Work pattern analysis
+   * @returns {number} Quality score (0-100)
+   */
+  assessConsecutiveDaysOffQuality(workPatterns) {
+    const offStreaks = workPatterns.consecutiveOffStreaks;
+    
+    if (offStreaks.length === 0) return 50; // No consecutive off days
+    
+    // Ideal consecutive off days: 2-3 days
+    let qualityScore = 0;
+    offStreaks.forEach(streak => {
+      if (streak === 2 || streak === 3) {
+        qualityScore += 100; // Perfect
+      } else if (streak === 1 || streak === 4) {
+        qualityScore += 70; // Good
+      } else if (streak >= 5) {
+        qualityScore += 40; // Too long (might indicate scheduling issues)
+      } else {
+        qualityScore += 30; // Very short streaks
+      }
+    });
+    
+    return qualityScore / offStreaks.length;
+  }
+
+  /**
+   * Calculate fairness perception compared to other staff
+   * @param {Object} staff - Current staff member
+   * @param {Object} workPatterns - Current staff work patterns
+   * @param {Object} schedule - Full schedule
+   * @param {Array} staffMembers - All staff members
+   * @param {Array} dateRange - Date range
+   * @returns {number} Fairness score (0-100)
+   */
+  async calculateFairnessPerception(staff, workPatterns, schedule, staffMembers, dateRange) {
+    // Compare work distribution with similar staff (same type)
+    const similarStaff = staffMembers.filter(s => s.status === staff.status && s.id !== staff.id);
+    
+    if (similarStaff.length === 0) return 90; // No comparison possible, assume fair
+    
+    const currentWorkRatio = workPatterns.workDays / (workPatterns.workDays + workPatterns.offDays);
+    const currentWeekendRatio = workPatterns.weekendWork / Math.max(workPatterns.totalWeekends, 1);
+    
+    let workRatioSum = 0;
+    let weekendRatioSum = 0;
+    let validComparisons = 0;
+    
+    similarStaff.forEach(otherStaff => {
+      if (!schedule[otherStaff.id]) return;
+      
+      const otherPatterns = this.analyzeStaffWorkPatterns(schedule[otherStaff.id], otherStaff, dateRange);
+      const otherWorkRatio = otherPatterns.workDays / (otherPatterns.workDays + otherPatterns.offDays);
+      const otherWeekendRatio = otherPatterns.weekendWork / Math.max(otherPatterns.totalWeekends, 1);
+      
+      workRatioSum += otherWorkRatio;
+      weekendRatioSum += otherWeekendRatio;
+      validComparisons++;
+    });
+    
+    if (validComparisons === 0) return 90;
+    
+    const avgWorkRatio = workRatioSum / validComparisons;
+    const avgWeekendRatio = weekendRatioSum / validComparisons;
+    
+    // Calculate fairness based on how close current staff is to average
+    const workRatioFairness = Math.max(0, 100 - (Math.abs(currentWorkRatio - avgWorkRatio) * 200));
+    const weekendRatioFairness = Math.max(0, 100 - (Math.abs(currentWeekendRatio - avgWeekendRatio) * 150));
+    
+    return (workRatioFairness * 0.6) + (weekendRatioFairness * 0.4);
+  }
+
+  /**
+   * Assess flexibility accommodation for staff
+   * @param {Object} workPatterns - Work pattern analysis
+   * @param {Object} staff - Staff member data
+   * @returns {number} Flexibility score (0-100)
+   */
+  assessFlexibilityAccommodation(workPatterns, staff) {
+    // For part-time staff, flexibility is more important
+    const baseScore = staff.status === 'パート' ? 85 : 90;
+    
+    // Variety in shift types indicates good flexibility
+    const shiftVariety = Object.keys(workPatterns.shiftVariety).length;
+    const varietyBonus = Math.min(15, shiftVariety * 3);
+    
+    // Reasonable consecutive work streaks indicate good balance
+    const maxWorkStreak = Math.max(...workPatterns.consecutiveWorkStreaks, 0);
+    const streakPenalty = Math.max(0, (maxWorkStreak - 5) * 2); // Penalty for very long streaks
+    
+    return Math.max(0, Math.min(100, baseScore + varietyBonus - streakPenalty));
+  }
+
+  // ============================================================================
+  // ENHANCED PRODUCTION-READY FEATURES  
+  // ============================================================================
+
+  /**
+   * Enhanced staff satisfaction calculation with detailed breakdown
+   * @param {Object} schedule - Schedule data
+   * @param {Array} staffMembers - Staff member data  
+   * @param {Array} dateRange - Date range
+   * @returns {Promise<Object>} Enhanced satisfaction analysis
+   */
+  async calculateEnhancedStaffSatisfaction(schedule, staffMembers, dateRange) {
+    try {
+      const satisfactionBreakdown = {
+        overall: 0,
+        byStaff: {},
+        factors: {
+          workLifeBalance: 0,
+          fairness: 0,
+          preferences: 0,
+          flexibility: 0,
+          consecutiveDaysOff: 0
+        },
+        recommendations: []
+      };
+
+      let totalSatisfaction = 0;
+      let validStaffCount = 0;
+
+      for (const staff of staffMembers) {
+        if (!schedule[staff.id]) continue;
+
+        const staffPatterns = this.analyzeStaffWorkPatterns(schedule[staff.id], staff, dateRange);
+        const staffAnalysis = {
+          workLifeBalance: this.calculateWorkLifeBalance(staffPatterns),
+          fairness: await this.calculateFairnessPerception(staff, staffPatterns, schedule, staffMembers, dateRange),
+          preferences: await this.calculatePreferenceCompliance(schedule[staff.id], staff, dateRange),
+          flexibility: this.assessFlexibilityAccommodation(staffPatterns, staff),
+          consecutiveDaysOff: this.assessConsecutiveDaysOffQuality(staffPatterns)
+        };
+
+        // Calculate staff overall satisfaction
+        const staffSatisfaction = (
+          staffAnalysis.workLifeBalance * 0.3 +
+          staffAnalysis.fairness * 0.25 +
+          staffAnalysis.preferences * 100 * 0.2 +
+          staffAnalysis.flexibility * 0.15 +
+          staffAnalysis.consecutiveDaysOff * 0.1
+        );
+
+        satisfactionBreakdown.byStaff[staff.name] = {
+          overall: Math.min(100, Math.max(0, staffSatisfaction)),
+          ...staffAnalysis
+        };
+
+        totalSatisfaction += staffSatisfaction;
+        validStaffCount++;
+
+        // Generate recommendations for low satisfaction
+        if (staffSatisfaction < 60) {
+          satisfactionBreakdown.recommendations.push({
+            staff: staff.name,
+            issue: 'Low satisfaction score',
+            suggestions: this.generateSatisfactionRecommendations(staffAnalysis)
+          });
+        }
+      }
+
+      // Calculate overall metrics
+      satisfactionBreakdown.overall = validStaffCount > 0 ? totalSatisfaction / validStaffCount : 0;
+      
+      // Calculate factor averages
+      Object.keys(satisfactionBreakdown.factors).forEach(factor => {
+        const factorSum = Object.values(satisfactionBreakdown.byStaff)
+          .reduce((sum, staff) => sum + (staff[factor] || 0), 0);
+        satisfactionBreakdown.factors[factor] = validStaffCount > 0 ? factorSum / validStaffCount : 0;
+      });
+
+      this.lastSatisfactionBreakdown = satisfactionBreakdown;
+      return satisfactionBreakdown;
+
+    } catch (error) {
+      console.error('❌ Enhanced satisfaction calculation failed:', error);
+      return {
+        overall: 0,
+        byStaff: {},
+        factors: {},
+        recommendations: [],
+        error: error.message
+      };
+    }
+  }
+
+  /**
+   * Calculate work-life balance score
+   * @param {Object} workPatterns - Work pattern analysis
+   * @returns {number} Work-life balance score (0-100)
+   */
+  calculateWorkLifeBalance(workPatterns) {
+    const workRatio = workPatterns.workDays / (workPatterns.workDays + workPatterns.offDays);
+    const weekendRatio = workPatterns.weekendWork / Math.max(workPatterns.totalWeekends, 1);
+    
+    // Ideal work ratio: 70-80%
+    let workBalanceScore = 100;
+    if (workRatio > 0.8) workBalanceScore -= (workRatio - 0.8) * 200;
+    if (workRatio < 0.6) workBalanceScore -= (0.6 - workRatio) * 150;
+    
+    // Weekend work penalty
+    if (weekendRatio > 0.7) workBalanceScore -= (weekendRatio - 0.7) * 100;
+    
+    return Math.max(0, Math.min(100, workBalanceScore));
+  }
+
+  /**
+   * Generate satisfaction improvement recommendations
+   * @param {Object} staffAnalysis - Staff analysis data
+   * @returns {Array} Recommendations
+   */
+  generateSatisfactionRecommendations(staffAnalysis) {
+    const recommendations = [];
+    
+    if (staffAnalysis.workLifeBalance < 60) {
+      recommendations.push('Improve work-life balance by reducing excessive work hours');
+    }
+    
+    if (staffAnalysis.fairness < 70) {
+      recommendations.push('Review shift distribution for fairness compared to peers');
+    }
+    
+    if (staffAnalysis.preferences < 0.6) {
+      recommendations.push('Better accommodate staff preferred shifts and days');
+    }
+    
+    if (staffAnalysis.flexibility < 70) {
+      recommendations.push('Increase schedule flexibility and variety');
+    }
+    
+    if (staffAnalysis.consecutiveDaysOff < 60) {
+      recommendations.push('Improve consecutive days off patterns');
+    }
+    
+    return recommendations.length > 0 ? recommendations : ['Schedule appears optimal for this staff member'];
+  }
+
+  /**
+   * Enhanced operational efficiency calculation with detailed metrics
+   * @param {Object} schedule - Schedule data
+   * @param {Array} staffMembers - Staff member data
+   * @param {Array} dateRange - Date range
+   * @returns {Promise<Object>} Enhanced efficiency analysis
+   */
+  async calculateEnhancedOperationalEfficiency(schedule, staffMembers, dateRange) {
+    try {
+      const efficiencyBreakdown = {
+        overall: 0,
+        coverage: 0,
+        utilization: 0,
+        flexibility: 0,
+        costEfficiency: 0,
+        dailyBreakdown: {},
+        recommendations: []
+      };
+
+      let totalCoverage = 0;
+      let totalUtilization = 0;
+      let flexibilitySum = 0;
+      let costEfficiencySum = 0;
+
+      dateRange.forEach(date => {
+        const dateKey = date.toISOString().split('T')[0];
+        const dayAnalysis = this.analyzeDailyEfficiency(schedule, staffMembers, date);
+        
+        efficiencyBreakdown.dailyBreakdown[dateKey] = dayAnalysis;
+        
+        totalCoverage += dayAnalysis.coverage;
+        totalUtilization += dayAnalysis.utilization;
+        flexibilitySum += dayAnalysis.flexibility;
+        costEfficiencySum += dayAnalysis.costEfficiency;
+        
+        // Generate daily recommendations
+        if (dayAnalysis.coverage < 70) {
+          efficiencyBreakdown.recommendations.push({
+            date: dateKey,
+            issue: 'Insufficient coverage',
+            suggestion: `Increase staffing on ${dateKey}`
+          });
+        }
+      });
+
+      const dayCount = dateRange.length;
+      efficiencyBreakdown.coverage = dayCount > 0 ? totalCoverage / dayCount : 0;
+      efficiencyBreakdown.utilization = dayCount > 0 ? totalUtilization / dayCount : 0;
+      efficiencyBreakdown.flexibility = dayCount > 0 ? flexibilitySum / dayCount : 0;
+      efficiencyBreakdown.costEfficiency = dayCount > 0 ? costEfficiencySum / dayCount : 0;
+      
+      // Calculate overall efficiency score
+      efficiencyBreakdown.overall = (
+        efficiencyBreakdown.coverage * 0.4 +
+        efficiencyBreakdown.utilization * 0.3 +
+        efficiencyBreakdown.flexibility * 0.2 +
+        efficiencyBreakdown.costEfficiency * 0.1
+      );
+
+      this.lastEfficiencyBreakdown = efficiencyBreakdown;
+      return efficiencyBreakdown;
+
+    } catch (error) {
+      console.error('❌ Enhanced efficiency calculation failed:', error);
+      return {
+        overall: 0,
+        coverage: 0,
+        utilization: 0,
+        flexibility: 0,
+        costEfficiency: 0,
+        dailyBreakdown: {},
+        recommendations: [],
+        error: error.message
+      };
+    }
+  }
+
+  /**
+   * Analyze daily operational efficiency
+   * @param {Object} schedule - Schedule data
+   * @param {Array} staffMembers - Staff member data
+   * @param {Date} date - Date to analyze
+   * @returns {Object} Daily efficiency metrics
+   */
+  analyzeDailyEfficiency(schedule, staffMembers, date) {
+    const dateKey = date.toISOString().split('T')[0];
+    const dayOfWeek = getDayOfWeek(dateKey);
+    const isWeekend = dayOfWeek === 'saturday' || dayOfWeek === 'sunday';
+    
+    let workingStaff = 0;
+    let regularStaff = 0;
+    let partTimeStaff = 0;
+    let earlyShifts = 0;
+    let lateShifts = 0;
+    let normalShifts = 0;
+    
+    staffMembers.forEach(staff => {
+      if (schedule[staff.id] && schedule[staff.id][dateKey] !== undefined) {
+        const shift = schedule[staff.id][dateKey];
+        
+        if (isWorkingShift(shift)) {
+          workingStaff++;
+          
+          if (staff.status === '社員') {
+            regularStaff++;
+          } else {
+            partTimeStaff++;
+          }
+          
+          if (isEarlyShift(shift)) earlyShifts++;
+          else if (isLateShift(shift)) lateShifts++;
+          else normalShifts++;
+        }
+      }
+    });
+    
+    // Calculate metrics
+    const optimalStaff = isWeekend ? Math.ceil(staffMembers.length * 0.75) : Math.ceil(staffMembers.length * 0.85);
+    const coverage = Math.min(100, (workingStaff / optimalStaff) * 100);
+    const utilization = (workingStaff / staffMembers.length) * 100;
+    
+    // Flexibility based on shift variety
+    const shiftTypes = [earlyShifts, normalShifts, lateShifts].filter(count => count > 0).length;
+    const flexibility = Math.min(100, (shiftTypes / 3) * 100);
+    
+    // Cost efficiency (prefer part-time for non-peak days)
+    const partTimeRatio = workingStaff > 0 ? partTimeStaff / workingStaff : 0;
+    const idealPartTimeRatio = isWeekend ? 0.6 : 0.4;
+    const costEfficiency = 100 - Math.abs(partTimeRatio - idealPartTimeRatio) * 100;
+    
+    return {
+      coverage: Math.max(0, coverage),
+      utilization: Math.max(0, utilization),
+      flexibility: Math.max(0, flexibility),
+      costEfficiency: Math.max(0, costEfficiency),
+      details: {
+        workingStaff,
+        regularStaff,
+        partTimeStaff,
+        shiftDistribution: { early: earlyShifts, normal: normalShifts, late: lateShifts },
+        isWeekend
+      }
+    };
+  }
+
+  /**
+   * Calculate cost efficiency of the schedule
+   * @param {Object} schedule - Schedule data
+   * @param {Array} staffMembers - Staff member data
+   * @param {Array} dateRange - Date range
+   * @returns {number} Cost efficiency score (0-100)
+   */
+  calculateCostEfficiency(schedule, staffMembers, dateRange) {
+    try {
+      let totalCost = 0;
+      let optimalCost = 0;
+      
+      dateRange.forEach(date => {
+        const dateKey = date.toISOString().split('T')[0];
+        const dayOfWeek = getDayOfWeek(dateKey);
+        const isWeekend = dayOfWeek === 'saturday' || dayOfWeek === 'sunday';
+        
+        let regularStaffWorking = 0;
+        let partTimeStaffWorking = 0;
+        
+        staffMembers.forEach(staff => {
+          if (schedule[staff.id] && schedule[staff.id][dateKey] && 
+              isWorkingShift(schedule[staff.id][dateKey])) {
+            if (staff.status === '社員') {
+              regularStaffWorking++;
+            } else {
+              partTimeStaffWorking++;
+            }
+          }
+        });
+        
+        // Assume regular staff cost 1.5x part-time, weekends 1.2x multiplier
+        const weekendMultiplier = isWeekend ? 1.2 : 1.0;
+        const dayCost = (regularStaffWorking * 1.5 + partTimeStaffWorking * 1.0) * weekendMultiplier;
+        totalCost += dayCost;
+        
+        // Calculate optimal cost (prefer part-time on weekdays, balanced on weekends)
+        const totalWorking = regularStaffWorking + partTimeStaffWorking;
+        const optimalPartTimeRatio = isWeekend ? 0.5 : 0.6;
+        const optimalPartTime = Math.round(totalWorking * optimalPartTimeRatio);
+        const optimalRegular = totalWorking - optimalPartTime;
+        const optimalDayCost = (optimalRegular * 1.5 + optimalPartTime * 1.0) * weekendMultiplier;
+        optimalCost += optimalDayCost;
+      });
+      
+      if (optimalCost === 0) return 100;
+      
+      const efficiency = Math.max(0, Math.min(100, (optimalCost / totalCost) * 100));
+      return efficiency;
+      
+    } catch (error) {
+      console.warn('⚠️ Cost efficiency calculation failed:', error.message);
+      return 75; // Default reasonable score
+    }
   }
 }

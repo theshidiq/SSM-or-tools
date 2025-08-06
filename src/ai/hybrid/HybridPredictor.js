@@ -9,6 +9,7 @@
 import { TensorFlowScheduler } from '../ml/TensorFlowScheduler';
 import { BusinessRuleValidator } from './BusinessRuleValidator';
 import { validateAllConstraints } from '../constraints/ConstraintEngine';
+import { extractAllDataForAI } from '../utils/DataExtractor';
 
 export class HybridPredictor {
   constructor() {
@@ -44,18 +45,40 @@ export class HybridPredictor {
 
       this.options = {
         // ML prediction settings
-        mlConfidenceThreshold: 0.7,
+        mlConfidenceThreshold: 0.8,  // Increased for better quality
+        mlMediumConfidenceThreshold: 0.6,  // Medium confidence range
+        mlLowConfidenceThreshold: 0.4,  // Low confidence threshold
         useMLPredictions: true,
         
         // Rule validation settings
         strictRuleEnforcement: true,
         allowRuleOverrides: false,
         
-        // Hybrid combination settings
+        // Hybrid decision engine settings
         preferMLWhenValid: true,
         fallbackToRules: true,
+        enableIntelligentDecisionEngine: true,
+        dynamicThresholdAdjustment: true,
+        
+        // Performance settings
+        maxCorrectionAttempts: 3,
+        enablePerformanceMonitoring: true,
+        memoryCleanupInterval: 30000,  // 30 seconds
         
         ...options
+      };
+
+      // Initialize intelligent decision engine
+      this.decisionEngine = {
+        totalDecisions: 0,
+        mlSuccessRate: 0,
+        ruleSuccessRate: 0,
+        hybridSuccessRate: 0,
+        adaptiveThresholds: {
+          high: this.options.mlConfidenceThreshold,
+          medium: this.options.mlMediumConfidenceThreshold,
+          low: this.options.mlLowConfidenceThreshold
+        }
       };
 
       this.initialized = true;
@@ -81,7 +104,7 @@ export class HybridPredictor {
   }
 
   /**
-   * Generate hybrid predictions that combine ML and business rules
+   * Generate hybrid predictions that combine ML and business rules with intelligent decision engine
    * @param {Object} inputData - Schedule input data
    * @param {Array} staffMembers - Staff member data
    * @param {Array} dateRange - Date range for predictions
@@ -98,60 +121,93 @@ export class HybridPredictor {
     try {
       console.log('🔮 Generating hybrid schedule predictions...');
 
-      // Step 1: Get ML predictions
+      // Step 1: Get ML predictions with confidence analysis
       let mlPredictions = null;
+      let mlConfidenceLevel = 'none';
       let mlSuccess = false;
       
       if (this.options.useMLPredictions) {
         try {
-          mlPredictions = await this.mlEngine.generateSchedule(inputData, staffMembers, dateRange);
-          mlSuccess = mlPredictions.success && 
-                     mlPredictions.confidence >= this.options.mlConfidenceThreshold;
+          // Ensure ML model is trained or train it
+          await this.ensureMLModelTrained(staffMembers);
           
-          console.log(`🧠 ML predictions: ${mlSuccess ? 'SUCCESS' : 'FALLBACK'} (confidence: ${mlPredictions?.confidence || 0})`);
+          mlPredictions = await this.mlEngine.predictSchedule(inputData.scheduleData, staffMembers, dateRange);
+          
+          if (mlPredictions?.predictions && Object.keys(mlPredictions.predictions).length > 0) {
+            const accuracy = mlPredictions.modelAccuracy || 0;
+            
+            // Intelligent confidence assessment
+            mlConfidenceLevel = this.assessMLConfidence(accuracy, mlPredictions);
+            mlSuccess = mlConfidenceLevel !== 'none';
+            
+            console.log(`🧠 ML predictions: ${mlSuccess ? 'SUCCESS' : 'FALLBACK'} (accuracy: ${accuracy.toFixed(3)}, confidence: ${mlConfidenceLevel})`);
+          }
         } catch (error) {
           console.warn('⚠️ ML prediction failed, falling back to rules:', error.message);
+          this.handleMLError(error);
         }
       }
 
-      // Step 2: Validate ML predictions against business rules
+      // Step 2: Intelligent decision engine for ML vs Rules
+      const decisionResult = await this.makeIntelligentDecision(
+        mlPredictions, 
+        mlConfidenceLevel, 
+        mlSuccess, 
+        staffMembers, 
+        dateRange
+      );
+      
       let validatedPredictions = null;
       let ruleValidationResult = null;
 
-      if (mlSuccess && mlPredictions) {
+      if (decisionResult.useML && mlPredictions) {
         ruleValidationResult = await this.validateMLPredictions(
-          mlPredictions.schedule, 
+          mlPredictions.predictions, 
           staffMembers, 
           dateRange
         );
 
-        if (ruleValidationResult.valid || !this.options.strictRuleEnforcement) {
-          validatedPredictions = mlPredictions.schedule;
-          console.log('✅ ML predictions passed business rule validation');
+        if (ruleValidationResult.valid || decisionResult.allowPartialValidation) {
+          validatedPredictions = mlPredictions.predictions;
+          console.log(`✅ ML predictions ${ruleValidationResult.valid ? 'fully validated' : 'partially accepted'} by decision engine`);
         } else {
-          console.log('❌ ML predictions failed business rule validation');
+          console.log('❌ ML predictions rejected by decision engine, falling back to rules');
         }
       }
 
-      // Step 3: Apply rule-based corrections or generate rule-based schedule
+      // Step 3: Execute decision with smart corrections and fallbacks
       let finalSchedule = null;
       let predictionMethod = 'unknown';
+      let correctionAttempts = 0;
 
-      if (validatedPredictions && ruleValidationResult?.valid) {
-        // Use validated ML predictions
+      if (decisionResult.method === 'ml_primary' && validatedPredictions && ruleValidationResult?.valid) {
+        // Use high-confidence ML predictions
         finalSchedule = validatedPredictions;
         predictionMethod = 'ml_validated';
-      } else if (validatedPredictions && !this.options.strictRuleEnforcement) {
-        // Use ML predictions with rule corrections
-        finalSchedule = await this.applyRuleCorrections(
+      } else if (decisionResult.method === 'ml_corrected' && validatedPredictions) {
+        // Use ML predictions with intelligent rule corrections
+        const correctionResult = await this.applyIntelligentRuleCorrections(
           validatedPredictions, 
-          ruleValidationResult.violations,
+          ruleValidationResult?.violations || [],
           staffMembers,
-          dateRange
+          dateRange,
+          mlConfidenceLevel
         );
+        finalSchedule = correctionResult.schedule;
         predictionMethod = 'ml_corrected';
+        correctionAttempts = correctionResult.attempts;
+      } else if (decisionResult.method === 'hybrid_blend') {
+        // Blend ML predictions with rule-based generation
+        finalSchedule = await this.generateHybridBlendedSchedule(
+          mlPredictions,
+          inputData,
+          staffMembers,
+          dateRange,
+          mlConfidenceLevel
+        );
+        predictionMethod = 'hybrid_blended';
       } else if (this.options.fallbackToRules) {
-        // Generate rule-based schedule
+        // Generate rule-based schedule as final fallback
         finalSchedule = await this.ruleValidator.generateRuleBasedSchedule(
           inputData,
           staffMembers,
@@ -176,7 +232,8 @@ export class HybridPredictor {
           method: predictionMethod,
           processingTime: Date.now() - startTime,
           mlUsed: mlSuccess,
-          mlConfidence: mlPredictions?.confidence || 0,
+          mlConfidence: mlPredictions?.modelAccuracy || 0,
+          predictionConfidence: mlPredictions?.confidence || {},
           ruleValidationResult,
           finalValidation,
           violations: finalValidation.violations || [],
@@ -502,20 +559,393 @@ export class HybridPredictor {
         hybridSuccessRate: 0
       };
       
-      if (this.mlEngine) {
+      if (this.mlEngine && typeof this.mlEngine.reset === 'function') {
         await this.mlEngine.reset();
       }
       
-      if (this.ruleValidator) {
+      if (this.ruleValidator && typeof this.ruleValidator.reset === 'function') {
         await this.ruleValidator.reset();
       }
       
+      // Reset decision engine metrics
+      this.decisionEngine = {
+        totalDecisions: 0,
+        mlSuccessRate: 0,
+        ruleSuccessRate: 0,
+        hybridSuccessRate: 0,
+        adaptiveThresholds: {
+          high: this.options.mlConfidenceThreshold,
+          medium: this.options.mlMediumConfidenceThreshold,
+          low: this.options.mlLowConfidenceThreshold
+        }
+      };
+      
       this.status = 'idle';
-      console.log('🔄 HybridPredictor reset completed');
+      console.log('🔄 HybridPredictor reset completed with decision engine reset');
       
     } catch (error) {
       console.error('❌ HybridPredictor reset failed:', error);
       throw error;
+    }
+  }
+
+  /**
+   * Ensure ML model is trained before making predictions
+   * @param {Array} staffMembers - Current staff members
+   */
+  async ensureMLModelTrained(staffMembers) {
+    if (!this.mlEngine) {
+      throw new Error('ML engine not initialized');
+    }
+
+    // Check if model is already trained
+    const modelInfo = this.mlEngine.getModelInfo();
+    if (modelInfo && modelInfo.isInitialized && modelInfo.accuracy > 0.5) {
+      console.log('✅ Using existing trained ML model');
+      return;
+    }
+
+    console.log('🎓 Training ML model on historical data...');
+    const trainingResult = await this.mlEngine.trainModel(staffMembers);
+    
+    if (!trainingResult || !trainingResult.success) {
+      throw new Error(`ML model training failed: ${trainingResult?.error || 'Unknown error'}`);
+    }
+
+    console.log(`✅ ML model trained successfully (${(trainingResult.finalAccuracy * 100).toFixed(1)}% accuracy)`);
+  }
+
+  /**
+   * Check if ML engine is ready for predictions
+   */
+  isMLReady() {
+    const modelInfo = this.mlEngine?.getModelInfo();
+    return modelInfo && modelInfo.isInitialized;
+  }
+
+  /**
+   * Get detailed status including ML model information
+   */
+  getDetailedStatus() {
+    const baseStatus = this.getStatus();
+    const modelInfo = this.mlEngine?.getModelInfo();
+    
+    return {
+      ...baseStatus,
+      mlModel: {
+        ready: this.isMLReady(),
+        trained: modelInfo?.accuracy > 0,
+        accuracy: modelInfo?.accuracy || 0,
+        parameters: modelInfo?.totalParams || 0,
+        memoryUsage: modelInfo?.memoryUsage || {}
+      }
+    };
+  }
+
+  // ============================================================================
+  // MISSING METHODS FOR COMPLETE HYBRID INTEGRATION
+  // ============================================================================
+
+  /**
+   * Assess ML confidence based on accuracy and prediction quality
+   * @param {number} accuracy - Model accuracy score
+   * @param {Object} predictions - ML predictions result
+   * @returns {string} Confidence level: 'high', 'medium', 'low', or 'none'
+   */
+  assessMLConfidence(accuracy, predictions) {
+    if (!predictions || !predictions.predictions || accuracy <= 0) {
+      return 'none';
+    }
+
+    // Check prediction consistency and confidence scores
+    const predictionEntries = Object.entries(predictions.predictions);
+    let totalConfidence = 0;
+    let confidenceCount = 0;
+
+    // Calculate average prediction confidence if available
+    Object.values(predictions.confidence || {}).forEach(staffConfidence => {
+      Object.values(staffConfidence).forEach(conf => {
+        if (typeof conf === 'number') {
+          totalConfidence += conf;
+          confidenceCount++;
+        }
+      });
+    });
+
+    const avgPredictionConfidence = confidenceCount > 0 ? totalConfidence / confidenceCount : 0;
+
+    // Assess overall confidence level
+    const combinedScore = (accuracy * 0.7) + (avgPredictionConfidence * 0.3);
+
+    if (combinedScore >= this.options.mlConfidenceThreshold) {
+      return 'high';
+    } else if (combinedScore >= this.options.mlMediumConfidenceThreshold) {
+      return 'medium';
+    } else if (combinedScore >= this.options.mlLowConfidenceThreshold) {
+      return 'low';
+    }
+    
+    return 'none';
+  }
+
+  /**
+   * Intelligent decision engine for choosing between ML and business rules
+   * @param {Object} mlPredictions - ML prediction results
+   * @param {string} mlConfidenceLevel - ML confidence assessment
+   * @param {boolean} mlSuccess - Whether ML predictions succeeded
+   * @param {Array} staffMembers - Staff member data
+   * @param {Array} dateRange - Date range for predictions
+   * @returns {Object} Decision result with method and reasoning
+   */
+  async makeIntelligentDecision(mlPredictions, mlConfidenceLevel, mlSuccess, staffMembers, dateRange) {
+    try {
+      console.log(`🤔 Making intelligent decision: ML confidence = ${mlConfidenceLevel}, success = ${mlSuccess}`);
+      
+      // Update decision engine metrics
+      this.decisionEngine.totalDecisions++;
+      
+      // Decision matrix based on confidence and system state
+      if (mlSuccess && mlConfidenceLevel === 'high') {
+        // High confidence ML - use directly with validation
+        this.decisionEngine.mlSuccessRate++;
+        return {
+          useML: true,
+          method: 'ml_primary',
+          allowPartialValidation: false,
+          reasoning: 'High ML confidence with successful predictions'
+        };
+      }
+      
+      if (mlSuccess && mlConfidenceLevel === 'medium') {
+        // Medium confidence ML - use with rule corrections
+        this.decisionEngine.hybridSuccessRate++;
+        return {
+          useML: true,
+          method: 'ml_corrected',
+          allowPartialValidation: true,
+          reasoning: 'Medium ML confidence, apply rule-based corrections'
+        };
+      }
+      
+      if (mlSuccess && mlConfidenceLevel === 'low' && this.options.enableIntelligentDecisionEngine) {
+        // Low confidence ML - blend with rule-based generation
+        this.decisionEngine.hybridSuccessRate++;
+        return {
+          useML: true,
+          method: 'hybrid_blend',
+          allowPartialValidation: true,
+          reasoning: 'Low ML confidence, blend with rule-based predictions'
+        };
+      }
+      
+      // Fallback to rules-based approach
+      this.decisionEngine.ruleSuccessRate++;
+      return {
+        useML: false,
+        method: 'rule_based',
+        allowPartialValidation: false,
+        reasoning: mlSuccess ? 
+          `ML confidence too low (${mlConfidenceLevel})` :
+          'ML prediction failed, using rule-based generation'
+      };
+      
+    } catch (error) {
+      console.error('❌ Decision engine error:', error);
+      return {
+        useML: false,
+        method: 'rule_based',
+        allowPartialValidation: false,
+        reasoning: `Decision engine error: ${error.message}`
+      };
+    }
+  }
+
+  /**
+   * Apply intelligent rule corrections to ML predictions
+   * @param {Object} mlSchedule - ML generated schedule
+   * @param {Array} violations - Rule violations to fix
+   * @param {Array} staffMembers - Staff member data
+   * @param {Array} dateRange - Date range
+   * @param {string} mlConfidenceLevel - ML confidence level
+   * @returns {Object} Correction result with schedule and metadata
+   */
+  async applyIntelligentRuleCorrections(mlSchedule, violations, staffMembers, dateRange, mlConfidenceLevel) {
+    try {
+      console.log(`🔧 Applying intelligent corrections for ${violations.length} violations...`);
+      
+      let correctedSchedule = JSON.parse(JSON.stringify(mlSchedule));
+      let correctionAttempts = 0;
+      const maxAttempts = this.options.maxCorrectionAttempts;
+      const correctionLog = [];
+      
+      // Sort violations by severity for intelligent correction order
+      const sortedViolations = violations.sort((a, b) => {
+        const severityOrder = { 'critical': 3, 'high': 2, 'medium': 1, 'low': 0 };
+        return (severityOrder[b.severity] || 0) - (severityOrder[a.severity] || 0);
+      });
+      
+      // Apply corrections with adaptive strategy based on ML confidence
+      const correctionIntensity = mlConfidenceLevel === 'high' ? 'minimal' :
+                                  mlConfidenceLevel === 'medium' ? 'moderate' : 'aggressive';
+      
+      for (const violation of sortedViolations) {
+        if (correctionAttempts >= maxAttempts) {
+          console.log(`⚠️ Reached max correction attempts (${maxAttempts})`);
+          break;
+        }
+        
+        const preCorrection = JSON.stringify(correctedSchedule);
+        correctedSchedule = await this.ruleValidator.correctViolation(
+          correctedSchedule,
+          violation,
+          staffMembers,
+          dateRange
+        );
+        
+        const postCorrection = JSON.stringify(correctedSchedule);
+        const correctionMade = preCorrection !== postCorrection;
+        
+        if (correctionMade) {
+          correctionLog.push({
+            type: violation.type,
+            severity: violation.severity,
+            corrected: true
+          });
+          correctionAttempts++;
+        } else {
+          correctionLog.push({
+            type: violation.type,
+            severity: violation.severity,
+            corrected: false,
+            reason: 'No correction strategy available'
+          });
+        }
+      }
+      
+      return {
+        schedule: correctedSchedule,
+        attempts: correctionAttempts,
+        corrections: correctionLog,
+        intensity: correctionIntensity,
+        success: true
+      };
+      
+    } catch (error) {
+      console.error('❌ Intelligent rule correction failed:', error);
+      return {
+        schedule: mlSchedule, // Return original on error
+        attempts: 0,
+        corrections: [],
+        success: false,
+        error: error.message
+      };
+    }
+  }
+
+  /**
+   * Generate hybrid blended schedule combining ML and rule-based approaches
+   * @param {Object} mlPredictions - ML prediction results
+   * @param {Object} inputData - Original input data
+   * @param {Array} staffMembers - Staff member data
+   * @param {Array} dateRange - Date range
+   * @param {string} mlConfidenceLevel - ML confidence level
+   * @returns {Object} Blended schedule
+   */
+  async generateHybridBlendedSchedule(mlPredictions, inputData, staffMembers, dateRange, mlConfidenceLevel) {
+    try {
+      console.log(`🎨 Generating hybrid blended schedule (ML confidence: ${mlConfidenceLevel})...`);
+      
+      // Generate rule-based schedule as baseline
+      const ruleBasedSchedule = await this.ruleValidator.generateRuleBasedSchedule(
+        inputData,
+        staffMembers,
+        dateRange
+      );
+      
+      if (!mlPredictions || !mlPredictions.predictions) {
+        console.log('⚠️ No ML predictions available, using rule-based schedule');
+        return ruleBasedSchedule;
+      }
+      
+      const mlSchedule = mlPredictions.predictions;
+      const mlConfidence = mlPredictions.confidence || {};
+      
+      // Blend schedules based on confidence levels
+      const blendedSchedule = {};
+      
+      staffMembers.forEach(staff => {
+        blendedSchedule[staff.id] = {};
+        
+        dateRange.forEach(date => {
+          const dateKey = date.toISOString().split('T')[0];
+          
+          const mlShift = mlSchedule[staff.id]?.[dateKey];
+          const ruleShift = ruleBasedSchedule[staff.id]?.[dateKey];
+          const confidence = mlConfidence[staff.id]?.[dateKey] || 0;
+          
+          // Decision logic for blending
+          if (mlShift !== undefined && confidence >= 0.7) {
+            // High confidence ML prediction - use it
+            blendedSchedule[staff.id][dateKey] = mlShift;
+          } else if (mlShift !== undefined && ruleShift !== undefined && confidence >= 0.5) {
+            // Medium confidence - prefer ML for work shifts, rules for off days
+            if (mlShift === '×' && ruleShift !== '×') {
+              blendedSchedule[staff.id][dateKey] = ruleShift; // Prefer working
+            } else {
+              blendedSchedule[staff.id][dateKey] = mlShift;
+            }
+          } else {
+            // Low/no confidence - use rule-based prediction
+            blendedSchedule[staff.id][dateKey] = ruleShift !== undefined ? ruleShift : mlShift;
+          }
+        });
+      });
+      
+      console.log('✅ Hybrid blended schedule generated');
+      return blendedSchedule;
+      
+    } catch (error) {
+      console.error('❌ Hybrid blending failed:', error);
+      
+      // Fallback to rule-based schedule
+      return await this.ruleValidator.generateRuleBasedSchedule(
+        inputData,
+        staffMembers,
+        dateRange
+      );
+    }
+  }
+
+  /**
+   * Handle ML engine errors with appropriate fallback strategies
+   * @param {Error} error - ML engine error
+   */
+  handleMLError(error) {
+    console.error('🚨 ML Engine Error:', error.message);
+    
+    // Record error for analysis
+    this.predictionHistory.push({
+      timestamp: new Date().toISOString(),
+      type: 'ml_error',
+      error: error.message,
+      success: false
+    });
+    
+    // Update metrics
+    this.metrics.totalPredictions++; // Count as attempted prediction
+    
+    // Adaptive threshold adjustment if errors are frequent
+    if (this.options.dynamicThresholdAdjustment) {
+      const recentErrors = this.predictionHistory
+        .filter(p => p.type === 'ml_error')
+        .slice(-5).length;
+      
+      if (recentErrors >= 3) {
+        // Lower thresholds to rely more on rules
+        this.decisionEngine.adaptiveThresholds.high = Math.max(0.7, this.decisionEngine.adaptiveThresholds.high - 0.05);
+        this.decisionEngine.adaptiveThresholds.medium = Math.max(0.5, this.decisionEngine.adaptiveThresholds.medium - 0.05);
+        console.log('🔧 Adaptive thresholds lowered due to ML errors');
+      }
     }
   }
 }
