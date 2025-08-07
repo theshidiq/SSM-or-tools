@@ -15,6 +15,7 @@ import {
 } from './TensorFlowConfig';
 import { ScheduleFeatureEngineer } from './FeatureEngineering';
 import { extractAllDataForAI } from '../utils/DataExtractor';
+import { isStaffActiveInCurrentPeriod } from '../../utils/staffUtils';
 
 export class TensorFlowScheduler {
   constructor() {
@@ -168,7 +169,7 @@ export class TensorFlowScheduler {
       
       console.log(`🔄 Using ${staffMembers.length} staff members for training`);
       
-      // Enhanced training data preparation with data augmentation
+      // Enhanced training data preparation with validation
       const trainingDataResult = await this.prepareEnhancedTrainingData(
         allHistoricalData, 
         staffMembers,
@@ -179,9 +180,22 @@ export class TensorFlowScheduler {
         throw new Error(`Training data preparation failed: ${trainingDataResult.error}`);
       }
       
-      const { features, labels, validationFeatures, validationLabels } = trainingDataResult;
+      const { features, labels, validationFeatures, validationLabels, metadata } = trainingDataResult;
       
       console.log(`📊 Training samples: ${features.length}, Validation samples: ${validationFeatures?.length || 0}`);
+      
+      // Validate training data consistency
+      const validationResult = this.validateTrainingData(features, labels, metadata);
+      
+      if (!validationResult.valid) {
+        throw new Error(`Training data validation failed: ${validationResult.issues.join('; ')}`);
+      }
+      
+      if (validationResult.warnings.length > 0) {
+        console.warn('⚠️ Training data warnings:', validationResult.warnings);
+      }
+      
+      console.log('✅ Training data validation passed:', validationResult.stats);
       
       // Enhanced model training with adaptive parameters
       const trainingConfig = this.getOptimalTrainingConfig(features.length, options);
@@ -272,6 +286,25 @@ export class TensorFlowScheduler {
     try {
       console.log('🔮 Generating ML predictions for schedule...');
       
+      // Filter out inactive staff members before processing
+      const activeStaff = staffMembers.filter(staff => {
+        try {
+          const isActive = isStaffActiveInCurrentPeriod(staff, dateRange);
+          
+          if (!isActive) {
+            console.log(`⏭️ Skipping inactive staff member: ${staff.name} (not active in current period)`);
+          }
+          
+          return isActive;
+        } catch (error) {
+          console.warn(`⚠️ Error checking staff activity for ${staff.name}:`, error);
+          // Default to including staff if there's an error
+          return true;
+        }
+      });
+      
+      console.log(`👥 Processing predictions for ${activeStaff.length} active staff (filtered from ${staffMembers.length} total)`);
+      
       // Extract historical data for context
       const extractedData = extractAllDataForAI();
       const allHistoricalData = {};
@@ -294,8 +327,8 @@ export class TensorFlowScheduler {
         dateRange: dateRange
       };
       
-      // Process each staff member
-      for (const staff of staffMembers) {
+      // Process only active staff members
+      for (const staff of activeStaff) {
         predictions[staff.id] = {};
         predictionConfidence[staff.id] = {};
         
@@ -550,6 +583,26 @@ export class TensorFlowScheduler {
   }
 
   /**
+   * Get current status of the TensorFlow scheduler
+   * @returns {Object} Status information
+   */
+  getStatus() {
+    return {
+      initialized: this.isInitialized,
+      ready: this.isReady(),
+      training: this.isTraining,
+      modelInfo: this.getModelInfo(),
+      performanceMetrics: { ...this.modelPerformanceMetrics },
+      version: this.modelVersion,
+      health: {
+        memoryEfficiency: this.assessMemoryEfficiency(),
+        errorRate: this.calculateErrorRate(),
+        responseTime: this.calculateAverageResponseTime()
+      }
+    };
+  }
+
+  /**
    * Reset the TensorFlow scheduler state
    */
   async reset() {
@@ -774,31 +827,44 @@ export class TensorFlowScheduler {
   }
 
   /**
-   * Extract and validate training data
+   * Extract and validate training data with comprehensive quality checks
    */
   async extractAndValidateTrainingData() {
     try {
+      console.log('🔍 Extracting and validating training data...');
+      
       const extractedData = extractAllDataForAI();
       
       if (!extractedData.success || !extractedData.data) {
         return {
           success: false,
-          error: 'No historical data available for training'
+          error: 'No historical data available for training',
+          details: extractedData.error || 'Data extraction failed'
         };
       }
       
       const { rawPeriodData, staffProfiles, summary } = extractedData.data;
       
-      if (rawPeriodData.length === 0) {
+      // Enhanced validation checks
+      const validationResults = await this.performDataQualityValidation({
+        rawPeriodData,
+        staffProfiles,
+        summary
+      });
+      
+      if (!validationResults.passed) {
         return {
           success: false,
-          error: 'No period data found for training'
+          error: 'Training data quality validation failed',
+          validation: validationResults,
+          details: validationResults.issues.join('; ')
         };
       }
       
       // Convert to training format
       const allHistoricalData = {};
       const allStaffMembers = [];
+      let totalShiftsProcessed = 0;
       
       rawPeriodData.forEach(periodData => {
         allHistoricalData[periodData.monthIndex] = {
@@ -806,21 +872,53 @@ export class TensorFlowScheduler {
           dateRange: periodData.dateRange
         };
         
-        // Collect unique staff members
+        // Count actual shift data
+        Object.values(periodData.scheduleData).forEach(staffSchedule => {
+          Object.values(staffSchedule).forEach(shift => {
+            if (shift !== undefined && shift !== null) {
+              totalShiftsProcessed++;
+            }
+          });
+        });
+        
+        // Collect unique staff members with enhanced data
         periodData.staffData.forEach(staff => {
           if (!allStaffMembers.find(s => s.id === staff.id)) {
-            allStaffMembers.push(staff);
+            // Enhance staff data with historical context
+            const enhancedStaff = {
+              ...staff,
+              periodsWorked: rawPeriodData.filter(pd => 
+                pd.staffData.find(s => s.id === staff.id)
+              ).length,
+              hasScheduleData: rawPeriodData.some(pd => 
+                pd.scheduleData[staff.id] && 
+                Object.keys(pd.scheduleData[staff.id]).length > 0
+              )
+            };
+            allStaffMembers.push(enhancedStaff);
           }
         });
       });
       
-      // Assess data quality
+      // Enhanced data quality assessment
       const dataQuality = {
         completeness: summary.dataCompleteness,
         periods: rawPeriodData.length,
         staffCount: allStaffMembers.length,
-        totalDataPoints: Object.keys(staffProfiles).length
+        activeStaffCount: allStaffMembers.filter(s => s.hasScheduleData).length,
+        totalDataPoints: totalShiftsProcessed,
+        averageDataPointsPerStaff: totalShiftsProcessed / Math.max(1, allStaffMembers.length),
+        periodCoverage: rawPeriodData.length / 6, // Out of 6 possible periods
+        validation: validationResults
       };
+      
+      console.log('✅ Training data validation completed:', {
+        periods: dataQuality.periods,
+        staff: dataQuality.staffCount,
+        activeStaff: dataQuality.activeStaffCount,
+        dataPoints: dataQuality.totalDataPoints,
+        completeness: `${dataQuality.completeness.toFixed(1)}%`
+      });
       
       return {
         success: true,
@@ -830,9 +928,11 @@ export class TensorFlowScheduler {
       };
       
     } catch (error) {
+      console.error('❌ Training data extraction failed:', error);
       return {
         success: false,
-        error: error.message
+        error: error.message,
+        details: 'Exception during data extraction and validation'
       };
     }
   }
@@ -858,9 +958,10 @@ export class TensorFlowScheduler {
       // Data augmentation if requested
       let features = trainingData.features;
       let labels = trainingData.labels;
+      let augmentedData = null;
       
       if (options.dataAugmentation && features.length < 1000) {
-        const augmentedData = await this.performDataAugmentation(features, labels);
+        augmentedData = await this.performDataAugmentation(features, labels);
         features = features.concat(augmentedData.features);
         labels = labels.concat(augmentedData.labels);
       }
@@ -870,15 +971,28 @@ export class TensorFlowScheduler {
       const validationFeatures = features.slice(splitIndex);
       const validationLabels = labels.slice(splitIndex);
       
-      features = features.slice(0, splitIndex);
-      labels = labels.slice(0, splitIndex);
+      const trainingFeatures = features.slice(0, splitIndex);
+      const trainingLabels = labels.slice(0, splitIndex);
+      
+      // Generate metadata about the training data
+      const metadata = {
+        originalSamples: features.length,
+        trainingSamples: trainingFeatures.length,
+        validationSamples: validationFeatures.length,
+        augmentedSamples: augmentedData ? augmentedData.features.length : 0,
+        staffCount: staffMembers.length,
+        featureCount: trainingFeatures.length > 0 ? trainingFeatures[0].length : 0,
+        expectedFeatures: MODEL_CONFIG.INPUT_FEATURES.TOTAL,
+        dataAugmentationUsed: options.dataAugmentation && features.length < 1000
+      };
       
       return {
         success: true,
-        features,
-        labels,
+        features: trainingFeatures,
+        labels: trainingLabels,
         validationFeatures,
-        validationLabels
+        validationLabels,
+        metadata
       };
       
     } catch (error) {
@@ -1194,8 +1308,224 @@ export class TensorFlowScheduler {
     }
   }
 
+  // ============================================================================
+  // ENHANCED DATA VALIDATION METHODS
+  // ============================================================================
+  
+  /**
+   * Perform comprehensive data quality validation
+   */
+  async performDataQualityValidation({ rawPeriodData, staffProfiles, summary }) {
+    const issues = [];
+    const warnings = [];
+    let score = 100;
+    
+    // Check 1: Minimum data requirements
+    if (rawPeriodData.length === 0) {
+      issues.push('No historical periods found');
+      score -= 50;
+    } else if (rawPeriodData.length < 2) {
+      warnings.push('Only one period available - limited learning capability');
+      score -= 10;
+    }
+    
+    // Check 2: Staff data quality
+    const totalStaff = Object.keys(staffProfiles).length;
+    if (totalStaff < 2) {
+      issues.push(`Insufficient staff data: ${totalStaff} (minimum 2 required)`);
+      score -= 30;
+    } else if (totalStaff < 5) {
+      warnings.push('Limited staff diversity may affect prediction quality');
+      score -= 5;
+    }
+    
+    // Check 3: Data completeness
+    if (summary.dataCompleteness < 5) {
+      issues.push(`Data completeness too low: ${summary.dataCompleteness.toFixed(1)}% (minimum 5% required)`);
+      score -= 40;
+    } else if (summary.dataCompleteness < 20) {
+      warnings.push(`Low data completeness: ${summary.dataCompleteness.toFixed(1)}%`);
+      score -= 15;
+    }
+    
+    // Check 4: Individual period data quality
+    let periodsWithData = 0;
+    let totalScheduleEntries = 0;
+    
+    rawPeriodData.forEach((period, index) => {
+      const staffWithData = Object.keys(period.scheduleData).length;
+      const scheduleEntries = Object.values(period.scheduleData)
+        .reduce((sum, schedule) => sum + Object.keys(schedule).length, 0);
+      
+      if (scheduleEntries > 0) {
+        periodsWithData++;
+        totalScheduleEntries += scheduleEntries;
+      }
+      
+      if (staffWithData === 0) {
+        issues.push(`Period ${index} has no staff schedule data`);
+        score -= 10;
+      } else if (scheduleEntries < 10) {
+        warnings.push(`Period ${index} has very limited data: ${scheduleEntries} entries`);
+        score -= 2;
+      }
+    });
+    
+    // Check 5: Training sample sufficiency
+    const estimatedSamples = totalScheduleEntries * 0.8; // Rough estimate
+    if (estimatedSamples < 50) {
+      issues.push(`Insufficient training samples: ~${Math.round(estimatedSamples)} (minimum 50 required)`);
+      score -= 25;
+    } else if (estimatedSamples < 100) {
+      warnings.push(`Limited training samples: ~${Math.round(estimatedSamples)} (recommended 100+)`);
+      score -= 5;
+    }
+    
+    // Check 6: Staff type diversity
+    const staffTypes = Object.values(staffProfiles)
+      .reduce((types, profile) => {
+        types[profile.status] = (types[profile.status] || 0) + 1;
+        return types;
+      }, {});
+    
+    if (Object.keys(staffTypes).length < 2) {
+      warnings.push('Only one staff type found - limited pattern diversity');
+      score -= 5;
+    }
+    
+    const passed = issues.length === 0;
+    const qualityLevel = score >= 80 ? 'excellent' : 
+                        score >= 60 ? 'good' : 
+                        score >= 40 ? 'fair' : 'poor';
+    
+    console.log(`📈 Data quality validation: ${qualityLevel} (${score}/100)`);
+    if (issues.length > 0) {
+      console.log('❌ Issues:', issues);
+    }
+    if (warnings.length > 0) {
+      console.log('⚠️ Warnings:', warnings);
+    }
+    
+    return {
+      passed,
+      score,
+      qualityLevel,
+      issues,
+      warnings,
+      metrics: {
+        periods: rawPeriodData.length,
+        periodsWithData,
+        totalStaff,
+        totalScheduleEntries,
+        estimatedSamples,
+        completeness: summary.dataCompleteness,
+        staffTypes: Object.keys(staffTypes).length
+      }
+    };
+  }
+  
+  /**
+   * Validate training features and labels for consistency
+   */
+  validateTrainingData(features, labels, metadata) {
+    const issues = [];
+    const warnings = [];
+    
+    // Check feature-label count consistency
+    if (features.length !== labels.length) {
+      issues.push(`Feature-label count mismatch: ${features.length} features, ${labels.length} labels`);
+    }
+    
+    // Check feature vector consistency
+    if (features.length > 0) {
+      const expectedLength = MODEL_CONFIG.INPUT_FEATURES.TOTAL;
+      const actualLength = features[0].length;
+      
+      if (actualLength !== expectedLength) {
+        issues.push(`Feature vector length mismatch: expected ${expectedLength}, got ${actualLength}`);
+      }
+      
+      // Check for inconsistent feature vector lengths
+      const inconsistentVectors = features.some(f => f.length !== actualLength);
+      if (inconsistentVectors) {
+        issues.push('Inconsistent feature vector lengths detected');
+      }
+      
+      // Check for NaN or infinite values
+      let nanCount = 0;
+      let infCount = 0;
+      
+      features.forEach((featureVector, i) => {
+        featureVector.forEach((value, j) => {
+          if (isNaN(value)) {
+            nanCount++;
+          } else if (!isFinite(value)) {
+            infCount++;
+          }
+        });
+      });
+      
+      if (nanCount > 0) {
+        issues.push(`${nanCount} NaN values detected in features`);
+      }
+      if (infCount > 0) {
+        issues.push(`${infCount} infinite values detected in features`);
+      }
+    }
+    
+    // Check label validity
+    const invalidLabels = labels.filter(label => 
+      !Number.isInteger(label) || 
+      label < 0 || 
+      label >= MODEL_CONFIG.ARCHITECTURE.OUTPUT_SIZE
+    );
+    
+    if (invalidLabels.length > 0) {
+      issues.push(`${invalidLabels.length} invalid labels (must be integers 0-${MODEL_CONFIG.ARCHITECTURE.OUTPUT_SIZE - 1})`);
+    }
+    
+    // Check label distribution
+    const labelCounts = {};
+    labels.forEach(label => {
+      labelCounts[label] = (labelCounts[label] || 0) + 1;
+    });
+    
+    const totalLabels = labels.length;
+    const labelDistribution = Object.entries(labelCounts)
+      .map(([label, count]) => ({ label, count, percentage: (count / totalLabels) * 100 }));
+    
+    // Warn about highly imbalanced labels
+    const maxPercentage = Math.max(...labelDistribution.map(l => l.percentage));
+    if (maxPercentage > 80) {
+      warnings.push(`Label distribution is highly imbalanced (${maxPercentage.toFixed(1)}% for one class)`);
+    }
+    
+    // Check for missing label classes
+    const missingLabels = [];
+    for (let i = 0; i < MODEL_CONFIG.ARCHITECTURE.OUTPUT_SIZE; i++) {
+      if (!labelCounts[i]) {
+        missingLabels.push(i);
+      }
+    }
+    
+    if (missingLabels.length > 0) {
+      warnings.push(`Missing label classes: [${missingLabels.join(', ')}]`);
+    }
+    
+    return {
+      valid: issues.length === 0,
+      issues,
+      warnings,
+      stats: {
+        sampleCount: features.length,
+        featureLength: features.length > 0 ? features[0].length : 0,
+        labelDistribution,
+        missingLabels
+      }
+    };
+  }
+  
   // Additional methods for feedback processing would go here...
-  // These are placeholders for the full implementation
   
   async processFeedbackData(correctionData) {
     // Process and validate user correction data
@@ -1214,12 +1544,49 @@ export class TensorFlowScheduler {
   
   hasStaffCompositionChanged(currentStaffMembers) {
     // Check if staff composition has changed significantly
-    return false; // Placeholder
+    if (!this.lastTrainingData || !this.lastTrainingData.staffMembers) return true;
+    
+    const currentIds = new Set(currentStaffMembers.map(s => s.id));
+    const lastIds = new Set(this.lastTrainingData.staffMembers.map(s => s.id));
+    
+    // Check for significant changes (>25% different)
+    const intersection = new Set([...currentIds].filter(id => lastIds.has(id)));
+    const union = new Set([...currentIds, ...lastIds]);
+    const similarity = intersection.size / union.size;
+    
+    return similarity < 0.75; // More than 25% change
   }
   
   async performDataAugmentation(features, labels) {
-    // Perform data augmentation to increase training samples
-    return { features: [], labels: [] }; // Placeholder
+    // Simple data augmentation through feature noise injection
+    if (features.length < 500) {
+      const augmentedFeatures = [];
+      const augmentedLabels = [];
+      
+      // Add noise-augmented versions of existing samples
+      const augmentationFactor = Math.min(2, 1000 / features.length);
+      
+      for (let i = 0; i < features.length; i++) {
+        const originalFeature = features[i];
+        const originalLabel = labels[i];
+        
+        for (let j = 0; j < augmentationFactor; j++) {
+          const augmentedFeature = originalFeature.map(value => {
+            // Add small random noise (±5%)
+            const noise = (Math.random() - 0.5) * 0.1 * value;
+            return Math.max(0, Math.min(1, value + noise)); // Clamp to [0,1]
+          });
+          
+          augmentedFeatures.push(augmentedFeature);
+          augmentedLabels.push(originalLabel);
+        }
+      }
+      
+      console.log(`📈 Data augmentation: added ${augmentedFeatures.length} synthetic samples`);
+      return { features: augmentedFeatures, labels: augmentedLabels };
+    }
+    
+    return { features: [], labels: [] };
   }
 }
 

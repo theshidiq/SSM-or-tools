@@ -5,7 +5,7 @@
  * Provides comprehensive error recovery, fallback strategies, and system health monitoring.
  */
 
-export class aiErrorHandler {
+class AIErrorHandler {
   constructor() {
     this.errorHistory = [];
     this.systemHealth = {
@@ -961,4 +961,14 @@ export class aiErrorHandler {
   }
 }
 
-export default aiErrorHandler;
+// Create singleton instance for global use
+const errorHandlerInstance = new AIErrorHandler();
+
+// Named export for the singleton instance
+export { errorHandlerInstance as aiErrorHandler };
+
+// Also export the class for testing and advanced usage
+export { AIErrorHandler };
+
+// Default export the singleton instance
+export default errorHandlerInstance;

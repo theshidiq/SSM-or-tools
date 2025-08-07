@@ -283,12 +283,6 @@ const NavigationToolbar = ({
                     : 'text-gray-600 hover:text-gray-700'
               }`}
             />
-            {/* ML Status Indicator */}
-            {isEnhanced && (
-              <div className={`ml-1 w-2 h-2 rounded-full ${
-                isMLReady && isMLReady() ? 'bg-green-500' : 'bg-yellow-500 animate-pulse'
-              }`} title={isMLReady && isMLReady() ? 'ML準備完了' : 'ML初期化中'} />
-            )}
           </button>
 
           {/* Add Table */}

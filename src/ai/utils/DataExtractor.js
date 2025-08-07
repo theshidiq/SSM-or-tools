@@ -8,6 +8,7 @@
 import { generateDateRange } from '../../utils/dateUtils';
 import { optimizedStorage } from '../../utils/storageUtils';
 import { shiftSymbols } from '../../constants/shiftConstants';
+import { isStaffActiveInCurrentPeriod } from '../../utils/staffUtils';
 
 /**
  * Extract schedule data for a specific period
@@ -80,7 +81,24 @@ export const extractStaffProfiles = (allPeriodData) => {
   allPeriodData.forEach(periodData => {
     const { staffData, scheduleData, dateRange, monthIndex } = periodData;
     
-    staffData.forEach(staff => {
+    // Filter staff to only include those who were active in this period
+    const activeStaffForPeriod = staffData.filter(staff => {
+      try {
+        const isActive = isStaffActiveInCurrentPeriod(staff, dateRange);
+        
+        if (!isActive) {
+          console.log(`⏭️ DataExtractor: Filtering out inactive staff ${staff.name} for period ${monthIndex}`);
+        }
+        
+        return isActive;
+      } catch (error) {
+        console.warn(`⚠️ Error checking staff activity for ${staff.name} in data extraction:`, error);
+        // Default to including staff if there's an error
+        return true;
+      }
+    });
+    
+    activeStaffForPeriod.forEach(staff => {
       if (!staffProfiles[staff.id]) {
         staffProfiles[staff.id] = {
           id: staff.id,

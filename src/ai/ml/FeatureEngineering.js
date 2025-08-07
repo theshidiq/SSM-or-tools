@@ -6,6 +6,7 @@
  */
 
 import { MODEL_CONFIG } from './TensorFlowConfig';
+import { isStaffActiveInCurrentPeriod } from '../../utils/staffUtils';
 
 /**
  * Main class for converting schedule data to ML features
@@ -42,6 +43,8 @@ export class ScheduleFeatureEngineer {
       'business_busy_level', 'required_coverage', 'staff_availability',
       'cost_factor', 'constraint_violations'
     ];
+    
+    console.log(`🔍 Feature Engineering: ${this.featureNames.length} features defined`);
   }
   
   /**
@@ -53,26 +56,69 @@ export class ScheduleFeatureEngineer {
   prepareTrainingData(allHistoricalData, staffMembers) {
     const features = [];
     const labels = [];
+    const sampleMetadata = [];
     
     console.log('🔧 Preparing training data from historical schedules...');
+    console.log(`📁 Processing ${Object.keys(allHistoricalData).length} historical periods`);
+    console.log(`👥 Processing ${staffMembers.length} staff members`);
+    
+    let totalSamples = 0;
+    let validSamples = 0;
+    let invalidSamples = 0;
+    let filteredStaffCount = 0;
     
     // Process each period
     Object.entries(allHistoricalData).forEach(([periodIndex, periodData]) => {
-      if (!periodData || !periodData.schedule) return;
+      if (!periodData || !periodData.schedule) {
+        console.warn(`⚠️ Period ${periodIndex} has no schedule data`);
+        return;
+      }
       
       const { schedule, dateRange } = periodData;
+      console.log(`📅 Processing period ${periodIndex} with ${dateRange.length} days`);
       
-      // Process each staff member
-      staffMembers.forEach(staff => {
-        if (!schedule[staff.id]) return;
+      // Filter staff members to only include those who were active in this period
+      const activeStaffForPeriod = staffMembers.filter(staff => {
+        try {
+          const isActive = isStaffActiveInCurrentPeriod(staff, dateRange);
+          
+          if (!isActive) {
+            console.log(`⏭️ Skipping inactive staff ${staff.name} for period ${periodIndex} training data`);
+            filteredStaffCount++;
+          }
+          
+          return isActive;
+        } catch (error) {
+          console.warn(`⚠️ Error checking staff activity for ${staff.name} in period ${periodIndex}:`, error);
+          // Default to including staff if there's an error
+          return true;
+        }
+      });
+      
+      console.log(`👥 Training with ${activeStaffForPeriod.length} active staff for period ${periodIndex}`);
+      
+      // Process only active staff members
+      activeStaffForPeriod.forEach(staff => {
+        if (!schedule[staff.id]) {
+          console.log(`ℹ️ No schedule data for staff ${staff.name} (${staff.id}) in period ${periodIndex}`);
+          return;
+        }
+        
+        const staffSchedule = schedule[staff.id];
+        let staffSamples = 0;
         
         // Process each date for this staff member
         dateRange.forEach((date, dateIndex) => {
+          totalSamples++;
           const dateKey = date.toISOString().split('T')[0];
-          const actualShift = schedule[staff.id][dateKey];
+          const actualShift = staffSchedule[dateKey];
           
-          // Skip if no actual shift data (can't learn from missing data)
-          if (actualShift === undefined || actualShift === null) return;
+          // Accept both defined values and empty strings (meaningful for regular staff)
+          if (actualShift === undefined || actualShift === null) {
+            console.log(`⚠️ Missing shift data for ${staff.name} on ${dateKey}`);
+            invalidSamples++;
+            return;
+          }
           
           // Generate features for this staff-date combination
           const featureVector = this.generateFeatures({
@@ -90,17 +136,56 @@ export class ScheduleFeatureEngineer {
           if (featureVector && label !== null) {
             features.push(featureVector);
             labels.push(label);
+            sampleMetadata.push({
+              staffId: staff.id,
+              staffName: staff.name,
+              date: dateKey,
+              period: periodIndex,
+              actualShift,
+              label,
+              isPartTime: staff.status === 'パート'
+            });
+            validSamples++;
+            staffSamples++;
+          } else {
+            console.warn(`⚠️ Invalid feature/label for ${staff.name} on ${dateKey}: shift="${actualShift}", label=${label}`);
+            invalidSamples++;
           }
         });
+        
+        console.log(`📊 Staff ${staff.name}: ${staffSamples} training samples`);
       });
     });
     
-    console.log(`✅ Generated ${features.length} training samples`);
+    console.log(`✅ Training data preparation completed:`);
+    console.log(`  - Total samples processed: ${totalSamples}`);
+    console.log(`  - Valid samples generated: ${validSamples}`);
+    console.log(`  - Invalid/skipped samples: ${invalidSamples}`);
+    console.log(`  - Inactive staff filtered: ${filteredStaffCount}`);
+    console.log(`  - Success rate: ${((validSamples / totalSamples) * 100).toFixed(1)}%`);
+    
+    // Validate feature consistency
+    if (features.length > 0) {
+      const featureLength = features[0].length;
+      const expectedLength = MODEL_CONFIG.INPUT_FEATURES.TOTAL;
+      console.log(`🔍 Feature validation: ${featureLength} features per sample (expected: ${expectedLength})`);
+      
+      if (featureLength !== expectedLength) {
+        console.error(`❌ Feature length mismatch! This will cause training failures.`);
+      }
+    }
     
     return {
       features: features,
       labels: labels,
-      featureNames: this.featureNames
+      featureNames: this.featureNames,
+      metadata: sampleMetadata,
+      stats: {
+        totalSamples,
+        validSamples,
+        invalidSamples,
+        successRate: validSamples / totalSamples
+      }
     };
   }
   
@@ -108,10 +193,13 @@ export class ScheduleFeatureEngineer {
    * Generate feature vector for a specific staff-date combination
    */
   generateFeatures({ staff, date, dateIndex, periodData, allHistoricalData, staffMembers }) {
-    const features = new Array(MODEL_CONFIG.INPUT_FEATURES.TOTAL).fill(0);
+    const expectedFeatures = MODEL_CONFIG.INPUT_FEATURES.TOTAL;
+    const features = new Array(expectedFeatures).fill(0);
     let idx = 0;
     
     try {
+      console.log(`🔧 Generating ${expectedFeatures} features for staff ${staff.name} on ${date.toISOString().split('T')[0]}`);
+      
       // Staff features (10)
       features[idx++] = this.hashString(staff.id) / 1000000; // Normalize hash
       features[idx++] = staff.status === '社員' ? 1 : 0;
@@ -157,6 +245,23 @@ export class ScheduleFeatureEngineer {
       features[idx++] = this.calculateCostFactor(staff, date);
       features[idx++] = this.calculateConstraintViolations(staff, periodData, date);
       
+      // Validate feature count matches expected
+      if (idx !== expectedFeatures) {
+        console.warn(`⚠️ Feature count mismatch: generated ${idx}, expected ${expectedFeatures}`);
+        // Pad or trim to match expected size
+        while (features.length < expectedFeatures) features.push(0);
+        while (features.length > expectedFeatures) features.pop();
+      }
+      
+      // Validate no NaN or infinite values
+      for (let i = 0; i < features.length; i++) {
+        if (!isFinite(features[i])) {
+          console.warn(`⚠️ Invalid feature at index ${i}: ${features[i]}, replacing with 0`);
+          features[i] = 0;
+        }
+      }
+      
+      console.log(`✅ Generated ${features.length} valid features (idx=${idx})`);
       return features;
     } catch (error) {
       console.error('❌ Error generating features:', error);
@@ -308,27 +413,77 @@ export class ScheduleFeatureEngineer {
   analyzeHistoricalPatterns(staff, allHistoricalData) {
     let earlyCount = 0, normalCount = 0, lateCount = 0, offCount = 0, total = 0;
     const periods = Object.keys(allHistoricalData).length;
+    const periodWorkRates = [];
     
-    Object.values(allHistoricalData).forEach(periodData => {
+    Object.entries(allHistoricalData).forEach(([periodKey, periodData]) => {
       if (!periodData?.schedule?.[staff.id]) return;
+      
+      let periodWork = 0, periodTotal = 0;
       
       Object.values(periodData.schedule[staff.id]).forEach(shift => {
         total++;
+        periodTotal++;
+        
+        // Count shift types with proper handling of empty strings for regular staff
+        const isPartTime = staff.status === 'パート';
+        
         switch (shift) {
-          case '△': earlyCount++; break;
-          case '○': case '': normalCount++; break;
-          case '▽': lateCount++; break;
-          case '×': offCount++; break;
+          case '△': 
+            earlyCount++; 
+            periodWork++;
+            break;
+          case '○': 
+            normalCount++; 
+            periodWork++;
+            break;
+          case '▽': 
+            lateCount++; 
+            periodWork++;
+            break;
+          case '×': 
+            offCount++; 
+            break;
+          case '': 
+            if (!isPartTime) {
+              normalCount++; // Empty = normal work for regular staff
+              periodWork++;
+            }
+            break;
+          default:
+            if (shift && shift.trim() !== '') {
+              normalCount++; // Custom text = work
+              periodWork++;
+            }
         }
       });
+      
+      if (periodTotal > 0) {
+        periodWorkRates.push(periodWork / periodTotal);
+      }
     });
     
     if (total === 0) {
       return {
-        earlyFreq: 0, normalFreq: 0.5, lateFreq: 0, offFreq: 0.3,
-        avgWeeklyHours: 20, consistency: 0.5, workloadTrend: 0,
+        earlyFreq: 0, normalFreq: staff.status === 'パート' ? 0.3 : 0.7, lateFreq: 0, offFreq: 0.3,
+        avgWeeklyHours: staff.status === 'パート' ? 20 : 35, consistency: 0.5, workloadTrend: 0,
         preferenceStrength: 0.5, stability: 0.5
       };
+    }
+    
+    // Calculate workload trend
+    let workloadTrend = 0;
+    if (periodWorkRates.length >= 2) {
+      const recent = periodWorkRates.slice(-2).reduce((a, b) => a + b, 0) / 2;
+      const older = periodWorkRates.slice(0, -2).reduce((a, b) => a + b, 0) / Math.max(1, periodWorkRates.length - 2);
+      workloadTrend = (recent - older) * 2; // Scale to [-2, 2] range
+    }
+    
+    // Calculate stability based on variance in work rates
+    let stability = 0.5;
+    if (periodWorkRates.length > 1) {
+      const avgRate = periodWorkRates.reduce((a, b) => a + b, 0) / periodWorkRates.length;
+      const variance = periodWorkRates.reduce((sum, rate) => sum + Math.pow(rate - avgRate, 2), 0) / periodWorkRates.length;
+      stability = Math.max(0, Math.min(1, 1 - variance)); // Higher stability = lower variance
     }
     
     return {
@@ -336,11 +491,11 @@ export class ScheduleFeatureEngineer {
       normalFreq: normalCount / total,
       lateFreq: lateCount / total,
       offFreq: offCount / total,
-      avgWeeklyHours: ((total - offCount) / total) * 40,
+      avgWeeklyHours: ((total - offCount) / total) * (staff.status === 'パート' ? 25 : 40),
       consistency: this.calculateConsistency(staff, allHistoricalData),
-      workloadTrend: periods > 1 ? Math.random() * 0.2 - 0.1 : 0, // Placeholder
+      workloadTrend: Math.max(-1, Math.min(1, workloadTrend)),
       preferenceStrength: Math.max(earlyCount, normalCount, lateCount) / total,
-      stability: 0.7 // Placeholder
+      stability: stability
     };
   }
   
@@ -366,7 +521,7 @@ export class ScheduleFeatureEngineer {
     return patterns.length > 1 ? 0.7 : 0.5;
   }
   
-  // Additional utility functions (simplified implementations)
+  // Additional utility functions (improved implementations)
   calculateConsecutiveDays(staff, periodData, currentDate) {
     if (!periodData?.schedule?.[staff.id]) return 0;
     
@@ -378,7 +533,11 @@ export class ScheduleFeatureEngineer {
       pastDate.setDate(pastDate.getDate() - i);
       const dateKey = pastDate.toISOString().split('T')[0];
       
-      if (schedule[dateKey] && schedule[dateKey] !== '×') {
+      const shift = schedule[dateKey];
+      const isWorkDay = shift && shift !== '×' && shift !== '' ? true : 
+                        (!staff.isPartTime && shift === ''); // Empty = work for regular staff
+      
+      if (isWorkDay) {
         consecutive++;
       } else {
         break;
@@ -396,18 +555,63 @@ export class ScheduleFeatureEngineer {
     const dateKey = lastWeek.toISOString().split('T')[0];
     
     const shift = periodData.schedule[staff.id][dateKey];
-    return shift && shift !== '×' ? 1 : 0;
+    const isWorkDay = shift && shift !== '×' ? 1 : 
+                      (!staff.isPartTime && shift === '' ? 1 : 0);
+    return isWorkDay;
   }
   
   getSameDayLastMonth(staff, allHistoricalData, currentDate) {
-    // Simple implementation - check if worked same day in previous periods
-    return Math.random() > 0.5 ? 1 : 0; // Placeholder
+    // Look for same day of week in previous periods
+    const targetDayOfWeek = currentDate.getDay();
+    let workingDaysFound = 0;
+    let totalDaysFound = 0;
+    
+    Object.values(allHistoricalData).forEach(periodData => {
+      if (!periodData?.schedule?.[staff.id]) return;
+      
+      Object.entries(periodData.schedule[staff.id]).forEach(([dateKey, shift]) => {
+        const date = new Date(dateKey);
+        if (date.getDay() === targetDayOfWeek) {
+          totalDaysFound++;
+          const isWorkDay = shift && shift !== '×' ? true : 
+                            (!staff.isPartTime && shift === '');
+          if (isWorkDay) workingDaysFound++;
+        }
+      });
+    });
+    
+    return totalDaysFound > 0 ? workingDaysFound / totalDaysFound : 0.5;
   }
   
   calculateBusinessLevel(date, periodData) {
-    // Business level based on day of week (weekends busier)
+    // Enhanced business level calculation
     const dayOfWeek = date.getDay();
-    return (dayOfWeek === 0 || dayOfWeek === 6) ? 80 : 60;
+    const month = date.getMonth() + 1;
+    const dayOfMonth = date.getDate();
+    
+    let baseLevel = 60; // Weekday baseline
+    
+    // Weekend premium
+    if (dayOfWeek === 0 || dayOfWeek === 6) {
+      baseLevel = 80;
+    }
+    
+    // Friday night boost
+    if (dayOfWeek === 5) {
+      baseLevel = 75;
+    }
+    
+    // End of month boost (payday effect)
+    if (dayOfMonth >= 25) {
+      baseLevel += 10;
+    }
+    
+    // Holiday season boost
+    if (month === 12 || month === 1) {
+      baseLevel += 15;
+    }
+    
+    return Math.min(100, baseLevel);
   }
   
   calculateRequiredCoverage(date, staffMembers) {
