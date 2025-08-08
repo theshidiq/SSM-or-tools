@@ -201,19 +201,21 @@ const SettingsModal = ({
 
         {/* Tab Navigation */}
         <div className="px-6 py-4 border-b border-gray-200 bg-gray-50">
-          <nav className="flex space-x-1" role="tablist">
-            {TABS.map((tab, index) => (
-              <TabButton
-                key={tab.id}
-                id={tab.id}
-                label={tab.label}
-                icon={tab.icon}
-                isActive={activeTab === tab.id}
-                onClick={() => setActiveTab(tab.id)}
-                hasErrors={validationErrors[tab.id] && Object.keys(validationErrors[tab.id]).length > 0}
-                keyboardShortcut={`Ctrl+${index + 1}`}
-              />
-            ))}
+          <nav aria-label="Settings navigation">
+            <div className="flex space-x-1" role="tablist">
+              {TABS.map((tab, index) => (
+                <TabButton
+                  key={tab.id}
+                  id={tab.id}
+                  label={tab.label}
+                  icon={tab.icon}
+                  isActive={activeTab === tab.id}
+                  onClick={() => setActiveTab(tab.id)}
+                  hasErrors={validationErrors[tab.id] && Object.keys(validationErrors[tab.id]).length > 0}
+                  keyboardShortcut={`Ctrl+${index + 1}`}
+                />
+              ))}
+            </div>
           </nav>
         </div>
 
