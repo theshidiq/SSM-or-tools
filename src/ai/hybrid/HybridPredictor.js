@@ -44,10 +44,10 @@ export class HybridPredictor {
       await this.ruleValidator.initialize(options.rules);
 
       this.options = {
-        // ML prediction settings
-        mlConfidenceThreshold: 0.8,  // Increased for better quality
-        mlMediumConfidenceThreshold: 0.6,  // Medium confidence range
-        mlLowConfidenceThreshold: 0.4,  // Low confidence threshold
+        // ML prediction settings - UPDATED for high-accuracy ML system
+        mlConfidenceThreshold: 0.85,  // High confidence for 90%+ accuracy system
+        mlMediumConfidenceThreshold: 0.75,  // Medium confidence threshold
+        mlLowConfidenceThreshold: 0.65,  // Low confidence threshold
         useMLPredictions: true,
         
         // Rule validation settings
@@ -699,10 +699,23 @@ export class HybridPredictor {
    */
   async makeIntelligentDecision(mlPredictions, mlConfidenceLevel, mlSuccess, staffMembers, dateRange) {
     try {
-      console.log(`🤔 Making intelligent decision: ML confidence = ${mlConfidenceLevel}, success = ${mlSuccess}`);
+      const mlAccuracy = mlPredictions?.modelAccuracy || 0;
+      console.log(`🤔 Making intelligent decision: ML accuracy = ${(mlAccuracy*100).toFixed(1)}%, confidence = ${mlConfidenceLevel}, success = ${mlSuccess}`);
       
       // Update decision engine metrics
       this.decisionEngine.totalDecisions++;
+      
+      // SPECIAL CASE: Always use ML when high accuracy is achieved (90%+)
+      if (mlSuccess && mlAccuracy >= 0.90) {
+        console.log('🎯 Using high-accuracy ML system (90%+ accuracy achieved)');
+        this.decisionEngine.mlSuccessRate++;
+        return {
+          useML: true,
+          method: 'high_accuracy_ml',
+          allowPartialValidation: false,
+          reasoning: `High accuracy ML system: ${(mlAccuracy * 100).toFixed(1)}% accuracy`
+        };
+      }
       
       // Decision matrix based on confidence and system state
       if (mlSuccess && mlConfidenceLevel === 'high') {

@@ -21,6 +21,10 @@ import {
   PRIORITY_RULES,
   DAILY_LIMITS,
   getMonthlyLimits,
+  getDailyLimits,
+  getPriorityRules,
+  getStaffConflictGroups,
+  initializeConstraintConfiguration,
   isOffDay,
   isEarlyShift,
   isLateShift,
@@ -29,6 +33,8 @@ import {
   isWeekday,
   getDayOfWeek
 } from '../constraints/ConstraintEngine';
+
+import { ConfigurationService } from '../../services/ConfigurationService.js';
 
 export class BusinessRuleValidator {
   constructor() {
@@ -42,6 +48,13 @@ export class BusinessRuleValidator {
       correctionsApplied: 0,
       successRate: 0
     };
+    
+    // Configuration service integration
+    this.configService = null;
+    this.restaurantId = null;
+    this.configurationCache = new Map();
+    this.lastConfigRefresh = 0;
+    this.configRefreshInterval = 5 * 60 * 1000; // 5 minutes
     
     // Initialize correction strategies
     this.initializeCorrectionStrategies();
@@ -62,6 +75,29 @@ export class BusinessRuleValidator {
         ...options
       };
 
+      // Extract restaurant ID for configuration service
+      this.restaurantId = options.restaurantId;
+
+      // Initialize configuration service if restaurant ID provided
+      if (this.restaurantId) {
+        try {
+          // Initialize constraint engine configuration
+          this.configService = await initializeConstraintConfiguration(this.restaurantId);
+          
+          if (!this.configService) {
+            console.warn('⚠️ Configuration service not available, using fallback static configuration');
+          } else {
+            console.log('✅ Configuration service integrated with BusinessRuleValidator');
+          }
+        } catch (error) {
+          console.warn('⚠️ Configuration service initialization failed, using static fallback:', error);
+          this.configService = null;
+        }
+      }
+
+      // Load dynamic configurations
+      await this.refreshConfiguration();
+
       this.initialized = true;
       this.status = 'ready';
       console.log('✅ BusinessRuleValidator initialized');
@@ -79,6 +115,43 @@ export class BusinessRuleValidator {
    */
   isReady() {
     return this.initialized && this.status === 'ready';
+  }
+
+  /**
+   * Refresh configuration from database
+   */
+  async refreshConfiguration() {
+    try {
+      if (!this.configService) {
+        return; // Use static fallback
+      }
+
+      const now = Date.now();
+      if (now - this.lastConfigRefresh < this.configRefreshInterval) {
+        return; // Cache still valid
+      }
+
+      // Load configurations
+      const [dailyLimits, monthlyLimits, priorityRules, staffGroups] = await Promise.all([
+        getDailyLimits(),
+        getMonthlyLimits(new Date().getFullYear(), new Date().getMonth() + 1),
+        getPriorityRules(),
+        getStaffConflictGroups()
+      ]);
+
+      // Cache configurations
+      this.configurationCache.set('dailyLimits', dailyLimits);
+      this.configurationCache.set('monthlyLimits', monthlyLimits);
+      this.configurationCache.set('priorityRules', priorityRules);
+      this.configurationCache.set('staffGroups', staffGroups);
+      
+      this.lastConfigRefresh = now;
+      console.log('🔄 BusinessRuleValidator configuration refreshed');
+
+    } catch (error) {
+      console.warn('⚠️ Configuration refresh failed:', error);
+      // Continue using cached or static configuration
+    }
   }
 
   /**
@@ -160,8 +233,11 @@ export class BusinessRuleValidator {
     try {
       console.log('🔍 Validating schedule against business rules...');
 
+      // Refresh configuration if needed
+      await this.refreshConfiguration();
+
       // Perform comprehensive constraint validation
-      const validationResult = validateAllConstraints(schedule, staffMembers, dateRange);
+      const validationResult = await validateAllConstraints(schedule, staffMembers, dateRange);
 
       // Additional business-specific validations
       const businessSpecificValidation = await this.performBusinessSpecificValidation(
@@ -406,7 +482,8 @@ export class BusinessRuleValidator {
       if (weekendWorkRatio > 0.70) staffSatisfaction -= 15; // Too many weekends
       
       // Priority rule satisfaction
-      if (PRIORITY_RULES[staff.name]) {
+      const priorityRules = this.configurationCache.get('priorityRules') || PRIORITY_RULES;
+      if (priorityRules[staff.name] || priorityRules[staff.id]) {
         // Check if priority rules are followed (simplified check)
         staffSatisfaction += 10; // Bonus for having priority rules considered
       }
@@ -774,17 +851,22 @@ export class BusinessRuleValidator {
    * @param {Array} dateRange - Date range
    */
   async applyPriorityRules(schedule, staffMembers, dateRange) {
-    Object.keys(PRIORITY_RULES).forEach(staffName => {
-      const staff = staffMembers.find(s => s.name === staffName);
+    // Get priority rules from cache or fallback to static
+    const priorityRules = this.configurationCache.get('priorityRules') || PRIORITY_RULES;
+    
+    Object.keys(priorityRules).forEach(staffIdentifier => {
+      // Find staff by name or ID
+      const staff = staffMembers.find(s => s.name === staffIdentifier || s.id === staffIdentifier);
       if (!staff || !schedule[staff.id]) return;
 
-      const rules = PRIORITY_RULES[staffName];
+      const rules = priorityRules[staffIdentifier];
+      const preferredShifts = rules.preferredShifts || [];
       
       dateRange.forEach(date => {
         const dateKey = date.toISOString().split('T')[0];
         const dayOfWeek = getDayOfWeek(dateKey);
         
-        rules.preferredShifts.forEach(rule => {
+        preferredShifts.forEach(rule => {
           if (rule.day === dayOfWeek) {
             let shiftValue = '';
             
@@ -829,10 +911,15 @@ export class BusinessRuleValidator {
    * @param {Array} dateRange - Date range
    */
   async distributeOffDays(schedule, staffMembers, dateRange) {
-    const monthLimits = getMonthlyLimits(
+    // Use cached monthly limits or fallback
+    const cachedMonthlyLimits = this.configurationCache.get('monthlyLimits');
+    const monthLimits = cachedMonthlyLimits || await getMonthlyLimits(
       dateRange[0].getFullYear(),
       dateRange[0].getMonth() + 1
     );
+
+    // Use cached daily limits or fallback
+    const dailyLimits = this.configurationCache.get('dailyLimits') || DAILY_LIMITS;
 
     staffMembers.forEach(staff => {
       if (!schedule[staff.id]) return;
@@ -856,7 +943,8 @@ export class BusinessRuleValidator {
             }
           });
 
-          if (currentOffCount < DAILY_LIMITS.maxOffPerDay) {
+          const maxOffPerDay = dailyLimits.maxOffPerDay || 4;
+          if (currentOffCount < maxOffPerDay) {
             schedule[staff.id][dateKey] = '×';
             offDaysSet++;
           }
@@ -872,8 +960,11 @@ export class BusinessRuleValidator {
    * @param {Array} dateRange - Date range
    */
   async applyCoverageCompensation(schedule, staffMembers, dateRange) {
+    // Get staff groups from cache or fallback
+    const staffGroups = this.configurationCache.get('staffGroups') || STAFF_CONFLICT_GROUPS;
+    
     // Apply Group 2 coverage compensation rule
-    const group2 = STAFF_CONFLICT_GROUPS.find(g => g.name === 'Group 2');
+    const group2 = staffGroups.find(g => g.name === 'Group 2');
     if (!group2 || !group2.coverageRule) return;
 
     const backupStaff = staffMembers.find(s => s.name === group2.coverageRule.backupStaff);
@@ -884,7 +975,8 @@ export class BusinessRuleValidator {
       
       // Check if any Group 2 member is off
       let group2MemberOff = false;
-      group2.members.forEach(memberName => {
+      const members = group2.members || [];
+      members.forEach(memberName => {
         const staff = staffMembers.find(s => s.name === memberName);
         if (staff && schedule[staff.id][dateKey] === '×') {
           group2MemberOff = true;
@@ -905,6 +997,9 @@ export class BusinessRuleValidator {
    * @param {Array} dateRange - Date range
    */
   async applyFinalAdjustments(schedule, staffMembers, dateRange) {
+    // Use cached daily limits or fallback
+    const dailyLimits = this.configurationCache.get('dailyLimits') || DAILY_LIMITS;
+    
     // Ensure minimum coverage each day
     dateRange.forEach(date => {
       const dateKey = date.toISOString().split('T')[0];
@@ -917,8 +1012,9 @@ export class BusinessRuleValidator {
       });
 
       // If insufficient coverage, convert some off days to working days
-      if (workingStaff < DAILY_LIMITS.minWorkingStaffPerDay) {
-        const deficit = DAILY_LIMITS.minWorkingStaffPerDay - workingStaff;
+      const minWorkingStaffPerDay = dailyLimits.minWorkingStaffPerDay || 3;
+      if (workingStaff < minWorkingStaffPerDay) {
+        const deficit = minWorkingStaffPerDay - workingStaff;
         let converted = 0;
         
         for (const staff of staffMembers) {
@@ -1237,7 +1333,8 @@ export class BusinessRuleValidator {
    * @returns {number} Compliance score (0-1)
    */
   async calculatePreferenceCompliance(staffSchedule, staff, dateRange) {
-    const rules = PRIORITY_RULES[staff.name];
+    const priorityRules = this.configurationCache.get('priorityRules') || PRIORITY_RULES;
+    const rules = priorityRules[staff.name] || priorityRules[staff.id];
     if (!rules || !rules.preferredShifts) return 0.8; // Default good score if no rules
     
     let totalPreferences = 0;

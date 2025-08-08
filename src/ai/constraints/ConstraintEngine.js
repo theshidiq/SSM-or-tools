@@ -6,12 +6,101 @@
  */
 
 import { getDaysInMonth } from '../../utils/dateUtils';
+import { ConfigurationService } from '../../services/ConfigurationService.js';
+
+// Configuration service instance - will be initialized when first used
+let configService = null;
+let configCache = new Map();
+let cacheTimestamp = 0;
+const CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
+
+/**
+ * Initialize configuration service
+ * @param {string} restaurantId - Restaurant ID for configuration
+ */
+export const initializeConstraintConfiguration = async (restaurantId) => {
+  if (!configService && restaurantId) {
+    configService = new ConfigurationService();
+    await configService.initialize({ restaurantId });
+    console.log('✅ Constraint Engine configuration service initialized');
+  }
+  return configService;
+};
+
+/**
+ * Get configuration with caching
+ * @param {string} configType - Type of configuration to get
+ */
+const getCachedConfig = async (configType) => {
+  const now = Date.now();
+  const cacheKey = `${configType}_${now}`;
+  
+  // Check if cache is still valid
+  if (configCache.has(configType) && (now - cacheTimestamp) < CACHE_DURATION) {
+    return configCache.get(configType);
+  }
+  
+  // Load fresh configuration
+  if (configService) {
+    try {
+      let config;
+      switch (configType) {
+        case 'staff_groups':
+          config = await configService.getStaffGroupsWithMembers();
+          break;
+        case 'priority_rules':
+          config = await configService.getPriorityRules();
+          break;
+        case 'daily_limits':
+          config = await configService.getDailyLimits();
+          break;
+        case 'monthly_limits':
+          config = await configService.getMonthlyLimits();
+          break;
+        case 'conflict_rules':
+          config = await configService.getConflictRules();
+          break;
+        default:
+          config = null;
+      }
+      
+      if (config) {
+        configCache.set(configType, config);
+        cacheTimestamp = now;
+        return config;
+      }
+    } catch (error) {
+      console.warn(`⚠️ Failed to load ${configType} configuration:`, error);
+    }
+  }
+  
+  // Fallback to static configuration
+  return getStaticConfiguration(configType);
+};
+
+/**
+ * Get static fallback configuration
+ */
+const getStaticConfiguration = (configType) => {
+  switch (configType) {
+    case 'staff_groups':
+      return STATIC_STAFF_CONFLICT_GROUPS;
+    case 'priority_rules':
+      return STATIC_PRIORITY_RULES;
+    case 'daily_limits':
+      return STATIC_DAILY_LIMITS;
+    case 'monthly_limits':
+      return (year, month) => getStaticMonthlyLimits(year, month);
+    default:
+      return null;
+  }
+};
 
 /**
  * Staff groups that cannot have simultaneous off/early shifts
- * Updated to match new group structure from AI_PREDICTION_MODEL_SPEC.md v1.1
+ * Static fallback configuration - Updated to match new group structure
  */
-export const STAFF_CONFLICT_GROUPS = [
+const STATIC_STAFF_CONFLICT_GROUPS = [
   { name: 'Group 1', members: ['料理長', '井関'] },
   { 
     name: 'Group 2', 
@@ -38,9 +127,9 @@ export const STAFF_CONFLICT_GROUPS = [
 ];
 
 /**
- * Priority rules for specific staff members
+ * Static priority rules for specific staff members
  */
-export const PRIORITY_RULES = {
+const STATIC_PRIORITY_RULES = {
   '料理長': {
     preferredShifts: [
       { day: 'sunday', shift: 'early', priority: 'high' }
@@ -54,9 +143,9 @@ export const PRIORITY_RULES = {
 };
 
 /**
- * Daily limits for different shift types
+ * Static daily limits for different shift types
  */
-export const DAILY_LIMITS = {
+const STATIC_DAILY_LIMITS = {
   maxOffPerDay: 4,
   maxEarlyPerDay: 4,
   maxLatePerDay: 3,
@@ -64,15 +153,51 @@ export const DAILY_LIMITS = {
 };
 
 /**
- * Monthly limits based on days in month
+ * Static monthly limits based on days in month
  */
-export const getMonthlyLimits = (year, month) => {
+const getStaticMonthlyLimits = (year, month) => {
   const daysInMonth = getDaysInMonth(year, month);
   return {
     maxOffDaysPerMonth: daysInMonth === 31 ? 8 : 7,
     minWorkDaysPerMonth: daysInMonth === 31 ? 23 : 23
   };
 };
+
+// Dynamic getters that use configuration service or fall back to static config
+export const getStaffConflictGroups = async () => {
+  return await getCachedConfig('staff_groups');
+};
+
+export const getPriorityRules = async () => {
+  return await getCachedConfig('priority_rules');
+};
+
+export const getDailyLimits = async () => {
+  return await getCachedConfig('daily_limits');
+};
+
+export const getMonthlyLimits = async (year, month) => {
+  const limits = await getCachedConfig('monthly_limits');
+  
+  if (typeof limits === 'function') {
+    return limits(year, month);
+  } else if (limits && typeof limits === 'object') {
+    // Database configuration format
+    const daysInMonth = getDaysInMonth(year, month);
+    return {
+      maxOffDaysPerMonth: limits.maxOffDaysPerMonth || (daysInMonth === 31 ? 8 : 7),
+      minWorkDaysPerMonth: limits.minWorkDaysPerMonth || 23
+    };
+  }
+  
+  // Fallback to static calculation
+  return getStaticMonthlyLimits(year, month);
+};
+
+// Export static versions for backward compatibility
+export const STAFF_CONFLICT_GROUPS = STATIC_STAFF_CONFLICT_GROUPS;
+export const PRIORITY_RULES = STATIC_PRIORITY_RULES;
+export const DAILY_LIMITS = STATIC_DAILY_LIMITS;
 
 /**
  * Constraint violation types
@@ -163,7 +288,7 @@ export const getDayOfWeek = (dateKey) => {
  * @param {Array} dateRange - Array of dates for the month
  * @returns {Object} Validation result
  */
-export const validateMonthlyOffLimits = (staffSchedule, staffName, dateRange) => {
+export const validateMonthlyOffLimits = async (staffSchedule, staffName, dateRange) => {
   if (!staffSchedule || !dateRange.length) {
     return { valid: true, violations: [] };
   }
@@ -171,7 +296,7 @@ export const validateMonthlyOffLimits = (staffSchedule, staffName, dateRange) =>
   const firstDate = dateRange[0];
   const year = firstDate.getFullYear();
   const month = firstDate.getMonth() + 1;
-  const monthlyLimits = getMonthlyLimits(year, month);
+  const monthlyLimits = await getMonthlyLimits(year, month);
 
   let offDaysCount = 0;
   const offDays = [];
@@ -218,8 +343,10 @@ export const validateMonthlyOffLimits = (staffSchedule, staffName, dateRange) =>
  * @param {Array} staffMembers - Array of staff member objects
  * @returns {Object} Validation result
  */
-export const validateDailyLimits = (scheduleData, dateKey, staffMembers) => {
+export const validateDailyLimits = async (scheduleData, dateKey, staffMembers) => {
   const violations = [];
+  const dailyLimits = await getDailyLimits();
+  
   let offCount = 0;
   let earlyCount = 0;
   let lateCount = 0;
@@ -256,48 +383,51 @@ export const validateDailyLimits = (scheduleData, dateKey, staffMembers) => {
   });
 
   // Check daily off limit
-  if (offCount > DAILY_LIMITS.maxOffPerDay) {
+  const maxOffPerDay = dailyLimits.maxOffPerDay || 4;
+  if (offCount > maxOffPerDay) {
     violations.push({
       type: VIOLATION_TYPES.DAILY_OFF_LIMIT,
       date: dateKey,
-      message: `Too many staff off on ${dateKey}: ${offCount} exceeds limit of ${DAILY_LIMITS.maxOffPerDay}`,
+      message: `Too many staff off on ${dateKey}: ${offCount} exceeds limit of ${maxOffPerDay}`,
       severity: 'high',
       details: {
         offCount,
-        limit: DAILY_LIMITS.maxOffPerDay,
+        limit: maxOffPerDay,
         staffOff: dayData.off,
-        excess: offCount - DAILY_LIMITS.maxOffPerDay
+        excess: offCount - maxOffPerDay
       }
     });
   }
 
   // Check daily early shift limit
-  if (earlyCount > DAILY_LIMITS.maxEarlyPerDay) {
+  const maxEarlyPerDay = dailyLimits.maxEarlyPerDay || 4;
+  if (earlyCount > maxEarlyPerDay) {
     violations.push({
       type: VIOLATION_TYPES.DAILY_EARLY_LIMIT,
       date: dateKey,
-      message: `Too many early shifts on ${dateKey}: ${earlyCount} exceeds limit of ${DAILY_LIMITS.maxEarlyPerDay}`,
+      message: `Too many early shifts on ${dateKey}: ${earlyCount} exceeds limit of ${maxEarlyPerDay}`,
       severity: 'medium',
       details: {
         earlyCount,
-        limit: DAILY_LIMITS.maxEarlyPerDay,
+        limit: maxEarlyPerDay,
         staffEarly: dayData.early,
-        excess: earlyCount - DAILY_LIMITS.maxEarlyPerDay
+        excess: earlyCount - maxEarlyPerDay
       }
     });
   }
 
   // Check minimum working staff
-  if (workingCount < DAILY_LIMITS.minWorkingStaffPerDay) {
+  const minWorkingStaffPerDay = dailyLimits.minWorkingStaffPerDay || 3;
+  if (workingCount < minWorkingStaffPerDay) {
     violations.push({
       type: VIOLATION_TYPES.INSUFFICIENT_COVERAGE,
       date: dateKey,
-      message: `Insufficient coverage on ${dateKey}: only ${workingCount} working, need at least ${DAILY_LIMITS.minWorkingStaffPerDay}`,
+      message: `Insufficient coverage on ${dateKey}: only ${workingCount} working, need at least ${minWorkingStaffPerDay}`,
       severity: 'critical',
       details: {
         workingCount,
-        requiredMinimum: DAILY_LIMITS.minWorkingStaffPerDay,
-        deficit: DAILY_LIMITS.minWorkingStaffPerDay - workingCount,
+        requiredMinimum: minWorkingStaffPerDay,
+        deficit: minWorkingStaffPerDay - workingCount,
         staffWorking: dayData.working
       }
     });
@@ -324,14 +454,16 @@ export const validateDailyLimits = (scheduleData, dateKey, staffMembers) => {
  * @param {Array} staffMembers - Array of staff member objects
  * @returns {Object} Validation result
  */
-export const validateStaffGroupConflicts = (scheduleData, dateKey, staffMembers) => {
+export const validateStaffGroupConflicts = async (scheduleData, dateKey, staffMembers) => {
   const violations = [];
+  const staffGroups = await getStaffConflictGroups();
 
-  STAFF_CONFLICT_GROUPS.forEach(group => {
+  staffGroups.forEach(group => {
     const groupMembers = [];
     let offOrEarlyCount = 0;
 
-    group.members.forEach(memberName => {
+    const members = group.members || [];
+    members.forEach(memberName => {
       const staff = staffMembers.find(s => s.name === memberName);
       if (staff && scheduleData[staff.id] && scheduleData[staff.id][dateKey] !== undefined) {
         const shift = scheduleData[staff.id][dateKey];
@@ -357,7 +489,7 @@ export const validateStaffGroupConflicts = (scheduleData, dateKey, staffMembers)
         severity: 'high',
         details: {
           groupName: group.name,
-          groupMembers: group.members,
+          groupMembers: members,
           conflictingMembers,
           conflictCount: offOrEarlyCount
         }
@@ -378,20 +510,23 @@ export const validateStaffGroupConflicts = (scheduleData, dateKey, staffMembers)
  * @param {Array} staffMembers - Array of staff member objects
  * @returns {Object} Validation result
  */
-export const validatePriorityRules = (scheduleData, dateKey, staffMembers) => {
+export const validatePriorityRules = async (scheduleData, dateKey, staffMembers) => {
   const violations = [];
   const dayOfWeek = getDayOfWeek(dateKey);
+  const priorityRules = await getPriorityRules();
 
-  Object.keys(PRIORITY_RULES).forEach(staffName => {
-    const staff = staffMembers.find(s => s.name === staffName);
+  // Handle both database format (by staff ID) and static format (by staff name)
+  const processRules = (staffIdentifier, rules) => {
+    // Find staff by name or ID
+    const staff = staffMembers.find(s => s.name === staffIdentifier || s.id === staffIdentifier);
     if (!staff || !scheduleData[staff.id] || scheduleData[staff.id][dateKey] === undefined) {
       return;
     }
 
     const currentShift = scheduleData[staff.id][dateKey];
-    const rules = PRIORITY_RULES[staffName];
+    const preferredShifts = rules.preferredShifts || [];
 
-    rules.preferredShifts.forEach(rule => {
+    preferredShifts.forEach(rule => {
       if (rule.day === dayOfWeek) {
         let ruleViolated = false;
         let expectedShift = '';
@@ -415,8 +550,8 @@ export const validatePriorityRules = (scheduleData, dateKey, staffMembers) => {
           violations.push({
             type: VIOLATION_TYPES.PRIORITY_RULE_VIOLATION,
             date: dateKey,
-            staffName,
-            message: `${staffName} priority rule violated on ${dayOfWeek}: should have ${expectedShift}, but has ${currentShift}`,
+            staffName: staff.name,
+            message: `${staff.name} priority rule violated on ${dayOfWeek}: should have ${expectedShift}, but has ${currentShift}`,
             severity: rule.priority === 'high' ? 'high' : 'medium',
             details: {
               rule,
@@ -428,7 +563,14 @@ export const validatePriorityRules = (scheduleData, dateKey, staffMembers) => {
         }
       }
     });
-  });
+  };
+
+  // Process priority rules
+  if (priorityRules && typeof priorityRules === 'object') {
+    Object.keys(priorityRules).forEach(staffIdentifier => {
+      processRules(staffIdentifier, priorityRules[staffIdentifier]);
+    });
+  }
 
   return {
     valid: violations.length === 0,
@@ -492,11 +634,12 @@ export const validateConsecutiveOffDays = (staffSchedule, staffName, dateRange) 
  * @param {Array} staffMembers - Array of staff member objects
  * @returns {Object} Validation result
  */
-export const validateCoverageCompensation = (scheduleData, dateKey, staffMembers) => {
+export const validateCoverageCompensation = async (scheduleData, dateKey, staffMembers) => {
   const violations = [];
+  const staffGroups = await getStaffConflictGroups();
   
   // Find Group 2 (料理長, 古藤) and 中田
-  const group2 = STAFF_CONFLICT_GROUPS.find(g => g.name === 'Group 2');
+  const group2 = staffGroups.find(g => g.name === 'Group 2');
   if (!group2 || !group2.coverageRule) {
     return { valid: true, violations: [] };
   }
@@ -512,7 +655,8 @@ export const validateCoverageCompensation = (scheduleData, dateKey, staffMembers
   let group2MemberOff = false;
   const offMembers = [];
   
-  group2.members.forEach(memberName => {
+  const members = group2.members || [];
+  members.forEach(memberName => {
     const staff = staffMembers.find(s => s.name === memberName);
     if (staff && scheduleData[staff.id] && scheduleData[staff.id][dateKey] !== undefined) {
       const shift = scheduleData[staff.id][dateKey];
@@ -557,11 +701,12 @@ export const validateCoverageCompensation = (scheduleData, dateKey, staffMembers
  * @param {Array} staffMembers - Array of staff member objects
  * @returns {Object} Validation result
  */
-export const validateProximityPatterns = (scheduleData, dateRange, staffMembers) => {
+export const validateProximityPatterns = async (scheduleData, dateRange, staffMembers) => {
   const violations = [];
+  const staffGroups = await getStaffConflictGroups();
   
   // Find Group 2 with proximity pattern
-  const group2 = STAFF_CONFLICT_GROUPS.find(g => g.name === 'Group 2');
+  const group2 = staffGroups.find(g => g.name === 'Group 2');
   if (!group2 || !group2.proximityPattern) {
     return { valid: true, violations: [] };
   }
@@ -635,7 +780,7 @@ export const validateProximityPatterns = (scheduleData, dateRange, staffMembers)
  * @param {Array} dateRange - Array of dates for the period
  * @returns {Object} Complete validation result
  */
-export const validateAllConstraints = (scheduleData, staffMembers, dateRange) => {
+export const validateAllConstraints = async (scheduleData, staffMembers, dateRange) => {
   console.log('🔍 Running comprehensive constraint validation...');
   
   const allViolations = [];
@@ -651,11 +796,11 @@ export const validateAllConstraints = (scheduleData, staffMembers, dateRange) =>
   };
 
   // Validate monthly limits for each staff member
-  staffMembers.forEach(staff => {
+  for (const staff of staffMembers) {
     if (scheduleData[staff.id]) {
       validationSummary.totalConstraintsChecked++;
       
-      const monthlyResult = validateMonthlyOffLimits(scheduleData[staff.id], staff.name, dateRange);
+      const monthlyResult = await validateMonthlyOffLimits(scheduleData[staff.id], staff.name, dateRange);
       if (!monthlyResult.valid) {
         allViolations.push(...monthlyResult.violations);
       }
@@ -665,37 +810,37 @@ export const validateAllConstraints = (scheduleData, staffMembers, dateRange) =>
         allViolations.push(...consecutiveResult.violations);
       }
     }
-  });
+  }
 
   // Validate daily constraints for each date
-  dateRange.forEach(date => {
+  for (const date of dateRange) {
     const dateKey = date.toISOString().split('T')[0];
     validationSummary.totalConstraintsChecked += 5; // daily limits, group conflicts, priority rules, coverage compensation, proximity patterns
 
-    const dailyLimitsResult = validateDailyLimits(scheduleData, dateKey, staffMembers);
+    const dailyLimitsResult = await validateDailyLimits(scheduleData, dateKey, staffMembers);
     if (!dailyLimitsResult.valid) {
       allViolations.push(...dailyLimitsResult.violations);
     }
 
-    const groupConflictsResult = validateStaffGroupConflicts(scheduleData, dateKey, staffMembers);
+    const groupConflictsResult = await validateStaffGroupConflicts(scheduleData, dateKey, staffMembers);
     if (!groupConflictsResult.valid) {
       allViolations.push(...groupConflictsResult.violations);
     }
 
-    const priorityRulesResult = validatePriorityRules(scheduleData, dateKey, staffMembers);
+    const priorityRulesResult = await validatePriorityRules(scheduleData, dateKey, staffMembers);
     if (!priorityRulesResult.valid) {
       allViolations.push(...priorityRulesResult.violations);
     }
 
-    const coverageCompensationResult = validateCoverageCompensation(scheduleData, dateKey, staffMembers);
+    const coverageCompensationResult = await validateCoverageCompensation(scheduleData, dateKey, staffMembers);
     if (!coverageCompensationResult.valid) {
       allViolations.push(...coverageCompensationResult.violations);
     }
-  });
+  }
 
   // Validate proximity patterns (needs full date range, so validate once)
   validationSummary.totalConstraintsChecked += 1;
-  const proximityPatternsResult = validateProximityPatterns(scheduleData, dateRange, staffMembers);
+  const proximityPatternsResult = await validateProximityPatterns(scheduleData, dateRange, staffMembers);
   if (!proximityPatternsResult.valid) {
     allViolations.push(...proximityPatternsResult.violations);
   }

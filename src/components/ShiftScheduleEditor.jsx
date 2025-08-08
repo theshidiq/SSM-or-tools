@@ -17,6 +17,7 @@ import { exportToCSV, printSchedule } from "../utils/exportUtils";
 // Import extracted components
 import { useScheduleData } from "../hooks/useScheduleData";
 import { useStaffManagement } from "../hooks/useStaffManagement";
+import { useSettingsData } from "../hooks/useSettingsData";
 import ErrorDisplay from "./schedule/ErrorDisplay";
 import StatisticsDashboard from "./schedule/StatisticsDashboard";
 import NavigationToolbar from "./schedule/NavigationToolbar";
@@ -24,6 +25,7 @@ import ScheduleTable from "./schedule/ScheduleTable";
 import StaffCardView from "./schedule/StaffCardView";
 import StaffEditModal from "./schedule/StaffEditModal";
 import StatusModal from "./common/StatusModal";
+import SettingsModal from "./settings/SettingsModal";
 
 // Import custom hooks
 
@@ -68,10 +70,23 @@ const ShiftScheduleEditor = ({
     title: "",
     message: "",
   });
+  const [showSettingsModal, setShowSettingsModal] = useState(false);
 
   // Refs - removed unused newColumnInputRef
 
   // Custom hooks
+  const {
+    settings,
+    isLoading: isLoadingSettings,
+    error: settingsError,
+    hasUnsavedChanges,
+    validationErrors,
+    updateSettings,
+    saveSettings,
+    resetToDefaults,
+    exportConfiguration,
+    importConfiguration,
+  } = useSettingsData();
   const {
     schedule,
     dateRange,
@@ -255,6 +270,88 @@ const ShiftScheduleEditor = ({
 
   const handlePrint = () => {
     printSchedule(orderedStaffMembers, dateRange, schedule);
+  };
+  
+  // Settings handlers
+  const handleShowSettings = () => {
+    setShowSettingsModal(true);
+  };
+
+  const handleSaveSettings = async (settingsToSave) => {
+    try {
+      await saveSettings(settingsToSave);
+      // Show success message
+      setDeleteModal({
+        isOpen: true,
+        type: "success",
+        title: "Settings Saved",
+        message: "Your configuration has been saved successfully.",
+      });
+    } catch (error) {
+      // Show error message
+      setDeleteModal({
+        isOpen: true,
+        type: "error",
+        title: "Save Failed",
+        message: `Failed to save settings: ${error.message}`,
+      });
+    }
+  };
+
+  const handleExportSettings = () => {
+    try {
+      const config = exportConfiguration();
+      const blob = new Blob([config], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `settings-${new Date().toISOString().split('T')[0]}.json`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch (error) {
+      setDeleteModal({
+        isOpen: true,
+        type: "error",
+        title: "Export Failed",
+        message: `Failed to export settings: ${error.message}`,
+      });
+    }
+  };
+
+  const handleImportSettings = () => {
+    const input = document.createElement("input");
+    input.type = "file";
+    input.accept = ".json";
+    input.onchange = (e) => {
+      const file = e.target.files[0];
+      if (file) {
+        const reader = new FileReader();
+        reader.onload = (e) => {
+          try {
+            const result = importConfiguration(e.target.result);
+            if (result.success) {
+              setDeleteModal({
+                isOpen: true,
+                type: "success",
+                title: "Settings Imported",
+                message: "Configuration has been imported successfully.",
+              });
+            }
+          } catch (error) {
+            setDeleteModal({
+              isOpen: true,
+              type: "error",
+              title: "Import Failed",
+              message: `Failed to import settings: ${error.message}`,
+            });
+          }
+        };
+        reader.readAsText(file);
+      }
+    };
+    input.click();
   };
 
   const handleAddTable = () => {
@@ -488,6 +585,7 @@ const ShiftScheduleEditor = ({
         handleDeletePeriod={handleDeletePeriod}
         viewMode={viewMode}
         onViewModeChange={handleViewModeChange}
+        onShowSettings={handleShowSettings}
         scheduleData={schedule}
         staffMembers={staffMembers}
         updateSchedule={updateSchedule}
@@ -744,6 +842,23 @@ const ShiftScheduleEditor = ({
         confirmText="Delete"
         cancelText="Cancel"
         autoCloseDelay={deleteModal.type === "success" ? 2000 : null}
+      />
+
+      <SettingsModal
+        isOpen={showSettingsModal}
+        onClose={() => setShowSettingsModal(false)}
+        onSave={handleSaveSettings}
+        isLoading={isLoadingSettings}
+        error={settingsError}
+        settings={settings}
+        onSettingsChange={updateSettings}
+        staffMembers={staffMembers}
+        onExportConfig={handleExportSettings}
+        onImportConfig={handleImportSettings}
+        onResetConfig={resetToDefaults}
+        onShowHistory={() => {}} // TODO: Implement history modal
+        validationErrors={validationErrors}
+        hasUnsavedChanges={hasUnsavedChanges}
       />
     </div>
   );

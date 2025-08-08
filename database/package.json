@@ -1,0 +1,55 @@
+{
+  "name": "shift-schedule-database",
+  "version": "1.0.0",
+  "description": "Database migration system for Shift Schedule Manager",
+  "main": "scripts/migrate.js",
+  "scripts": {
+    "migrate": "node scripts/migrate.js run",
+    "migrate:dry-run": "node scripts/migrate.js run --dry-run",
+    "migrate:schema-only": "node scripts/migrate.js run --skip-seed",
+    "migrate:status": "node scripts/migrate.js status",
+    "migrate:validate": "node scripts/migrate.js validate",
+    "migrate:rollback": "node scripts/migrate.js rollback",
+    "test": "node scripts/test-suite.js",
+    "test:schema": "node scripts/test-suite.js schema", 
+    "test:performance": "node scripts/test-suite.js performance",
+    "export": "node utilities/data-export.js",
+    "import": "node utilities/data-import.js",
+    "setup:realtime": "psql -f migrations/utilities/supabase-realtime-setup.sql",
+    "setup:helpers": "psql -f scripts/supabase-setup.sql",
+    "validate:migration": "psql -f migrations/tests/validate_migration.sql",
+    "rollback:all": "psql -f migrations/rollback/rollback_all.sql",
+    "rollback:seed": "psql -f migrations/rollback/rollback_seed_only.sql"
+  },
+  "keywords": [
+    "supabase",
+    "database",
+    "migration",
+    "postgresql",
+    "shift-scheduling",
+    "multi-tenant",
+    "rls"
+  ],
+  "author": "Shift Schedule Manager Team",
+  "license": "MIT",
+  "dependencies": {
+    "@supabase/supabase-js": "^2.38.0",
+    "json2csv": "^6.1.0",
+    "uuid": "^9.0.1"
+  },
+  "devDependencies": {
+    "dotenv": "^16.3.1"
+  },
+  "engines": {
+    "node": ">=16.0.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/your-org/shift-schedule-manager.git",
+    "directory": "database"
+  },
+  "bugs": {
+    "url": "https://github.com/your-org/shift-schedule-manager/issues"
+  },
+  "homepage": "https://github.com/your-org/shift-schedule-manager#readme"
+}

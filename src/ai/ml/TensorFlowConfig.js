@@ -1107,7 +1107,7 @@ const validateModelIntegrity = async (model, metadata) => {
  * Extract version from model URL
  */
 const extractVersionFromUrl = (url) => {
-  const match = url.match(/-v([\d\.]+)$/);
+  const match = url.match(/-v([\d.]+)$/);
   return match ? match[1] : '1.0';
 };
 
