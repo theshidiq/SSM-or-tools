@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { X, Save, RotateCcw, Download, Upload, History, AlertTriangle } from "lucide-react";
+import { X, Save, RotateCcw, Download, Upload, History, AlertTriangle, Database } from "lucide-react";
 
 // Import tab components
 import StaffGroupsTab from "./tabs/StaffGroupsTab";
@@ -11,6 +11,7 @@ import ConstraintWeightsTab from "./tabs/ConstraintWeightsTab";
 // Import shared components
 import TabButton from "./shared/TabButton";
 import ConnectionStatusBanner from "./ConnectionStatusBanner";
+import DatabaseSetupModal from "./DatabaseSetupModal";
 
 const TABS = [
   { id: "staff-groups", label: "Staff Groups", icon: "👥" },
@@ -45,6 +46,7 @@ const SettingsModal = ({
 }) => {
   const [activeTab, setActiveTab] = useState("staff-groups");
   const [isVisible, setIsVisible] = useState(false);
+  const [showDatabaseSetup, setShowDatabaseSetup] = useState(false);
 
   useEffect(() => {
     if (isOpen) {
@@ -181,6 +183,18 @@ const SettingsModal = ({
             </button>
 
             <div className="h-6 w-px bg-gray-300"></div>
+
+            {/* Database Setup Button */}
+            <button
+              onClick={() => setShowDatabaseSetup(true)}
+              className="flex items-center px-3 py-2 text-sm font-medium text-white bg-blue-600 border border-blue-600 rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors"
+              title="Setup Database Tables"
+            >
+              <Database size={16} className="mr-1.5" />
+              Setup Database
+            </button>
+
+            <div className="h-6 w-px bg-gray-300"></div>
             
             <button
               onClick={onClose}
@@ -290,6 +304,21 @@ const SettingsModal = ({
           </div>
         </div>
       </div>
+
+      {/* Database Setup Modal */}
+      <DatabaseSetupModal
+        isOpen={showDatabaseSetup}
+        onClose={() => setShowDatabaseSetup(false)}
+        onComplete={(result) => {
+          setShowDatabaseSetup(false);
+          if (result.success) {
+            // Refresh settings after successful setup
+            if (onRetryConnection) {
+              onRetryConnection();
+            }
+          }
+        }}
+      />
     </div>
   );
 };

@@ -363,96 +363,233 @@ export class ConfigurationService {
    * Get conflict rules from database
    */
   async getConflictRules() {
-    const rules = await this.getConfiguration('conflict_rules');
-    
-    return rules.map(rule => ({
-      id: rule.id,
-      name: rule.name,
-      rule_type: rule.rule_type,
-      conflict_definition: rule.conflict_definition,
-      penalty_weight: parseFloat(rule.penalty_weight),
-      is_hard_constraint: rule.is_hard_constraint,
-      effective_from: rule.effective_from,
-      effective_until: rule.effective_until,
-    }));
+    try {
+      const rules = await this.getConfiguration('conflict_rules');
+      
+      if (!Array.isArray(rules)) {
+        console.warn('⚠️ Conflict rules is not an array, using fallback:', rules);
+        return this.getDefaultConflictRules();
+      }
+
+      // Filter and transform valid rules
+      const validRules = rules.filter(rule => {
+        if (!rule || typeof rule !== 'object') {
+          console.warn('⚠️ Invalid conflict rule (not an object):', rule);
+          return false;
+        }
+        
+        if (!rule.conflict_definition || typeof rule.conflict_definition !== 'object') {
+          console.warn('⚠️ Invalid conflict rule structure (missing conflict_definition):', rule);
+          return false;
+        }
+        
+        return true;
+      });
+
+      return validRules.map(rule => {
+        try {
+          return {
+            id: rule.id,
+            name: rule.name,
+            rule_type: rule.rule_type,
+            conflict_definition: rule.conflict_definition,
+            penalty_weight: parseFloat(rule.penalty_weight) || 1.0,
+            is_hard_constraint: rule.is_hard_constraint,
+            effective_from: rule.effective_from,
+            effective_until: rule.effective_until,
+          };
+        } catch (error) {
+          console.warn('⚠️ Error processing conflict rule:', rule, error);
+          return null;
+        }
+      }).filter(rule => rule !== null);
+      
+    } catch (error) {
+      console.error('❌ Failed to get conflict rules:', error);
+      return this.getDefaultConflictRules();
+    }
   }
 
   /**
    * Get daily limits from database
    */
   async getDailyLimits() {
-    const limits = await this.getConfiguration('daily_limits');
-    
-    return limits.reduce((acc, limit) => {
-      const config = limit.limit_config;
-      acc[limit.name] = {
-        ...config,
-        penalty_weight: parseFloat(limit.penalty_weight),
-        is_hard_constraint: limit.is_hard_constraint,
-      };
-      return acc;
-    }, {});
+    try {
+      const limits = await this.getConfiguration('daily_limits');
+      
+      if (!Array.isArray(limits)) {
+        console.warn('⚠️ Daily limits is not an array, using fallback:', limits);
+        return this.getDefaultDailyLimits();
+      }
+
+      // Filter valid limits
+      const validLimits = limits.filter(limit => {
+        if (!limit || typeof limit !== 'object') {
+          console.warn('⚠️ Invalid daily limit (not an object):', limit);
+          return false;
+        }
+        
+        if (!limit.limit_config || typeof limit.limit_config !== 'object') {
+          console.warn('⚠️ Invalid daily limit structure (missing limit_config):', limit);
+          return false;
+        }
+        
+        if (!limit.name) {
+          console.warn('⚠️ Daily limit missing name:', limit);
+          return false;
+        }
+        
+        return true;
+      });
+
+      return validLimits.reduce((acc, limit) => {
+        try {
+          const config = limit.limit_config;
+          acc[limit.name] = {
+            ...config,
+            penalty_weight: parseFloat(limit.penalty_weight) || 1.0,
+            is_hard_constraint: limit.is_hard_constraint,
+            id: limit.id,
+          };
+          return acc;
+        } catch (error) {
+          console.warn('⚠️ Error processing daily limit:', limit, error);
+          return acc;
+        }
+      }, {});
+      
+    } catch (error) {
+      console.error('❌ Failed to get daily limits:', error);
+      return this.getDefaultDailyLimits();
+    }
   }
 
   /**
    * Get monthly limits from database
    */
   async getMonthlyLimits() {
-    const limits = await this.getConfiguration('monthly_limits');
-    
-    return limits.reduce((acc, limit) => {
-      const config = limit.limit_config;
-      acc[limit.name] = {
-        ...config,
-        penalty_weight: parseFloat(limit.penalty_weight),
-        is_hard_constraint: limit.is_hard_constraint,
-      };
-      return acc;
-    }, {});
+    try {
+      const limits = await this.getConfiguration('monthly_limits');
+      
+      if (!Array.isArray(limits)) {
+        console.warn('⚠️ Monthly limits is not an array, using fallback:', limits);
+        return this.getDefaultMonthlyLimits();
+      }
+
+      // Filter valid limits
+      const validLimits = limits.filter(limit => {
+        if (!limit || typeof limit !== 'object') {
+          console.warn('⚠️ Invalid monthly limit (not an object):', limit);
+          return false;
+        }
+        
+        if (!limit.limit_config || typeof limit.limit_config !== 'object') {
+          console.warn('⚠️ Invalid monthly limit structure (missing limit_config):', limit);
+          return false;
+        }
+        
+        if (!limit.name) {
+          console.warn('⚠️ Monthly limit missing name:', limit);
+          return false;
+        }
+        
+        return true;
+      });
+
+      return validLimits.reduce((acc, limit) => {
+        try {
+          const config = limit.limit_config;
+          acc[limit.name] = {
+            ...config,
+            penalty_weight: parseFloat(limit.penalty_weight) || 1.0,
+            is_hard_constraint: limit.is_hard_constraint,
+            id: limit.id,
+          };
+          return acc;
+        } catch (error) {
+          console.warn('⚠️ Error processing monthly limit:', limit, error);
+          return acc;
+        }
+      }, {});
+      
+    } catch (error) {
+      console.error('❌ Failed to get monthly limits:', error);
+      return this.getDefaultMonthlyLimits();
+    }
   }
 
   /**
    * Get priority rules from database
    */
   async getPriorityRules() {
-    const rules = await this.getConfiguration('priority_rules');
-    
-    // Ensure rules is an array before using reduce
-    if (!Array.isArray(rules)) {
-      console.warn('⚠️ Priority rules is not an array, returning empty object:', rules);
-      return {};
-    }
-    
-    return rules.reduce((acc, rule) => {
-      // Validate rule structure
-      if (!rule || !rule.rule_definition) {
-        console.warn('⚠️ Invalid priority rule structure:', rule);
-        return acc;
+    try {
+      const rules = await this.getConfiguration('priority_rules');
+      
+      // Ensure rules is an array before using reduce
+      if (!Array.isArray(rules)) {
+        console.warn('⚠️ Priority rules is not an array, using fallback:', rules);
+        return this.getDefaultPriorityRules();
       }
 
-      const definition = rule.rule_definition;
-      const staffId = definition.staff_id || definition.staff_name;
-      
-      if (!staffId) {
-        console.warn('⚠️ Priority rule missing staff identifier:', rule);
-        return acc;
-      }
-      
-      if (!acc[staffId]) {
-        acc[staffId] = {
-          preferredShifts: [],
-        };
-      }
-      
-      acc[staffId].preferredShifts.push({
-        day: definition.conditions?.day_of_week,
-        shift: definition.conditions?.shift_type,
-        priority: rule.priority_level > 5 ? 'high' : 'medium',
-        preference_strength: definition.preference_strength || 0.5,
+      // Filter out invalid rules before processing
+      const validRules = rules.filter(rule => {
+        if (!rule || typeof rule !== 'object') {
+          console.warn('⚠️ Invalid priority rule (not an object):', rule);
+          return false;
+        }
+        
+        if (!rule.rule_definition || typeof rule.rule_definition !== 'object') {
+          console.warn('⚠️ Invalid priority rule structure (missing rule_definition):', rule);
+          return false;
+        }
+        
+        const definition = rule.rule_definition;
+        const staffId = definition.staff_id || definition.staff_name;
+        
+        if (!staffId) {
+          console.warn('⚠️ Priority rule missing staff identifier:', rule);
+          return false;
+        }
+        
+        return true;
       });
       
-      return acc;
-    }, {});
+      if (validRules.length === 0) {
+        console.warn('⚠️ No valid priority rules found, using defaults');
+        return this.getDefaultPriorityRules();
+      }
+      
+      return validRules.reduce((acc, rule) => {
+        try {
+          const definition = rule.rule_definition;
+          const staffId = definition.staff_id || definition.staff_name;
+          
+          if (!acc[staffId]) {
+            acc[staffId] = {
+              preferredShifts: [],
+            };
+          }
+          
+          acc[staffId].preferredShifts.push({
+            day: definition.conditions?.day_of_week,
+            shift: definition.conditions?.shift_type,
+            priority: rule.priority_level > 5 ? 'high' : 'medium',
+            preference_strength: definition.preference_strength || 0.5,
+            ruleName: rule.name,
+            ruleId: rule.id,
+          });
+          
+          return acc;
+        } catch (error) {
+          console.warn('⚠️ Error processing priority rule:', rule, error);
+          return acc;
+        }
+      }, {});
+      
+    } catch (error) {
+      console.error('❌ Failed to get priority rules:', error);
+      return this.getDefaultPriorityRules();
+    }
   }
 
   /**
