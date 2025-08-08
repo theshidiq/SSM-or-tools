@@ -183,7 +183,7 @@ export class ConfigurationService {
         return this.configCache.get(cacheKey);
       }
 
-      // Query database
+      // Query database with improved error handling
       let query = supabase.from(configType).select('*');
 
       // Add restaurant filter
@@ -200,7 +200,19 @@ export class ConfigurationService {
       const { data, error } = await query;
       
       if (error) {
-        throw error;
+        // Handle specific error codes
+        if (error.code === 'PGRST116') {
+          // Table exists but no data - this is OK
+          console.log(`📋 No data found for ${configType}, using defaults`);
+        } else if (error.code === '42P01') {
+          // Table does not exist
+          console.warn(`⚠️ Table ${configType} does not exist, using fallback configuration`);
+          throw new Error(`Table ${configType} does not exist`);
+        } else {
+          // Other database errors
+          console.error(`❌ Database error loading ${configType}:`, error);
+          throw error;
+        }
       }
 
       // Process and cache the configuration
@@ -405,9 +417,26 @@ export class ConfigurationService {
   async getPriorityRules() {
     const rules = await this.getConfiguration('priority_rules');
     
+    // Ensure rules is an array before using reduce
+    if (!Array.isArray(rules)) {
+      console.warn('⚠️ Priority rules is not an array, returning empty object:', rules);
+      return {};
+    }
+    
     return rules.reduce((acc, rule) => {
+      // Validate rule structure
+      if (!rule || !rule.rule_definition) {
+        console.warn('⚠️ Invalid priority rule structure:', rule);
+        return acc;
+      }
+
       const definition = rule.rule_definition;
-      const staffId = definition.staff_id;
+      const staffId = definition.staff_id || definition.staff_name;
+      
+      if (!staffId) {
+        console.warn('⚠️ Priority rule missing staff identifier:', rule);
+        return acc;
+      }
       
       if (!acc[staffId]) {
         acc[staffId] = {
