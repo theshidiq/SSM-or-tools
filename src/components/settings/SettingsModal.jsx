@@ -10,6 +10,7 @@ import ConstraintWeightsTab from "./tabs/ConstraintWeightsTab";
 
 // Import shared components
 import TabButton from "./shared/TabButton";
+import ConnectionStatusBanner from "./ConnectionStatusBanner";
 
 const TABS = [
   { id: "staff-groups", label: "Staff Groups", icon: "👥" },
@@ -35,6 +36,9 @@ const SettingsModal = ({
   onImportConfig,
   onResetConfig,
   onShowHistory,
+  // Connection and retry
+  connectionStatus = null,
+  onRetryConnection,
   // Validation and preview
   validationErrors = {},
   hasUnsavedChanges = false,
@@ -198,6 +202,13 @@ const SettingsModal = ({
             </div>
           </div>
         )}
+
+        {/* Connection Status Banner */}
+        <ConnectionStatusBanner 
+          connectionStatus={connectionStatus}
+          onRetryConnection={onRetryConnection}
+          isRetrying={isLoading}
+        />
 
         {/* Tab Navigation */}
         <div className="px-6 py-4 border-b border-gray-200 bg-gray-50">

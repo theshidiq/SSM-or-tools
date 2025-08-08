@@ -9,19 +9,48 @@ export const useSupabase = () => {
   const subscriptionRef = useRef(null);
   const autoSaveTimeoutRef = useRef(null);
 
-  // Check connection status
+  // Check connection status with comprehensive table checks
   const checkConnection = useCallback(async () => {
     try {
-      const { data, error } = await supabase
+      // Test basic connection with a simple query
+      const { data: connectionTest, error: connectionError } = await supabase
         .from("schedules")
         .select("count")
         .limit(1);
-      if (error) throw error;
+      
+      if (connectionError) throw connectionError;
+      
+      // Check if configuration tables exist and are accessible
+      const tableChecks = await Promise.allSettled([
+        supabase.from("config_versions").select("count").limit(1),
+        supabase.from("ml_model_configs").select("count").limit(1),
+        supabase.from("restaurants").select("count").limit(1),
+      ]);
+      
+      const configTablesAccessible = tableChecks.every(
+        result => result.status === 'fulfilled' || 
+        (result.status === 'rejected' && result.reason?.code === 'PGRST116') // No rows is OK
+      );
+      
       setIsConnected(true);
       setError(null);
+      
+      // Store table accessibility info for other components to use
+      window.supabaseTableStatus = {
+        schedules: true,
+        configuration: configTablesAccessible,
+        lastChecked: Date.now()
+      };
+      
     } catch (err) {
       setIsConnected(false);
       setError(err.message);
+      window.supabaseTableStatus = {
+        schedules: false,
+        configuration: false,
+        lastChecked: Date.now(),
+        error: err.message
+      };
     }
   }, []);
 

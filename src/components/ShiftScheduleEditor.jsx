@@ -81,11 +81,13 @@ const ShiftScheduleEditor = ({
     error: settingsError,
     hasUnsavedChanges,
     validationErrors,
+    connectionStatus,
     updateSettings,
     saveSettings,
     resetToDefaults,
     exportConfiguration,
     importConfiguration,
+    checkConnectionStatus,
   } = useSettingsData();
   const {
     schedule,
@@ -857,6 +859,8 @@ const ShiftScheduleEditor = ({
         onImportConfig={handleImportSettings}
         onResetConfig={resetToDefaults}
         onShowHistory={() => {}} // TODO: Implement history modal
+        connectionStatus={connectionStatus}
+        onRetryConnection={checkConnectionStatus}
         validationErrors={validationErrors}
         hasUnsavedChanges={hasUnsavedChanges}
       />

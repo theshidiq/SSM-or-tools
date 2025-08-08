@@ -1,5 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { useSupabase } from "./useSupabase";
+import { useRestaurant } from "../contexts/RestaurantContext";
+import { ConfigurationService } from "../services/ConfigurationService";
 
 const DEFAULT_SETTINGS = {
   staffGroups: [],
@@ -59,12 +61,81 @@ export const useSettingsData = () => {
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
   const [validationErrors, setValidationErrors] = useState({});
   const [configHistory, setConfigHistory] = useState([]);
+  const [configService, setConfigService] = useState(null);
+  const [connectionStatus, setConnectionStatus] = useState({
+    database: false,
+    configuration: false
+  });
   
   const { supabase, isConnected } = useSupabase();
+  const { restaurant, isLoading: isRestaurantLoading } = useRestaurant();
+
+  // Check connection and table accessibility
+  const checkConnectionStatus = useCallback(async () => {
+    const status = {
+      database: isConnected,
+      configuration: false
+    };
+
+    if (isConnected && supabase) {
+      try {
+        // Test configuration tables accessibility
+        const tableTests = await Promise.allSettled([
+          supabase.from('config_versions').select('count').limit(1),
+          supabase.from('ml_model_configs').select('count').limit(1),
+        ]);
+
+        status.configuration = tableTests.every(
+          result => result.status === 'fulfilled' || 
+          (result.status === 'rejected' && result.reason?.code === 'PGRST116')
+        );
+      } catch (err) {
+        console.warn('Configuration tables check failed:', err);
+        status.configuration = false;
+      }
+    }
+
+    setConnectionStatus(status);
+    return status;
+  }, [isConnected, supabase]);
+
+  // Initialize configuration service
+  const initializeConfigService = useCallback(async () => {
+    if (!restaurant?.id || isRestaurantLoading) return null;
+
+    try {
+      const service = new ConfigurationService();
+      const initialized = await service.initialize({
+        restaurantId: restaurant.id,
+      });
+
+      if (initialized) {
+        setConfigService(service);
+        return service;
+      }
+    } catch (err) {
+      console.warn('Failed to initialize ConfigurationService:', err);
+    }
+    
+    return null;
+  }, [restaurant?.id, isRestaurantLoading]);
 
   // Load settings from database
   const loadSettings = useCallback(async () => {
-    if (!isConnected || !supabase) {
+    if (isRestaurantLoading) {
+      return; // Wait for restaurant to load
+    }
+
+    const connectionStatus = await checkConnectionStatus();
+    
+    if (!connectionStatus.database || !supabase) {
+      setError('Database not connected');
+      setIsLoading(false);
+      return;
+    }
+
+    if (!restaurant?.id) {
+      setError('No restaurant selected');
       setIsLoading(false);
       return;
     }
@@ -73,10 +144,84 @@ export const useSettingsData = () => {
       setIsLoading(true);
       setError(null);
 
+      // If configuration tables are not accessible, use defaults
+      if (!connectionStatus.configuration) {
+        console.warn('Configuration tables not accessible, using default settings');
+        setSettings({
+          ...DEFAULT_SETTINGS,
+          updatedAt: new Date().toISOString(),
+        });
+        setIsLoading(false);
+        return;
+      }
+
+      // Try to use configuration service if available
+      let service = configService;
+      if (!service) {
+        service = await initializeConfigService();
+      }
+
+      if (service) {
+        try {
+          // Load settings using configuration service
+          const [
+            staffGroups,
+            conflictRules,
+            dailyLimits,
+            monthlyLimits,
+            priorityRules,
+            mlConfig
+          ] = await Promise.all([
+            service.getStaffGroups(),
+            service.getConflictRules(),
+            service.getDailyLimits(),
+            service.getMonthlyLimits(),
+            service.getPriorityRules(),
+            service.getMLModelConfig()
+          ]);
+
+          const loadedSettings = {
+            ...DEFAULT_SETTINGS,
+            staffGroups: staffGroups || [],
+            conflictRules: conflictRules || [],
+            dailyLimits: Object.entries(dailyLimits || {}).map(([name, config]) => ({
+              id: name,
+              name,
+              ...config
+            })),
+            monthlyLimits: Object.entries(monthlyLimits || {}).map(([name, config]) => ({
+              id: name,
+              name,
+              ...config
+            })),
+            priorityRules: Object.entries(priorityRules || {}).map(([staffId, rules]) => ({
+              id: staffId,
+              staffId,
+              ...rules
+            })),
+            mlParameters: {
+              ...DEFAULT_SETTINGS.mlParameters,
+              ...(mlConfig?.parameters || {}),
+              confidenceThreshold: mlConfig?.confidence_threshold || DEFAULT_SETTINGS.mlParameters.confidenceThreshold,
+            },
+            updatedAt: new Date().toISOString(),
+          };
+
+          setSettings(loadedSettings);
+          setHasUnsavedChanges(false);
+          setIsLoading(false);
+          return;
+        } catch (serviceError) {
+          console.warn('Configuration service failed, falling back to direct queries:', serviceError);
+        }
+      }
+
+      // Fallback to direct database queries
       // Load the active configuration version
       const { data: activeVersion, error: versionError } = await supabase
         .from('config_versions')
         .select('id')
+        .eq('restaurant_id', restaurant.id)
         .eq('is_active', true)
         .single();
 
@@ -191,12 +336,18 @@ export const useSettingsData = () => {
     } finally {
       setIsLoading(false);
     }
-  }, [supabase, isConnected]);
+  }, [supabase, isConnected, restaurant?.id, isRestaurantLoading, configService, checkConnectionStatus, initializeConfigService]);
 
   // Save settings to database
   const saveSettings = useCallback(async (settingsToSave = settings) => {
-    if (!isConnected || !supabase) {
+    const connectionStatus = await checkConnectionStatus();
+    
+    if (!connectionStatus.database || !supabase) {
       throw new Error('Database not connected');
+    }
+
+    if (!restaurant?.id) {
+      throw new Error('No restaurant selected');
     }
 
     try {
@@ -210,10 +361,81 @@ export const useSettingsData = () => {
         throw new Error('Validation errors found');
       }
 
+      // If configuration tables are not accessible, save to local storage as fallback
+      if (!connectionStatus.configuration) {
+        console.warn('Configuration tables not accessible, saving to local storage as fallback');
+        const settingsKey = `restaurant_${restaurant.id}_settings`;
+        localStorage.setItem(settingsKey, JSON.stringify({
+          ...settingsToSave,
+          savedAt: new Date().toISOString(),
+          version: (settingsToSave.version || 0) + 1,
+        }));
+        
+        setSettings({
+          ...settingsToSave,
+          updatedAt: new Date().toISOString(),
+          version: (settingsToSave.version || 0) + 1,
+        });
+        setHasUnsavedChanges(false);
+        setValidationErrors({});
+        setIsLoading(false);
+        
+        return { success: true, version: 'local-' + Date.now(), fallback: true };
+      }
+
+      // Try to use configuration service for saving
+      let service = configService;
+      if (!service) {
+        service = await initializeConfigService();
+      }
+
+      if (service) {
+        try {
+          // Create new version using service
+          const versionName = `Settings Update ${new Date().toLocaleString()}`;
+          const versionId = await service.createConfigurationVersion(versionName, 'Updated via settings UI');
+
+          // Save ML configuration using service
+          const mlConfig = {
+            version_id: versionId,
+            restaurant_id: restaurant.id,
+            model_name: 'default_scheduler',
+            model_type: 'optimization',
+            parameters: settingsToSave.mlParameters,
+            confidence_threshold: settingsToSave.mlParameters.confidenceThreshold,
+            is_default: true,
+          };
+
+          const { error: mlError } = await supabase
+            .from('ml_model_configs')
+            .insert(mlConfig);
+
+          if (mlError) throw mlError;
+
+          // Activate the new version
+          await service.activateConfigurationVersion(versionId);
+
+          // Update local state
+          setSettings({
+            ...settingsToSave,
+            updatedAt: new Date().toISOString(),
+            version: (settingsToSave.version || 0) + 1,
+          });
+          setHasUnsavedChanges(false);
+          setValidationErrors({});
+          setIsLoading(false);
+
+          return { success: true, version: versionId };
+        } catch (serviceError) {
+          console.warn('Configuration service save failed, falling back to direct approach:', serviceError);
+        }
+      }
+
+      // Fallback to direct database operations
       // Create a new configuration version
       const { data: newVersion, error: versionError } = await supabase
         .rpc('create_config_version', {
-          p_restaurant_id: 'your-restaurant-id', // This should come from user context
+          p_restaurant_id: restaurant.id,
           p_name: `Configuration ${new Date().toLocaleString()}`,
           p_description: 'Updated via settings UI',
         });
@@ -230,7 +452,7 @@ export const useSettingsData = () => {
             settingsToSave.staffGroups.map(group => ({
               id: group.id,
               version_id: versionId,
-              restaurant_id: 'your-restaurant-id',
+              restaurant_id: restaurant.id,
               name: group.name,
               description: group.description,
               color: group.color,
@@ -267,7 +489,7 @@ export const useSettingsData = () => {
             settingsToSave.dailyLimits.map(limit => ({
               id: limit.id,
               version_id: versionId,
-              restaurant_id: 'your-restaurant-id',
+              restaurant_id: restaurant.id,
               name: limit.name,
               limit_config: {
                 shiftType: limit.shiftType,
@@ -323,16 +545,17 @@ export const useSettingsData = () => {
     } finally {
       setIsLoading(false);
     }
-  }, [settings, supabase, isConnected]);
+  }, [settings, supabase, restaurant?.id, configService, checkConnectionStatus, initializeConfigService]);
 
   // Load configuration history
   const loadConfigHistory = useCallback(async () => {
-    if (!isConnected || !supabase) return [];
+    if (!isConnected || !supabase || !restaurant?.id) return [];
 
     try {
       const { data, error } = await supabase
         .from('config_versions')
         .select('*')
+        .eq('restaurant_id', restaurant.id)
         .order('created_at', { ascending: false })
         .limit(20);
 
@@ -345,7 +568,7 @@ export const useSettingsData = () => {
       console.error('Failed to load config history:', err);
       return [];
     }
-  }, [supabase, isConnected]);
+  }, [supabase, isConnected, restaurant?.id]);
 
   // Validate settings
   const validateSettings = (settingsToValidate) => {
@@ -454,15 +677,26 @@ export const useSettingsData = () => {
     }
   }, []);
 
-  // Load settings on mount
+  // Initialize configuration service when restaurant changes
   useEffect(() => {
-    loadSettings();
-  }, [loadSettings]);
+    if (restaurant?.id && !isRestaurantLoading) {
+      initializeConfigService();
+    }
+  }, [restaurant?.id, isRestaurantLoading, initializeConfigService]);
 
-  // Load config history on mount
+  // Load settings on mount and when restaurant changes
   useEffect(() => {
-    loadConfigHistory();
-  }, [loadConfigHistory]);
+    if (!isRestaurantLoading) {
+      loadSettings();
+    }
+  }, [loadSettings, isRestaurantLoading]);
+
+  // Load config history when restaurant changes
+  useEffect(() => {
+    if (!isRestaurantLoading && restaurant?.id) {
+      loadConfigHistory();
+    }
+  }, [loadConfigHistory, isRestaurantLoading, restaurant?.id]);
 
   return {
     // State
@@ -472,6 +706,7 @@ export const useSettingsData = () => {
     hasUnsavedChanges,
     validationErrors,
     configHistory,
+    connectionStatus,
 
     // Actions
     updateSettings,
@@ -484,5 +719,6 @@ export const useSettingsData = () => {
 
     // Utilities
     validateSettings,
+    checkConnectionStatus,
   };
 };

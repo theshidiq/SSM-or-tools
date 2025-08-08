@@ -2,6 +2,7 @@ import React, { useEffect } from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import ShiftScheduleEditor from "./components/ShiftScheduleEditor.jsx";
 import { useSupabase } from "./hooks/useSupabase.js";
+import { RestaurantProvider } from "./contexts/RestaurantContext";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -57,7 +58,9 @@ function AppContent() {
 function App() {
   return (
     <QueryClientProvider client={queryClient}>
-      <AppContent />
+      <RestaurantProvider>
+        <AppContent />
+      </RestaurantProvider>
     </QueryClientProvider>
   );
 }
