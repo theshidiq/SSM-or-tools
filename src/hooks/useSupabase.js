@@ -31,6 +31,31 @@ export const useSupabase = () => {
         result => result.status === 'fulfilled' || 
         (result.status === 'rejected' && result.reason?.code === 'PGRST116') // No rows is OK
       );
+
+      // Additional check for proper configuration initialization
+      let hasActiveConfig = false;
+      if (configTablesAccessible) {
+        try {
+          const { data: restaurants } = await supabase
+            .from("restaurants")
+            .select("id")
+            .limit(1);
+          
+          if (restaurants && restaurants.length > 0) {
+            const { data: activeConfigVersions } = await supabase
+              .from("config_versions")
+              .select("id")
+              .eq("restaurant_id", restaurants[0].id)
+              .eq("is_active", true)
+              .limit(1);
+            
+            hasActiveConfig = activeConfigVersions && activeConfigVersions.length > 0;
+          }
+        } catch (checkError) {
+          console.warn('Configuration initialization check failed:', checkError);
+          hasActiveConfig = false;
+        }
+      }
       
       setIsConnected(true);
       setError(null);
@@ -38,7 +63,9 @@ export const useSupabase = () => {
       // Store table accessibility info for other components to use
       window.supabaseTableStatus = {
         schedules: true,
-        configuration: configTablesAccessible,
+        configuration: configTablesAccessible && hasActiveConfig,
+        configTablesExist: configTablesAccessible,
+        hasActiveConfiguration: hasActiveConfig,
         lastChecked: Date.now()
       };
       
@@ -48,6 +75,8 @@ export const useSupabase = () => {
       window.supabaseTableStatus = {
         schedules: false,
         configuration: false,
+        configTablesExist: false,
+        hasActiveConfiguration: false,
         lastChecked: Date.now(),
         error: err.message
       };

@@ -783,41 +783,54 @@ ALTER TABLE ml_model_performance ENABLE ROW LEVEL SECURITY;
 
 -- Create permissive policies for authenticated users (can be tightened later)
 -- Note: You may want to customize these policies based on your security requirements
+-- Drop existing policies if they exist, then create new ones to avoid PostgreSQL syntax errors
 
-CREATE POLICY IF NOT EXISTS "Enable all operations for authenticated users" ON restaurants
+DROP POLICY IF EXISTS "Enable all operations for authenticated users" ON restaurants;
+CREATE POLICY "Enable all operations for authenticated users" ON restaurants
     FOR ALL TO authenticated USING (true) WITH CHECK (true);
 
-CREATE POLICY IF NOT EXISTS "Enable all operations for authenticated users" ON staff
+DROP POLICY IF EXISTS "Enable all operations for authenticated users" ON staff;
+CREATE POLICY "Enable all operations for authenticated users" ON staff
     FOR ALL TO authenticated USING (true) WITH CHECK (true);
 
-CREATE POLICY IF NOT EXISTS "Enable all operations for authenticated users" ON config_versions
+DROP POLICY IF EXISTS "Enable all operations for authenticated users" ON config_versions;
+CREATE POLICY "Enable all operations for authenticated users" ON config_versions
     FOR ALL TO authenticated USING (true) WITH CHECK (true);
 
-CREATE POLICY IF NOT EXISTS "Enable all operations for authenticated users" ON config_changes
+DROP POLICY IF EXISTS "Enable all operations for authenticated users" ON config_changes;
+CREATE POLICY "Enable all operations for authenticated users" ON config_changes
     FOR ALL TO authenticated USING (true) WITH CHECK (true);
 
-CREATE POLICY IF NOT EXISTS "Enable all operations for authenticated users" ON staff_groups
+DROP POLICY IF EXISTS "Enable all operations for authenticated users" ON staff_groups;
+CREATE POLICY "Enable all operations for authenticated users" ON staff_groups
     FOR ALL TO authenticated USING (true) WITH CHECK (true);
 
-CREATE POLICY IF NOT EXISTS "Enable all operations for authenticated users" ON staff_group_members
+DROP POLICY IF EXISTS "Enable all operations for authenticated users" ON staff_group_members;
+CREATE POLICY "Enable all operations for authenticated users" ON staff_group_members
     FOR ALL TO authenticated USING (true) WITH CHECK (true);
 
-CREATE POLICY IF NOT EXISTS "Enable all operations for authenticated users" ON conflict_rules
+DROP POLICY IF EXISTS "Enable all operations for authenticated users" ON conflict_rules;
+CREATE POLICY "Enable all operations for authenticated users" ON conflict_rules
     FOR ALL TO authenticated USING (true) WITH CHECK (true);
 
-CREATE POLICY IF NOT EXISTS "Enable all operations for authenticated users" ON daily_limits
+DROP POLICY IF EXISTS "Enable all operations for authenticated users" ON daily_limits;
+CREATE POLICY "Enable all operations for authenticated users" ON daily_limits
     FOR ALL TO authenticated USING (true) WITH CHECK (true);
 
-CREATE POLICY IF NOT EXISTS "Enable all operations for authenticated users" ON monthly_limits
+DROP POLICY IF EXISTS "Enable all operations for authenticated users" ON monthly_limits;
+CREATE POLICY "Enable all operations for authenticated users" ON monthly_limits
     FOR ALL TO authenticated USING (true) WITH CHECK (true);
 
-CREATE POLICY IF NOT EXISTS "Enable all operations for authenticated users" ON priority_rules
+DROP POLICY IF EXISTS "Enable all operations for authenticated users" ON priority_rules;
+CREATE POLICY "Enable all operations for authenticated users" ON priority_rules
     FOR ALL TO authenticated USING (true) WITH CHECK (true);
 
-CREATE POLICY IF NOT EXISTS "Enable all operations for authenticated users" ON ml_model_configs
+DROP POLICY IF EXISTS "Enable all operations for authenticated users" ON ml_model_configs;
+CREATE POLICY "Enable all operations for authenticated users" ON ml_model_configs
     FOR ALL TO authenticated USING (true) WITH CHECK (true);
 
-CREATE POLICY IF NOT EXISTS "Enable all operations for authenticated users" ON ml_model_performance
+DROP POLICY IF EXISTS "Enable all operations for authenticated users" ON ml_model_performance;
+CREATE POLICY "Enable all operations for authenticated users" ON ml_model_performance
     FOR ALL TO authenticated USING (true) WITH CHECK (true);
 
 -- =====================================================================

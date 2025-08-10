@@ -142,13 +142,141 @@ export class ConfigurationService {
         });
         console.log(`📋 Active configuration version: ${data.name} (v${data.version_number})`);
       } else {
-        console.log('📋 No active configuration version found, using defaults');
+        console.log('📋 No active configuration version found, trying to create default configuration');
+        // Try to create a default configuration version
+        await this.createDefaultConfigurationIfNeeded();
       }
 
     } catch (error) {
       console.warn('⚠️ Failed to load active configuration version:', error);
       this.currentVersionId = null;
     }
+  }
+
+  /**
+   * Create default configuration version if none exists
+   */
+  async createDefaultConfigurationIfNeeded() {
+    try {
+      console.log('🔧 Creating default configuration version...');
+
+      // Create default configuration version
+      const { data: configVersion, error: versionError } = await supabase
+        .from('config_versions')
+        .insert({
+          restaurant_id: this.currentRestaurantId,
+          version_number: 1,
+          name: 'Default Configuration',
+          description: 'Auto-created default configuration for new restaurant setup',
+          is_active: true,
+        })
+        .select()
+        .single();
+
+      if (versionError) {
+        console.warn('Failed to create default config version:', versionError);
+        return false;
+      }
+
+      this.currentVersionId = configVersion.id;
+      this.versionCache.set('active', {
+        ...configVersion,
+        loadTime: Date.now(),
+      });
+
+      // Create basic ML configuration
+      const { error: mlConfigError } = await supabase
+        .from('ml_model_configs')
+        .insert({
+          restaurant_id: this.currentRestaurantId,
+          version_id: configVersion.id,
+          model_name: 'default_genetic_algorithm',
+          model_type: 'genetic_algorithm',
+          parameters: {
+            populationSize: 100,
+            generations: 300,
+            mutationRate: 0.1,
+            crossoverRate: 0.8,
+            elitismRate: 0.1,
+            convergenceThreshold: 0.001,
+            maxRuntime: 300,
+            enableAdaptiveMutation: true,
+            parallelProcessing: true,
+            constraintWeights: this.getDefaultConstraintWeights(),
+          },
+          confidence_threshold: 0.75,
+          is_default: true,
+        });
+
+      if (mlConfigError) {
+        console.warn('Failed to create default ML config:', mlConfigError);
+      }
+
+      // Create basic daily limits
+      const { error: dailyLimitsError } = await supabase
+        .from('daily_limits')
+        .insert([
+          {
+            restaurant_id: this.currentRestaurantId,
+            version_id: configVersion.id,
+            name: 'Max Off Per Day',
+            limit_config: {
+              shift_type: 'off',
+              max_count: 4,
+              applies_to: 'all_staff',
+              description: 'Maximum number of staff who can be off on any given day'
+            },
+            penalty_weight: 50.0,
+            is_hard_constraint: true,
+            is_active: true,
+          },
+          {
+            restaurant_id: this.currentRestaurantId,
+            version_id: configVersion.id,
+            name: 'Min Working Staff',
+            limit_config: {
+              shift_type: 'any_working',
+              min_count: 3,
+              applies_to: 'all_staff',
+              description: 'Minimum number of working staff required per day'
+            },
+            penalty_weight: 100.0,
+            is_hard_constraint: true,
+            is_active: true,
+          },
+        ]);
+
+      if (dailyLimitsError) {
+        console.warn('Failed to create default daily limits:', dailyLimitsError);
+      }
+
+      console.log(`✅ Created default configuration version: ${configVersion.id}`);
+      return true;
+
+    } catch (error) {
+      console.error('❌ Failed to create default configuration:', error);
+      return false;
+    }
+  }
+
+  /**
+   * Get default constraint weights
+   */
+  getDefaultConstraintWeights() {
+    return {
+      shift_distribution: 25,
+      off_day_distribution: 20,
+      weekend_fairness: 15,
+      shift_preferences: 20,
+      day_off_preferences: 15,
+      seniority_bonus: 10,
+      minimum_coverage: 40,
+      skill_requirements: 30,
+      conflict_avoidance: 35,
+      schedule_stability: 15,
+      cost_efficiency: 20,
+      pattern_consistency: 10,
+    };
   }
 
   /**
@@ -1193,6 +1321,12 @@ class BusinessRuleEngine {
   }
 
   processRules(rules, type) {
+    // Ensure rules is an array before processing
+    if (!Array.isArray(rules)) {
+      console.warn(`⚠️ processRules received non-array rules for type ${type}:`, rules);
+      return;
+    }
+    
     rules.forEach(rule => {
       this.rules.set(`${type}_${rule.id || rule.name}`, {
         type,

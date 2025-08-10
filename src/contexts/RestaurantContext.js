@@ -54,9 +54,10 @@ export const RestaurantProvider = ({ children }) => {
         // If restaurants table doesn't exist or isn't accessible, create a default
         console.warn('Restaurants table not accessible, creating default restaurant');
         const defaultRestaurant = {
-          id: 'default-restaurant-id',
+          id: crypto.randomUUID(),
           name: 'Default Restaurant',
           settings: {},
+          isLocalOnly: true, // Mark as local-only to prevent database operations
         };
         setRestaurant(defaultRestaurant);
         localStorage.setItem('currentRestaurantId', defaultRestaurant.id);
@@ -85,11 +86,12 @@ export const RestaurantProvider = ({ children }) => {
           localStorage.setItem('currentRestaurantId', newRestaurant.id);
         } catch (createError) {
           console.warn('Could not create restaurant in database, using fallback');
-          // Use fallback restaurant
+          // Use fallback restaurant with proper UUID
           const fallbackRestaurant = {
-            id: 'fallback-restaurant-id',
+            id: crypto.randomUUID(),
             name: 'My Restaurant',
             settings: {},
+            isLocalOnly: true, // Mark as local-only to prevent database operations
           };
           setRestaurant(fallbackRestaurant);
           localStorage.setItem('currentRestaurantId', fallbackRestaurant.id);
@@ -100,11 +102,12 @@ export const RestaurantProvider = ({ children }) => {
       console.error('Failed to initialize restaurant:', err);
       setError(err.message);
       
-      // Use fallback restaurant on error
+      // Use fallback restaurant on error with proper UUID
       const fallbackRestaurant = {
-        id: 'error-fallback-restaurant-id',
+        id: crypto.randomUUID(),
         name: 'Fallback Restaurant',
         settings: {},
+        isLocalOnly: true, // Mark as local-only to prevent database operations
       };
       setRestaurant(fallbackRestaurant);
       localStorage.setItem('currentRestaurantId', fallbackRestaurant.id);

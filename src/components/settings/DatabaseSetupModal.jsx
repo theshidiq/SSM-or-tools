@@ -106,10 +106,15 @@ const DatabaseSetupModal = ({ isOpen, onClose, onComplete }) => {
         setCurrentStep('Automated setup failed - manual setup required');
         setAutomationFailed(true);
         
-        // Generate schema for manual setup
-        const schema = fallbackService.getGeneratedSchema();
-        if (schema) {
-          setSchemaText(schema);
+        // Generate schema for manual setup using new fallback methods
+        if (result.fallbackSQL) {
+          setSchemaText(result.fallbackSQL);
+        } else {
+          // Fallback to old method if no fallbackSQL provided
+          const schema = fallbackService.getGeneratedSchema();
+          if (schema) {
+            setSchemaText(schema);
+          }
         }
       } else {
         setCurrentStep(`Setup failed: ${result.error}`);
@@ -183,8 +188,13 @@ const DatabaseSetupModal = ({ isOpen, onClose, onComplete }) => {
     setShowSchema(true);
     setAutomationFailed(false);
     
-    // Generate and display schema immediately
-    const schema = fallbackService.getGeneratedSchema();
+    // Generate and display schema immediately using new fallback methods
+    let schema;
+    if (automatedService && typeof automatedService.generateFallbackSQL === 'function') {
+      schema = automatedService.generateFallbackSQL();
+    } else {
+      schema = fallbackService.getGeneratedSchema();
+    }
     if (schema) {
       setSchemaText(schema);
     }
@@ -358,8 +368,8 @@ const DatabaseSetupModal = ({ isOpen, onClose, onComplete }) => {
                   </div>
                   <h3 className="text-xl font-semibold text-gray-800 mb-2">Automated Database Setup</h3>
                   <p className="text-gray-600 mb-6 max-w-md mx-auto">
-                    One-click solution! All tables, functions, and sample data will be created automatically. 
-                    No manual SQL copy-pasting required.
+                    RPC-FREE one-click solution! All tables, functions, and sample data will be created automatically 
+                    using direct SQL execution. No RPC setup or manual copy-pasting required.
                   </p>
                   
                   <div className="bg-green-50 border border-green-200 rounded-lg p-4 mb-6">
@@ -368,11 +378,12 @@ const DatabaseSetupModal = ({ isOpen, onClose, onComplete }) => {
                       <div className="text-sm text-green-800">
                         <p className="font-medium mb-2">Fully Automated Features:</p>
                         <ul className="space-y-1 text-green-700">
-                          <li>• Direct SQL execution through Supabase</li>
+                          <li>• NO RPC functions required - works immediately</li>
+                          <li>• Direct SQL execution via supabase.sql()</li>
                           <li>• Smart table detection (skips existing tables)</li>
                           <li>• Automatic retry with error recovery</li>
                           <li>• Real-time progress tracking</li>
-                          <li>• Fallback to manual setup if needed</li>
+                          <li>• Automatic fallback with copy-paste SQL</li>
                         </ul>
                       </div>
                     </div>
@@ -414,10 +425,10 @@ const DatabaseSetupModal = ({ isOpen, onClose, onComplete }) => {
                       <div className="flex items-start gap-3">
                         <AlertTriangle size={20} className="text-orange-600 flex-shrink-0 mt-0.5" />
                         <div className="text-sm text-orange-800">
-                          <p className="font-medium mb-2">Automated Setup Failed</p>
+                          <p className="font-medium mb-2">RPC-Free Automated Setup Failed</p>
                           <p className="mb-2">
-                            The automated setup couldn't complete due to database permissions or connection issues. 
-                            Manual setup is now required.
+                            The RPC-free automated setup couldn't complete due to database permissions or connection issues. 
+                            Manual copy-paste setup is now required.
                           </p>
                         </div>
                       </div>
@@ -491,7 +502,7 @@ const DatabaseSetupModal = ({ isOpen, onClose, onComplete }) => {
 
                   <div className="mt-6 text-sm text-gray-500">
                     {setupMode === 'automated' ? 
-                      'Executing SQL directly through Supabase...' :
+                      'Executing SQL directly via supabase.sql() - no RPC functions required...' :
                       'Please wait while the database is being configured...'}
                   </div>
                   
@@ -518,7 +529,7 @@ const DatabaseSetupModal = ({ isOpen, onClose, onComplete }) => {
                   </h3>
                   <p className="text-gray-600 mb-6">
                     {setupMode === 'automated' ? 
-                      'All database tables, functions, and configurations were created automatically. No manual steps were required!' :
+                      'All database tables, functions, and configurations were created automatically using RPC-free direct SQL execution. No RPC setup or manual steps were required!' :
                       'All database tables have been created successfully. You can now use all features of the application.'}
                   </p>
                   

@@ -77,18 +77,36 @@ export const useSettingsData = () => {
       configuration: false
     };
 
-    if (isConnected && supabase) {
+    if (isConnected && supabase && restaurant?.id && !restaurant?.isLocalOnly) {
       try {
-        // Test configuration tables accessibility
-        const tableTests = await Promise.allSettled([
+        // Test configuration tables accessibility and proper initialization
+        const configTests = await Promise.allSettled([
           supabase.from('config_versions').select('count').limit(1),
           supabase.from('ml_model_configs').select('count').limit(1),
+          // Check if there's an active configuration version for this restaurant
+          supabase.from('config_versions')
+            .select('id')
+            .eq('restaurant_id', restaurant.id)
+            .eq('is_active', true)
+            .single()
         ]);
 
-        status.configuration = tableTests.every(
+        const tablesAccessible = configTests.slice(0, 2).every(
           result => result.status === 'fulfilled' || 
           (result.status === 'rejected' && result.reason?.code === 'PGRST116')
         );
+
+        // Configuration is considered properly initialized if:
+        // 1. Tables are accessible 
+        // 2. AND there's an active configuration version for this restaurant
+        const hasActiveConfig = configTests[2].status === 'fulfilled' && configTests[2].value?.data;
+
+        status.configuration = tablesAccessible && hasActiveConfig;
+
+        if (tablesAccessible && !hasActiveConfig) {
+          console.log('⚠️ Configuration tables exist but no active configuration found for restaurant. Settings will attempt to create default configuration.');
+        }
+
       } catch (err) {
         console.warn('Configuration tables check failed:', err);
         status.configuration = false;
@@ -97,11 +115,17 @@ export const useSettingsData = () => {
 
     setConnectionStatus(status);
     return status;
-  }, [isConnected, supabase]);
+  }, [isConnected, supabase, restaurant?.id]);
 
   // Initialize configuration service
   const initializeConfigService = useCallback(async () => {
     if (!restaurant?.id || isRestaurantLoading) return null;
+
+    // Don't initialize ConfigurationService for local-only restaurants
+    if (restaurant.isLocalOnly) {
+      console.log('⚠️ Restaurant is local-only, skipping ConfigurationService initialization');
+      return null;
+    }
 
     try {
       const service = new ConfigurationService();
@@ -118,7 +142,7 @@ export const useSettingsData = () => {
     }
     
     return null;
-  }, [restaurant?.id, isRestaurantLoading]);
+  }, [restaurant?.id, restaurant?.isLocalOnly, isRestaurantLoading]);
 
   // Load settings from database
   const loadSettings = useCallback(async () => {
@@ -136,6 +160,38 @@ export const useSettingsData = () => {
 
     if (!restaurant?.id) {
       setError('No restaurant selected');
+      setIsLoading(false);
+      return;
+    }
+
+    // For local-only restaurants, use default settings and try to load from localStorage
+    if (restaurant.isLocalOnly) {
+      console.log('⚠️ Using local-only restaurant, loading from localStorage or defaults');
+      try {
+        const settingsKey = `restaurant_${restaurant.id}_settings`;
+        const savedSettings = localStorage.getItem(settingsKey);
+        
+        if (savedSettings) {
+          const parsed = JSON.parse(savedSettings);
+          setSettings({
+            ...DEFAULT_SETTINGS,
+            ...parsed,
+            updatedAt: new Date().toISOString(),
+          });
+        } else {
+          setSettings({
+            ...DEFAULT_SETTINGS,
+            updatedAt: new Date().toISOString(),
+          });
+        }
+      } catch (err) {
+        console.warn('Failed to load settings from localStorage:', err);
+        setSettings({
+          ...DEFAULT_SETTINGS,
+          updatedAt: new Date().toISOString(),
+        });
+      }
+      
       setIsLoading(false);
       return;
     }
@@ -230,8 +286,53 @@ export const useSettingsData = () => {
       }
 
       if (!activeVersion) {
-        // No active configuration, use defaults
-        setSettings(DEFAULT_SETTINGS);
+        // No active configuration, try to create one or use defaults
+        console.log('📋 No active configuration found, attempting to create default configuration');
+        
+        try {
+          // Try to create a default configuration version
+          const { data: newConfigVersion, error: createError } = await supabase
+            .from('config_versions')
+            .insert({
+              restaurant_id: restaurant.id,
+              version_number: 1,
+              name: 'Default Configuration',
+              description: 'Auto-created default configuration',
+              is_active: true,
+            })
+            .select()
+            .single();
+
+          if (!createError && newConfigVersion) {
+            // Created successfully, create basic ML config too
+            await supabase
+              .from('ml_model_configs')
+              .insert({
+                restaurant_id: restaurant.id,
+                version_id: newConfigVersion.id,
+                model_name: 'default_genetic_algorithm',
+                model_type: 'genetic_algorithm',
+                parameters: DEFAULT_SETTINGS.mlParameters,
+                confidence_threshold: DEFAULT_SETTINGS.mlParameters.confidenceThreshold,
+                is_default: true,
+              });
+
+            console.log('✅ Created default configuration version:', newConfigVersion.id);
+            
+            // Update connection status now that we have configuration
+            await checkConnectionStatus();
+          } else {
+            console.warn('Failed to create default configuration:', createError);
+          }
+        } catch (createConfigError) {
+          console.warn('Could not create default configuration:', createConfigError);
+        }
+
+        // Use default settings regardless of whether creation succeeded
+        setSettings({
+          ...DEFAULT_SETTINGS,
+          updatedAt: new Date().toISOString(),
+        });
         setIsLoading(false);
         return;
       }
@@ -340,14 +441,53 @@ export const useSettingsData = () => {
 
   // Save settings to database
   const saveSettings = useCallback(async (settingsToSave = settings) => {
+    if (!restaurant?.id) {
+      throw new Error('No restaurant selected');
+    }
+
+    // For local-only restaurants, save to localStorage
+    if (restaurant.isLocalOnly) {
+      console.log('⚠️ Saving settings to localStorage for local-only restaurant');
+      try {
+        setIsLoading(true);
+        setError(null);
+
+        // Validate settings before saving
+        const errors = validateSettings(settingsToSave);
+        if (Object.keys(errors).length > 0) {
+          setValidationErrors(errors);
+          throw new Error('Validation errors found');
+        }
+
+        const settingsKey = `restaurant_${restaurant.id}_settings`;
+        localStorage.setItem(settingsKey, JSON.stringify({
+          ...settingsToSave,
+          savedAt: new Date().toISOString(),
+          version: (settingsToSave.version || 0) + 1,
+        }));
+        
+        setSettings({
+          ...settingsToSave,
+          updatedAt: new Date().toISOString(),
+          version: (settingsToSave.version || 0) + 1,
+        });
+        setHasUnsavedChanges(false);
+        setValidationErrors({});
+        
+        return { success: true, version: 'local-' + Date.now(), isLocalOnly: true };
+      } catch (err) {
+        console.error('Failed to save settings to localStorage:', err);
+        setError(err.message);
+        throw err;
+      } finally {
+        setIsLoading(false);
+      }
+    }
+
     const connectionStatus = await checkConnectionStatus();
     
     if (!connectionStatus.database || !supabase) {
       throw new Error('Database not connected');
-    }
-
-    if (!restaurant?.id) {
-      throw new Error('No restaurant selected');
     }
 
     try {
