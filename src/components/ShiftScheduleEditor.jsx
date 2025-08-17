@@ -877,7 +877,7 @@ const ShiftScheduleEditor = ({
         validationErrors={validationErrors}
         hasUnsavedChanges={hasUnsavedChanges}
         // Autosave state
-        isAutosaving={isAutosaving}
+        isAutoSaving={isAutosaving}
         lastSaveTime={lastSaveTime}
         autosaveError={autosaveError}
         isAutosaveEnabled={isAutosaveEnabled}

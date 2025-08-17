@@ -131,7 +131,7 @@ export const useSettingsData = (autosaveEnabled = true) => {
     cancelAutosave,
   } = useAutosave(autosaveSettings, settings, {
     delay: 400, // 400ms debounce
-    enabled: isAutosaveEnabled && hasUnsavedChanges,
+    enabled: isAutosaveEnabled, // Remove hasUnsavedChanges condition to fix autosave logic
     onSaveSuccess: () => {
       console.log("Settings autosaved successfully");
     },

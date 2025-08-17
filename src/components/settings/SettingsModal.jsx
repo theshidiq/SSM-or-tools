@@ -42,6 +42,11 @@ const SettingsModal = ({
   onResetConfig,
   // Validation and preview
   validationErrors = {},
+  // Autosave state
+  autosaveError = null,
+  isAutosaveEnabled = true,
+  onToggleAutosave,
+  lastSaveTime = null,
 }) => {
   const [activeTab, setActiveTab] = useState("staff-groups");
   const [isVisible, setIsVisible] = useState(false);
@@ -228,11 +233,39 @@ const SettingsModal = ({
         {/* Footer */}
         <div className="flex items-center justify-between px-6 py-4 border-t border-gray-200 bg-gray-50">
           <div className="flex items-center gap-4">
+            {/* Autosave Status */}
             {isAutoSaving && (
               <div className="flex items-center gap-2 text-blue-600">
                 <div className="w-4 h-4 border-2 border-blue-200 border-t-blue-600 rounded-full animate-spin"></div>
                 <span className="text-sm font-medium">Auto-saving...</span>
               </div>
+            )}
+            
+            {autosaveError && (
+              <div className="flex items-center gap-2 text-red-600">
+                <AlertTriangle size={16} />
+                <span className="text-sm font-medium">Auto-save failed: {autosaveError}</span>
+              </div>
+            )}
+            
+            {!isAutoSaving && !autosaveError && lastSaveTime && (
+              <div className="flex items-center gap-2 text-green-600">
+                <Check size={16} />
+                <span className="text-sm">Saved at {new Date(lastSaveTime).toLocaleTimeString()}</span>
+              </div>
+            )}
+
+            {/* Autosave Toggle */}
+            {onToggleAutosave && (
+              <label className="flex items-center gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  checked={isAutosaveEnabled}
+                  onChange={(e) => onToggleAutosave(e.target.checked)}
+                  className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                />
+                <span className="text-gray-700">Auto-save</span>
+              </label>
             )}
 
             <button
