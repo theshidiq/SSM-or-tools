@@ -1,6 +1,6 @@
 /**
  * NeuralNetworkModel.js
- * 
+ *
  * Phase 3: Neural Network Model for deep learning-based shift scheduling
  * Implements a multi-layer neural network for pattern recognition and prediction
  */
@@ -12,34 +12,34 @@ export class NeuralNetworkModel {
   constructor() {
     this.initialized = false;
     this.trained = false;
-    this.version = '1.0.0';
-    
+    this.version = "1.0.0";
+
     // Network architecture
     this.layers = [];
     this.weights = [];
     this.biases = [];
     this.activations = [];
-    
+
     // Training state
     this.trainingHistory = [];
     this.currentEpoch = 0;
     this.bestAccuracy = 0;
     this.bestWeights = null;
-    
+
     // Configuration
     this.config = {
       hiddenLayers: [64, 32, 16],
-      activation: 'relu',
-      outputActivation: 'softmax',
-      optimizer: 'adam',
+      activation: "relu",
+      outputActivation: "softmax",
+      optimizer: "adam",
       learningRate: 0.001,
       epochs: 100,
       batchSize: 32,
       validationSplit: 0.2,
       earlyStoppingPatience: 10,
-      dropoutRate: 0.2
+      dropoutRate: 0.2,
     };
-    
+
     // Optimizer state (for Adam)
     this.adamState = {
       m: [], // First moment
@@ -47,9 +47,9 @@ export class NeuralNetworkModel {
       beta1: 0.9,
       beta2: 0.999,
       epsilon: 1e-8,
-      t: 0 // Time step
+      t: 0, // Time step
     };
-    
+
     // Performance metrics
     this.metrics = {
       accuracy: 0,
@@ -57,7 +57,7 @@ export class NeuralNetworkModel {
       valAccuracy: 0,
       valLoss: 0,
       trainingTime: 0,
-      predictionTime: 0
+      predictionTime: 0,
     };
   }
 
@@ -67,30 +67,31 @@ export class NeuralNetworkModel {
    * @returns {Object} Initialization result
    */
   async initialize(config = {}) {
-    console.log('🧠 Initializing Neural Network Model...');
-    
+    console.log("🧠 Initializing Neural Network Model...");
+
     try {
       // Merge configuration
       this.config = { ...this.config, ...config };
-      
+
       this.initialized = true;
-      
-      console.log('✅ Neural Network Model initialized');
-      console.log(`Architecture: Input -> ${this.config.hiddenLayers.join(' -> ')} -> Output`);
-      
+
+      console.log("✅ Neural Network Model initialized");
+      console.log(
+        `Architecture: Input -> ${this.config.hiddenLayers.join(" -> ")} -> Output`,
+      );
+
       return {
         success: true,
         timestamp: new Date().toISOString(),
         architecture: this.config.hiddenLayers,
-        activationFunction: this.config.activation
+        activationFunction: this.config.activation,
       };
-      
     } catch (error) {
-      console.error('❌ Neural Network initialization failed:', error);
+      console.error("❌ Neural Network initialization failed:", error);
       return {
         success: false,
         error: error.message,
-        timestamp: new Date().toISOString()
+        timestamp: new Date().toISOString(),
       };
     }
   }
@@ -101,33 +102,35 @@ export class NeuralNetworkModel {
    * @param {number} outputSize - Number of output classes
    */
   buildNetwork(inputSize, outputSize) {
-    console.log(`🏗️ Building network: ${inputSize} inputs -> ${outputSize} outputs`);
-    
+    console.log(
+      `🏗️ Building network: ${inputSize} inputs -> ${outputSize} outputs`,
+    );
+
     // Define layer sizes
     const layerSizes = [inputSize, ...this.config.hiddenLayers, outputSize];
     this.layers = layerSizes;
-    
+
     // Initialize weights and biases
     this.weights = [];
     this.biases = [];
     this.activations = [];
-    
+
     for (let i = 0; i < layerSizes.length - 1; i++) {
       const inputSize = layerSizes[i];
       const outputSize = layerSizes[i + 1];
-      
+
       // Xavier initialization for weights
       const weights = this.initializeWeights(inputSize, outputSize);
       const biases = new Array(outputSize).fill(0);
-      
+
       this.weights.push(weights);
       this.biases.push(biases);
       this.activations.push(new Array(outputSize).fill(0));
     }
-    
+
     // Initialize Adam optimizer state
     this.initializeAdamState();
-    
+
     console.log(`✅ Network built with ${this.weights.length} layers`);
   }
 
@@ -140,7 +143,7 @@ export class NeuralNetworkModel {
   initializeWeights(inputSize, outputSize) {
     const weights = [];
     const limit = Math.sqrt(6 / (inputSize + outputSize));
-    
+
     for (let i = 0; i < inputSize; i++) {
       const row = [];
       for (let j = 0; j < outputSize; j++) {
@@ -148,7 +151,7 @@ export class NeuralNetworkModel {
       }
       weights.push(row);
     }
-    
+
     return weights;
   }
 
@@ -159,20 +162,20 @@ export class NeuralNetworkModel {
     this.adamState.m = [];
     this.adamState.v = [];
     this.adamState.t = 0;
-    
+
     for (let i = 0; i < this.weights.length; i++) {
       const weightShape = [this.weights[i].length, this.weights[i][0].length];
       const biasShape = [this.biases[i].length];
-      
+
       // Initialize momentum arrays
       this.adamState.m.push({
         weights: this.createZeroMatrix(weightShape[0], weightShape[1]),
-        biases: new Array(biasShape[0]).fill(0)
+        biases: new Array(biasShape[0]).fill(0),
       });
-      
+
       this.adamState.v.push({
         weights: this.createZeroMatrix(weightShape[0], weightShape[1]),
-        biases: new Array(biasShape[0]).fill(0)
+        biases: new Array(biasShape[0]).fill(0),
       });
     }
   }
@@ -200,70 +203,92 @@ export class NeuralNetworkModel {
    */
   async train(features, labels, options = {}) {
     if (!this.initialized) {
-      throw new Error('Neural Network not initialized');
+      throw new Error("Neural Network not initialized");
     }
 
-    console.log('🎯 Training Neural Network...');
-    
+    console.log("🎯 Training Neural Network...");
+
     try {
       const startTime = Date.now();
       const config = { ...this.config, ...options };
-      
+
       // Prepare data
-      const { trainFeatures, trainLabels, valFeatures, valLabels } = 
+      const { trainFeatures, trainLabels, valFeatures, valLabels } =
         this.splitTrainingData(features, labels, config.validationSplit);
-      
+
       // Build network if not already built
       if (this.weights.length === 0) {
         const inputSize = features[0].length;
         const outputSize = this.getOutputSize(labels);
         this.buildNetwork(inputSize, outputSize);
       }
-      
+
       // Convert labels to one-hot encoding
       const trainLabelsOneHot = this.toOneHot(trainLabels);
       const valLabelsOneHot = this.toOneHot(valLabels);
-      
+
       // Training loop
       let bestValAccuracy = 0;
       let patienceCounter = 0;
-      
+
       for (let epoch = 0; epoch < config.epochs; epoch++) {
         this.currentEpoch = epoch;
-        
+
         // Shuffle training data
         const shuffledData = this.shuffleData(trainFeatures, trainLabelsOneHot);
-        
+
         // Train on batches
         let totalLoss = 0;
         let correctPredictions = 0;
-        
-        for (let batchStart = 0; batchStart < shuffledData.features.length; batchStart += config.batchSize) {
-          const batchEnd = Math.min(batchStart + config.batchSize, shuffledData.features.length);
-          const batchFeatures = shuffledData.features.slice(batchStart, batchEnd);
+
+        for (
+          let batchStart = 0;
+          batchStart < shuffledData.features.length;
+          batchStart += config.batchSize
+        ) {
+          const batchEnd = Math.min(
+            batchStart + config.batchSize,
+            shuffledData.features.length,
+          );
+          const batchFeatures = shuffledData.features.slice(
+            batchStart,
+            batchEnd,
+          );
           const batchLabels = shuffledData.labels.slice(batchStart, batchEnd);
-          
+
           // Forward pass
-          const predictions = batchFeatures.map(features => this.forward(features, true));
-          
+          const predictions = batchFeatures.map((features) =>
+            this.forward(features, true),
+          );
+
           // Calculate loss
           const batchLoss = this.calculateBatchLoss(predictions, batchLabels);
           totalLoss += batchLoss;
-          
+
           // Count correct predictions
-          correctPredictions += this.countCorrectPredictions(predictions, batchLabels);
-          
+          correctPredictions += this.countCorrectPredictions(
+            predictions,
+            batchLabels,
+          );
+
           // Backward pass
-          this.backward(batchFeatures, batchLabels, predictions, config.learningRate);
+          this.backward(
+            batchFeatures,
+            batchLabels,
+            predictions,
+            config.learningRate,
+          );
         }
-        
+
         // Calculate training metrics
         const trainAccuracy = correctPredictions / shuffledData.features.length;
-        const trainLoss = totalLoss / Math.ceil(shuffledData.features.length / config.batchSize);
-        
+        const trainLoss =
+          totalLoss /
+          Math.ceil(shuffledData.features.length / config.batchSize);
+
         // Validation
         const valMetrics = this.validate(valFeatures, valLabelsOneHot);
-        
+
         // Update metrics
         this.metrics = {
           accuracy: trainAccuracy,
@@ -271,18 +296,18 @@ export class NeuralNetworkModel {
           valAccuracy: valMetrics.accuracy,
           valLoss: valMetrics.loss,
           trainingTime: Date.now() - startTime,
-          predictionTime: this.metrics.predictionTime
+          predictionTime: this.metrics.predictionTime,
         };
-        
+
         // Store training history
         this.trainingHistory.push({
           epoch,
           trainAccuracy,
           trainLoss,
           valAccuracy: valMetrics.accuracy,
-          valLoss: valMetrics.loss
+          valLoss: valMetrics.loss,
         });
-        
+
         // Early stopping
         if (valMetrics.accuracy > bestValAccuracy) {
           bestValAccuracy = valMetrics.accuracy;
@@ -292,30 +317,34 @@ export class NeuralNetworkModel {
         } else {
           patienceCounter++;
         }
-        
+
         // Callback for progress updates
         if (options.onEpochEnd) {
           options.onEpochEnd(epoch, trainLoss, trainAccuracy);
         }
-        
+
         // Early stopping check
         if (patienceCounter >= config.earlyStoppingPatience) {
-          console.log(`🛑 Early stopping at epoch ${epoch} (patience: ${config.earlyStoppingPatience})`);
+          console.log(
+            `🛑 Early stopping at epoch ${epoch} (patience: ${config.earlyStoppingPatience})`,
+          );
           break;
         }
       }
-      
+
       // Restore best weights
       if (this.bestWeights) {
         this.restoreWeights(this.bestWeights);
       }
-      
+
       this.trained = true;
       const trainingTime = Date.now() - startTime;
-      
+
       console.log(`✅ Neural Network training completed in ${trainingTime}ms`);
-      console.log(`🎯 Best validation accuracy: ${this.bestAccuracy.toFixed(4)}`);
-      
+      console.log(
+        `🎯 Best validation accuracy: ${this.bestAccuracy.toFixed(4)}`,
+      );
+
       return {
         success: true,
         timestamp: new Date().toISOString(),
@@ -323,15 +352,14 @@ export class NeuralNetworkModel {
         loss: this.metrics.valLoss,
         epochs: this.currentEpoch + 1,
         trainingTime,
-        modelSize: this.calculateModelSize()
+        modelSize: this.calculateModelSize(),
       };
-      
     } catch (error) {
-      console.error('❌ Neural Network training failed:', error);
+      console.error("❌ Neural Network training failed:", error);
       return {
         success: false,
         error: error.message,
-        timestamp: new Date().toISOString()
+        timestamp: new Date().toISOString(),
       };
     }
   }
@@ -347,15 +375,15 @@ export class NeuralNetworkModel {
     const totalSamples = features.length;
     const valSize = Math.floor(totalSamples * validationSplit);
     const trainSize = totalSamples - valSize;
-    
+
     // Shuffle data before splitting
     const shuffled = this.shuffleData(features, labels);
-    
+
     return {
       trainFeatures: shuffled.features.slice(0, trainSize),
       trainLabels: shuffled.labels.slice(0, trainSize),
       valFeatures: shuffled.features.slice(trainSize),
-      valLabels: shuffled.labels.slice(trainSize)
+      valLabels: shuffled.labels.slice(trainSize),
     };
   }
 
@@ -367,16 +395,16 @@ export class NeuralNetworkModel {
    */
   shuffleData(features, labels) {
     const indices = Array.from({ length: features.length }, (_, i) => i);
-    
+
     // Fisher-Yates shuffle
     for (let i = indices.length - 1; i > 0; i--) {
       const j = Math.floor(Math.random() * (i + 1));
       [indices[i], indices[j]] = [indices[j], indices[i]];
     }
-    
+
     return {
-      features: indices.map(i => features[i]),
-      labels: indices.map(i => labels[i])
+      features: indices.map((i) => features[i]),
+      labels: indices.map((i) => labels[i]),
     };
   }
 
@@ -397,7 +425,7 @@ export class NeuralNetworkModel {
    */
   toOneHot(labels) {
     const numClasses = this.getOutputSize(labels);
-    return labels.map(label => {
+    return labels.map((label) => {
       const oneHot = new Array(numClasses).fill(0);
       oneHot[Math.floor(label)] = 1;
       return oneHot;
@@ -412,15 +440,15 @@ export class NeuralNetworkModel {
    */
   forward(input, training = false) {
     let activation = [...input];
-    
+
     // Forward through each layer
     for (let layer = 0; layer < this.weights.length; layer++) {
       const weights = this.weights[layer];
       const biases = this.biases[layer];
-      
+
       // Linear transformation
       const linearOutput = this.linearTransform(activation, weights, biases);
-      
+
       // Apply activation function
       if (layer === this.weights.length - 1) {
         // Output layer - use softmax
@@ -428,17 +456,17 @@ export class NeuralNetworkModel {
       } else {
         // Hidden layers - use specified activation
         activation = this.applyActivation(linearOutput, this.config.activation);
-        
+
         // Apply dropout during training
         if (training && this.config.dropoutRate > 0) {
           activation = this.applyDropout(activation, this.config.dropoutRate);
         }
       }
-      
+
       // Store activation for backpropagation
       this.activations[layer] = [...activation];
     }
-    
+
     return activation;
   }
 
@@ -451,7 +479,7 @@ export class NeuralNetworkModel {
    */
   linearTransform(input, weights, biases) {
     const output = [];
-    
+
     for (let j = 0; j < weights[0].length; j++) {
       let sum = biases[j];
       for (let i = 0; i < input.length; i++) {
@@ -459,7 +487,7 @@ export class NeuralNetworkModel {
       }
       output.push(sum);
     }
-    
+
     return output;
   }
 
@@ -471,14 +499,14 @@ export class NeuralNetworkModel {
    */
   applyActivation(input, activation) {
     switch (activation) {
-      case 'relu':
-        return input.map(x => Math.max(0, x));
-      case 'sigmoid':
-        return input.map(x => 1 / (1 + Math.exp(-x)));
-      case 'tanh':
-        return input.map(x => Math.tanh(x));
-      case 'leaky_relu':
-        return input.map(x => x > 0 ? x : 0.01 * x);
+      case "relu":
+        return input.map((x) => Math.max(0, x));
+      case "sigmoid":
+        return input.map((x) => 1 / (1 + Math.exp(-x)));
+      case "tanh":
+        return input.map((x) => Math.tanh(x));
+      case "leaky_relu":
+        return input.map((x) => (x > 0 ? x : 0.01 * x));
       default:
         return input;
     }
@@ -491,9 +519,9 @@ export class NeuralNetworkModel {
    */
   softmax(input) {
     const max = Math.max(...input);
-    const exps = input.map(x => Math.exp(x - max));
+    const exps = input.map((x) => Math.exp(x - max));
     const sum = exps.reduce((acc, val) => acc + val, 0);
-    return exps.map(exp => exp / sum);
+    return exps.map((exp) => exp / sum);
   }
 
   /**
@@ -503,7 +531,9 @@ export class NeuralNetworkModel {
    * @returns {Array} Dropout applied vector
    */
   applyDropout(input, dropoutRate) {
-    return input.map(x => Math.random() > dropoutRate ? x / (1 - dropoutRate) : 0);
+    return input.map((x) =>
+      Math.random() > dropoutRate ? x / (1 - dropoutRate) : 0,
+    );
   }
 
   /**
@@ -514,11 +544,11 @@ export class NeuralNetworkModel {
    */
   calculateBatchLoss(predictions, labels) {
     let totalLoss = 0;
-    
+
     for (let i = 0; i < predictions.length; i++) {
       totalLoss += this.crossEntropyLoss(predictions[i], labels[i]);
     }
-    
+
     return totalLoss / predictions.length;
   }
 
@@ -546,16 +576,16 @@ export class NeuralNetworkModel {
    */
   countCorrectPredictions(predictions, labels) {
     let correct = 0;
-    
+
     for (let i = 0; i < predictions.length; i++) {
       const predictedClass = this.argmax(predictions[i]);
       const actualClass = this.argmax(labels[i]);
-      
+
       if (predictedClass === actualClass) {
         correct++;
       }
     }
-    
+
     return correct;
   }
 
@@ -567,14 +597,14 @@ export class NeuralNetworkModel {
   argmax(array) {
     let maxIndex = 0;
     let maxValue = array[0];
-    
+
     for (let i = 1; i < array.length; i++) {
       if (array[i] > maxValue) {
         maxValue = array[i];
         maxIndex = i;
       }
     }
-    
+
     return maxIndex;
   }
 
@@ -587,34 +617,37 @@ export class NeuralNetworkModel {
    */
   backward(batchFeatures, batchLabels, predictions, learningRate) {
     const batchSize = batchFeatures.length;
-    
+
     // Calculate gradients for each sample in batch
     const gradients = {
-      weights: this.weights.map(w => this.createZeroMatrix(w.length, w[0].length)),
-      biases: this.biases.map(b => new Array(b.length).fill(0))
+      weights: this.weights.map((w) =>
+        this.createZeroMatrix(w.length, w[0].length),
+      ),
+      biases: this.biases.map((b) => new Array(b.length).fill(0)),
     };
-    
+
     for (let sample = 0; sample < batchSize; sample++) {
       const sampleGradients = this.calculateSampleGradients(
         batchFeatures[sample],
         batchLabels[sample],
-        predictions[sample]
+        predictions[sample],
       );
-      
+
       // Accumulate gradients
       for (let layer = 0; layer < gradients.weights.length; layer++) {
         for (let i = 0; i < gradients.weights[layer].length; i++) {
           for (let j = 0; j < gradients.weights[layer][i].length; j++) {
-            gradients.weights[layer][i][j] += sampleGradients.weights[layer][i][j];
+            gradients.weights[layer][i][j] +=
+              sampleGradients.weights[layer][i][j];
           }
         }
-        
+
         for (let j = 0; j < gradients.biases[layer].length; j++) {
           gradients.biases[layer][j] += sampleGradients.biases[layer][j];
         }
       }
     }
-    
+
     // Average gradients
     for (let layer = 0; layer < gradients.weights.length; layer++) {
       for (let i = 0; i < gradients.weights[layer].length; i++) {
@@ -622,12 +655,12 @@ export class NeuralNetworkModel {
           gradients.weights[layer][i][j] /= batchSize;
         }
       }
-      
+
       for (let j = 0; j < gradients.biases[layer].length; j++) {
         gradients.biases[layer][j] /= batchSize;
       }
     }
-    
+
     // Update weights using Adam optimizer
     this.updateWeightsAdam(gradients, learningRate);
   }
@@ -642,29 +675,32 @@ export class NeuralNetworkModel {
   calculateSampleGradients(input, target, prediction) {
     // This is a simplified gradient calculation
     // In practice, you'd implement full backpropagation
-    
+
     const gradients = {
-      weights: this.weights.map(w => this.createZeroMatrix(w.length, w[0].length)),
-      biases: this.biases.map(b => new Array(b.length).fill(0))
+      weights: this.weights.map((w) =>
+        this.createZeroMatrix(w.length, w[0].length),
+      ),
+      biases: this.biases.map((b) => new Array(b.length).fill(0)),
     };
-    
+
     // For simplicity, calculate gradients based on output error
     const outputError = prediction.map((pred, i) => pred - target[i]);
-    
+
     // This would be expanded to full backpropagation through all layers
     const lastLayer = gradients.weights.length - 1;
-    
+
     // Update last layer gradients (simplified)
     for (let i = 0; i < gradients.weights[lastLayer].length; i++) {
       for (let j = 0; j < gradients.weights[lastLayer][i].length; j++) {
-        gradients.weights[lastLayer][i][j] = this.activations[lastLayer - 1][i] * outputError[j];
+        gradients.weights[lastLayer][i][j] =
+          this.activations[lastLayer - 1][i] * outputError[j];
       }
     }
-    
+
     for (let j = 0; j < gradients.biases[lastLayer].length; j++) {
       gradients.biases[lastLayer][j] = outputError[j];
     }
-    
+
     return gradients;
   }
 
@@ -675,56 +711,60 @@ export class NeuralNetworkModel {
    */
   updateWeightsAdam(gradients, learningRate) {
     this.adamState.t++;
-    
+
     for (let layer = 0; layer < this.weights.length; layer++) {
       // Update weights
       for (let i = 0; i < this.weights[layer].length; i++) {
         for (let j = 0; j < this.weights[layer][i].length; j++) {
           const gradient = gradients.weights[layer][i][j];
-          
+
           // Update moments
-          this.adamState.m[layer].weights[i][j] = 
-            this.adamState.beta1 * this.adamState.m[layer].weights[i][j] + 
+          this.adamState.m[layer].weights[i][j] =
+            this.adamState.beta1 * this.adamState.m[layer].weights[i][j] +
             (1 - this.adamState.beta1) * gradient;
-          
-          this.adamState.v[layer].weights[i][j] = 
-            this.adamState.beta2 * this.adamState.v[layer].weights[i][j] + 
+
+          this.adamState.v[layer].weights[i][j] =
+            this.adamState.beta2 * this.adamState.v[layer].weights[i][j] +
             (1 - this.adamState.beta2) * gradient * gradient;
-          
+
           // Bias correction
-          const mHat = this.adamState.m[layer].weights[i][j] / 
+          const mHat =
+            this.adamState.m[layer].weights[i][j] /
             (1 - Math.pow(this.adamState.beta1, this.adamState.t));
-          const vHat = this.adamState.v[layer].weights[i][j] / 
+          const vHat =
+            this.adamState.v[layer].weights[i][j] /
             (1 - Math.pow(this.adamState.beta2, this.adamState.t));
-          
+
           // Update weight
-          this.weights[layer][i][j] -= learningRate * mHat / 
-            (Math.sqrt(vHat) + this.adamState.epsilon);
+          this.weights[layer][i][j] -=
+            (learningRate * mHat) / (Math.sqrt(vHat) + this.adamState.epsilon);
         }
       }
-      
+
       // Update biases
       for (let j = 0; j < this.biases[layer].length; j++) {
         const gradient = gradients.biases[layer][j];
-        
+
         // Update moments
-        this.adamState.m[layer].biases[j] = 
-          this.adamState.beta1 * this.adamState.m[layer].biases[j] + 
+        this.adamState.m[layer].biases[j] =
+          this.adamState.beta1 * this.adamState.m[layer].biases[j] +
           (1 - this.adamState.beta1) * gradient;
-        
-        this.adamState.v[layer].biases[j] = 
-          this.adamState.beta2 * this.adamState.v[layer].biases[j] + 
+
+        this.adamState.v[layer].biases[j] =
+          this.adamState.beta2 * this.adamState.v[layer].biases[j] +
           (1 - this.adamState.beta2) * gradient * gradient;
-        
+
         // Bias correction
-        const mHat = this.adamState.m[layer].biases[j] / 
+        const mHat =
+          this.adamState.m[layer].biases[j] /
           (1 - Math.pow(this.adamState.beta1, this.adamState.t));
-        const vHat = this.adamState.v[layer].biases[j] / 
+        const vHat =
+          this.adamState.v[layer].biases[j] /
           (1 - Math.pow(this.adamState.beta2, this.adamState.t));
-        
+
         // Update bias
-        this.biases[layer][j] -= learningRate * mHat / 
-          (Math.sqrt(vHat) + this.adamState.epsilon);
+        this.biases[layer][j] -=
+          (learningRate * mHat) / (Math.sqrt(vHat) + this.adamState.epsilon);
       }
     }
   }
@@ -738,21 +778,21 @@ export class NeuralNetworkModel {
   validate(valFeatures, valLabels) {
     let totalLoss = 0;
     let correctPredictions = 0;
-    
+
     for (let i = 0; i < valFeatures.length; i++) {
       const prediction = this.forward(valFeatures[i], false);
       const loss = this.crossEntropyLoss(prediction, valLabels[i]);
-      
+
       totalLoss += loss;
-      
+
       if (this.argmax(prediction) === this.argmax(valLabels[i])) {
         correctPredictions++;
       }
     }
-    
+
     return {
       accuracy: correctPredictions / valFeatures.length,
-      loss: totalLoss / valFeatures.length
+      loss: totalLoss / valFeatures.length,
     };
   }
 
@@ -763,20 +803,22 @@ export class NeuralNetworkModel {
    */
   async predict(features) {
     if (!this.trained) {
-      console.warn('⚠️ Neural Network not trained yet');
-      return Array.isArray(features[0]) ? features.map(() => [0.25, 0.25, 0.25, 0.25]) : [0.25, 0.25, 0.25, 0.25];
+      console.warn("⚠️ Neural Network not trained yet");
+      return Array.isArray(features[0])
+        ? features.map(() => [0.25, 0.25, 0.25, 0.25])
+        : [0.25, 0.25, 0.25, 0.25];
     }
 
     const startTime = Date.now();
-    
+
     // Handle single sample or batch
     const isBatch = Array.isArray(features[0]);
     const samples = isBatch ? features : [features];
-    
-    const predictions = samples.map(sample => this.forward(sample, false));
-    
+
+    const predictions = samples.map((sample) => this.forward(sample, false));
+
     this.metrics.predictionTime = Date.now() - startTime;
-    
+
     return isBatch ? predictions : predictions[0];
   }
 
@@ -786,10 +828,8 @@ export class NeuralNetworkModel {
    */
   copyWeights() {
     return {
-      weights: this.weights.map(layer => 
-        layer.map(row => [...row])
-      ),
-      biases: this.biases.map(layer => [...layer])
+      weights: this.weights.map((layer) => layer.map((row) => [...row])),
+      biases: this.biases.map((layer) => [...layer]),
     };
   }
 
@@ -798,10 +838,8 @@ export class NeuralNetworkModel {
    * @param {Object} backup - Backed up weights and biases
    */
   restoreWeights(backup) {
-    this.weights = backup.weights.map(layer => 
-      layer.map(row => [...row])
-    );
-    this.biases = backup.biases.map(layer => [...layer]);
+    this.weights = backup.weights.map((layer) => layer.map((row) => [...row]));
+    this.biases = backup.biases.map((layer) => [...layer]);
   }
 
   /**
@@ -810,14 +848,14 @@ export class NeuralNetworkModel {
    */
   calculateModelSize() {
     let totalParams = 0;
-    
+
     for (let i = 0; i < this.weights.length; i++) {
       // Count weights
       totalParams += this.weights[i].length * this.weights[i][0].length;
       // Count biases
       totalParams += this.biases[i].length;
     }
-    
+
     return totalParams;
   }
 
@@ -846,7 +884,7 @@ export class NeuralNetworkModel {
     if (!this.isReady()) {
       return {
         success: false,
-        error: 'Model not ready for updates'
+        error: "Model not ready for updates",
       };
     }
 
@@ -858,20 +896,19 @@ export class NeuralNetworkModel {
         {
           epochs: 5, // Few epochs for incremental learning
           learningRate: this.config.learningRate * 0.1, // Lower learning rate
-          onEpochEnd: () => {} // Silent updates
-        }
+          onEpochEnd: () => {}, // Silent updates
+        },
       );
-      
+
       return {
         success: true,
         updatedSamples: feedbackData.features.length,
-        newAccuracy: result.accuracy
+        newAccuracy: result.accuracy,
       };
-      
     } catch (error) {
       return {
         success: false,
-        error: error.message
+        error: error.message,
       };
     }
   }
@@ -889,7 +926,7 @@ export class NeuralNetworkModel {
       metrics: { ...this.metrics },
       trainingHistory: this.trainingHistory.length,
       modelSize: this.weights.length > 0 ? this.calculateModelSize() : 0,
-      ready: this.isReady()
+      ready: this.isReady(),
     };
   }
 
@@ -898,8 +935,8 @@ export class NeuralNetworkModel {
    * @returns {Object} Reset result
    */
   async reset() {
-    console.log('🔄 Resetting Neural Network...');
-    
+    console.log("🔄 Resetting Neural Network...");
+
     try {
       this.initialized = false;
       this.trained = false;
@@ -911,7 +948,7 @@ export class NeuralNetworkModel {
       this.currentEpoch = 0;
       this.bestAccuracy = 0;
       this.bestWeights = null;
-      
+
       // Reset optimizer state
       this.adamState = {
         m: [],
@@ -919,9 +956,9 @@ export class NeuralNetworkModel {
         beta1: 0.9,
         beta2: 0.999,
         epsilon: 1e-8,
-        t: 0
+        t: 0,
       };
-      
+
       // Reset metrics
       this.metrics = {
         accuracy: 0,
@@ -929,23 +966,22 @@ export class NeuralNetworkModel {
         valAccuracy: 0,
         valLoss: 0,
         trainingTime: 0,
-        predictionTime: 0
+        predictionTime: 0,
       };
-      
-      console.log('✅ Neural Network reset successfully');
-      
+
+      console.log("✅ Neural Network reset successfully");
+
       return {
         success: true,
-        message: 'Neural Network reset successfully',
-        timestamp: new Date().toISOString()
+        message: "Neural Network reset successfully",
+        timestamp: new Date().toISOString(),
       };
-      
     } catch (error) {
-      console.error('❌ Neural Network reset failed:', error);
+      console.error("❌ Neural Network reset failed:", error);
       return {
         success: false,
         error: error.message,
-        timestamp: new Date().toISOString()
+        timestamp: new Date().toISOString(),
       };
     }
   }

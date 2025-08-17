@@ -41,12 +41,15 @@ const PERIODS_STORAGE_KEY = "shift_manager_periods";
 // Function to save periods to localStorage
 const savePeriods = (periods) => {
   try {
-    const serializedPeriods = periods.map(period => ({
+    const serializedPeriods = periods.map((period) => ({
       start: period.start.toISOString(),
       end: period.end.toISOString(),
       label: period.label,
     }));
-    localStorage.setItem(PERIODS_STORAGE_KEY, JSON.stringify(serializedPeriods));
+    localStorage.setItem(
+      PERIODS_STORAGE_KEY,
+      JSON.stringify(serializedPeriods),
+    );
   } catch (error) {
     console.warn("Failed to save periods to localStorage:", error);
   }
@@ -59,9 +62,9 @@ const loadPeriods = () => {
     if (!stored) {
       return [...defaultMonthPeriods];
     }
-    
+
     const serializedPeriods = JSON.parse(stored);
-    return serializedPeriods.map(period => ({
+    return serializedPeriods.map((period) => ({
       start: new Date(period.start),
       end: new Date(period.end),
       label: period.label,
@@ -73,7 +76,7 @@ const loadPeriods = () => {
 };
 
 // Initialize periods from localStorage or defaults
-export let monthPeriods = loadPeriods();
+export const monthPeriods = loadPeriods();
 
 // Function to add next period
 export const addNextPeriod = () => {
@@ -137,11 +140,13 @@ export const addNextPeriod = () => {
   };
 
   monthPeriods.push(newPeriod);
-  
+
   // Save updated periods to localStorage
   savePeriods(monthPeriods);
-  
-  console.log(`✅ Added new period: ${newPeriod.label} (saved to localStorage)`);
+
+  console.log(
+    `✅ Added new period: ${newPeriod.label} (saved to localStorage)`,
+  );
   return monthPeriods.length - 1; // Return the new period index
 };
 
@@ -219,25 +224,33 @@ export const isDateWithinWorkPeriod = (date, staff) => {
 // Function to get the current month index based on today's date
 export const getCurrentMonthIndex = () => {
   const today = new Date();
-  const todayUTC = new Date(Date.UTC(today.getFullYear(), today.getMonth(), today.getDate()));
-  
+  const todayUTC = new Date(
+    Date.UTC(today.getFullYear(), today.getMonth(), today.getDate()),
+  );
+
   // Find the period that contains today's date
   for (let i = 0; i < monthPeriods.length; i++) {
     const period = monthPeriods[i];
     if (todayUTC >= period.start && todayUTC <= period.end) {
-      console.log(`📅 Current date (${todayUTC.toISOString().split('T')[0]}) falls in period ${i}: ${period.label}`);
+      console.log(
+        `📅 Current date (${todayUTC.toISOString().split("T")[0]}) falls in period ${i}: ${period.label}`,
+      );
       return i;
     }
   }
-  
+
   // If today's date doesn't fall in any existing period, check if it's before the first period
   if (todayUTC < monthPeriods[0].start) {
-    console.log(`📅 Current date is before all periods, defaulting to first period: ${monthPeriods[0].label}`);
+    console.log(
+      `📅 Current date is before all periods, defaulting to first period: ${monthPeriods[0].label}`,
+    );
     return 0;
   }
-  
+
   // If today's date is after all periods, return the last period
-  console.log(`📅 Current date is after all periods, defaulting to last period: ${monthPeriods[monthPeriods.length - 1].label}`);
+  console.log(
+    `📅 Current date is after all periods, defaulting to last period: ${monthPeriods[monthPeriods.length - 1].label}`,
+  );
   return monthPeriods.length - 1;
 };
 

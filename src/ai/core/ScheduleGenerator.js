@@ -1,21 +1,21 @@
 /**
  * ScheduleGenerator.js
- * 
+ *
  * Core schedule generation engine that creates optimized shift schedules.
  * Combines constraint satisfaction, pattern recognition, and intelligent assignment.
  */
 
-import { 
-  isOffDay, 
-  isEarlyShift, 
-  isLateShift, 
+import {
+  isOffDay,
+  isEarlyShift,
+  isLateShift,
   isNormalShift,
   isWorkingShift,
   getDayOfWeek,
   isWeekday,
   STAFF_CONFLICT_GROUPS,
   PRIORITY_RULES,
-  getMonthlyLimits
+  getMonthlyLimits,
 } from "../constraints/ConstraintEngine";
 
 /**
@@ -31,7 +31,7 @@ export class ScheduleGenerator {
       totalGenerations: 0,
       successfulGenerations: 0,
       averageIterations: 0,
-      averageConstraintSatisfaction: 0
+      averageConstraintSatisfaction: 0,
     };
   }
 
@@ -40,23 +40,22 @@ export class ScheduleGenerator {
    * @param {Object} options - Initialization options
    */
   async initialize(options = {}) {
-    console.log('📋 Initializing Schedule Generator...');
-    
+    console.log("📋 Initializing Schedule Generator...");
+
     try {
       // Initialize generation strategies
       this.initializeGenerationStrategies();
-      
+
       // Initialize shift priorities
       this.initializeShiftPriorities();
-      
+
       // Load historical patterns if available
       await this.loadHistoricalPatterns(options);
-      
+
       this.initialized = true;
-      console.log('✅ Schedule Generator initialized successfully');
-      
+      console.log("✅ Schedule Generator initialized successfully");
     } catch (error) {
-      console.error('❌ Schedule Generator initialization failed:', error);
+      console.error("❌ Schedule Generator initialization failed:", error);
       throw error;
     }
   }
@@ -66,27 +65,27 @@ export class ScheduleGenerator {
    */
   initializeGenerationStrategies() {
     // Priority-based strategy: Fill high priority assignments first
-    this.generationStrategies.set('priority_first', {
-      name: 'Priority First',
-      description: 'Assign priority rules first, then fill remaining positions',
+    this.generationStrategies.set("priority_first", {
+      name: "Priority First",
+      description: "Assign priority rules first, then fill remaining positions",
       weight: 0.3,
-      execute: this.priorityFirstStrategy.bind(this)
+      execute: this.priorityFirstStrategy.bind(this),
     });
 
     // Balance-based strategy: Distribute shifts evenly
-    this.generationStrategies.set('balance_first', {
-      name: 'Balance First', 
-      description: 'Focus on even distribution of shifts across staff',
+    this.generationStrategies.set("balance_first", {
+      name: "Balance First",
+      description: "Focus on even distribution of shifts across staff",
       weight: 0.4,
-      execute: this.balanceFirstStrategy.bind(this)
+      execute: this.balanceFirstStrategy.bind(this),
     });
 
     // Pattern-based strategy: Follow historical patterns
-    this.generationStrategies.set('pattern_based', {
-      name: 'Pattern Based',
-      description: 'Generate based on historical patterns and preferences',
+    this.generationStrategies.set("pattern_based", {
+      name: "Pattern Based",
+      description: "Generate based on historical patterns and preferences",
       weight: 0.3,
-      execute: this.patternBasedStrategy.bind(this)
+      execute: this.patternBasedStrategy.bind(this),
     });
   }
 
@@ -95,41 +94,41 @@ export class ScheduleGenerator {
    */
   initializeShiftPriorities() {
     // Day of week priorities
-    this.shiftPriorities.set('sunday_early', {
-      priority: 'high',
-      staff: '料理長',
-      condition: (dateKey) => getDayOfWeek(dateKey) === 'sunday',
-      shift: '△',
-      weight: 0.8
+    this.shiftPriorities.set("sunday_early", {
+      priority: "high",
+      staff: "料理長",
+      condition: (dateKey) => getDayOfWeek(dateKey) === "sunday",
+      shift: "△",
+      weight: 0.8,
     });
 
-    this.shiftPriorities.set('sunday_off', {
-      priority: 'high',
-      staff: '与儀',
-      condition: (dateKey) => getDayOfWeek(dateKey) === 'sunday',
-      shift: '×',
-      weight: 0.8
+    this.shiftPriorities.set("sunday_off", {
+      priority: "high",
+      staff: "与儀",
+      condition: (dateKey) => getDayOfWeek(dateKey) === "sunday",
+      shift: "×",
+      weight: 0.8,
     });
 
     // Coverage priorities
-    this.shiftPriorities.set('group2_coverage', {
-      priority: 'critical',
-      staff: '中田',
+    this.shiftPriorities.set("group2_coverage", {
+      priority: "critical",
+      staff: "中田",
       condition: (dateKey, schedule, staffMembers) => {
         // Check if Group 2 members (料理長 or 古藤) have day off
-        const group2 = STAFF_CONFLICT_GROUPS.find(g => g.name === 'Group 2');
+        const group2 = STAFF_CONFLICT_GROUPS.find((g) => g.name === "Group 2");
         if (!group2) return false;
-        
-        return group2.members.some(memberName => {
-          const staff = staffMembers.find(s => s.name === memberName);
+
+        return group2.members.some((memberName) => {
+          const staff = staffMembers.find((s) => s.name === memberName);
           if (staff && schedule[staff.id] && schedule[staff.id][dateKey]) {
             return isOffDay(schedule[staff.id][dateKey]);
           }
           return false;
         });
       },
-      shift: '', // Normal shift
-      weight: 1.0
+      shift: "", // Normal shift
+      weight: 1.0,
     });
   }
 
@@ -141,10 +140,10 @@ export class ScheduleGenerator {
     // This would typically load from the DataExtractor
     // For now, initialize with empty patterns
     this.staffPatterns.clear();
-    
+
     // Initialize basic patterns for each staff member
     const staffList = options.staffMembers || [];
-    staffList.forEach(staff => {
+    staffList.forEach((staff) => {
       this.staffPatterns.set(staff.id, {
         preferredDays: [],
         preferredShifts: [],
@@ -153,8 +152,8 @@ export class ScheduleGenerator {
           weekdayPreference: 0, // -1 to 1 scale
           weekendPreference: 0,
           earlyShiftPreference: 0,
-          lateShiftPreference: 0
-        }
+          lateShiftPreference: 0,
+        },
       });
     });
   }
@@ -166,7 +165,7 @@ export class ScheduleGenerator {
    */
   async generateSchedule(params = {}) {
     if (!this.initialized) {
-      throw new Error('ScheduleGenerator not initialized');
+      throw new Error("ScheduleGenerator not initialized");
     }
 
     const {
@@ -174,12 +173,12 @@ export class ScheduleGenerator {
       dateRange = [],
       existingSchedule = {},
       preserveExisting = true,
-      strategy = 'hybrid',
-      maxIterations = 100
+      strategy = "hybrid",
+      maxIterations = 100,
     } = params;
 
     console.log(`📋 Generating schedule with ${strategy} strategy...`);
-    
+
     try {
       const startTime = Date.now();
       let bestSchedule = null;
@@ -188,16 +187,17 @@ export class ScheduleGenerator {
 
       // Initialize working schedule
       let workingSchedule = this.initializeWorkingSchedule(
-        staffMembers, 
-        dateRange, 
-        existingSchedule, 
-        preserveExisting
+        staffMembers,
+        dateRange,
+        existingSchedule,
+        preserveExisting,
       );
 
       // Try different generation approaches
-      const strategies = strategy === 'hybrid' ? 
-        Array.from(this.generationStrategies.keys()) : 
-        [strategy];
+      const strategies =
+        strategy === "hybrid"
+          ? Array.from(this.generationStrategies.keys())
+          : [strategy];
 
       for (const strategyName of strategies) {
         const strategyFunc = this.generationStrategies.get(strategyName);
@@ -207,20 +207,20 @@ export class ScheduleGenerator {
 
         for (let i = 0; i < maxIterations; i++) {
           iterations++;
-          
+
           // Generate schedule with current strategy
           const generated = await strategyFunc.execute(
             workingSchedule,
             staffMembers,
             dateRange,
-            { iteration: i, maxIterations }
+            { iteration: i, maxIterations },
           );
 
           // Evaluate the generated schedule
           const score = await this.evaluateSchedule(
             generated.schedule,
             staffMembers,
-            dateRange
+            dateRange,
           );
 
           if (score > bestScore) {
@@ -229,12 +229,14 @@ export class ScheduleGenerator {
               ...generated,
               score,
               strategy: strategyName,
-              iteration: i
+              iteration: i,
             };
-            
+
             // If we achieved near-perfect score, we can stop early
             if (score >= 95) {
-              console.log(`🎯 Achieved high score (${score}%) early, stopping optimization`);
+              console.log(
+                `🎯 Achieved high score (${score}%) early, stopping optimization`,
+              );
               break;
             }
           }
@@ -248,47 +250,52 @@ export class ScheduleGenerator {
 
       // Update statistics
       this.generationStats.totalGenerations++;
-      this.generationStats.averageIterations = 
-        (this.generationStats.averageIterations + iterations) / this.generationStats.totalGenerations;
-      
+      this.generationStats.averageIterations =
+        (this.generationStats.averageIterations + iterations) /
+        this.generationStats.totalGenerations;
+
       if (bestSchedule && bestScore >= 80) {
         this.generationStats.successfulGenerations++;
       }
-      
-      this.generationStats.averageConstraintSatisfaction = 
-        (this.generationStats.averageConstraintSatisfaction + bestScore) / this.generationStats.totalGenerations;
+
+      this.generationStats.averageConstraintSatisfaction =
+        (this.generationStats.averageConstraintSatisfaction + bestScore) /
+        this.generationStats.totalGenerations;
 
       const result = {
         success: bestSchedule !== null,
         schedule: bestSchedule?.schedule || workingSchedule,
         score: bestScore,
-        strategy: bestSchedule?.strategy || 'none',
+        strategy: bestSchedule?.strategy || "none",
         generationTime,
         iterations,
         metadata: {
           staffCount: staffMembers.length,
           dateCount: dateRange.length,
-          preservedCells: preserveExisting ? this.countPreservedCells(existingSchedule) : 0,
+          preservedCells: preserveExisting
+            ? this.countPreservedCells(existingSchedule)
+            : 0,
           strategiesUsed: strategies.length,
-          bestIteration: bestSchedule?.iteration || -1
+          bestIteration: bestSchedule?.iteration || -1,
         },
-        statistics: { ...this.generationStats }
+        statistics: { ...this.generationStats },
       };
 
       console.log(`✅ Schedule generation completed in ${generationTime}ms`);
-      console.log(`📊 Best score: ${bestScore}% using ${bestSchedule?.strategy || 'unknown'} strategy`);
+      console.log(
+        `📊 Best score: ${bestScore}% using ${bestSchedule?.strategy || "unknown"} strategy`,
+      );
 
       return result;
-
     } catch (error) {
-      console.error('❌ Schedule generation failed:', error);
+      console.error("❌ Schedule generation failed:", error);
       return {
         success: false,
         error: error.message,
         schedule: existingSchedule,
         score: 0,
         generationTime: 0,
-        iterations: 0
+        iterations: 0,
       };
     }
   }
@@ -301,24 +308,32 @@ export class ScheduleGenerator {
    * @param {boolean} preserveExisting - Whether to preserve existing data
    * @returns {Object} Working schedule
    */
-  initializeWorkingSchedule(staffMembers, dateRange, existingSchedule, preserveExisting) {
+  initializeWorkingSchedule(
+    staffMembers,
+    dateRange,
+    existingSchedule,
+    preserveExisting,
+  ) {
     const workingSchedule = {};
-    
-    staffMembers.forEach(staff => {
+
+    staffMembers.forEach((staff) => {
       workingSchedule[staff.id] = {};
-      
-      dateRange.forEach(date => {
-        const dateKey = date.toISOString().split('T')[0];
-        
-        if (preserveExisting && 
-            existingSchedule[staff.id] && 
-            existingSchedule[staff.id][dateKey] !== undefined &&
-            existingSchedule[staff.id][dateKey] !== '') {
+
+      dateRange.forEach((date) => {
+        const dateKey = date.toISOString().split("T")[0];
+
+        if (
+          preserveExisting &&
+          existingSchedule[staff.id] &&
+          existingSchedule[staff.id][dateKey] !== undefined &&
+          existingSchedule[staff.id][dateKey] !== ""
+        ) {
           // Preserve existing data
-          workingSchedule[staff.id][dateKey] = existingSchedule[staff.id][dateKey];
+          workingSchedule[staff.id][dateKey] =
+            existingSchedule[staff.id][dateKey];
         } else {
           // Initialize with normal shift (empty string)
-          workingSchedule[staff.id][dateKey] = '';
+          workingSchedule[staff.id][dateKey] = "";
         }
       });
     });
@@ -339,17 +354,17 @@ export class ScheduleGenerator {
     let changesApplied = 0;
 
     // Phase 1: Apply priority rules first
-    dateRange.forEach(date => {
-      const dateKey = date.toISOString().split('T')[0];
-      
+    dateRange.forEach((date) => {
+      const dateKey = date.toISOString().split("T")[0];
+
       // Apply shift priorities for this date
       for (const [priorityId, priority] of this.shiftPriorities) {
         if (priority.condition(dateKey, workingSchedule, staffMembers)) {
-          const staff = staffMembers.find(s => s.name === priority.staff);
+          const staff = staffMembers.find((s) => s.name === priority.staff);
           if (staff && workingSchedule[staff.id]) {
             const currentShift = workingSchedule[staff.id][dateKey];
             // Only change if current shift is empty or we have higher priority
-            if (currentShift === '' || priority.priority === 'critical') {
+            if (currentShift === "" || priority.priority === "critical") {
               workingSchedule[staff.id][dateKey] = priority.shift;
               changesApplied++;
             }
@@ -359,24 +374,28 @@ export class ScheduleGenerator {
     });
 
     // Phase 2: Fill remaining positions with balanced approach
-    dateRange.forEach(date => {
-      const dateKey = date.toISOString().split('T')[0];
-      
+    dateRange.forEach((date) => {
+      const dateKey = date.toISOString().split("T")[0];
+
       // Count current assignments for the day
-      const dayCounts = this.countDayAssignments(workingSchedule, dateKey, staffMembers);
-      
+      const dayCounts = this.countDayAssignments(
+        workingSchedule,
+        dateKey,
+        staffMembers,
+      );
+
       // Apply group constraints and daily limits
-      staffMembers.forEach(staff => {
-        if (workingSchedule[staff.id][dateKey] === '') {
+      staffMembers.forEach((staff) => {
+        if (workingSchedule[staff.id][dateKey] === "") {
           // Assign based on constraints and balance
           const suggestedShift = this.suggestShiftForStaff(
             staff,
             dateKey,
             workingSchedule,
             staffMembers,
-            dayCounts
+            dayCounts,
           );
-          
+
           if (suggestedShift) {
             workingSchedule[staff.id][dateKey] = suggestedShift;
             changesApplied++;
@@ -388,11 +407,19 @@ export class ScheduleGenerator {
     return {
       schedule: workingSchedule,
       changesApplied,
-      strategy: 'priority_first',
+      strategy: "priority_first",
       analysis: {
-        priorityRulesApplied: this.countPriorityRulesApplied(workingSchedule, dateRange, staffMembers),
-        balanceScore: this.calculateBalanceScore(workingSchedule, staffMembers, dateRange)
-      }
+        priorityRulesApplied: this.countPriorityRulesApplied(
+          workingSchedule,
+          dateRange,
+          staffMembers,
+        ),
+        balanceScore: this.calculateBalanceScore(
+          workingSchedule,
+          staffMembers,
+          dateRange,
+        ),
+      },
     };
   }
 
@@ -411,10 +438,16 @@ export class ScheduleGenerator {
     // Calculate monthly limits for each staff member
     const monthlyLimits = this.calculateMonthlyLimits(dateRange);
     const staffOffDayBudgets = new Map();
-    
-    staffMembers.forEach(staff => {
-      const currentOffDays = this.countStaffOffDays(workingSchedule[staff.id], dateRange);
-      staffOffDayBudgets.set(staff.id, monthlyLimits.maxOffDaysPerMonth - currentOffDays);
+
+    staffMembers.forEach((staff) => {
+      const currentOffDays = this.countStaffOffDays(
+        workingSchedule[staff.id],
+        dateRange,
+      );
+      staffOffDayBudgets.set(
+        staff.id,
+        monthlyLimits.maxOffDaysPerMonth - currentOffDays,
+      );
     });
 
     // Sort dates by difficulty (weekends first, then special constraint days)
@@ -425,46 +458,72 @@ export class ScheduleGenerator {
     });
 
     // Fill schedule date by date, balancing as we go
-    sortedDates.forEach(date => {
-      const dateKey = date.toISOString().split('T')[0];
+    sortedDates.forEach((date) => {
+      const dateKey = date.toISOString().split("T")[0];
       const dayOfWeek = getDayOfWeek(dateKey);
-      
+
       // Sort staff by current workload (lowest first)
       const staffByWorkload = [...staffMembers].sort((a, b) => {
-        const aWorkload = this.calculateStaffWorkload(workingSchedule[a.id], dateRange);
-        const bWorkload = this.calculateStaffWorkload(workingSchedule[b.id], dateRange);
+        const aWorkload = this.calculateStaffWorkload(
+          workingSchedule[a.id],
+          dateRange,
+        );
+        const bWorkload = this.calculateStaffWorkload(
+          workingSchedule[b.id],
+          dateRange,
+        );
         return aWorkload - bWorkload;
       });
 
       // Assign shifts for this day
       let assignedCount = 0;
       const maxOffPerDay = 4; // DAILY_LIMITS.maxOffPerDay
-      
-      staffByWorkload.forEach(staff => {
-        if (workingSchedule[staff.id][dateKey] === '') {
+
+      staffByWorkload.forEach((staff) => {
+        if (workingSchedule[staff.id][dateKey] === "") {
           const staffOffBudget = staffOffDayBudgets.get(staff.id) || 0;
-          const currentDayOffCount = this.countDayOffAssignments(workingSchedule, dateKey, staffMembers);
-          
+          const currentDayOffCount = this.countDayOffAssignments(
+            workingSchedule,
+            dateKey,
+            staffMembers,
+          );
+
           // Decide shift type based on balance and constraints
-          let assignedShift = '';
-          
+          let assignedShift = "";
+
           // Consider giving day off if under budget and daily limit allows
-          if (staffOffBudget > 0 && currentDayOffCount < maxOffPerDay && assignedCount < staffMembers.length - 3) {
+          if (
+            staffOffBudget > 0 &&
+            currentDayOffCount < maxOffPerDay &&
+            assignedCount < staffMembers.length - 3
+          ) {
             // More likely to give day off if staff has high workload
-            const workload = this.calculateStaffWorkload(workingSchedule[staff.id], dateRange);
-            const avgWorkload = this.calculateAverageWorkload(workingSchedule, staffMembers, dateRange);
-            
+            const workload = this.calculateStaffWorkload(
+              workingSchedule[staff.id],
+              dateRange,
+            );
+            const avgWorkload = this.calculateAverageWorkload(
+              workingSchedule,
+              staffMembers,
+              dateRange,
+            );
+
             if (workload > avgWorkload * 1.1) {
-              assignedShift = '×';
+              assignedShift = "×";
               staffOffDayBudgets.set(staff.id, staffOffBudget - 1);
             }
           }
-          
+
           // If not assigned day off, assign working shift
-          if (assignedShift === '') {
-            assignedShift = this.selectWorkingShift(staff, dateKey, workingSchedule, staffMembers);
+          if (assignedShift === "") {
+            assignedShift = this.selectWorkingShift(
+              staff,
+              dateKey,
+              workingSchedule,
+              staffMembers,
+            );
           }
-          
+
           workingSchedule[staff.id][dateKey] = assignedShift;
           changesApplied++;
           assignedCount++;
@@ -475,12 +534,24 @@ export class ScheduleGenerator {
     return {
       schedule: workingSchedule,
       changesApplied,
-      strategy: 'balance_first',
+      strategy: "balance_first",
       analysis: {
-        balanceScore: this.calculateBalanceScore(workingSchedule, staffMembers, dateRange),
-        workloadVariance: this.calculateWorkloadVariance(workingSchedule, staffMembers, dateRange),
-        offDayDistribution: this.calculateOffDayDistribution(workingSchedule, staffMembers, dateRange)
-      }
+        balanceScore: this.calculateBalanceScore(
+          workingSchedule,
+          staffMembers,
+          dateRange,
+        ),
+        workloadVariance: this.calculateWorkloadVariance(
+          workingSchedule,
+          staffMembers,
+          dateRange,
+        ),
+        offDayDistribution: this.calculateOffDayDistribution(
+          workingSchedule,
+          staffMembers,
+          dateRange,
+        ),
+      },
     };
   }
 
@@ -498,12 +569,12 @@ export class ScheduleGenerator {
     let patternMatches = 0;
 
     // Fill based on learned patterns
-    dateRange.forEach(date => {
-      const dateKey = date.toISOString().split('T')[0];
+    dateRange.forEach((date) => {
+      const dateKey = date.toISOString().split("T")[0];
       const dayOfWeek = getDayOfWeek(dateKey);
-      
-      staffMembers.forEach(staff => {
-        if (workingSchedule[staff.id][dateKey] === '') {
+
+      staffMembers.forEach((staff) => {
+        if (workingSchedule[staff.id][dateKey] === "") {
           const staffPattern = this.staffPatterns.get(staff.id);
           if (staffPattern) {
             const suggestedShift = this.predictShiftFromPattern(
@@ -511,12 +582,20 @@ export class ScheduleGenerator {
               dateKey,
               dayOfWeek,
               staffPattern,
-              workingSchedule
+              workingSchedule,
             );
-            
+
             if (suggestedShift) {
               // Validate against constraints before applying
-              if (this.validateShiftAssignment(staff, dateKey, suggestedShift, workingSchedule, staffMembers)) {
+              if (
+                this.validateShiftAssignment(
+                  staff,
+                  dateKey,
+                  suggestedShift,
+                  workingSchedule,
+                  staffMembers,
+                )
+              ) {
                 workingSchedule[staff.id][dateKey] = suggestedShift;
                 changesApplied++;
                 patternMatches++;
@@ -528,18 +607,29 @@ export class ScheduleGenerator {
     });
 
     // Fill remaining empty slots with balanced approach
-    const remaining = this.fillRemainingSlots(workingSchedule, staffMembers, dateRange);
+    const remaining = this.fillRemainingSlots(
+      workingSchedule,
+      staffMembers,
+      dateRange,
+    );
     changesApplied += remaining.changesApplied;
 
     return {
       schedule: workingSchedule,
       changesApplied,
-      strategy: 'pattern_based',
+      strategy: "pattern_based",
       analysis: {
         patternMatches,
-        patternMatchRate: staffMembers.length > 0 ? patternMatches / (staffMembers.length * dateRange.length) : 0,
-        balanceScore: this.calculateBalanceScore(workingSchedule, staffMembers, dateRange)
-      }
+        patternMatchRate:
+          staffMembers.length > 0
+            ? patternMatches / (staffMembers.length * dateRange.length)
+            : 0,
+        balanceScore: this.calculateBalanceScore(
+          workingSchedule,
+          staffMembers,
+          dateRange,
+        ),
+      },
     };
   }
 
@@ -554,38 +644,56 @@ export class ScheduleGenerator {
    */
   suggestShiftForStaff(staff, dateKey, schedule, staffMembers, dayCounts) {
     const dayOfWeek = getDayOfWeek(dateKey);
-    
+
     // Check priority rules first
-    const priorityShift = this.checkPriorityRules(staff, dateKey, schedule, staffMembers);
+    const priorityShift = this.checkPriorityRules(
+      staff,
+      dateKey,
+      schedule,
+      staffMembers,
+    );
     if (priorityShift) return priorityShift;
-    
+
     // Check monthly off day budget
     const monthlyLimits = this.calculateMonthlyLimits([new Date(dateKey)]);
-    const currentOffDays = this.countStaffOffDays(schedule[staff.id], [new Date(dateKey)]);
-    const canTakeOffDay = currentOffDays < monthlyLimits.maxOffDaysPerMonth && dayCounts.off < 4;
-    
+    const currentOffDays = this.countStaffOffDays(schedule[staff.id], [
+      new Date(dateKey),
+    ]);
+    const canTakeOffDay =
+      currentOffDays < monthlyLimits.maxOffDaysPerMonth && dayCounts.off < 4;
+
     // Check group constraints
-    const hasGroupConflict = this.checkGroupConflicts(staff, dateKey, '×', schedule, staffMembers);
-    
+    const hasGroupConflict = this.checkGroupConflicts(
+      staff,
+      dateKey,
+      "×",
+      schedule,
+      staffMembers,
+    );
+
     // Decision logic
     if (canTakeOffDay && !hasGroupConflict && Math.random() < 0.2) {
-      return '×'; // Day off
+      return "×"; // Day off
     }
-    
+
     // Assign working shift based on day and needs
-    if (dayOfWeek === 'sunday' && staff.name === '料理長' && dayCounts.early < 2) {
-      return '△'; // Early shift for head chef on Sunday
+    if (
+      dayOfWeek === "sunday" &&
+      staff.name === "料理長" &&
+      dayCounts.early < 2
+    ) {
+      return "△"; // Early shift for head chef on Sunday
     }
-    
+
     if (dayCounts.early < 3 && Math.random() < 0.3) {
-      return '△'; // Early shift
+      return "△"; // Early shift
     }
-    
+
     if (dayCounts.late < 2 && Math.random() < 0.2) {
-      return '◇'; // Late shift
+      return "◇"; // Late shift
     }
-    
-    return ''; // Normal shift
+
+    return ""; // Normal shift
   }
 
   /**
@@ -596,21 +704,22 @@ export class ScheduleGenerator {
    */
   applyRandomMutation(schedule, mutationRate = 0.1) {
     const mutated = JSON.parse(JSON.stringify(schedule));
-    
-    Object.keys(mutated).forEach(staffId => {
-      Object.keys(mutated[staffId]).forEach(dateKey => {
+
+    Object.keys(mutated).forEach((staffId) => {
+      Object.keys(mutated[staffId]).forEach((dateKey) => {
         if (Math.random() < mutationRate) {
           const currentShift = mutated[staffId][dateKey];
           // Only mutate non-empty shifts (preserve manually set empty cells)
-          if (currentShift !== '' && currentShift !== undefined) {
-            const possibleShifts = ['', '△', '◇', '×'];
-            const newShift = possibleShifts[Math.floor(Math.random() * possibleShifts.length)];
+          if (currentShift !== "" && currentShift !== undefined) {
+            const possibleShifts = ["", "△", "◇", "×"];
+            const newShift =
+              possibleShifts[Math.floor(Math.random() * possibleShifts.length)];
             mutated[staffId][dateKey] = newShift;
           }
         }
       });
     });
-    
+
     return mutated;
   }
 
@@ -622,26 +731,40 @@ export class ScheduleGenerator {
    * @returns {number} Score from 0-100
    */
   async evaluateSchedule(schedule, staffMembers, dateRange) {
-    let score = 100;
+    const score = 100;
     let penalties = 0;
-    
+
     // Import validation from constraint engine
-    const { validateAllConstraints } = await import('../constraints/ConstraintEngine');
-    const validation = validateAllConstraints(schedule, staffMembers, dateRange);
-    
+    const { validateAllConstraints } = await import(
+      "../constraints/ConstraintEngine"
+    );
+    const validation = validateAllConstraints(
+      schedule,
+      staffMembers,
+      dateRange,
+    );
+
     // Major penalty for constraint violations
     penalties += validation.summary.criticalViolations * 20;
     penalties += validation.summary.highViolations * 10;
     penalties += validation.summary.mediumViolations * 5;
-    
+
     // Balance score (workload distribution)
-    const balanceScore = this.calculateBalanceScore(schedule, staffMembers, dateRange);
+    const balanceScore = this.calculateBalanceScore(
+      schedule,
+      staffMembers,
+      dateRange,
+    );
     if (balanceScore < 70) penalties += (70 - balanceScore) * 0.5;
-    
+
     // Priority rules satisfaction
-    const priorityScore = this.calculatePriorityScore(schedule, staffMembers, dateRange);
+    const priorityScore = this.calculatePriorityScore(
+      schedule,
+      staffMembers,
+      dateRange,
+    );
     if (priorityScore < 80) penalties += (80 - priorityScore) * 0.3;
-    
+
     return Math.max(0, score - penalties);
   }
 
@@ -653,18 +776,20 @@ export class ScheduleGenerator {
    * @returns {number} Balance score 0-100
    */
   calculateBalanceScore(schedule, staffMembers, dateRange) {
-    const workloads = staffMembers.map(staff => 
-      this.calculateStaffWorkload(schedule[staff.id], dateRange)
+    const workloads = staffMembers.map((staff) =>
+      this.calculateStaffWorkload(schedule[staff.id], dateRange),
     );
-    
+
     if (workloads.length === 0) return 100;
-    
+
     const avg = workloads.reduce((sum, w) => sum + w, 0) / workloads.length;
-    const variance = workloads.reduce((sum, w) => sum + Math.pow(w - avg, 2), 0) / workloads.length;
+    const variance =
+      workloads.reduce((sum, w) => sum + Math.pow(w - avg, 2), 0) /
+      workloads.length;
     const stdDev = Math.sqrt(variance);
-    
+
     // Lower standard deviation = better balance
-    const balanceScore = Math.max(0, 100 - (stdDev * 10));
+    const balanceScore = Math.max(0, 100 - stdDev * 10);
     return balanceScore;
   }
 
@@ -676,16 +801,16 @@ export class ScheduleGenerator {
    */
   calculateStaffWorkload(staffSchedule, dateRange) {
     if (!staffSchedule) return 0;
-    
+
     let workingDays = 0;
-    dateRange.forEach(date => {
-      const dateKey = date.toISOString().split('T')[0];
+    dateRange.forEach((date) => {
+      const dateKey = date.toISOString().split("T")[0];
       const shift = staffSchedule[dateKey];
       if (shift !== undefined && !isOffDay(shift)) {
         workingDays++;
       }
     });
-    
+
     return dateRange.length > 0 ? workingDays / dateRange.length : 0;
   }
 
@@ -700,36 +825,40 @@ export class ScheduleGenerator {
     let totalRules = 0;
     let satisfiedRules = 0;
 
-    dateRange.forEach(date => {
-      const dateKey = date.toISOString().split('T')[0];
+    dateRange.forEach((date) => {
+      const dateKey = date.toISOString().split("T")[0];
       const dayOfWeek = getDayOfWeek(dateKey);
 
       // Check priority rules
-      Object.keys(PRIORITY_RULES).forEach(staffName => {
-        const staff = staffMembers.find(s => s.name === staffName);
-        if (staff && schedule[staff.id] && schedule[staff.id][dateKey] !== undefined) {
+      Object.keys(PRIORITY_RULES).forEach((staffName) => {
+        const staff = staffMembers.find((s) => s.name === staffName);
+        if (
+          staff &&
+          schedule[staff.id] &&
+          schedule[staff.id][dateKey] !== undefined
+        ) {
           const rules = PRIORITY_RULES[staffName];
-          
-          rules.preferredShifts.forEach(rule => {
+
+          rules.preferredShifts.forEach((rule) => {
             if (rule.day === dayOfWeek) {
               totalRules++;
               const currentShift = schedule[staff.id][dateKey];
-              
+
               let ruleSatisfied = false;
               switch (rule.shift) {
-                case 'early':
+                case "early":
                   ruleSatisfied = isEarlyShift(currentShift);
                   break;
-                case 'off':
+                case "off":
                   ruleSatisfied = isOffDay(currentShift);
                   break;
-                case 'late':
+                case "late":
                   ruleSatisfied = isLateShift(currentShift);
                   break;
                 default:
                   ruleSatisfied = isNormalShift(currentShift);
               }
-              
+
               if (ruleSatisfied) satisfiedRules++;
             }
           });
@@ -749,41 +878,41 @@ export class ScheduleGenerator {
 
   countDayAssignments(schedule, dateKey, staffMembers) {
     const counts = { off: 0, early: 0, late: 0, normal: 0, working: 0 };
-    
-    staffMembers.forEach(staff => {
+
+    staffMembers.forEach((staff) => {
       if (schedule[staff.id] && schedule[staff.id][dateKey] !== undefined) {
         const shift = schedule[staff.id][dateKey];
         if (isOffDay(shift)) counts.off++;
         else if (isEarlyShift(shift)) counts.early++;
         else if (isLateShift(shift)) counts.late++;
         else counts.normal++;
-        
+
         if (isWorkingShift(shift)) counts.working++;
       }
     });
-    
+
     return counts;
   }
 
   countStaffOffDays(staffSchedule, dateRange) {
     if (!staffSchedule) return 0;
-    
+
     let offDays = 0;
-    dateRange.forEach(date => {
-      const dateKey = date.toISOString().split('T')[0];
+    dateRange.forEach((date) => {
+      const dateKey = date.toISOString().split("T")[0];
       if (staffSchedule[dateKey] && isOffDay(staffSchedule[dateKey])) {
         offDays++;
       }
     });
-    
+
     return offDays;
   }
 
   countPreservedCells(existingSchedule) {
     let count = 0;
-    Object.values(existingSchedule).forEach(staffSchedule => {
-      Object.values(staffSchedule).forEach(shift => {
-        if (shift !== undefined && shift !== '') count++;
+    Object.values(existingSchedule).forEach((staffSchedule) => {
+      Object.values(staffSchedule).forEach((shift) => {
+        if (shift !== undefined && shift !== "") count++;
       });
     });
     return count;
@@ -802,7 +931,7 @@ export class ScheduleGenerator {
 
   selectWorkingShift(staff, dateKey, schedule, staffMembers) {
     // Logic to select appropriate working shift
-    return ''; // Default to normal shift
+    return ""; // Default to normal shift
   }
 
   calculateDateDifficulty(date) {
@@ -812,36 +941,46 @@ export class ScheduleGenerator {
   }
 
   calculateWorkloadVariance(schedule, staffMembers, dateRange) {
-    const workloads = staffMembers.map(staff => 
-      this.calculateStaffWorkload(schedule[staff.id], dateRange)
+    const workloads = staffMembers.map((staff) =>
+      this.calculateStaffWorkload(schedule[staff.id], dateRange),
     );
-    
+
     if (workloads.length === 0) return 0;
-    
+
     const avg = workloads.reduce((sum, w) => sum + w, 0) / workloads.length;
-    return workloads.reduce((sum, w) => sum + Math.pow(w - avg, 2), 0) / workloads.length;
+    return (
+      workloads.reduce((sum, w) => sum + Math.pow(w - avg, 2), 0) /
+      workloads.length
+    );
   }
 
   calculateOffDayDistribution(schedule, staffMembers, dateRange) {
     // Calculate how evenly off days are distributed
-    const offDayCounts = staffMembers.map(staff => 
-      this.countStaffOffDays(schedule[staff.id], dateRange)
+    const offDayCounts = staffMembers.map((staff) =>
+      this.countStaffOffDays(schedule[staff.id], dateRange),
     );
-    
+
     const variance = this.calculateWorkloadVariance(
-      Object.fromEntries(staffMembers.map((staff, i) => [staff.id, { total: offDayCounts[i] }])),
-      staffMembers.map((staff, i) => ({ ...staff, schedule: { total: offDayCounts[i] } })),
-      [{ length: 1 }] // Dummy range for calculation
+      Object.fromEntries(
+        staffMembers.map((staff, i) => [staff.id, { total: offDayCounts[i] }]),
+      ),
+      staffMembers.map((staff, i) => ({
+        ...staff,
+        schedule: { total: offDayCounts[i] },
+      })),
+      [{ length: 1 }], // Dummy range for calculation
     );
-    
+
     return Math.max(0, 100 - variance * 100);
   }
 
   calculateAverageWorkload(schedule, staffMembers, dateRange) {
-    const workloads = staffMembers.map(staff => 
-      this.calculateStaffWorkload(schedule[staff.id], dateRange)
+    const workloads = staffMembers.map((staff) =>
+      this.calculateStaffWorkload(schedule[staff.id], dateRange),
     );
-    return workloads.length > 0 ? workloads.reduce((sum, w) => sum + w, 0) / workloads.length : 0;
+    return workloads.length > 0
+      ? workloads.reduce((sum, w) => sum + w, 0) / workloads.length
+      : 0;
   }
 
   countDayOffAssignments(schedule, dateKey, staffMembers) {
@@ -856,7 +995,7 @@ export class ScheduleGenerator {
   predictShiftFromPattern(staff, dateKey, dayOfWeek, pattern, schedule) {
     // Predict shift based on learned patterns
     // This is a simplified implementation
-    return '';
+    return "";
   }
 
   validateShiftAssignment(staff, dateKey, shift, schedule, staffMembers) {
@@ -867,17 +1006,17 @@ export class ScheduleGenerator {
   fillRemainingSlots(schedule, staffMembers, dateRange) {
     // Fill any remaining empty slots with balanced approach
     let changesApplied = 0;
-    
-    dateRange.forEach(date => {
-      const dateKey = date.toISOString().split('T')[0];
-      staffMembers.forEach(staff => {
-        if (schedule[staff.id][dateKey] === '') {
-          schedule[staff.id][dateKey] = '';
+
+    dateRange.forEach((date) => {
+      const dateKey = date.toISOString().split("T")[0];
+      staffMembers.forEach((staff) => {
+        if (schedule[staff.id][dateKey] === "") {
+          schedule[staff.id][dateKey] = "";
           changesApplied++;
         }
       });
     });
-    
+
     return { changesApplied };
   }
 
@@ -891,7 +1030,7 @@ export class ScheduleGenerator {
       strategies: Array.from(this.generationStrategies.keys()),
       priorityRules: Array.from(this.shiftPriorities.keys()),
       statistics: { ...this.generationStats },
-      patternsLoaded: this.staffPatterns.size
+      patternsLoaded: this.staffPatterns.size,
     };
   }
 }

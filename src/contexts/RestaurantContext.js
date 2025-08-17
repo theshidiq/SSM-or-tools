@@ -1,12 +1,11 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
-import { supabase } from '../utils/supabase';
+import React, { createContext, useContext, useState, useEffect } from "react";
 
 const RestaurantContext = createContext(null);
 
 export const useRestaurant = () => {
   const context = useContext(RestaurantContext);
   if (!context) {
-    throw new Error('useRestaurant must be used within a RestaurantProvider');
+    throw new Error("useRestaurant must be used within a RestaurantProvider");
   }
   return context;
 };
@@ -16,124 +15,71 @@ export const RestaurantProvider = ({ children }) => {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
 
-  // Initialize default restaurant or get from user context
-  const initializeRestaurant = async () => {
+  // Initialize restaurant from localStorage
+  const initializeRestaurant = () => {
     try {
       setIsLoading(true);
       setError(null);
 
-      // Check if we have a default restaurant
-      let savedRestaurantId = localStorage.getItem('currentRestaurantId');
-      
-      if (savedRestaurantId) {
-        // Validate the saved restaurant exists
-        const { data: existingRestaurant, error: fetchError } = await supabase
-          .from('restaurants')
-          .select('*')
-          .eq('id', savedRestaurantId)
-          .single();
+      // Check if we have saved restaurant info
+      const savedRestaurantData = localStorage.getItem("restaurant-info");
 
-        if (!fetchError && existingRestaurant) {
-          setRestaurant(existingRestaurant);
-          setIsLoading(false);
-          return;
-        } else {
-          // Clear invalid restaurant ID
-          localStorage.removeItem('currentRestaurantId');
-          savedRestaurantId = null;
-        }
-      }
-
-      // Try to get any existing restaurant
-      const { data: restaurants, error: listError } = await supabase
-        .from('restaurants')
-        .select('*')
-        .limit(1);
-
-      if (listError) {
-        // If restaurants table doesn't exist or isn't accessible, create a default
-        console.warn('Restaurants table not accessible, creating default restaurant');
+      if (savedRestaurantData) {
+        const restaurantInfo = JSON.parse(savedRestaurantData);
+        setRestaurant(restaurantInfo);
+      } else {
+        // Create default restaurant
         const defaultRestaurant = {
           id: crypto.randomUUID(),
-          name: 'Default Restaurant',
+          name: "My Restaurant",
+          address: "",
+          phone: "",
           settings: {},
-          isLocalOnly: true, // Mark as local-only to prevent database operations
+          isLocalOnly: true, // All operations are local-only
         };
+
         setRestaurant(defaultRestaurant);
-        localStorage.setItem('currentRestaurantId', defaultRestaurant.id);
-      } else if (restaurants && restaurants.length > 0) {
-        // Use the first available restaurant
-        const firstRestaurant = restaurants[0];
-        setRestaurant(firstRestaurant);
-        localStorage.setItem('currentRestaurantId', firstRestaurant.id);
-      } else {
-        // No restaurants exist, create a default one
-        try {
-          const { data: newRestaurant, error: createError } = await supabase
-            .from('restaurants')
-            .insert({
-              name: 'My Restaurant',
-              address: '',
-              phone: '',
-              settings: {}
-            })
-            .select()
-            .single();
-
-          if (createError) throw createError;
-
-          setRestaurant(newRestaurant);
-          localStorage.setItem('currentRestaurantId', newRestaurant.id);
-        } catch (createError) {
-          console.warn('Could not create restaurant in database, using fallback');
-          // Use fallback restaurant with proper UUID
-          const fallbackRestaurant = {
-            id: crypto.randomUUID(),
-            name: 'My Restaurant',
-            settings: {},
-            isLocalOnly: true, // Mark as local-only to prevent database operations
-          };
-          setRestaurant(fallbackRestaurant);
-          localStorage.setItem('currentRestaurantId', fallbackRestaurant.id);
-        }
+        localStorage.setItem(
+          "restaurant-info",
+          JSON.stringify(defaultRestaurant),
+        );
       }
-
     } catch (err) {
-      console.error('Failed to initialize restaurant:', err);
+      console.error("Failed to initialize restaurant:", err);
       setError(err.message);
-      
-      // Use fallback restaurant on error with proper UUID
+
+      // Use fallback restaurant on error
       const fallbackRestaurant = {
         id: crypto.randomUUID(),
-        name: 'Fallback Restaurant',
+        name: "My Restaurant",
+        address: "",
+        phone: "",
         settings: {},
-        isLocalOnly: true, // Mark as local-only to prevent database operations
+        isLocalOnly: true,
       };
       setRestaurant(fallbackRestaurant);
-      localStorage.setItem('currentRestaurantId', fallbackRestaurant.id);
+      localStorage.setItem(
+        "restaurant-info",
+        JSON.stringify(fallbackRestaurant),
+      );
     } finally {
       setIsLoading(false);
     }
   };
 
-  // Switch to different restaurant
-  const switchRestaurant = async (restaurantId) => {
+  // Update restaurant info
+  const updateRestaurant = (updates) => {
     try {
-      setIsLoading(true);
-      const { data: newRestaurant, error } = await supabase
-        .from('restaurants')
-        .select('*')
-        .eq('id', restaurantId)
-        .single();
-
-      if (error) throw error;
-
-      setRestaurant(newRestaurant);
-      localStorage.setItem('currentRestaurantId', restaurantId);
+      const updatedRestaurant = { ...restaurant, ...updates };
+      setRestaurant(updatedRestaurant);
+      localStorage.setItem(
+        "restaurant-info",
+        JSON.stringify(updatedRestaurant),
+      );
+      return true;
     } catch (err) {
       setError(err.message);
-    } finally {
-      setIsLoading(false);
+      return false;
     }
   };
 
@@ -145,7 +91,7 @@ export const RestaurantProvider = ({ children }) => {
     restaurant,
     isLoading,
     error,
-    switchRestaurant,
+    updateRestaurant,
     refreshRestaurant: initializeRestaurant,
   };
 

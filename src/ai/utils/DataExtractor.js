@@ -1,14 +1,14 @@
 /**
  * DataExtractor.js
- * 
+ *
  * Utilities to extract and analyze data from the current schedule format.
  * Handles localStorage, Supabase data, and existing schedule structures.
  */
 
-import { generateDateRange } from '../../utils/dateUtils';
-import { optimizedStorage } from '../../utils/storageUtils';
-import { shiftSymbols } from '../../constants/shiftConstants';
-import { isStaffActiveInCurrentPeriod } from '../../utils/staffUtils';
+import { generateDateRange } from "../../utils/dateUtils";
+import { optimizedStorage } from "../../utils/storageUtils";
+import { shiftSymbols } from "../../constants/shiftConstants";
+import { isStaffActiveInCurrentPeriod } from "../../utils/staffUtils";
 
 /**
  * Extract schedule data for a specific period
@@ -25,9 +25,9 @@ export const extractPeriodData = (monthIndex) => {
     if (!scheduleData || !staffData) {
       return {
         success: false,
-        error: 'No data found for the specified period',
+        error: "No data found for the specified period",
         monthIndex,
-        dateRange
+        dateRange,
       };
     }
 
@@ -40,14 +40,14 @@ export const extractPeriodData = (monthIndex) => {
       metadata: {
         totalStaff: staffData.length,
         totalDays: dateRange.length,
-        dateKeys: dateRange.map(date => date.toISOString().split('T')[0])
-      }
+        dateKeys: dateRange.map((date) => date.toISOString().split("T")[0]),
+      },
     };
   } catch (error) {
     return {
       success: false,
       error: error.message,
-      monthIndex
+      monthIndex,
     };
   }
 };
@@ -58,7 +58,7 @@ export const extractPeriodData = (monthIndex) => {
  */
 export const extractAllHistoricalData = () => {
   const allData = [];
-  
+
   // Extract data from all 6 periods (0-5)
   for (let monthIndex = 0; monthIndex < 6; monthIndex++) {
     const periodData = extractPeriodData(monthIndex);
@@ -66,7 +66,7 @@ export const extractAllHistoricalData = () => {
       allData.push(periodData);
     }
   }
-  
+
   return allData;
 };
 
@@ -77,28 +77,33 @@ export const extractAllHistoricalData = () => {
  */
 export const extractStaffProfiles = (allPeriodData) => {
   const staffProfiles = {};
-  
-  allPeriodData.forEach(periodData => {
+
+  allPeriodData.forEach((periodData) => {
     const { staffData, scheduleData, dateRange, monthIndex } = periodData;
-    
+
     // Filter staff to only include those who were active in this period
-    const activeStaffForPeriod = staffData.filter(staff => {
+    const activeStaffForPeriod = staffData.filter((staff) => {
       try {
         const isActive = isStaffActiveInCurrentPeriod(staff, dateRange);
-        
+
         if (!isActive) {
-          console.log(`⏭️ DataExtractor: Filtering out inactive staff ${staff.name} for period ${monthIndex}`);
+          console.log(
+            `⏭️ DataExtractor: Filtering out inactive staff ${staff.name} for period ${monthIndex}`,
+          );
         }
-        
+
         return isActive;
       } catch (error) {
-        console.warn(`⚠️ Error checking staff activity for ${staff.name} in data extraction:`, error);
+        console.warn(
+          `⚠️ Error checking staff activity for ${staff.name} in data extraction:`,
+          error,
+        );
         // Default to including staff if there's an error
         return true;
       }
     });
-    
-    activeStaffForPeriod.forEach(staff => {
+
+    activeStaffForPeriod.forEach((staff) => {
       if (!staffProfiles[staff.id]) {
         staffProfiles[staff.id] = {
           id: staff.id,
@@ -112,24 +117,24 @@ export const extractStaffProfiles = (allPeriodData) => {
           periodsWorked: [],
           shiftHistory: {},
           totalShifts: 0,
-          shiftCounts: {}
+          shiftCounts: {},
         };
       }
-      
+
       // Add this period to their work history
       staffProfiles[staff.id].periodsWorked.push(monthIndex);
-      
+
       // Extract shift patterns for this period
       if (scheduleData[staff.id]) {
         const staffSchedule = scheduleData[staff.id];
         const periodShifts = {};
-        
-        dateRange.forEach(date => {
-          const dateKey = date.toISOString().split('T')[0];
+
+        dateRange.forEach((date) => {
+          const dateKey = date.toISOString().split("T")[0];
           if (staffSchedule[dateKey] !== undefined) {
             const shiftValue = staffSchedule[dateKey];
             periodShifts[dateKey] = shiftValue;
-            
+
             // Count shift types
             if (!staffProfiles[staff.id].shiftCounts[shiftValue]) {
               staffProfiles[staff.id].shiftCounts[shiftValue] = 0;
@@ -138,12 +143,12 @@ export const extractStaffProfiles = (allPeriodData) => {
             staffProfiles[staff.id].totalShifts++;
           }
         });
-        
+
         staffProfiles[staff.id].shiftHistory[monthIndex] = periodShifts;
       }
     });
   });
-  
+
   return staffProfiles;
 };
 
@@ -160,26 +165,26 @@ export const extractDailyCoveragePatterns = (allPeriodData) => {
     patterns: {
       weekday: {},
       weekend: {},
-      monthly: {}
-    }
+      monthly: {},
+    },
   };
-  
+
   // Initialize day of week data
   for (let i = 0; i < 7; i++) {
     coverageData.byDayOfWeek[i] = {
       totalDays: 0,
       shiftCounts: {},
-      averageStaff: 0
+      averageStaff: 0,
     };
   }
-  
-  allPeriodData.forEach(periodData => {
+
+  allPeriodData.forEach((periodData) => {
     const { scheduleData, dateRange, monthIndex } = periodData;
-    
-    dateRange.forEach(date => {
-      const dateKey = date.toISOString().split('T')[0];
+
+    dateRange.forEach((date) => {
+      const dateKey = date.toISOString().split("T")[0];
       const dayOfWeek = date.getDay();
-      
+
       // Count shifts for this date
       const dailyShifts = {
         early: 0,
@@ -187,41 +192,41 @@ export const extractDailyCoveragePatterns = (allPeriodData) => {
         late: 0,
         off: 0,
         other: 0,
-        total: 0
+        total: 0,
       };
-      
-      Object.keys(scheduleData).forEach(staffId => {
+
+      Object.keys(scheduleData).forEach((staffId) => {
         if (scheduleData[staffId][dateKey] !== undefined) {
           const shift = scheduleData[staffId][dateKey];
           dailyShifts.total++;
-          
+
           // Categorize shift types
-          if (shift === '△' || shift === 'early') {
+          if (shift === "△" || shift === "early") {
             dailyShifts.early++;
-          } else if (shift === '×' || shift === 'off') {
+          } else if (shift === "×" || shift === "off") {
             dailyShifts.off++;
-          } else if (shift === '◇' || shift === 'late') {
+          } else if (shift === "◇" || shift === "late") {
             dailyShifts.late++;
-          } else if (shift === '' || shift === 'normal') {
+          } else if (shift === "" || shift === "normal") {
             dailyShifts.normal++;
           } else {
             dailyShifts.other++;
           }
         }
       });
-      
+
       // Store daily data
       coverageData.byDate[dateKey] = {
         date: date,
         dayOfWeek: dayOfWeek,
         monthIndex: monthIndex,
-        shifts: dailyShifts
+        shifts: dailyShifts,
       };
-      
+
       // Aggregate by day of week
       const dayData = coverageData.byDayOfWeek[dayOfWeek];
       dayData.totalDays++;
-      Object.keys(dailyShifts).forEach(shiftType => {
+      Object.keys(dailyShifts).forEach((shiftType) => {
         if (!dayData.shiftCounts[shiftType]) {
           dayData.shiftCounts[shiftType] = 0;
         }
@@ -229,15 +234,15 @@ export const extractDailyCoveragePatterns = (allPeriodData) => {
       });
     });
   });
-  
+
   // Calculate averages
-  Object.keys(coverageData.byDayOfWeek).forEach(dayOfWeek => {
+  Object.keys(coverageData.byDayOfWeek).forEach((dayOfWeek) => {
     const dayData = coverageData.byDayOfWeek[dayOfWeek];
     if (dayData.totalDays > 0) {
       dayData.averageStaff = dayData.shiftCounts.total / dayData.totalDays;
     }
   });
-  
+
   return coverageData;
 };
 
@@ -248,33 +253,34 @@ export const extractDailyCoveragePatterns = (allPeriodData) => {
  */
 export const extractShiftSymbolUsage = (allPeriodData) => {
   const symbolUsage = {};
-  
+
   // Initialize with known symbols
-  Object.keys(shiftSymbols).forEach(key => {
+  Object.keys(shiftSymbols).forEach((key) => {
     symbolUsage[shiftSymbols[key].symbol] = {
       symbol: shiftSymbols[key].symbol,
       label: shiftSymbols[key].label,
       count: 0,
-      staffUsage: {}
+      staffUsage: {},
     };
   });
-  
+
   // Add empty string for normal shift
-  symbolUsage[''] = {
-    symbol: '',
-    label: 'Normal Shift',
+  symbolUsage[""] = {
+    symbol: "",
+    label: "Normal Shift",
     count: 0,
-    staffUsage: {}
+    staffUsage: {},
   };
-  
-  allPeriodData.forEach(periodData => {
+
+  allPeriodData.forEach((periodData) => {
     const { scheduleData, staffData } = periodData;
-    
-    Object.keys(scheduleData).forEach(staffId => {
-      const staffName = staffData.find(s => s.id === staffId)?.name || staffId;
+
+    Object.keys(scheduleData).forEach((staffId) => {
+      const staffName =
+        staffData.find((s) => s.id === staffId)?.name || staffId;
       const staffSchedule = scheduleData[staffId];
-      
-      Object.values(staffSchedule).forEach(shiftValue => {
+
+      Object.values(staffSchedule).forEach((shiftValue) => {
         if (shiftValue !== undefined) {
           // Count usage
           if (!symbolUsage[shiftValue]) {
@@ -282,12 +288,12 @@ export const extractShiftSymbolUsage = (allPeriodData) => {
               symbol: shiftValue,
               label: `Custom: ${shiftValue}`,
               count: 0,
-              staffUsage: {}
+              staffUsage: {},
             };
           }
-          
+
           symbolUsage[shiftValue].count++;
-          
+
           // Track staff usage
           if (!symbolUsage[shiftValue].staffUsage[staffName]) {
             symbolUsage[shiftValue].staffUsage[staffName] = 0;
@@ -297,7 +303,7 @@ export const extractShiftSymbolUsage = (allPeriodData) => {
       });
     });
   });
-  
+
   return symbolUsage;
 };
 
@@ -317,29 +323,32 @@ export const extractDataQualityMetrics = (allPeriodData) => {
     coverage: {
       complete: 0,
       partial: 0,
-      empty: 0
-    }
+      empty: 0,
+    },
   };
-  
-  allPeriodData.forEach(periodData => {
+
+  allPeriodData.forEach((periodData) => {
     const { scheduleData, staffData, dateRange, monthIndex } = periodData;
-    
+
     metrics.totalStaff += staffData.length;
     metrics.totalDays += dateRange.length;
-    
-    dateRange.forEach(date => {
-      const dateKey = date.toISOString().split('T')[0];
+
+    dateRange.forEach((date) => {
+      const dateKey = date.toISOString().split("T")[0];
       let dayShifts = 0;
       let staffWithData = 0;
-      
-      staffData.forEach(staff => {
-        if (scheduleData[staff.id] && scheduleData[staff.id][dateKey] !== undefined) {
+
+      staffData.forEach((staff) => {
+        if (
+          scheduleData[staff.id] &&
+          scheduleData[staff.id][dateKey] !== undefined
+        ) {
           staffWithData++;
           dayShifts++;
           metrics.totalShifts++;
         }
       });
-      
+
       // Categorize coverage
       if (staffWithData === 0) {
         metrics.coverage.empty++;
@@ -353,12 +362,12 @@ export const extractDataQualityMetrics = (allPeriodData) => {
           monthIndex,
           staffTotal: staffData.length,
           staffWithData,
-          coverage: (staffWithData / staffData.length) * 100
+          coverage: (staffWithData / staffData.length) * 100,
         });
       }
     });
   });
-  
+
   return metrics;
 };
 
@@ -368,31 +377,31 @@ export const extractDataQualityMetrics = (allPeriodData) => {
  */
 export const extractAllDataForAI = () => {
   try {
-    console.log('🔍 Extracting all data for AI analysis...');
-    
+    console.log("🔍 Extracting all data for AI analysis...");
+
     // Extract all historical data
     const allPeriodData = extractAllHistoricalData();
-    
+
     if (allPeriodData.length === 0) {
       return {
         success: false,
-        error: 'No historical data found',
-        data: null
+        error: "No historical data found",
+        data: null,
       };
     }
-    
+
     // Extract staff profiles
     const staffProfiles = extractStaffProfiles(allPeriodData);
-    
+
     // Extract coverage patterns
     const coveragePatterns = extractDailyCoveragePatterns(allPeriodData);
-    
+
     // Extract shift symbol usage
     const shiftSymbolUsage = extractShiftSymbolUsage(allPeriodData);
-    
+
     // Extract data quality metrics
     const dataQualityMetrics = extractDataQualityMetrics(allPeriodData);
-    
+
     const result = {
       success: true,
       extractedAt: new Date().toISOString(),
@@ -407,21 +416,24 @@ export const extractAllDataForAI = () => {
           totalStaff: Object.keys(staffProfiles).length,
           totalDays: dataQualityMetrics.totalDays,
           totalShifts: dataQualityMetrics.totalShifts,
-          dataCompleteness: (dataQualityMetrics.coverage.complete / 
-            (dataQualityMetrics.coverage.complete + dataQualityMetrics.coverage.partial + dataQualityMetrics.coverage.empty)) * 100
-        }
-      }
+          dataCompleteness:
+            (dataQualityMetrics.coverage.complete /
+              (dataQualityMetrics.coverage.complete +
+                dataQualityMetrics.coverage.partial +
+                dataQualityMetrics.coverage.empty)) *
+            100,
+        },
+      },
     };
-    
-    console.log('✅ Data extraction completed:', result.data.summary);
+
+    console.log("✅ Data extraction completed:", result.data.summary);
     return result;
-    
   } catch (error) {
-    console.error('❌ Data extraction failed:', error);
+    console.error("❌ Data extraction failed:", error);
     return {
       success: false,
       error: error.message,
-      data: null
+      data: null,
     };
   }
 };

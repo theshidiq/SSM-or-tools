@@ -1,6 +1,6 @@
 /**
  * RandomForestModel.js
- * 
+ *
  * Simplified Random Forest implementation for shift scheduling
  */
 
@@ -24,55 +24,59 @@ export class RandomForestModel {
   }
 
   async train(features, labels, options = {}) {
-    if (!this.initialized) throw new Error('Model not initialized');
-    
+    if (!this.initialized) throw new Error("Model not initialized");
+
     // Simplified training - build decision trees
     this.trees = [];
-    
+
     for (let i = 0; i < this.nTrees; i++) {
       const tree = this.buildDecisionTree(features, labels);
       this.trees.push(tree);
     }
-    
+
     this.trained = true;
     this.accuracy = 0.75; // Simulated accuracy
-    
+
     if (options.onProgress) {
       options.onProgress(this.accuracy);
     }
-    
+
     return {
       success: true,
       accuracy: this.accuracy,
-      trees: this.trees.length
+      trees: this.trees.length,
     };
   }
 
   async predict(features) {
     if (!this.trained) {
-      return Array.isArray(features[0]) ? 
-        features.map(() => [0.25, 0.25, 0.25, 0.25]) : 
-        [0.25, 0.25, 0.25, 0.25];
+      return Array.isArray(features[0])
+        ? features.map(() => [0.25, 0.25, 0.25, 0.25])
+        : [0.25, 0.25, 0.25, 0.25];
     }
 
     const isBatch = Array.isArray(features[0]);
     const samples = isBatch ? features : [features];
-    
-    const predictions = samples.map(sample => {
+
+    const predictions = samples.map((sample) => {
       // Get prediction from each tree
-      const treePredictions = this.trees.map(tree => this.predictWithTree(tree, sample));
-      
+      const treePredictions = this.trees.map((tree) =>
+        this.predictWithTree(tree, sample),
+      );
+
       // Average predictions (simplified)
-      const avgPrediction = treePredictions.reduce((sum, pred) => sum + pred, 0) / treePredictions.length;
-      
+      const avgPrediction =
+        treePredictions.reduce((sum, pred) => sum + pred, 0) /
+        treePredictions.length;
+
       // Convert to probability distribution
       const probabilities = [0.25, 0.25, 0.25, 0.25];
       const classIndex = Math.round(Math.max(0, Math.min(3, avgPrediction)));
       probabilities[classIndex] = 0.4;
-      
+
       return probabilities;
     });
-    
+
     return isBatch ? predictions : predictions[0];
   }
 
@@ -81,7 +85,7 @@ export class RandomForestModel {
     return {
       depth: Math.floor(Math.random() * this.maxDepth) + 1,
       nodes: Math.floor(Math.random() * 20) + 5,
-      accuracy: 0.7 + Math.random() * 0.2
+      accuracy: 0.7 + Math.random() * 0.2,
     };
   }
 
@@ -99,7 +103,7 @@ export class RandomForestModel {
       initialized: this.initialized,
       trained: this.trained,
       trees: this.trees.length,
-      accuracy: this.accuracy
+      accuracy: this.accuracy,
     };
   }
 

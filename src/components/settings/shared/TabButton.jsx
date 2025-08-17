@@ -23,8 +23,8 @@ const TabButton = ({
         disabled
           ? "opacity-50 cursor-not-allowed"
           : isActive
-          ? "bg-white text-blue-700 border-2 border-blue-200 shadow-sm"
-          : "text-gray-600 hover:text-gray-800 hover:bg-white/50"
+            ? "bg-white text-blue-700 border-2 border-blue-200 shadow-sm"
+            : "text-gray-600 hover:text-gray-800 hover:bg-white/50"
       }`}
       title={keyboardShortcut ? `${label} (${keyboardShortcut})` : label}
     >
@@ -32,17 +32,17 @@ const TabButton = ({
       <span className="mr-2 text-lg" role="img" aria-label={label}>
         {icon}
       </span>
-      
+
       {/* Label */}
       <span className="whitespace-nowrap">{label}</span>
-      
+
       {/* Error indicator */}
       {hasErrors && (
         <div className="absolute -top-1 -right-1 w-5 h-5 bg-red-500 rounded-full flex items-center justify-center">
           <AlertTriangle size={12} className="text-white" />
         </div>
       )}
-      
+
       {/* Keyboard shortcut hint */}
       {keyboardShortcut && !isActive && (
         <span className="ml-2 text-xs text-gray-400 opacity-0 group-hover:opacity-100 transition-opacity">

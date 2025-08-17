@@ -4,160 +4,158 @@ import { ja } from "date-fns/locale";
 import { shiftSymbols } from "../../constants/shiftConstants";
 
 // Individual staff card component for better performance isolation
-const StaffCard = React.memo(({ staffData, formatDateForCard, getDepartmentColor, getStatusColor }) => {
-  const { staff, stats, dates } = staffData;
+const StaffCard = React.memo(
+  ({ staffData, formatDateForCard, getDepartmentColor, getStatusColor }) => {
+    const { staff, stats, dates } = staffData;
 
-  return (
-    <div
-      className="bg-white rounded-lg border border-gray-200 shadow-sm hover:shadow-md transition-shadow duration-200 p-6"
-    >
-      {/* Header */}
-      <div className="flex items-start justify-between mb-4">
-        <div className="flex-1">
-          <h3 className="text-lg font-semibold text-gray-900 mb-2">
-            {staff.name}
-          </h3>
-          <div className="flex flex-wrap gap-2">
-            {staff.department && (
-              <span
-                className={`px-2 py-1 text-xs font-medium rounded-full border ${getDepartmentColor(staff.department)}`}
-              >
-                {staff.department}
-              </span>
-            )}
-            {staff.status && (
-              <span
-                className={`px-2 py-1 text-xs font-medium rounded-full border ${getStatusColor(staff.status)}`}
-              >
-                {staff.status}
+    return (
+      <div className="bg-white rounded-lg border border-gray-200 shadow-sm hover:shadow-md transition-shadow duration-200 p-6">
+        {/* Header */}
+        <div className="flex items-start justify-between mb-4">
+          <div className="flex-1">
+            <h3 className="text-lg font-semibold text-gray-900 mb-2">
+              {staff.name}
+            </h3>
+            <div className="flex flex-wrap gap-2">
+              {staff.department && (
+                <span
+                  className={`px-2 py-1 text-xs font-medium rounded-full border ${getDepartmentColor(staff.department)}`}
+                >
+                  {staff.department}
+                </span>
+              )}
+              {staff.status && (
+                <span
+                  className={`px-2 py-1 text-xs font-medium rounded-full border ${getStatusColor(staff.status)}`}
+                >
+                  {staff.status}
+                </span>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* Statistics */}
+        <div className="grid grid-cols-2 gap-3 mb-4">
+          <div className="text-center p-2 bg-blue-50 rounded-lg">
+            <div className="text-lg font-bold text-blue-600">
+              {stats.earlyShifts}
+            </div>
+            <div className="text-xs text-blue-700">早番</div>
+          </div>
+          <div className="text-center p-2 bg-red-50 rounded-lg">
+            <div className="text-lg font-bold text-red-600">
+              {stats.daysOff}
+            </div>
+            <div className="text-xs text-red-700">休み</div>
+          </div>
+          <div className="text-center p-2 bg-gray-50 rounded-lg">
+            <div className="text-lg font-bold text-gray-600">
+              {stats.normalShifts}
+            </div>
+            <div className="text-xs text-gray-700">通常</div>
+          </div>
+          <div className="text-center p-2 bg-yellow-50 rounded-lg">
+            <div className="text-lg font-bold text-yellow-600">
+              {stats.customTextDays}
+            </div>
+            <div className="text-xs text-yellow-700">その他</div>
+          </div>
+        </div>
+
+        {/* Early Shift Dates */}
+        {dates.earlyDates.length > 0 && (
+          <div className="mb-3">
+            <div className="text-xs font-medium text-blue-700 mb-1">
+              早番日:
+            </div>
+            <div className="flex flex-wrap gap-1">
+              {dates.earlyDates.slice(0, 8).map((date, index) => (
+                <span
+                  key={`early-${date.toISOString().split("T")[0]}-${index}`}
+                  className="px-2 py-1 text-xs bg-blue-100 text-blue-700 rounded"
+                >
+                  {formatDateForCard(date)}
+                </span>
+              ))}
+              {dates.earlyDates.length > 8 && (
+                <span className="px-2 py-1 text-xs bg-blue-50 text-blue-600 rounded">
+                  +{dates.earlyDates.length - 8}
+                </span>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* Days Off Dates */}
+        {dates.daysOffDates.length > 0 && (
+          <div className="mb-3">
+            <div className="text-xs font-medium text-red-700 mb-1">休み日:</div>
+            <div className="flex flex-wrap gap-1">
+              {dates.daysOffDates.slice(0, 8).map((date, index) => (
+                <span
+                  key={`off-${date.toISOString().split("T")[0]}-${index}`}
+                  className="px-2 py-1 text-xs bg-red-100 text-red-700 rounded"
+                >
+                  {formatDateForCard(date)}
+                </span>
+              ))}
+              {dates.daysOffDates.length > 8 && (
+                <span className="px-2 py-1 text-xs bg-red-50 text-red-600 rounded">
+                  +{dates.daysOffDates.length - 8}
+                </span>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* Custom Text Dates */}
+        {dates.customTextDates.length > 0 && (
+          <div className="mb-3">
+            <div className="text-xs font-medium text-yellow-700 mb-1">
+              特別:
+            </div>
+            <div className="flex flex-wrap gap-1">
+              {dates.customTextDates.slice(0, 6).map((item, index) => (
+                <span
+                  key={`custom-${item.date.toISOString().split("T")[0]}-${index}`}
+                  className="px-2 py-1 text-xs bg-yellow-100 text-yellow-800 rounded"
+                  title={`${formatDateForCard(item.date)}: ${item.text}`}
+                >
+                  {formatDateForCard(item.date)}
+                </span>
+              ))}
+              {dates.customTextDates.length > 6 && (
+                <span className="px-2 py-1 text-xs bg-yellow-50 text-yellow-600 rounded">
+                  +{dates.customTextDates.length - 6}
+                </span>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* Summary */}
+        <div className="pt-3 border-t border-gray-100">
+          <div className="text-xs text-gray-500">
+            総勤務日:{" "}
+            {stats.earlyShifts +
+              stats.normalShifts +
+              stats.lateShifts +
+              stats.customTextDays}
+            日
+            {stats.lateShifts > 0 && (
+              <span className="ml-2 text-purple-600">
+                遅番: {stats.lateShifts}日
               </span>
             )}
           </div>
         </div>
       </div>
+    );
+  },
+);
 
-      {/* Statistics */}
-      <div className="grid grid-cols-2 gap-3 mb-4">
-        <div className="text-center p-2 bg-blue-50 rounded-lg">
-          <div className="text-lg font-bold text-blue-600">
-            {stats.earlyShifts}
-          </div>
-          <div className="text-xs text-blue-700">早番</div>
-        </div>
-        <div className="text-center p-2 bg-red-50 rounded-lg">
-          <div className="text-lg font-bold text-red-600">
-            {stats.daysOff}
-          </div>
-          <div className="text-xs text-red-700">休み</div>
-        </div>
-        <div className="text-center p-2 bg-gray-50 rounded-lg">
-          <div className="text-lg font-bold text-gray-600">
-            {stats.normalShifts}
-          </div>
-          <div className="text-xs text-gray-700">通常</div>
-        </div>
-        <div className="text-center p-2 bg-yellow-50 rounded-lg">
-          <div className="text-lg font-bold text-yellow-600">
-            {stats.customTextDays}
-          </div>
-          <div className="text-xs text-yellow-700">その他</div>
-        </div>
-      </div>
-
-      {/* Early Shift Dates */}
-      {dates.earlyDates.length > 0 && (
-        <div className="mb-3">
-          <div className="text-xs font-medium text-blue-700 mb-1">
-            早番日:
-          </div>
-          <div className="flex flex-wrap gap-1">
-            {dates.earlyDates.slice(0, 8).map((date, index) => (
-              <span
-                key={`early-${date.toISOString().split("T")[0]}-${index}`}
-                className="px-2 py-1 text-xs bg-blue-100 text-blue-700 rounded"
-              >
-                {formatDateForCard(date)}
-              </span>
-            ))}
-            {dates.earlyDates.length > 8 && (
-              <span className="px-2 py-1 text-xs bg-blue-50 text-blue-600 rounded">
-                +{dates.earlyDates.length - 8}
-              </span>
-            )}
-          </div>
-        </div>
-      )}
-
-      {/* Days Off Dates */}
-      {dates.daysOffDates.length > 0 && (
-        <div className="mb-3">
-          <div className="text-xs font-medium text-red-700 mb-1">
-            休み日:
-          </div>
-          <div className="flex flex-wrap gap-1">
-            {dates.daysOffDates.slice(0, 8).map((date, index) => (
-              <span
-                key={`off-${date.toISOString().split("T")[0]}-${index}`}
-                className="px-2 py-1 text-xs bg-red-100 text-red-700 rounded"
-              >
-                {formatDateForCard(date)}
-              </span>
-            ))}
-            {dates.daysOffDates.length > 8 && (
-              <span className="px-2 py-1 text-xs bg-red-50 text-red-600 rounded">
-                +{dates.daysOffDates.length - 8}
-              </span>
-            )}
-          </div>
-        </div>
-      )}
-
-      {/* Custom Text Dates */}
-      {dates.customTextDates.length > 0 && (
-        <div className="mb-3">
-          <div className="text-xs font-medium text-yellow-700 mb-1">
-            特別:
-          </div>
-          <div className="flex flex-wrap gap-1">
-            {dates.customTextDates.slice(0, 6).map((item, index) => (
-              <span
-                key={`custom-${item.date.toISOString().split("T")[0]}-${index}`}
-                className="px-2 py-1 text-xs bg-yellow-100 text-yellow-800 rounded"
-                title={`${formatDateForCard(item.date)}: ${item.text}`}
-              >
-                {formatDateForCard(item.date)}
-              </span>
-            ))}
-            {dates.customTextDates.length > 6 && (
-              <span className="px-2 py-1 text-xs bg-yellow-50 text-yellow-600 rounded">
-                +{dates.customTextDates.length - 6}
-              </span>
-            )}
-          </div>
-        </div>
-      )}
-
-      {/* Summary */}
-      <div className="pt-3 border-t border-gray-100">
-        <div className="text-xs text-gray-500">
-          総勤務日:{" "}
-          {stats.earlyShifts +
-            stats.normalShifts +
-            stats.lateShifts +
-            stats.customTextDays}
-          日
-          {stats.lateShifts > 0 && (
-            <span className="ml-2 text-purple-600">
-              遅番: {stats.lateShifts}日
-            </span>
-          )}
-        </div>
-      </div>
-    </div>
-  );
-});
-
-StaffCard.displayName = 'StaffCard';
+StaffCard.displayName = "StaffCard";
 
 const StaffCardView = React.memo(
   ({ orderedStaffMembers, dateRange, schedule }) => {
@@ -193,7 +191,7 @@ const StaffCardView = React.memo(
 
     // Pre-computed date keys for better performance
     const dateKeys = useMemo(() => {
-      return dateRange.map(date => date.toISOString().split("T")[0]);
+      return dateRange.map((date) => date.toISOString().split("T")[0]);
     }, [dateRange]);
 
     // Helper function to calculate statistics and shift data for each staff member
@@ -312,6 +310,6 @@ const StaffCardView = React.memo(
   },
 );
 
-StaffCardView.displayName = 'StaffCardView';
+StaffCardView.displayName = "StaffCardView";
 
 export default StaffCardView;

@@ -1,9 +1,9 @@
 /**
  * DatabaseSetupService.js
- * 
+ *
  * Practical database setup service for Supabase.
  * Provides complete SQL schema for copy-paste setup and validates existing tables.
- * 
+ *
  * Features:
  * - Complete SQL schema generation
  * - Table existence validation
@@ -12,7 +12,7 @@
  * - Error-proof validation
  */
 
-import { supabase } from '../utils/supabase.js';
+import { supabase } from "../utils/supabase.js";
 
 export class DatabaseSetupService {
   constructor() {
@@ -21,13 +21,13 @@ export class DatabaseSetupService {
     this.progress = 0;
     this.errors = [];
     this.isSetupComplete = false;
-    
+
     // Setup progress callbacks
     this.onProgress = null;
     this.onStepComplete = null;
     this.onError = null;
     this.onComplete = null;
-    
+
     // Initialize setup steps
     this.initializeSetupSteps();
   }
@@ -38,44 +38,44 @@ export class DatabaseSetupService {
   initializeSetupSteps() {
     this.setupSteps = [
       {
-        id: 'validate_connection',
-        name: 'Validate Database Connection',
-        description: 'Check Supabase connection and permissions',
+        id: "validate_connection",
+        name: "Validate Database Connection",
+        description: "Check Supabase connection and permissions",
         execute: this.validateConnection.bind(this),
         critical: true,
       },
       {
-        id: 'check_existing_tables',
-        name: 'Check Existing Tables',
-        description: 'Scan for existing database tables',
+        id: "check_existing_tables",
+        name: "Check Existing Tables",
+        description: "Scan for existing database tables",
         execute: this.checkExistingTables.bind(this),
         critical: true,
       },
       {
-        id: 'provide_schema',
-        name: 'Generate Database Schema',
-        description: 'Provide complete SQL schema for setup',
+        id: "provide_schema",
+        name: "Generate Database Schema",
+        description: "Provide complete SQL schema for setup",
         execute: this.provideSchema.bind(this),
         critical: true,
       },
       {
-        id: 'validate_setup',
-        name: 'Validate Tables',
-        description: 'Verify all required tables exist',
+        id: "validate_setup",
+        name: "Validate Tables",
+        description: "Verify all required tables exist",
         execute: this.validateRequiredTables.bind(this),
         critical: true,
       },
       {
-        id: 'insert_sample_data',
-        name: 'Insert Sample Data',
-        description: 'Create sample restaurant and configuration data',
+        id: "insert_sample_data",
+        name: "Insert Sample Data",
+        description: "Create sample restaurant and configuration data",
         execute: this.insertSampleData.bind(this),
         critical: false,
       },
       {
-        id: 'final_validation',
-        name: 'Final Validation',
-        description: 'Verify complete system functionality',
+        id: "final_validation",
+        name: "Final Validation",
+        description: "Verify complete system functionality",
         execute: this.performFinalValidation.bind(this),
         critical: true,
       },
@@ -85,37 +85,48 @@ export class DatabaseSetupService {
   /**
    * Execute complete database setup
    */
-  async executeSetup(progressCallback = null, errorCallback = null, completeCallback = null) {
+  async executeSetup(
+    progressCallback = null,
+    errorCallback = null,
+    completeCallback = null,
+  ) {
     this.onProgress = progressCallback;
     this.onError = errorCallback;
     this.onComplete = completeCallback;
-    
+
     this.currentStep = 0;
     this.progress = 0;
     this.errors = [];
     this.isSetupComplete = false;
 
     try {
-      console.log('🚀 Starting database validation and setup...');
-      this.reportProgress('Starting database validation...', 0);
+      console.log("🚀 Starting database validation and setup...");
+      this.reportProgress("Starting database validation...", 0);
 
       for (let i = 0; i < this.setupSteps.length; i++) {
         const step = this.setupSteps[i];
         this.currentStep = i;
-        
+
         try {
-          console.log(`📋 Executing step ${i + 1}/${this.setupSteps.length}: ${step.name}`);
-          this.reportProgress(`Executing: ${step.name}`, (i / this.setupSteps.length) * 100);
+          console.log(
+            `📋 Executing step ${i + 1}/${this.setupSteps.length}: ${step.name}`,
+          );
+          this.reportProgress(
+            `Executing: ${step.name}`,
+            (i / this.setupSteps.length) * 100,
+          );
 
           await step.execute();
-          
-          console.log(`✅ Completed: ${step.name}`);
-          this.reportProgress(`Completed: ${step.name}`, ((i + 1) / this.setupSteps.length) * 100);
 
+          console.log(`✅ Completed: ${step.name}`);
+          this.reportProgress(
+            `Completed: ${step.name}`,
+            ((i + 1) / this.setupSteps.length) * 100,
+          );
         } catch (error) {
           const errorMsg = `Failed at step "${step.name}": ${error.message}`;
           console.error(`❌ ${errorMsg}`, error);
-          
+
           this.errors.push({
             step: step.name,
             stepId: step.id,
@@ -141,10 +152,10 @@ export class DatabaseSetupService {
 
       this.isSetupComplete = true;
       this.progress = 100;
-      
-      console.log('✅ Database setup completed successfully!');
-      this.reportProgress('Setup completed successfully!', 100);
-      
+
+      console.log("✅ Database setup completed successfully!");
+      this.reportProgress("Setup completed successfully!", 100);
+
       if (this.onComplete) {
         this.onComplete({
           success: true,
@@ -158,10 +169,9 @@ export class DatabaseSetupService {
         errors: this.errors,
         stepsCompleted: this.setupSteps.length,
       };
-
     } catch (error) {
-      console.error('❌ Database setup failed:', error);
-      
+      console.error("❌ Database setup failed:", error);
+
       const result = {
         success: false,
         error: error.message,
@@ -188,7 +198,7 @@ export class DatabaseSetupService {
         percentage,
         currentStep: this.currentStep,
         totalSteps: this.setupSteps.length,
-        stepName: this.setupSteps[this.currentStep]?.name || 'Unknown',
+        stepName: this.setupSteps[this.currentStep]?.name || "Unknown",
       });
     }
   }
@@ -200,13 +210,12 @@ export class DatabaseSetupService {
     try {
       // Test basic connection
       const { data, error } = await supabase.auth.getSession();
-      
+
       if (error) {
         throw new Error(`Authentication error: ${error.message}`);
       }
 
-      console.log('✅ Database connection validated');
-      
+      console.log("✅ Database connection validated");
     } catch (error) {
       throw new Error(`Database connection failed: ${error.message}`);
     }
@@ -217,18 +226,18 @@ export class DatabaseSetupService {
    */
   async checkExistingTables() {
     const requiredTables = [
-      'restaurants',
-      'staff',
-      'config_versions',
-      'config_changes',
-      'staff_groups',
-      'staff_group_members',
-      'conflict_rules',
-      'daily_limits',
-      'monthly_limits',
-      'priority_rules',
-      'ml_model_configs',
-      'ml_model_performance',
+      "restaurants",
+      "staff",
+      "config_versions",
+      "config_changes",
+      "staff_groups",
+      "staff_group_members",
+      "conflict_rules",
+      "daily_limits",
+      "monthly_limits",
+      "priority_rules",
+      "ml_model_configs",
+      "ml_model_performance",
     ];
 
     const existingTables = [];
@@ -236,15 +245,12 @@ export class DatabaseSetupService {
 
     for (const table of requiredTables) {
       try {
-        const { error } = await supabase
-          .from(table)
-          .select('count')
-          .limit(1);
+        const { error } = await supabase.from(table).select("count").limit(1);
 
-        if (!error || error.code === 'PGRST116') {
+        if (!error || error.code === "PGRST116") {
           // Table exists (either no error or just no data)
           existingTables.push(table);
-        } else if (error.code === '42P01') {
+        } else if (error.code === "42P01") {
           // Table doesn't exist
           missingTables.push(table);
         } else {
@@ -266,9 +272,9 @@ export class DatabaseSetupService {
     this.missingTables = missingTables;
 
     if (missingTables.length === 0) {
-      console.log('🎉 All required tables already exist!');
+      console.log("🎉 All required tables already exist!");
     } else {
-      console.log(`📋 Missing tables: ${missingTables.join(', ')}`);
+      console.log(`📋 Missing tables: ${missingTables.join(", ")}`);
     }
   }
 
@@ -277,19 +283,21 @@ export class DatabaseSetupService {
    */
   async provideSchema() {
     if (this.missingTables.length === 0) {
-      console.log('✅ Schema generation skipped - all tables exist');
+      console.log("✅ Schema generation skipped - all tables exist");
       return;
     }
 
     // Generate the complete schema
     const schema = this.generateCompleteSchema();
-    
+
     // Store schema for the UI to display
     this.generatedSchema = schema;
-    
-    console.log('📋 Complete database schema generated');
-    console.log('💡 Please copy the schema from the setup modal and run it in your Supabase SQL editor');
-    
+
+    console.log("📋 Complete database schema generated");
+    console.log(
+      "💡 Please copy the schema from the setup modal and run it in your Supabase SQL editor",
+    );
+
     // Validate the generated schema for common PostgreSQL issues
     this.validateSchemaForCommonIssues();
   }
@@ -302,28 +310,42 @@ export class DatabaseSetupService {
     const issues = [];
 
     // Check for CREATE TRIGGER IF NOT EXISTS (not supported)
-    if (schema.includes('CREATE TRIGGER IF NOT EXISTS')) {
-      issues.push('Found CREATE TRIGGER IF NOT EXISTS - this syntax is not supported in PostgreSQL');
+    if (schema.includes("CREATE TRIGGER IF NOT EXISTS")) {
+      issues.push(
+        "Found CREATE TRIGGER IF NOT EXISTS - this syntax is not supported in PostgreSQL",
+      );
     }
 
     // Check for proper trigger syntax
-    const triggerMatches = schema.match(/CREATE TRIGGER\s+(?!IF\s+NOT\s+EXISTS)\w+/g);
+    const triggerMatches = schema.match(
+      /CREATE TRIGGER\s+(?!IF\s+NOT\s+EXISTS)\w+/g,
+    );
     if (triggerMatches) {
-      console.log(`✅ Found ${triggerMatches.length} properly formatted CREATE TRIGGER statements`);
+      console.log(
+        `✅ Found ${triggerMatches.length} properly formatted CREATE TRIGGER statements`,
+      );
     }
 
     // Check for DROP TRIGGER IF EXISTS before CREATE TRIGGER
-    const dropTriggerMatches = schema.match(/DROP TRIGGER IF EXISTS\s+\w+\s+ON\s+\w+;/g);
+    const dropTriggerMatches = schema.match(
+      /DROP TRIGGER IF EXISTS\s+\w+\s+ON\s+\w+;/g,
+    );
     if (dropTriggerMatches) {
-      console.log(`✅ Found ${dropTriggerMatches.length} idempotent DROP TRIGGER IF EXISTS statements`);
+      console.log(
+        `✅ Found ${dropTriggerMatches.length} idempotent DROP TRIGGER IF EXISTS statements`,
+      );
     }
 
     if (issues.length > 0) {
-      console.warn('⚠️ Schema validation issues found:');
-      issues.forEach(issue => console.warn(`   - ${issue}`));
-      throw new Error(`Schema contains ${issues.length} compatibility issue(s): ${issues.join('; ')}`);
+      console.warn("⚠️ Schema validation issues found:");
+      issues.forEach((issue) => console.warn(`   - ${issue}`));
+      throw new Error(
+        `Schema contains ${issues.length} compatibility issue(s): ${issues.join("; ")}`,
+      );
     } else {
-      console.log('✅ Schema validation passed - no PostgreSQL compatibility issues found');
+      console.log(
+        "✅ Schema validation passed - no PostgreSQL compatibility issues found",
+      );
     }
   }
 
@@ -906,15 +928,15 @@ AND table_name IN (
    */
   async validateRequiredTables() {
     const requiredTables = [
-      'restaurants',
-      'staff',
-      'config_versions',
-      'staff_groups',
-      'conflict_rules',
-      'daily_limits',
-      'monthly_limits',
-      'priority_rules',
-      'ml_model_configs',
+      "restaurants",
+      "staff",
+      "config_versions",
+      "staff_groups",
+      "conflict_rules",
+      "daily_limits",
+      "monthly_limits",
+      "priority_rules",
+      "ml_model_configs",
     ];
 
     const missingTables = [];
@@ -922,15 +944,12 @@ AND table_name IN (
 
     for (const table of requiredTables) {
       try {
-        const { error } = await supabase
-          .from(table)
-          .select('count')
-          .limit(1);
+        const { error } = await supabase.from(table).select("count").limit(1);
 
-        if (!error || error.code === 'PGRST116') {
+        if (!error || error.code === "PGRST116") {
           // Table exists and is accessible
           accessibleTables.push(table);
-        } else if (error.code === '42P01') {
+        } else if (error.code === "42P01") {
           // Table doesn't exist
           missingTables.push(table);
         } else {
@@ -944,10 +963,14 @@ AND table_name IN (
     }
 
     if (missingTables.length > 0) {
-      throw new Error(`Missing required tables: ${missingTables.join(', ')}. Please ensure you've run the complete SQL schema in your Supabase SQL editor.`);
+      throw new Error(
+        `Missing required tables: ${missingTables.join(", ")}. Please ensure you've run the complete SQL schema in your Supabase SQL editor.`,
+      );
     }
 
-    console.log(`✅ All ${accessibleTables.length} required tables are accessible`);
+    console.log(
+      `✅ All ${accessibleTables.length} required tables are accessible`,
+    );
     this.validatedTables = accessibleTables;
   }
 
@@ -958,90 +981,108 @@ AND table_name IN (
     try {
       // Check if we already have sample data
       const { data: existingRestaurants } = await supabase
-        .from('restaurants')
-        .select('count')
+        .from("restaurants")
+        .select("count")
         .limit(1);
 
       if (existingRestaurants && existingRestaurants.length > 0) {
-        console.log('✅ Sample data already exists, skipping insertion');
+        console.log("✅ Sample data already exists, skipping insertion");
         return;
       }
 
       // Create sample restaurant
       const { data: restaurant, error: restaurantError } = await supabase
-        .from('restaurants')
+        .from("restaurants")
         .insert({
-          name: 'Sample Restaurant',
-          slug: 'sample-restaurant',
-          timezone: 'Asia/Tokyo',
+          name: "Sample Restaurant",
+          slug: "sample-restaurant",
+          timezone: "Asia/Tokyo",
           settings: {
-            businessHours: { start: '09:00', end: '22:00' },
-            daysOpen: ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday']
-          }
+            businessHours: { start: "09:00", end: "22:00" },
+            daysOpen: [
+              "monday",
+              "tuesday",
+              "wednesday",
+              "thursday",
+              "friday",
+              "saturday",
+              "sunday",
+            ],
+          },
         })
         .select()
         .single();
 
       if (restaurantError) {
-        console.warn('Sample restaurant creation failed:', restaurantError);
+        console.warn("Sample restaurant creation failed:", restaurantError);
         return; // Sample data is non-critical
       }
 
       // Create sample staff
       const staffMembers = [
-        { name: '料理長', position: 'Head Chef', email: 'head.chef@example.com' },
-        { name: '井関', position: 'Cook', email: 'iseki@example.com' },
-        { name: '古藤', position: 'Cook', email: 'koto@example.com' },
-        { name: '中田', position: 'Cook', email: 'nakata@example.com' },
-        { name: '小池', position: 'Cook', email: 'koike@example.com' },
-        { name: '田辺', position: 'Server', email: 'tanabe@example.com' },
-        { name: '岸', position: 'Server', email: 'kishi@example.com' },
-        { name: '与儀', position: 'Server', email: 'yogi@example.com' },
-        { name: 'カマル', position: 'Server', email: 'kamal@example.com' },
-        { name: '高野', position: 'Server', email: 'takano@example.com' },
-        { name: '派遣スタッフ', position: 'Temporary', email: 'temp@example.com' },
+        {
+          name: "料理長",
+          position: "Head Chef",
+          email: "head.chef@example.com",
+        },
+        { name: "井関", position: "Cook", email: "iseki@example.com" },
+        { name: "古藤", position: "Cook", email: "koto@example.com" },
+        { name: "中田", position: "Cook", email: "nakata@example.com" },
+        { name: "小池", position: "Cook", email: "koike@example.com" },
+        { name: "田辺", position: "Server", email: "tanabe@example.com" },
+        { name: "岸", position: "Server", email: "kishi@example.com" },
+        { name: "与儀", position: "Server", email: "yogi@example.com" },
+        { name: "カマル", position: "Server", email: "kamal@example.com" },
+        { name: "高野", position: "Server", email: "takano@example.com" },
+        {
+          name: "派遣スタッフ",
+          position: "Temporary",
+          email: "temp@example.com",
+        },
       ];
 
       const { data: staff, error: staffError } = await supabase
-        .from('staff')
+        .from("staff")
         .insert(
-          staffMembers.map(member => ({
+          staffMembers.map((member) => ({
             ...member,
             restaurant_id: restaurant.id,
-            hire_date: '2024-01-01',
+            hire_date: "2024-01-01",
             is_active: true,
-          }))
+          })),
         )
         .select();
 
       if (staffError) {
-        console.warn('Sample staff creation failed:', staffError);
+        console.warn("Sample staff creation failed:", staffError);
         return;
       }
 
       // Create initial configuration version
-      const { data: configVersion, error: versionError } = await supabase
-        .rpc('create_config_version', {
+      const { data: configVersion, error: versionError } = await supabase.rpc(
+        "create_config_version",
+        {
           p_restaurant_id: restaurant.id,
-          p_name: 'Initial Configuration',
-          p_description: 'Default setup with sample data'
-        });
+          p_name: "Initial Configuration",
+          p_description: "Default setup with sample data",
+        },
+      );
 
       if (versionError) {
-        console.warn('Sample config version creation failed:', versionError);
+        console.warn("Sample config version creation failed:", versionError);
         return;
       }
 
       // Create sample ML configuration
       const { error: mlError } = await supabase
-        .from('ml_model_configs')
+        .from("ml_model_configs")
         .insert({
           restaurant_id: restaurant.id,
           version_id: configVersion,
-          model_name: 'default_scheduler',
-          model_type: 'optimization',
+          model_name: "default_scheduler",
+          model_type: "optimization",
           parameters: {
-            algorithm: 'genetic_algorithm',
+            algorithm: "genetic_algorithm",
             populationSize: 100,
             generations: 300,
             mutationRate: 0.1,
@@ -1052,36 +1093,36 @@ AND table_name IN (
             fitnessWeights: {
               fairness: 0.3,
               preferences: 0.25,
-              constraints: 0.45
-            }
+              constraints: 0.45,
+            },
           },
           confidence_threshold: 0.85,
           is_default: true,
         });
 
       if (mlError) {
-        console.warn('Sample ML config creation failed:', mlError);
+        console.warn("Sample ML config creation failed:", mlError);
         return;
       }
 
       // Create sample priority rules
       const { error: priorityError } = await supabase
-        .from('priority_rules')
+        .from("priority_rules")
         .insert([
           {
             restaurant_id: restaurant.id,
             version_id: configVersion,
-            name: '料理長 Sunday Early Preference',
-            description: 'Head chef prefers Sunday early shift',
+            name: "料理長 Sunday Early Preference",
+            description: "Head chef prefers Sunday early shift",
             priority_level: 8,
             rule_definition: {
-              type: 'preferred_shift',
-              staff_name: '料理長',
+              type: "preferred_shift",
+              staff_name: "料理長",
               conditions: {
                 day_of_week: [0],
-                shift_type: 'early'
+                shift_type: "early",
               },
-              preference_strength: 0.9
+              preference_strength: 0.9,
             },
             penalty_weight: 1.0,
             is_hard_constraint: false,
@@ -1090,42 +1131,43 @@ AND table_name IN (
           {
             restaurant_id: restaurant.id,
             version_id: configVersion,
-            name: '与儀 Sunday Off Preference',
-            description: 'Yogi prefers Sunday off',
+            name: "与儀 Sunday Off Preference",
+            description: "Yogi prefers Sunday off",
             priority_level: 7,
             rule_definition: {
-              type: 'preferred_shift',
-              staff_name: '与儀',
+              type: "preferred_shift",
+              staff_name: "与儀",
               conditions: {
                 day_of_week: [0],
-                shift_type: 'off'
+                shift_type: "off",
               },
-              preference_strength: 0.8
+              preference_strength: 0.8,
             },
             penalty_weight: 1.0,
             is_hard_constraint: false,
             is_active: true,
-          }
+          },
         ]);
 
       if (priorityError) {
-        console.warn('Sample priority rules creation failed:', priorityError);
+        console.warn("Sample priority rules creation failed:", priorityError);
         return;
       }
 
       // Activate the configuration version
-      const { error: activateError } = await supabase
-        .rpc('activate_config_version', { p_version_id: configVersion });
+      const { error: activateError } = await supabase.rpc(
+        "activate_config_version",
+        { p_version_id: configVersion },
+      );
 
       if (activateError) {
-        console.warn('Config version activation failed:', activateError);
+        console.warn("Config version activation failed:", activateError);
       }
 
-      console.log('✅ Sample data inserted successfully');
+      console.log("✅ Sample data inserted successfully");
       this.sampleDataInserted = true;
-
     } catch (error) {
-      console.warn('⚠️ Sample data insertion failed (non-critical):', error);
+      console.warn("⚠️ Sample data insertion failed (non-critical):", error);
       // Sample data is non-critical, so we don't throw
     }
   }
@@ -1141,15 +1183,17 @@ AND table_name IN (
     };
 
     // Test table access
-    const testTables = ['restaurants', 'staff', 'config_versions', 'ml_model_configs'];
+    const testTables = [
+      "restaurants",
+      "staff",
+      "config_versions",
+      "ml_model_configs",
+    ];
     for (const table of testTables) {
       try {
-        const { error } = await supabase
-          .from(table)
-          .select('count')
-          .limit(1);
-        
-        if (!error || error.code === 'PGRST116') {
+        const { error } = await supabase.from(table).select("count").limit(1);
+
+        if (!error || error.code === "PGRST116") {
           validationResults.tablesAccessible++;
         }
       } catch (error) {
@@ -1159,37 +1203,43 @@ AND table_name IN (
 
     // Test functions
     try {
-      const { error } = await supabase.rpc('get_active_config_version', { 
-        p_restaurant_id: '00000000-0000-0000-0000-000000000000' 
+      const { error } = await supabase.rpc("get_active_config_version", {
+        p_restaurant_id: "00000000-0000-0000-0000-000000000000",
       });
-      
-      if (!error || !error.message.includes('function')) {
+
+      if (!error || !error.message.includes("function")) {
         validationResults.functionsWorking++;
       }
     } catch (error) {
-      console.warn('Final validation - function test failed:', error);
+      console.warn("Final validation - function test failed:", error);
     }
 
     // Check for sample data
     try {
       const { data, error } = await supabase
-        .from('restaurants')
-        .select('count')
+        .from("restaurants")
+        .select("count")
         .limit(1);
-      
+
       if (!error && data && data.length > 0) {
         validationResults.sampleDataAvailable = true;
       }
     } catch (error) {
-      console.warn('Final validation - sample data check failed:', error);
+      console.warn("Final validation - sample data check failed:", error);
     }
 
     this.validationResults = validationResults;
 
     console.log(`✅ Final validation completed:`);
-    console.log(`   - Tables accessible: ${validationResults.tablesAccessible}/${testTables.length}`);
-    console.log(`   - Functions working: ${validationResults.functionsWorking}/1`);
-    console.log(`   - Sample data: ${validationResults.sampleDataAvailable ? 'Yes' : 'No'}`);
+    console.log(
+      `   - Tables accessible: ${validationResults.tablesAccessible}/${testTables.length}`,
+    );
+    console.log(
+      `   - Functions working: ${validationResults.functionsWorking}/1`,
+    );
+    console.log(
+      `   - Sample data: ${validationResults.sampleDataAvailable ? "Yes" : "No"}`,
+    );
   }
 
   /**
@@ -1201,7 +1251,7 @@ AND table_name IN (
       totalSteps: this.setupSteps.length,
       percentage: this.progress,
       isComplete: this.isSetupComplete,
-      stepName: this.setupSteps[this.currentStep]?.name || 'Unknown',
+      stepName: this.setupSteps[this.currentStep]?.name || "Unknown",
       errors: this.errors,
       generatedSchema: this.generatedSchema,
       missingTables: this.missingTables || [],
@@ -1236,8 +1286,8 @@ AND table_name IN (
    */
   async testSchemaCompatibility() {
     try {
-      console.log('🧪 Testing schema compatibility with PostgreSQL...');
-      
+      console.log("🧪 Testing schema compatibility with PostgreSQL...");
+
       // Test basic connection first
       const { error: connectionError } = await supabase.auth.getSession();
       if (connectionError) {
@@ -1253,17 +1303,22 @@ AND table_name IN (
         );
       `;
 
-      const { error: tableError } = await supabase.rpc('exec', { sql: testTableSQL });
-      
-      // Clean up test table if it was created
-      await supabase.rpc('exec', { sql: 'DROP TABLE IF EXISTS __schema_test_table__;' });
+      const { error: tableError } = await supabase.rpc("exec", {
+        sql: testTableSQL,
+      });
 
-      if (tableError && !tableError.message.includes('does not exist')) {
-        console.warn('⚠️ Schema compatibility test had issues:', tableError);
+      // Clean up test table if it was created
+      await supabase.rpc("exec", {
+        sql: "DROP TABLE IF EXISTS __schema_test_table__;",
+      });
+
+      if (tableError && !tableError.message.includes("does not exist")) {
+        console.warn("⚠️ Schema compatibility test had issues:", tableError);
         return {
           compatible: false,
           error: tableError.message,
-          recommendation: 'Please check your Supabase permissions and PostgreSQL version'
+          recommendation:
+            "Please check your Supabase permissions and PostgreSQL version",
         };
       }
 
@@ -1279,25 +1334,26 @@ AND table_name IN (
         DROP FUNCTION IF EXISTS __test_trigger_function__();
       `;
 
-      const { error: triggerError } = await supabase.rpc('exec', { sql: triggerTestSQL });
-      
+      const { error: triggerError } = await supabase.rpc("exec", {
+        sql: triggerTestSQL,
+      });
+
       if (triggerError) {
-        console.warn('⚠️ Trigger compatibility test had issues:', triggerError);
+        console.warn("⚠️ Trigger compatibility test had issues:", triggerError);
       }
 
-      console.log('✅ Schema compatibility test completed successfully');
+      console.log("✅ Schema compatibility test completed successfully");
       return {
         compatible: true,
         error: null,
-        recommendation: 'Schema should execute successfully in Supabase'
+        recommendation: "Schema should execute successfully in Supabase",
       };
-
     } catch (error) {
-      console.error('❌ Schema compatibility test failed:', error);
+      console.error("❌ Schema compatibility test failed:", error);
       return {
         compatible: false,
         error: error.message,
-        recommendation: 'Please verify Supabase connection and permissions'
+        recommendation: "Please verify Supabase connection and permissions",
       };
     }
   }
@@ -1308,67 +1364,75 @@ AND table_name IN (
    */
   async executeSchemaDirectly() {
     try {
-      console.log('🚀 Attempting to execute schema directly...');
-      
+      console.log("🚀 Attempting to execute schema directly...");
+
       const schema = this.getGeneratedSchema();
-      
+
       // Split schema into manageable chunks (Supabase may have query size limits)
       const statements = schema
-        .split(';')
-        .map(stmt => stmt.trim())
-        .filter(stmt => stmt.length > 0 && !stmt.startsWith('--'));
+        .split(";")
+        .map((stmt) => stmt.trim())
+        .filter((stmt) => stmt.length > 0 && !stmt.startsWith("--"));
 
       let executedStatements = 0;
       const errors = [];
 
       for (const statement of statements) {
         try {
-          if (statement.includes('SELECT log_setup_progress') || 
-              statement.includes('RAISE NOTICE') ||
-              statement.includes('DO $$')) {
+          if (
+            statement.includes("SELECT log_setup_progress") ||
+            statement.includes("RAISE NOTICE") ||
+            statement.includes("DO $$")
+          ) {
             // Skip progress logging statements as they may not work via RPC
             continue;
           }
 
-          const { error } = await supabase.rpc('exec', { sql: statement + ';' });
-          
+          const { error } = await supabase.rpc("exec", {
+            sql: statement + ";",
+          });
+
           if (error) {
             errors.push({
-              statement: statement.substring(0, 100) + '...',
-              error: error.message
+              statement: statement.substring(0, 100) + "...",
+              error: error.message,
             });
             console.warn(`⚠️ Statement failed: ${error.message}`);
           } else {
             executedStatements++;
           }
-          
         } catch (error) {
           errors.push({
-            statement: statement.substring(0, 100) + '...',
-            error: error.message
+            statement: statement.substring(0, 100) + "...",
+            error: error.message,
           });
         }
       }
 
       if (errors.length === 0) {
-        console.log(`✅ Schema executed successfully! ${executedStatements} statements completed.`);
+        console.log(
+          `✅ Schema executed successfully! ${executedStatements} statements completed.`,
+        );
         return {
           success: true,
           executedStatements,
-          errors: []
+          errors: [],
         };
       } else {
-        console.warn(`⚠️ Schema execution completed with ${errors.length} errors out of ${statements.length} statements`);
+        console.warn(
+          `⚠️ Schema execution completed with ${errors.length} errors out of ${statements.length} statements`,
+        );
         return {
           success: false,
           executedStatements,
-          errors
+          errors,
         };
       }
-
     } catch (error) {
-      console.error('❌ Direct schema execution failed:', error);
-      throw new Error(`Direct schema execution not supported: ${error.message}`);
+      console.error("❌ Direct schema execution failed:", error);
+      throw new Error(
+        `Direct schema execution not supported: ${error.message}`,
+      );
     }
   }
 }

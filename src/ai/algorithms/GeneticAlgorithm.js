@@ -1,11 +1,11 @@
 /**
  * GeneticAlgorithm.js
- * 
+ *
  * Genetic Algorithm implementation for shift schedule optimization.
  * Uses evolutionary computation to find optimal scheduling solutions.
  */
 
-import { validateAllConstraints } from '../constraints/ConstraintEngine';
+import { validateAllConstraints } from "../constraints/ConstraintEngine";
 
 /**
  * Genetic Algorithm for schedule optimization
@@ -21,7 +21,7 @@ export class GeneticAlgorithm {
       elitismSize: 5,
       tournamentSize: 3,
       convergenceThreshold: 0.01,
-      maxStagnantGenerations: 20
+      maxStagnantGenerations: 20,
     };
     this.fitnessFunction = null;
     this.evolutionStats = {
@@ -29,7 +29,7 @@ export class GeneticAlgorithm {
       successfulRuns: 0,
       averageGenerations: 0,
       bestFitnessAchieved: 0,
-      averageConvergenceTime: 0
+      averageConvergenceTime: 0,
     };
   }
 
@@ -38,8 +38,8 @@ export class GeneticAlgorithm {
    * @param {Object} options - Initialization options
    */
   initialize(options = {}) {
-    console.log('🧬 Initializing Genetic Algorithm...');
-    
+    console.log("🧬 Initializing Genetic Algorithm...");
+
     try {
       // Update parameters if provided
       if (options.parameters) {
@@ -47,13 +47,13 @@ export class GeneticAlgorithm {
       }
 
       // Set fitness function
-      this.fitnessFunction = options.fitnessFunction || this.defaultFitnessFunction;
-      
+      this.fitnessFunction =
+        options.fitnessFunction || this.defaultFitnessFunction;
+
       this.initialized = true;
-      console.log('✅ Genetic Algorithm initialized successfully');
-      
+      console.log("✅ Genetic Algorithm initialized successfully");
     } catch (error) {
-      console.error('❌ Genetic Algorithm initialization failed:', error);
+      console.error("❌ Genetic Algorithm initialization failed:", error);
       throw error;
     }
   }
@@ -65,7 +65,7 @@ export class GeneticAlgorithm {
    */
   async evolve(params = {}) {
     if (!this.initialized) {
-      throw new Error('Genetic Algorithm not initialized');
+      throw new Error("Genetic Algorithm not initialized");
     }
 
     const {
@@ -73,20 +73,20 @@ export class GeneticAlgorithm {
       dateRange = [],
       initialSchedule = {},
       preserveFixed = true,
-      customFitness = null
+      customFitness = null,
     } = params;
 
-    console.log('🧬 Starting genetic algorithm evolution...');
-    
+    console.log("🧬 Starting genetic algorithm evolution...");
+
     try {
       const startTime = Date.now();
-      
+
       // Initialize population
       let population = this.initializePopulation(
-        staffMembers, 
-        dateRange, 
-        initialSchedule, 
-        preserveFixed
+        staffMembers,
+        dateRange,
+        initialSchedule,
+        preserveFixed,
       );
 
       // Evolution statistics
@@ -97,63 +97,80 @@ export class GeneticAlgorithm {
         diversity: 0,
         stagnantGenerations: 0,
         fitnessHistory: [],
-        diversityHistory: []
+        diversityHistory: [],
       };
 
       // Set fitness function for this run
       const fitnessFunc = customFitness || this.fitnessFunction;
 
       // Evolution loop
-      while (stats.generation < this.parameters.maxGenerations && 
-             stats.stagnantGenerations < this.parameters.maxStagnantGenerations) {
-        
+      while (
+        stats.generation < this.parameters.maxGenerations &&
+        stats.stagnantGenerations < this.parameters.maxStagnantGenerations
+      ) {
         stats.generation++;
 
         // Evaluate population fitness
-        await this.evaluatePopulation(population, fitnessFunc, staffMembers, dateRange);
+        await this.evaluatePopulation(
+          population,
+          fitnessFunc,
+          staffMembers,
+          dateRange,
+        );
 
         // Calculate generation statistics
         const generationStats = this.calculateGenerationStats(population);
         const previousBestFitness = stats.bestFitness;
-        
+
         stats.bestFitness = generationStats.bestFitness;
         stats.averageFitness = generationStats.averageFitness;
         stats.diversity = generationStats.diversity;
-        
+
         stats.fitnessHistory.push(stats.bestFitness);
         stats.diversityHistory.push(stats.diversity);
 
         // Check for stagnation
-        if (Math.abs(stats.bestFitness - previousBestFitness) < this.parameters.convergenceThreshold) {
+        if (
+          Math.abs(stats.bestFitness - previousBestFitness) <
+          this.parameters.convergenceThreshold
+        ) {
           stats.stagnantGenerations++;
         } else {
           stats.stagnantGenerations = 0;
         }
 
-        console.log(`🧬 Generation ${stats.generation}: Best=${stats.bestFitness.toFixed(2)}, Avg=${stats.averageFitness.toFixed(2)}, Diversity=${stats.diversity.toFixed(2)}`);
+        console.log(
+          `🧬 Generation ${stats.generation}: Best=${stats.bestFitness.toFixed(2)}, Avg=${stats.averageFitness.toFixed(2)}, Diversity=${stats.diversity.toFixed(2)}`,
+        );
 
         // Early termination if excellent fitness achieved
         if (stats.bestFitness >= 95) {
-          console.log('🎯 Excellent fitness achieved, terminating evolution');
+          console.log("🎯 Excellent fitness achieved, terminating evolution");
           break;
         }
 
         // Create next generation
-        population = await this.createNextGeneration(population, fitnessFunc, staffMembers, dateRange);
+        population = await this.createNextGeneration(
+          population,
+          fitnessFunc,
+          staffMembers,
+          dateRange,
+        );
       }
 
       const evolutionTime = Date.now() - startTime;
 
       // Get best solution
-      const bestIndividual = population.reduce((best, current) => 
-        current.fitness > best.fitness ? current : best
+      const bestIndividual = population.reduce((best, current) =>
+        current.fitness > best.fitness ? current : best,
       );
 
       // Update evolution statistics
       this.evolutionStats.totalRuns++;
-      this.evolutionStats.averageGenerations = 
-        (this.evolutionStats.averageGenerations + stats.generation) / this.evolutionStats.totalRuns;
-      
+      this.evolutionStats.averageGenerations =
+        (this.evolutionStats.averageGenerations + stats.generation) /
+        this.evolutionStats.totalRuns;
+
       if (stats.bestFitness > this.evolutionStats.bestFitnessAchieved) {
         this.evolutionStats.bestFitnessAchieved = stats.bestFitness;
       }
@@ -162,8 +179,9 @@ export class GeneticAlgorithm {
         this.evolutionStats.successfulRuns++;
       }
 
-      this.evolutionStats.averageConvergenceTime = 
-        (this.evolutionStats.averageConvergenceTime + evolutionTime) / this.evolutionStats.totalRuns;
+      this.evolutionStats.averageConvergenceTime =
+        (this.evolutionStats.averageConvergenceTime + evolutionTime) /
+        this.evolutionStats.totalRuns;
 
       const result = {
         success: true,
@@ -172,42 +190,46 @@ export class GeneticAlgorithm {
         bestFitness: bestIndividual.fitness,
         generations: stats.generation,
         evolutionTime,
-        convergenceReason: stats.generation >= this.parameters.maxGenerations ? 
-          'max_generations' : 
-          stats.stagnantGenerations >= this.parameters.maxStagnantGenerations ? 
-            'stagnation' : 'early_termination',
+        convergenceReason:
+          stats.generation >= this.parameters.maxGenerations
+            ? "max_generations"
+            : stats.stagnantGenerations >=
+                this.parameters.maxStagnantGenerations
+              ? "stagnation"
+              : "early_termination",
         finalPopulationStats: {
           bestFitness: stats.bestFitness,
           averageFitness: stats.averageFitness,
           diversity: stats.diversity,
-          populationSize: population.length
+          populationSize: population.length,
         },
         evolutionHistory: {
           fitnessHistory: stats.fitnessHistory,
-          diversityHistory: stats.diversityHistory
+          diversityHistory: stats.diversityHistory,
         },
         parameters: { ...this.parameters },
         metadata: {
-          algorithm: 'genetic_algorithm',
+          algorithm: "genetic_algorithm",
           staffCount: staffMembers.length,
           dateCount: dateRange.length,
-          searchSpaceSize: Math.pow(4, staffMembers.length * dateRange.length)
-        }
+          searchSpaceSize: Math.pow(4, staffMembers.length * dateRange.length),
+        },
       };
 
-      console.log(`✅ Evolution completed in ${evolutionTime}ms after ${stats.generation} generations`);
+      console.log(
+        `✅ Evolution completed in ${evolutionTime}ms after ${stats.generation} generations`,
+      );
       console.log(`📊 Best fitness: ${stats.bestFitness.toFixed(2)}%`);
 
       return result;
-
     } catch (error) {
-      console.error('❌ Genetic algorithm evolution failed:', error);
+      console.error("❌ Genetic algorithm evolution failed:", error);
       return {
         success: false,
         timestamp: new Date().toISOString(),
         error: error.message,
         evolutionTime: 0,
-        generations: 0
+        generations: 0,
       };
     }
   }
@@ -220,42 +242,50 @@ export class GeneticAlgorithm {
    * @param {boolean} preserveFixed - Whether to preserve fixed assignments
    * @returns {Array} Initial population
    */
-  initializePopulation(staffMembers, dateRange, initialSchedule, preserveFixed) {
+  initializePopulation(
+    staffMembers,
+    dateRange,
+    initialSchedule,
+    preserveFixed,
+  ) {
     const population = [];
-    const possibleShifts = ['', '△', '◇', '×'];
+    const possibleShifts = ["", "△", "◇", "×"];
 
     for (let i = 0; i < this.parameters.populationSize; i++) {
       const individual = {
         schedule: {},
         fitness: 0,
         age: 0,
-        id: `gen0_ind${i}`
+        id: `gen0_ind${i}`,
       };
 
       // Initialize schedule for each staff member
-      staffMembers.forEach(staff => {
+      staffMembers.forEach((staff) => {
         individual.schedule[staff.id] = {};
-        
-        dateRange.forEach(date => {
-          const dateKey = date.toISOString().split('T')[0];
-          
+
+        dateRange.forEach((date) => {
+          const dateKey = date.toISOString().split("T")[0];
+
           // Preserve fixed assignments if specified
-          if (preserveFixed && 
-              initialSchedule[staff.id] && 
-              initialSchedule[staff.id][dateKey] !== undefined &&
-              initialSchedule[staff.id][dateKey] !== '') {
-            individual.schedule[staff.id][dateKey] = initialSchedule[staff.id][dateKey];
+          if (
+            preserveFixed &&
+            initialSchedule[staff.id] &&
+            initialSchedule[staff.id][dateKey] !== undefined &&
+            initialSchedule[staff.id][dateKey] !== ""
+          ) {
+            individual.schedule[staff.id][dateKey] =
+              initialSchedule[staff.id][dateKey];
           } else {
             // Random assignment with bias toward normal shifts
             const random = Math.random();
             if (random < 0.5) {
-              individual.schedule[staff.id][dateKey] = ''; // Normal shift
+              individual.schedule[staff.id][dateKey] = ""; // Normal shift
             } else if (random < 0.7) {
-              individual.schedule[staff.id][dateKey] = '×'; // Off day
+              individual.schedule[staff.id][dateKey] = "×"; // Off day
             } else if (random < 0.85) {
-              individual.schedule[staff.id][dateKey] = '△'; // Early shift
+              individual.schedule[staff.id][dateKey] = "△"; // Early shift
             } else {
-              individual.schedule[staff.id][dateKey] = '◇'; // Late shift
+              individual.schedule[staff.id][dateKey] = "◇"; // Late shift
             }
           }
         });
@@ -276,7 +306,11 @@ export class GeneticAlgorithm {
    */
   async evaluatePopulation(population, fitnessFunc, staffMembers, dateRange) {
     for (const individual of population) {
-      individual.fitness = await fitnessFunc(individual.schedule, staffMembers, dateRange);
+      individual.fitness = await fitnessFunc(
+        individual.schedule,
+        staffMembers,
+        dateRange,
+      );
       individual.age++;
     }
   }
@@ -291,29 +325,42 @@ export class GeneticAlgorithm {
   async defaultFitnessFunction(schedule, staffMembers, dateRange) {
     try {
       // Constraint validation (70% of fitness)
-      const validation = validateAllConstraints(schedule, staffMembers, dateRange);
+      const validation = validateAllConstraints(
+        schedule,
+        staffMembers,
+        dateRange,
+      );
       let constraintScore = validation.valid ? 100 : 0;
-      
+
       if (!validation.valid) {
-        const violationPenalty = validation.summary.criticalViolations * 20 + 
-                               validation.summary.highViolations * 10 + 
-                               validation.summary.mediumViolations * 5;
+        const violationPenalty =
+          validation.summary.criticalViolations * 20 +
+          validation.summary.highViolations * 10 +
+          validation.summary.mediumViolations * 5;
         constraintScore = Math.max(0, 100 - violationPenalty);
       }
 
       // Workload balance (20% of fitness)
-      const balanceScore = this.calculateWorkloadBalance(schedule, staffMembers, dateRange);
+      const balanceScore = this.calculateWorkloadBalance(
+        schedule,
+        staffMembers,
+        dateRange,
+      );
 
       // Shift distribution (10% of fitness)
-      const distributionScore = this.calculateShiftDistribution(schedule, staffMembers, dateRange);
+      const distributionScore = this.calculateShiftDistribution(
+        schedule,
+        staffMembers,
+        dateRange,
+      );
 
       // Weighted fitness
-      const fitness = (constraintScore * 0.7) + (balanceScore * 0.2) + (distributionScore * 0.1);
-      
-      return Math.min(100, Math.max(0, fitness));
+      const fitness =
+        constraintScore * 0.7 + balanceScore * 0.2 + distributionScore * 0.1;
 
+      return Math.min(100, Math.max(0, fitness));
     } catch (error) {
-      console.error('Error in fitness calculation:', error);
+      console.error("Error in fitness calculation:", error);
       return 0;
     }
   }
@@ -326,12 +373,12 @@ export class GeneticAlgorithm {
    * @returns {number} Balance score (0-100)
    */
   calculateWorkloadBalance(schedule, staffMembers, dateRange) {
-    const workloads = staffMembers.map(staff => {
+    const workloads = staffMembers.map((staff) => {
       let workingDays = 0;
-      dateRange.forEach(date => {
-        const dateKey = date.toISOString().split('T')[0];
+      dateRange.forEach((date) => {
+        const dateKey = date.toISOString().split("T")[0];
         const shift = schedule[staff.id]?.[dateKey];
-        if (shift !== undefined && shift !== '×' && shift !== 'off') {
+        if (shift !== undefined && shift !== "×" && shift !== "off") {
           workingDays++;
         }
       });
@@ -341,10 +388,12 @@ export class GeneticAlgorithm {
     if (workloads.length === 0) return 100;
 
     const avg = workloads.reduce((sum, w) => sum + w, 0) / workloads.length;
-    const variance = workloads.reduce((sum, w) => sum + Math.pow(w - avg, 2), 0) / workloads.length;
+    const variance =
+      workloads.reduce((sum, w) => sum + Math.pow(w - avg, 2), 0) /
+      workloads.length;
     const stdDev = Math.sqrt(variance);
 
-    return Math.max(0, 100 - (stdDev * 200));
+    return Math.max(0, 100 - stdDev * 200);
   }
 
   /**
@@ -357,19 +406,22 @@ export class GeneticAlgorithm {
   calculateShiftDistribution(schedule, staffMembers, dateRange) {
     const shiftCounts = { normal: 0, early: 0, late: 0, off: 0 };
 
-    staffMembers.forEach(staff => {
-      dateRange.forEach(date => {
-        const dateKey = date.toISOString().split('T')[0];
+    staffMembers.forEach((staff) => {
+      dateRange.forEach((date) => {
+        const dateKey = date.toISOString().split("T")[0];
         const shift = schedule[staff.id]?.[dateKey];
-        
-        if (shift === '△') shiftCounts.early++;
-        else if (shift === '◇') shiftCounts.late++;
-        else if (shift === '×') shiftCounts.off++;
+
+        if (shift === "△") shiftCounts.early++;
+        else if (shift === "◇") shiftCounts.late++;
+        else if (shift === "×") shiftCounts.off++;
         else shiftCounts.normal++;
       });
     });
 
-    const totalShifts = Object.values(shiftCounts).reduce((sum, count) => sum + count, 0);
+    const totalShifts = Object.values(shiftCounts).reduce(
+      (sum, count) => sum + count,
+      0,
+    );
     if (totalShifts === 0) return 100;
 
     // Prefer normal shifts, balanced early/late, reasonable off days
@@ -393,19 +445,22 @@ export class GeneticAlgorithm {
    * @returns {Object} Generation statistics
    */
   calculateGenerationStats(population) {
-    const fitnesses = population.map(ind => ind.fitness);
+    const fitnesses = population.map((ind) => ind.fitness);
     const bestFitness = Math.max(...fitnesses);
-    const averageFitness = fitnesses.reduce((sum, f) => sum + f, 0) / fitnesses.length;
-    
+    const averageFitness =
+      fitnesses.reduce((sum, f) => sum + f, 0) / fitnesses.length;
+
     // Calculate diversity using fitness variance
-    const variance = fitnesses.reduce((sum, f) => sum + Math.pow(f - averageFitness, 2), 0) / fitnesses.length;
+    const variance =
+      fitnesses.reduce((sum, f) => sum + Math.pow(f - averageFitness, 2), 0) /
+      fitnesses.length;
     const diversity = Math.sqrt(variance);
 
     return {
       bestFitness,
       averageFitness,
       diversity,
-      worstFitness: Math.min(...fitnesses)
+      worstFitness: Math.min(...fitnesses),
     };
   }
 
@@ -423,7 +478,7 @@ export class GeneticAlgorithm {
     // Elitism - keep best individuals
     const sorted = [...population].sort((a, b) => b.fitness - a.fitness);
     const elite = sorted.slice(0, this.parameters.elitismSize);
-    nextGeneration.push(...elite.map(ind => ({ ...ind, age: ind.age + 1 })));
+    nextGeneration.push(...elite.map((ind) => ({ ...ind, age: ind.age + 1 })));
 
     // Generate offspring to fill remaining population
     while (nextGeneration.length < this.parameters.populationSize) {
@@ -434,7 +489,12 @@ export class GeneticAlgorithm {
       // Crossover
       let offspring1, offspring2;
       if (Math.random() < this.parameters.crossoverRate) {
-        [offspring1, offspring2] = this.crossover(parent1, parent2, staffMembers, dateRange);
+        [offspring1, offspring2] = this.crossover(
+          parent1,
+          parent2,
+          staffMembers,
+          dateRange,
+        );
       } else {
         offspring1 = this.clone(parent1);
         offspring2 = this.clone(parent2);
@@ -470,14 +530,14 @@ export class GeneticAlgorithm {
    */
   tournamentSelection(population) {
     const tournament = [];
-    
+
     for (let i = 0; i < this.parameters.tournamentSize; i++) {
       const randomIndex = Math.floor(Math.random() * population.length);
       tournament.push(population[randomIndex]);
     }
 
-    return tournament.reduce((best, current) => 
-      current.fitness > best.fitness ? current : best
+    return tournament.reduce((best, current) =>
+      current.fitness > best.fitness ? current : best,
     );
   }
 
@@ -494,21 +554,25 @@ export class GeneticAlgorithm {
     const offspring2 = { schedule: {}, fitness: 0, age: 0 };
 
     // Single-point crossover for each staff member
-    staffMembers.forEach(staff => {
+    staffMembers.forEach((staff) => {
       offspring1.schedule[staff.id] = {};
       offspring2.schedule[staff.id] = {};
 
       const crossoverPoint = Math.floor(Math.random() * dateRange.length);
 
       dateRange.forEach((date, index) => {
-        const dateKey = date.toISOString().split('T')[0];
-        
+        const dateKey = date.toISOString().split("T")[0];
+
         if (index < crossoverPoint) {
-          offspring1.schedule[staff.id][dateKey] = parent1.schedule[staff.id][dateKey];
-          offspring2.schedule[staff.id][dateKey] = parent2.schedule[staff.id][dateKey];
+          offspring1.schedule[staff.id][dateKey] =
+            parent1.schedule[staff.id][dateKey];
+          offspring2.schedule[staff.id][dateKey] =
+            parent2.schedule[staff.id][dateKey];
         } else {
-          offspring1.schedule[staff.id][dateKey] = parent2.schedule[staff.id][dateKey];
-          offspring2.schedule[staff.id][dateKey] = parent1.schedule[staff.id][dateKey];
+          offspring1.schedule[staff.id][dateKey] =
+            parent2.schedule[staff.id][dateKey];
+          offspring2.schedule[staff.id][dateKey] =
+            parent1.schedule[staff.id][dateKey];
         }
       });
     });
@@ -523,19 +587,25 @@ export class GeneticAlgorithm {
    * @param {Array} dateRange - Date range
    */
   mutate(individual, staffMembers, dateRange) {
-    const possibleShifts = ['', '△', '◇', '×'];
-    const mutationCount = Math.max(1, Math.floor(staffMembers.length * dateRange.length * 0.01)); // 1% mutation rate
+    const possibleShifts = ["", "△", "◇", "×"];
+    const mutationCount = Math.max(
+      1,
+      Math.floor(staffMembers.length * dateRange.length * 0.01),
+    ); // 1% mutation rate
 
     for (let i = 0; i < mutationCount; i++) {
-      const randomStaff = staffMembers[Math.floor(Math.random() * staffMembers.length)];
-      const randomDate = dateRange[Math.floor(Math.random() * dateRange.length)];
-      const dateKey = randomDate.toISOString().split('T')[0];
+      const randomStaff =
+        staffMembers[Math.floor(Math.random() * staffMembers.length)];
+      const randomDate =
+        dateRange[Math.floor(Math.random() * dateRange.length)];
+      const dateKey = randomDate.toISOString().split("T")[0];
 
       const currentShift = individual.schedule[randomStaff.id][dateKey];
       let newShift;
-      
+
       do {
-        newShift = possibleShifts[Math.floor(Math.random() * possibleShifts.length)];
+        newShift =
+          possibleShifts[Math.floor(Math.random() * possibleShifts.length)];
       } while (newShift === currentShift);
 
       individual.schedule[randomStaff.id][dateKey] = newShift;
@@ -552,7 +622,7 @@ export class GeneticAlgorithm {
       schedule: JSON.parse(JSON.stringify(individual.schedule)),
       fitness: individual.fitness,
       age: individual.age,
-      id: individual.id + '_clone'
+      id: individual.id + "_clone",
     };
   }
 
@@ -565,8 +635,12 @@ export class GeneticAlgorithm {
       initialized: this.initialized,
       parameters: { ...this.parameters },
       statistics: { ...this.evolutionStats },
-      successRate: this.evolutionStats.totalRuns > 0 ? 
-        (this.evolutionStats.successfulRuns / this.evolutionStats.totalRuns) * 100 : 0
+      successRate:
+        this.evolutionStats.totalRuns > 0
+          ? (this.evolutionStats.successfulRuns /
+              this.evolutionStats.totalRuns) *
+            100
+          : 0,
     };
   }
 }

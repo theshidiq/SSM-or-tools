@@ -45,13 +45,13 @@ const StaffCardView = React.memo(
                 shiftValue === "early"
               ) {
                 earlyShifts++;
-                allShiftDates.push({ date, type: 'early', value: shiftValue });
+                allShiftDates.push({ date, type: "early", value: shiftValue });
               } else if (
                 shiftValue === shiftSymbols.off.symbol ||
                 shiftValue === "off"
               ) {
                 daysOff++;
-                allShiftDates.push({ date, type: 'off', value: shiftValue });
+                allShiftDates.push({ date, type: "off", value: shiftValue });
               } else if (
                 shiftValue === shiftSymbols.late.symbol ||
                 shiftValue === "late" ||
@@ -67,7 +67,7 @@ const StaffCardView = React.memo(
               } else if (shiftValue && shiftValue.trim() !== "") {
                 // Custom text (any non-empty, non-standard shift value)
                 customTextDays++;
-                allShiftDates.push({ date, type: 'custom', value: shiftValue });
+                allShiftDates.push({ date, type: "custom", value: shiftValue });
               }
             } catch (error) {
               console.warn(`Error processing date ${date}:`, error);
@@ -109,13 +109,22 @@ const StaffCardView = React.memo(
       let currentWeekStart = null;
 
       dates.forEach((item) => {
-        const weekStart = startOfWeek(item.date, { weekStartsOn: 0, locale: ja }); // Sunday start
-        
-        if (!currentWeekStart || !isSameWeek(item.date, currentWeekStart, { weekStartsOn: 0, locale: ja })) {
+        const weekStart = startOfWeek(item.date, {
+          weekStartsOn: 0,
+          locale: ja,
+        }); // Sunday start
+
+        if (
+          !currentWeekStart ||
+          !isSameWeek(item.date, currentWeekStart, {
+            weekStartsOn: 0,
+            locale: ja,
+          })
+        ) {
           if (currentWeek.length > 0) {
             weeks.push({
               weekStart: currentWeekStart,
-              dates: currentWeek
+              dates: currentWeek,
             });
           }
           currentWeek = [item];
@@ -129,7 +138,7 @@ const StaffCardView = React.memo(
       if (currentWeek.length > 0) {
         weeks.push({
           weekStart: currentWeekStart,
-          dates: currentWeek
+          dates: currentWeek,
         });
       }
 
@@ -170,7 +179,9 @@ const StaffCardView = React.memo(
         {/* Card View Title */}
         <div className="bg-white border border-gray-200 rounded-t-lg px-6 py-4 border-b-0 mb-6">
           <div className="flex items-center justify-between">
-            <h2 className="text-lg font-semibold text-gray-900">調理場シフト表</h2>
+            <h2 className="text-lg font-semibold text-gray-900">
+              調理場シフト表
+            </h2>
             <div className="flex items-center space-x-4 text-sm text-gray-600">
               <div className="flex items-center space-x-1">
                 <div className="w-3 h-3 bg-blue-200 rounded border border-blue-300"></div>
@@ -214,14 +225,26 @@ const StaffCardView = React.memo(
                   </div>
                 </div>
                 <div className="flex-shrink-0 text-right text-xs">
-                  <span className="text-blue-600 font-medium">{stats.earlyShifts}日</span>
+                  <span className="text-blue-600 font-medium">
+                    {stats.earlyShifts}日
+                  </span>
                   <span className="text-gray-400 mx-1">|</span>
-                  <span className="text-red-600 font-medium">{stats.daysOff}日</span>
+                  <span className="text-red-600 font-medium">
+                    {stats.daysOff}日
+                  </span>
                   <span className="text-gray-400 mx-1">|</span>
-                  <span className="text-gray-600 font-medium">{(() => {
-                    const total = stats.earlyShifts * 0.5 + stats.daysOff * 1 + stats.customTextDays * 1;
-                    return total % 1 === 0 ? total.toString() : total.toFixed(1);
-                  })()}日</span>
+                  <span className="text-gray-600 font-medium">
+                    {(() => {
+                      const total =
+                        stats.earlyShifts * 0.5 +
+                        stats.daysOff * 1 +
+                        stats.customTextDays * 1;
+                      return total % 1 === 0
+                        ? total.toString()
+                        : total.toFixed(1);
+                    })()}
+                    日
+                  </span>
                 </div>
               </div>
 
@@ -230,12 +253,15 @@ const StaffCardView = React.memo(
                 <div className="mb-3">
                   {groupDatesByWeek(allShiftDates).map((week, weekIndex) => {
                     // Calculate week statistics
-                    const weekStats = week.dates.reduce((acc, item) => {
-                      if (item.type === 'early') acc.early++;
-                      if (item.type === 'off') acc.off++;
-                      if (item.type === 'custom') acc.custom++;
-                      return acc;
-                    }, { early: 0, off: 0, custom: 0 });
+                    const weekStats = week.dates.reduce(
+                      (acc, item) => {
+                        if (item.type === "early") acc.early++;
+                        if (item.type === "off") acc.off++;
+                        if (item.type === "custom") acc.custom++;
+                        return acc;
+                      },
+                      { early: 0, off: 0, custom: 0 },
+                    );
 
                     return (
                       <div key={`week-${weekIndex}`} className="mb-2">
@@ -244,15 +270,19 @@ const StaffCardView = React.memo(
                           {week.dates.map((item, index) => {
                             const colorClasses = {
                               early: "text-blue-600 bg-blue-50",
-                              off: "text-red-600 bg-red-50", 
-                              custom: "text-yellow-700 bg-yellow-50"
+                              off: "text-red-600 bg-red-50",
+                              custom: "text-yellow-700 bg-yellow-50",
                             };
-                            
+
                             return (
                               <span
                                 key={`shift-${item.date.toISOString().split("T")[0]}-${index}`}
                                 className={`px-3 py-2 text-base font-medium rounded ${colorClasses[item.type] || "text-gray-600 bg-gray-50"}`}
-                                title={item.type === 'custom' ? `${formatDateForCard(item.date)}: ${item.value}` : undefined}
+                                title={
+                                  item.type === "custom"
+                                    ? `${formatDateForCard(item.date)}: ${item.value}`
+                                    : undefined
+                                }
                               >
                                 {formatDateForCard(item.date)}
                               </span>

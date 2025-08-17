@@ -26,7 +26,7 @@ const StaffEditModal = ({
 }) => {
   // Track if user is actively editing to prevent overwriting their changes
   const [isUserEditing, setIsUserEditing] = React.useState(false);
-  
+
   // Ref for the name input field to enable auto-focus
   const nameInputRef = useRef(null);
 
@@ -89,7 +89,6 @@ const StaffEditModal = ({
             JSON.stringify(selectedStaffForEdit.endPeriod);
 
         if (hasChanges) {
-
           // Update selectedStaffForEdit with latest data
           setSelectedStaffForEdit(updatedStaffData);
 
@@ -101,18 +100,24 @@ const StaffEditModal = ({
             startPeriod: updatedStaffData.startPeriod || null,
             endPeriod: updatedStaffData.endPeriod || null,
           };
-          
+
           setEditingStaffData(newEditingData);
         }
       }
     }
-  }, [staffMembers, selectedStaffForEdit, setSelectedStaffForEdit, setEditingStaffData, isUserEditing]);
+  }, [
+    staffMembers,
+    selectedStaffForEdit,
+    setSelectedStaffForEdit,
+    setEditingStaffData,
+    isUserEditing,
+  ]);
 
   // Helper function to update editing data and mark user as actively editing
   const updateEditingStaffData = (updateFn) => {
     setIsUserEditing(true);
     setEditingStaffData(updateFn);
-    
+
     // Clear the editing flag after a short delay to allow for multiple rapid changes
     setTimeout(() => {
       setIsUserEditing(false);
@@ -130,8 +135,7 @@ const StaffEditModal = ({
 
   // Create a stable key for the form that only changes when switching staff or modes
   // This prevents unnecessary re-renders while typing
-  const formKey = `${selectedStaffForEdit?.id || 'new'}-${isAddingNewStaff ? 'add' : 'edit'}`;
-  
+  const formKey = `${selectedStaffForEdit?.id || "new"}-${isAddingNewStaff ? "add" : "edit"}`;
 
   if (!showStaffEditModal) return null;
 
@@ -167,7 +171,6 @@ const StaffEditModal = ({
             (staff) => staff.id === selectedStaffForEdit.id,
           );
           if (updatedStaff) {
-            
             // Create new editing data object
             const newEditingData = {
               name: updatedStaff.name,
@@ -180,7 +183,6 @@ const StaffEditModal = ({
             // Update both selected staff and editing data immediately
             setSelectedStaffForEdit(updatedStaff);
             setEditingStaffData(newEditingData);
-            
           }
 
           // Save to database
@@ -221,15 +223,14 @@ const StaffEditModal = ({
   const handleStaffSelect = (staff) => {
     // Clear editing flag when selecting different staff
     setIsUserEditing(false);
-    
+
     // ALWAYS use the most current staff data from the staffMembers array
     // This ensures we get the latest data even after database refresh
     const currentStaffData = staffMembers.find((s) => s.id === staff.id);
-    
+
     if (!currentStaffData) {
       return;
     }
-
 
     setSelectedStaffForEdit(currentStaffData);
     const newEditingData = {
@@ -242,7 +243,7 @@ const StaffEditModal = ({
 
     setEditingStaffData(newEditingData);
     setIsAddingNewStaff(false);
-    
+
     // Focus the name input after selecting staff
     setTimeout(() => {
       if (nameInputRef.current) {
@@ -263,7 +264,7 @@ const StaffEditModal = ({
       startPeriod: null,
       endPeriod: null,
     });
-    
+
     // Focus the name input when adding new staff
     setTimeout(() => {
       if (nameInputRef.current) {
@@ -384,11 +385,7 @@ const StaffEditModal = ({
             </h3>
 
             {(isAddingNewStaff || selectedStaffForEdit) && (
-              <form 
-                key={formKey} 
-                onSubmit={handleSubmit} 
-                className="space-y-4"
-              >
+              <form key={formKey} onSubmit={handleSubmit} className="space-y-4">
                 {/* Name Field */}
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">

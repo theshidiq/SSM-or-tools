@@ -1,17 +1,20 @@
 /**
  * PreferenceModel.js
- * 
+ *
  * Model classes for staff preference patterns and scheduling preferences.
  * Provides structured representation of staff preferences detected from historical data.
  */
 
-import { CONFIDENCE_LEVELS, getConfidenceLevel } from '../core/PatternRecognizer';
+import {
+  CONFIDENCE_LEVELS,
+  getConfidenceLevel,
+} from "../core/PatternRecognizer";
 
 /**
  * Base preference class
  */
 export class Preference {
-  constructor(staffId, staffName, type, confidence = 'medium') {
+  constructor(staffId, staffName, type, confidence = "medium") {
     this.id = this.generateId();
     this.staffId = staffId;
     this.staffName = staffName;
@@ -19,11 +22,11 @@ export class Preference {
     this.confidence = confidence;
     this.strength = 0; // 0-100 percentage strength
     this.active = true;
-    this.source = 'historical_analysis';
+    this.source = "historical_analysis";
     this.detectedAt = new Date().toISOString();
     this.lastConfirmed = null;
     this.overrideAllowed = true;
-    this.notes = '';
+    this.notes = "";
   }
 
   /**
@@ -51,7 +54,7 @@ export class Preference {
    * @returns {boolean} True if preference applies
    */
   appliesTo(dateKey, shiftType) {
-    throw new Error('appliesTo method must be implemented by subclass');
+    throw new Error("appliesTo method must be implemented by subclass");
   }
 
   /**
@@ -60,7 +63,7 @@ export class Preference {
    * @returns {number} Score from -100 to 100 (negative = avoid, positive = prefer)
    */
   getScore(context) {
-    throw new Error('getScore method must be implemented by subclass');
+    throw new Error("getScore method must be implemented by subclass");
   }
 
   /**
@@ -80,7 +83,7 @@ export class Preference {
       detectedAt: this.detectedAt,
       lastConfirmed: this.lastConfirmed,
       overrideAllowed: this.overrideAllowed,
-      notes: this.notes
+      notes: this.notes,
     };
   }
 }
@@ -90,7 +93,7 @@ export class Preference {
  */
 export class DayOfWeekPreference extends Preference {
   constructor(staffId, staffName, dayOfWeek, preferenceType, strength) {
-    super(staffId, staffName, 'day_of_week', getConfidenceLevel(strength));
+    super(staffId, staffName, "day_of_week", getConfidenceLevel(strength));
     this.dayOfWeek = dayOfWeek; // 'sunday', 'monday', etc.
     this.preferenceType = preferenceType; // 'off', 'work', 'early', 'late'
     this.strength = strength; // percentage
@@ -106,9 +109,17 @@ export class DayOfWeekPreference extends Preference {
    */
   appliesTo(dateKey, shiftType) {
     const date = new Date(dateKey);
-    const dayNames = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
+    const dayNames = [
+      "sunday",
+      "monday",
+      "tuesday",
+      "wednesday",
+      "thursday",
+      "friday",
+      "saturday",
+    ];
     const dayOfWeek = dayNames[date.getDay()];
-    
+
     if (dayOfWeek !== this.dayOfWeek) {
       return false;
     }
@@ -118,14 +129,14 @@ export class DayOfWeekPreference extends Preference {
     }
 
     // Check if shift type matches preference
-    if (this.preferenceType === 'off') {
-      return shiftType === '×' || shiftType === 'off' || shiftType === '★';
-    } else if (this.preferenceType === 'work') {
-      return shiftType !== '×' && shiftType !== 'off' && shiftType !== '★';
-    } else if (this.preferenceType === 'early') {
-      return shiftType === '△' || shiftType === 'early';
-    } else if (this.preferenceType === 'late') {
-      return shiftType === '◇' || shiftType === 'late';
+    if (this.preferenceType === "off") {
+      return shiftType === "×" || shiftType === "off" || shiftType === "★";
+    } else if (this.preferenceType === "work") {
+      return shiftType !== "×" && shiftType !== "off" && shiftType !== "★";
+    } else if (this.preferenceType === "early") {
+      return shiftType === "△" || shiftType === "early";
+    } else if (this.preferenceType === "late") {
+      return shiftType === "◇" || shiftType === "late";
     }
 
     return false;
@@ -143,10 +154,13 @@ export class DayOfWeekPreference extends Preference {
 
     // Return positive score for preferred scenarios, negative for avoided
     const baseScore = this.strength;
-    
-    if (this.preferenceType === context.shiftType || 
-        (this.preferenceType === 'work' && context.shiftType !== 'off') ||
-        (this.preferenceType === 'off' && (context.shiftType === 'off' || context.shiftType === '×'))) {
+
+    if (
+      this.preferenceType === context.shiftType ||
+      (this.preferenceType === "work" && context.shiftType !== "off") ||
+      (this.preferenceType === "off" &&
+        (context.shiftType === "off" || context.shiftType === "×"))
+    ) {
       return baseScore;
     }
 
@@ -173,7 +187,7 @@ export class DayOfWeekPreference extends Preference {
       dayOfWeek: this.dayOfWeek,
       preferenceType: this.preferenceType,
       seasonalVariation: this.seasonalVariation,
-      exceptions: [...this.exceptions]
+      exceptions: [...this.exceptions],
     };
   }
 }
@@ -183,10 +197,10 @@ export class DayOfWeekPreference extends Preference {
  */
 export class ShiftTypePreference extends Preference {
   constructor(staffId, staffName, shiftType, strength) {
-    super(staffId, staffName, 'shift_type', getConfidenceLevel(strength));
+    super(staffId, staffName, "shift_type", getConfidenceLevel(strength));
     this.shiftType = shiftType; // 'early', 'late', 'normal', 'off'
     this.strength = strength;
-    this.timeFlexibility = 'none'; // 'none', 'slight', 'moderate', 'high'
+    this.timeFlexibility = "none"; // 'none', 'slight', 'moderate', 'high'
     this.daysOfWeek = []; // Empty means all days, specific days if limited
   }
 
@@ -200,9 +214,17 @@ export class ShiftTypePreference extends Preference {
     // Check day of week restriction
     if (this.daysOfWeek.length > 0) {
       const date = new Date(dateKey);
-      const dayNames = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
+      const dayNames = [
+        "sunday",
+        "monday",
+        "tuesday",
+        "wednesday",
+        "thursday",
+        "friday",
+        "saturday",
+      ];
       const dayOfWeek = dayNames[date.getDay()];
-      
+
       if (!this.daysOfWeek.includes(dayOfWeek)) {
         return false;
       }
@@ -219,14 +241,14 @@ export class ShiftTypePreference extends Preference {
    */
   matchesShiftType(shift) {
     switch (this.shiftType) {
-      case 'early':
-        return shift === '△' || shift === 'early';
-      case 'late':
-        return shift === '◇' || shift === 'late';
-      case 'normal':
-        return shift === '' || shift === 'normal';
-      case 'off':
-        return shift === '×' || shift === 'off' || shift === '★';
+      case "early":
+        return shift === "△" || shift === "early";
+      case "late":
+        return shift === "◇" || shift === "late";
+      case "normal":
+        return shift === "" || shift === "normal";
+      case "off":
+        return shift === "×" || shift === "off" || shift === "★";
       default:
         return false;
     }
@@ -263,7 +285,7 @@ export class ShiftTypePreference extends Preference {
       ...super.toJSON(),
       shiftType: this.shiftType,
       timeFlexibility: this.timeFlexibility,
-      daysOfWeek: [...this.daysOfWeek]
+      daysOfWeek: [...this.daysOfWeek],
     };
   }
 }
@@ -273,13 +295,18 @@ export class ShiftTypePreference extends Preference {
  */
 export class ConsecutivePatternPreference extends Preference {
   constructor(staffId, staffName, patternType, preferredLength, strength) {
-    super(staffId, staffName, 'consecutive_pattern', getConfidenceLevel(strength));
+    super(
+      staffId,
+      staffName,
+      "consecutive_pattern",
+      getConfidenceLevel(strength),
+    );
     this.patternType = patternType; // 'work_days', 'off_days'
     this.preferredLength = preferredLength; // number of consecutive days
     this.minLength = Math.max(1, preferredLength - 1);
     this.maxLength = preferredLength + 1;
     this.strength = strength;
-    this.flexibility = 'medium'; // 'strict', 'medium', 'flexible'
+    this.flexibility = "medium"; // 'strict', 'medium', 'flexible'
   }
 
   /**
@@ -289,10 +316,10 @@ export class ConsecutivePatternPreference extends Preference {
    * @returns {boolean} True if preference applies
    */
   appliesTo(consecutiveDays, patternType) {
-    if (this.patternType === 'work_days' && patternType !== 'work') {
+    if (this.patternType === "work_days" && patternType !== "work") {
       return false;
     }
-    if (this.patternType === 'off_days' && patternType !== 'off') {
+    if (this.patternType === "off_days" && patternType !== "off") {
       return false;
     }
 
@@ -311,7 +338,7 @@ export class ConsecutivePatternPreference extends Preference {
     }
 
     const length = context.consecutiveDays.length;
-    
+
     // Perfect match gets full score
     if (length === this.preferredLength) {
       return this.strength;
@@ -322,13 +349,13 @@ export class ConsecutivePatternPreference extends Preference {
     let penalty = 0;
 
     switch (this.flexibility) {
-      case 'strict':
+      case "strict":
         penalty = deviation * 25; // Heavy penalty for deviation
         break;
-      case 'medium':
+      case "medium":
         penalty = deviation * 15; // Moderate penalty
         break;
-      case 'flexible':
+      case "flexible":
         penalty = deviation * 5; // Light penalty
         break;
     }
@@ -347,7 +374,7 @@ export class ConsecutivePatternPreference extends Preference {
       preferredLength: this.preferredLength,
       minLength: this.minLength,
       maxLength: this.maxLength,
-      flexibility: this.flexibility
+      flexibility: this.flexibility,
     };
   }
 }
@@ -357,12 +384,12 @@ export class ConsecutivePatternPreference extends Preference {
  */
 export class FrequencyPreference extends Preference {
   constructor(staffId, staffName, frequencyType, targetPercentage, strength) {
-    super(staffId, staffName, 'frequency', getConfidenceLevel(strength));
+    super(staffId, staffName, "frequency", getConfidenceLevel(strength));
     this.frequencyType = frequencyType; // 'work_frequency', 'off_frequency'
     this.targetPercentage = targetPercentage; // 0-100
     this.tolerance = 10; // +/- percentage tolerance
     this.strength = strength;
-    this.timeFrame = 'weekly'; // 'weekly', 'monthly'
+    this.timeFrame = "weekly"; // 'weekly', 'monthly'
   }
 
   /**
@@ -371,8 +398,10 @@ export class FrequencyPreference extends Preference {
    * @returns {boolean} True if preference applies
    */
   appliesTo(context) {
-    return context.frequencyType === this.frequencyType && 
-           context.timeFrame === this.timeFrame;
+    return (
+      context.frequencyType === this.frequencyType &&
+      context.timeFrame === this.timeFrame
+    );
   }
 
   /**
@@ -385,8 +414,10 @@ export class FrequencyPreference extends Preference {
       return 0;
     }
 
-    const deviation = Math.abs(context.actualPercentage - this.targetPercentage);
-    
+    const deviation = Math.abs(
+      context.actualPercentage - this.targetPercentage,
+    );
+
     if (deviation <= this.tolerance) {
       return this.strength;
     }
@@ -406,7 +437,7 @@ export class FrequencyPreference extends Preference {
       frequencyType: this.frequencyType,
       targetPercentage: this.targetPercentage,
       tolerance: this.tolerance,
-      timeFrame: this.timeFrame
+      timeFrame: this.timeFrame,
     };
   }
 }
@@ -416,7 +447,7 @@ export class FrequencyPreference extends Preference {
  */
 export class SeasonalPreference extends Preference {
   constructor(staffId, staffName, season, preferenceType, strength) {
-    super(staffId, staffName, 'seasonal', getConfidenceLevel(strength));
+    super(staffId, staffName, "seasonal", getConfidenceLevel(strength));
     this.season = season; // 'spring', 'summer', 'fall', 'winter', or month numbers
     this.preferenceType = preferenceType; // 'more_off', 'more_work', 'more_early', etc.
     this.strength = strength;
@@ -430,14 +461,21 @@ export class SeasonalPreference extends Preference {
    */
   getMonthMapping(season) {
     switch (season) {
-      case 'spring': return [3, 4, 5];
-      case 'summer': return [6, 7, 8];
-      case 'fall': return [9, 10, 11];
-      case 'winter': return [12, 1, 2];
+      case "spring":
+        return [3, 4, 5];
+      case "summer":
+        return [6, 7, 8];
+      case "fall":
+        return [9, 10, 11];
+      case "winter":
+        return [12, 1, 2];
       default:
         // Assume it's a specific month or comma-separated months
-        if (typeof season === 'string') {
-          return season.split(',').map(m => parseInt(m.trim())).filter(m => m >= 1 && m <= 12);
+        if (typeof season === "string") {
+          return season
+            .split(",")
+            .map((m) => parseInt(m.trim()))
+            .filter((m) => m >= 1 && m <= 12);
         }
         return [season];
     }
@@ -452,7 +490,7 @@ export class SeasonalPreference extends Preference {
   appliesTo(dateKey, context) {
     const date = new Date(dateKey);
     const month = date.getMonth() + 1; // 1-12
-    
+
     return this.monthMapping.includes(month);
   }
 
@@ -468,23 +506,23 @@ export class SeasonalPreference extends Preference {
 
     // Check if current shift type matches seasonal preference
     switch (this.preferenceType) {
-      case 'more_off':
-        if (context.shiftType === '×' || context.shiftType === 'off') {
+      case "more_off":
+        if (context.shiftType === "×" || context.shiftType === "off") {
           return this.strength;
         }
         break;
-      case 'more_work':
-        if (context.shiftType !== '×' && context.shiftType !== 'off') {
+      case "more_work":
+        if (context.shiftType !== "×" && context.shiftType !== "off") {
           return this.strength;
         }
         break;
-      case 'more_early':
-        if (context.shiftType === '△' || context.shiftType === 'early') {
+      case "more_early":
+        if (context.shiftType === "△" || context.shiftType === "early") {
           return this.strength;
         }
         break;
-      case 'more_late':
-        if (context.shiftType === '◇' || context.shiftType === 'late') {
+      case "more_late":
+        if (context.shiftType === "◇" || context.shiftType === "late") {
           return this.strength;
         }
         break;
@@ -502,7 +540,7 @@ export class SeasonalPreference extends Preference {
       ...super.toJSON(),
       season: this.season,
       preferenceType: this.preferenceType,
-      monthMapping: [...this.monthMapping]
+      monthMapping: [...this.monthMapping],
     };
   }
 }
@@ -523,7 +561,7 @@ export class PreferenceManager {
    */
   addPreference(preference) {
     this.preferences.set(preference.id, preference);
-    
+
     // Add to staff preference tracking
     if (!this.staffPreferences.has(preference.staffId)) {
       this.staffPreferences.set(preference.staffId, []);
@@ -540,9 +578,9 @@ export class PreferenceManager {
     if (preference) {
       // Remove from staff tracking
       const staffPrefs = this.staffPreferences.get(preference.staffId) || [];
-      const updatedPrefs = staffPrefs.filter(id => id !== preferenceId);
+      const updatedPrefs = staffPrefs.filter((id) => id !== preferenceId);
       this.staffPreferences.set(preference.staffId, updatedPrefs);
-      
+
       // Remove from main preferences
       this.preferences.delete(preferenceId);
     }
@@ -555,7 +593,9 @@ export class PreferenceManager {
    */
   getStaffPreferences(staffId) {
     const preferenceIds = this.staffPreferences.get(staffId) || [];
-    return preferenceIds.map(id => this.preferences.get(id)).filter(pref => pref && pref.active);
+    return preferenceIds
+      .map((id) => this.preferences.get(id))
+      .filter((pref) => pref && pref.active);
   }
 
   /**
@@ -569,10 +609,10 @@ export class PreferenceManager {
     let totalScore = 0;
     let weightSum = 0;
 
-    staffPrefs.forEach(preference => {
+    staffPrefs.forEach((preference) => {
       const score = preference.getScore(context);
       const weight = this.getPreferenceWeight(preference);
-      
+
       totalScore += score * weight;
       weightSum += weight;
     });
@@ -591,15 +631,15 @@ export class PreferenceManager {
       [CONFIDENCE_LEVELS.HIGH]: 0.8,
       [CONFIDENCE_LEVELS.MEDIUM]: 0.6,
       [CONFIDENCE_LEVELS.LOW]: 0.4,
-      [CONFIDENCE_LEVELS.VERY_LOW]: 0.2
+      [CONFIDENCE_LEVELS.VERY_LOW]: 0.2,
     };
 
     const typeWeights = {
-      'day_of_week': 1.0,
-      'shift_type': 0.9,
-      'consecutive_pattern': 0.8,
-      'frequency': 0.7,
-      'seasonal': 0.6
+      day_of_week: 1.0,
+      shift_type: 0.9,
+      consecutive_pattern: 0.8,
+      frequency: 0.7,
+      seasonal: 0.6,
     };
 
     const confidenceWeight = confidenceWeights[preference.confidence] || 0.5;
@@ -615,21 +655,21 @@ export class PreferenceManager {
    */
   createPreferencesFromPatterns(patternAnalysis) {
     const createdPreferences = [];
-    
-    Object.keys(patternAnalysis.staffPatterns).forEach(staffId => {
+
+    Object.keys(patternAnalysis.staffPatterns).forEach((staffId) => {
       const staffPattern = patternAnalysis.staffPatterns[staffId];
-      
+
       // Create day of week preferences
-      Object.keys(staffPattern.patterns.dayOfWeek.patterns).forEach(day => {
+      Object.keys(staffPattern.patterns.dayOfWeek.patterns).forEach((day) => {
         const dayPattern = staffPattern.patterns.dayOfWeek.patterns[day];
-        
+
         if (dayPattern.offPercentage > 60) {
           const preference = new DayOfWeekPreference(
             staffId,
             staffPattern.staffName,
             day,
-            'off',
-            dayPattern.offPercentage
+            "off",
+            dayPattern.offPercentage,
           );
           this.addPreference(preference);
           createdPreferences.push(preference);
@@ -638,8 +678,8 @@ export class PreferenceManager {
             staffId,
             staffPattern.staffName,
             day,
-            'work',
-            dayPattern.workPercentage
+            "work",
+            dayPattern.workPercentage,
           );
           this.addPreference(preference);
           createdPreferences.push(preference);
@@ -647,29 +687,41 @@ export class PreferenceManager {
       });
 
       // Create shift type preferences
-      Object.keys(staffPattern.patterns.shiftType.shiftTypes).forEach(shiftType => {
-        const shiftData = staffPattern.patterns.shiftType.shiftTypes[shiftType];
-        
-        if (shiftData.percentage > 40 && shiftData.confidence !== CONFIDENCE_LEVELS.VERY_LOW) {
-          const preference = new ShiftTypePreference(
-            staffId,
-            staffPattern.staffName,
-            shiftType === '△' ? 'early' : shiftType === '◇' ? 'late' : shiftType === '×' ? 'off' : 'normal',
-            shiftData.percentage
-          );
-          this.addPreference(preference);
-          createdPreferences.push(preference);
-        }
-      });
+      Object.keys(staffPattern.patterns.shiftType.shiftTypes).forEach(
+        (shiftType) => {
+          const shiftData =
+            staffPattern.patterns.shiftType.shiftTypes[shiftType];
+
+          if (
+            shiftData.percentage > 40 &&
+            shiftData.confidence !== CONFIDENCE_LEVELS.VERY_LOW
+          ) {
+            const preference = new ShiftTypePreference(
+              staffId,
+              staffPattern.staffName,
+              shiftType === "△"
+                ? "early"
+                : shiftType === "◇"
+                  ? "late"
+                  : shiftType === "×"
+                    ? "off"
+                    : "normal",
+              shiftData.percentage,
+            );
+            this.addPreference(preference);
+            createdPreferences.push(preference);
+          }
+        },
+      );
 
       // Create consecutive pattern preferences
       if (staffPattern.patterns.consecutive.workStreaks.average > 0) {
         const preference = new ConsecutivePatternPreference(
           staffId,
           staffPattern.staffName,
-          'work_days',
+          "work_days",
           Math.round(staffPattern.patterns.consecutive.workStreaks.average),
-          80 // High confidence for average patterns
+          80, // High confidence for average patterns
         );
         this.addPreference(preference);
         createdPreferences.push(preference);
@@ -680,9 +732,9 @@ export class PreferenceManager {
         const preference = new FrequencyPreference(
           staffId,
           staffPattern.staffName,
-          'work_frequency',
+          "work_frequency",
           staffPattern.patterns.frequency.workFrequency.percentage,
-          staffPattern.patterns.frequency.workFrequency.consistency
+          staffPattern.patterns.frequency.workFrequency.consistency,
         );
         this.addPreference(preference);
         createdPreferences.push(preference);
@@ -702,42 +754,48 @@ export class PreferenceManager {
   getPreferenceRecommendations(staffId, currentSchedule, dateRange) {
     const recommendations = [];
     const staffPrefs = this.getStaffPreferences(staffId);
-    
-    staffPrefs.forEach(preference => {
+
+    staffPrefs.forEach((preference) => {
       let satisfactionCount = 0;
       let totalApplicable = 0;
 
-      dateRange.forEach(date => {
-        const dateKey = date.toISOString().split('T')[0];
+      dateRange.forEach((date) => {
+        const dateKey = date.toISOString().split("T")[0];
         const currentShift = currentSchedule[dateKey];
-        
+
         if (currentShift !== undefined) {
           const context = { dateKey, shiftType: currentShift };
           const score = preference.getScore(context);
-          
-          if (Math.abs(score) > 0) { // Preference applies
+
+          if (Math.abs(score) > 0) {
+            // Preference applies
             totalApplicable++;
-            if (score > 0) { // Preference satisfied
+            if (score > 0) {
+              // Preference satisfied
               satisfactionCount++;
             }
           }
         }
       });
 
-      const satisfactionRate = totalApplicable > 0 ? (satisfactionCount / totalApplicable) * 100 : 100;
-      
+      const satisfactionRate =
+        totalApplicable > 0 ? (satisfactionCount / totalApplicable) * 100 : 100;
+
       if (satisfactionRate < 70) {
         recommendations.push({
           preferenceId: preference.id,
           preferenceType: preference.type,
           satisfactionRate,
-          priority: satisfactionRate < 30 ? 'high' : 'medium',
-          suggestion: this.generatePreferenceSuggestion(preference, satisfactionRate),
+          priority: satisfactionRate < 30 ? "high" : "medium",
+          suggestion: this.generatePreferenceSuggestion(
+            preference,
+            satisfactionRate,
+          ),
           details: {
             satisfactionCount,
             totalApplicable,
-            preferenceStrength: preference.strength
-          }
+            preferenceStrength: preference.strength,
+          },
         });
       }
     });
@@ -756,15 +814,15 @@ export class PreferenceManager {
    */
   generatePreferenceSuggestion(preference, satisfactionRate) {
     switch (preference.type) {
-      case 'day_of_week':
+      case "day_of_week":
         return `Consider scheduling ${preference.staffName} for ${preference.preferenceType} on ${preference.dayOfWeek}s more often`;
-      case 'shift_type':
+      case "shift_type":
         return `${preference.staffName} prefers ${preference.shiftType} shifts - current satisfaction: ${satisfactionRate.toFixed(1)}%`;
-      case 'consecutive_pattern':
+      case "consecutive_pattern":
         return `${preference.staffName} prefers ${preference.preferredLength} consecutive ${preference.patternType}`;
-      case 'frequency':
+      case "frequency":
         return `Adjust ${preference.staffName}'s ${preference.frequencyType} to target ${preference.targetPercentage}%`;
-      case 'seasonal':
+      case "seasonal":
         return `Consider ${preference.staffName}'s seasonal preference for ${preference.preferenceType} during ${preference.season}`;
       default:
         return `Improve satisfaction for ${preference.staffName}'s ${preference.type} preference`;
@@ -780,7 +838,7 @@ export class PreferenceManager {
       exportedAt: new Date().toISOString(),
       preferences: {},
       staffPreferences: {},
-      preferenceHistory: [...this.preferenceHistory]
+      preferenceHistory: [...this.preferenceHistory],
     };
 
     // Export preferences
@@ -789,9 +847,11 @@ export class PreferenceManager {
     });
 
     // Export staff preference mappings
-    Array.from(this.staffPreferences.entries()).forEach(([staffId, preferenceIds]) => {
-      exported.staffPreferences[staffId] = [...preferenceIds];
-    });
+    Array.from(this.staffPreferences.entries()).forEach(
+      ([staffId, preferenceIds]) => {
+        exported.staffPreferences[staffId] = [...preferenceIds];
+      },
+    );
 
     return exported;
   }
@@ -808,56 +868,56 @@ export class PreferenceManager {
     // Import preferences
     Object.entries(jsonData.preferences || {}).forEach(([id, prefData]) => {
       let preference;
-      
+
       switch (prefData.type) {
-        case 'day_of_week':
+        case "day_of_week":
           preference = new DayOfWeekPreference(
             prefData.staffId,
             prefData.staffName,
             prefData.dayOfWeek,
             prefData.preferenceType,
-            prefData.strength
+            prefData.strength,
           );
           break;
-        case 'shift_type':
+        case "shift_type":
           preference = new ShiftTypePreference(
             prefData.staffId,
             prefData.staffName,
             prefData.shiftType,
-            prefData.strength
+            prefData.strength,
           );
           break;
-        case 'consecutive_pattern':
+        case "consecutive_pattern":
           preference = new ConsecutivePatternPreference(
             prefData.staffId,
             prefData.staffName,
             prefData.patternType,
             prefData.preferredLength,
-            prefData.strength
+            prefData.strength,
           );
           break;
-        case 'frequency':
+        case "frequency":
           preference = new FrequencyPreference(
             prefData.staffId,
             prefData.staffName,
             prefData.frequencyType,
             prefData.targetPercentage,
-            prefData.strength
+            prefData.strength,
           );
           break;
-        case 'seasonal':
+        case "seasonal":
           preference = new SeasonalPreference(
             prefData.staffId,
             prefData.staffName,
             prefData.season,
             prefData.preferenceType,
-            prefData.strength
+            prefData.strength,
           );
           break;
         default:
           return;
       }
-      
+
       if (preference) {
         // Apply common properties
         preference.id = prefData.id;
@@ -868,14 +928,16 @@ export class PreferenceManager {
         preference.lastConfirmed = prefData.lastConfirmed;
         preference.overrideAllowed = prefData.overrideAllowed;
         preference.notes = prefData.notes;
-        
+
         this.preferences.set(id, preference);
       }
     });
 
     // Import staff preference mappings
-    Object.entries(jsonData.staffPreferences || {}).forEach(([staffId, preferenceIds]) => {
-      this.staffPreferences.set(staffId, [...preferenceIds]);
-    });
+    Object.entries(jsonData.staffPreferences || {}).forEach(
+      ([staffId, preferenceIds]) => {
+        this.staffPreferences.set(staffId, [...preferenceIds]);
+      },
+    );
   }
 }

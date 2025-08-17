@@ -1,6 +1,6 @@
 /**
  * AnalyticsDashboard.js
- * 
+ *
  * Comprehensive Business Intelligence System
  * - Executive Dashboard: High-level insights for restaurant management
  * - Predictive Analytics: Forecast labor costs, efficiency trends, staff satisfaction
@@ -9,13 +9,13 @@
  * - Strategic Recommendations: Long-term staffing and operational suggestions
  */
 
-import React, { useState, useEffect, useMemo } from 'react';
-import { 
-  TrendingUp, 
-  TrendingDown, 
-  DollarSign, 
-  Users, 
-  Clock, 
+import React, { useState, useEffect, useMemo } from "react";
+import {
+  TrendingUp,
+  TrendingDown,
+  DollarSign,
+  Users,
+  Clock,
   Target,
   BarChart3,
   PieChart,
@@ -24,18 +24,18 @@ import {
   Zap,
   Award,
   AlertTriangle,
-  CheckCircle
-} from 'lucide-react';
+  CheckCircle,
+} from "lucide-react";
 
 export class AnalyticsDashboard {
   constructor(options = {}) {
     this.config = {
       updateInterval: options.updateInterval || 300000, // 5 minutes
       retainDataDays: options.retainDataDays || 365,
-      benchmarkSource: options.benchmarkSource || 'industry_standard',
+      benchmarkSource: options.benchmarkSource || "industry_standard",
       roiCalculationPeriod: options.roiCalculationPeriod || 90, // days
       predictiveHorizon: options.predictiveHorizon || 180, // days
-      ...options
+      ...options,
     };
 
     this.state = {
@@ -46,7 +46,7 @@ export class AnalyticsDashboard {
       trendAnalysis: new Map(),
       predictions: new Map(),
       recommendations: [],
-      alerts: []
+      alerts: [],
     };
 
     this.dataCollectors = {
@@ -54,7 +54,7 @@ export class AnalyticsDashboard {
       financial: new FinancialCollector(),
       operational: new OperationalCollector(),
       staff: new StaffCollector(),
-      external: new ExternalDataCollector()
+      external: new ExternalDataCollector(),
     };
 
     this.analyzers = {
@@ -62,7 +62,7 @@ export class AnalyticsDashboard {
       predictive: new PredictiveAnalyzer(),
       comparative: new ComparativeAnalyzer(),
       roi: new ROIAnalyzer(),
-      benchmark: new BenchmarkAnalyzer()
+      benchmark: new BenchmarkAnalyzer(),
     };
 
     this.dashboardComponents = new Map();
@@ -73,15 +73,15 @@ export class AnalyticsDashboard {
    */
   async initialize() {
     try {
-      console.log('📊 Initializing Analytics Dashboard...');
-      
+      console.log("📊 Initializing Analytics Dashboard...");
+
       // Initialize data collectors
       await Promise.all([
         this.dataCollectors.performance.initialize(),
         this.dataCollectors.financial.initialize(),
         this.dataCollectors.operational.initialize(),
         this.dataCollectors.staff.initialize(),
-        this.dataCollectors.external.initialize()
+        this.dataCollectors.external.initialize(),
       ]);
 
       // Initialize analyzers
@@ -90,26 +90,26 @@ export class AnalyticsDashboard {
         this.analyzers.predictive.initialize(),
         this.analyzers.comparative.initialize(),
         this.analyzers.roi.initialize(),
-        this.analyzers.benchmark.initialize()
+        this.analyzers.benchmark.initialize(),
       ]);
 
       // Load initial data
       await this.loadInitialData();
-      
+
       // Set up real-time updates
       this.setupRealTimeUpdates();
-      
+
       // Initialize dashboard components
       this.initializeDashboardComponents();
-      
+
       this.state.isInitialized = true;
       this.state.lastUpdate = Date.now();
-      
-      console.log('✅ Analytics Dashboard initialized successfully');
-      
+
+      console.log("✅ Analytics Dashboard initialized successfully");
+
       return true;
     } catch (error) {
-      console.error('❌ Failed to initialize Analytics Dashboard:', error);
+      console.error("❌ Failed to initialize Analytics Dashboard:", error);
       throw error;
     }
   }
@@ -118,8 +118,8 @@ export class AnalyticsDashboard {
    * Generate Executive Dashboard
    */
   async generateExecutiveDashboard() {
-    console.log('👔 Generating Executive Dashboard...');
-    
+    console.log("👔 Generating Executive Dashboard...");
+
     const dashboard = {
       timestamp: Date.now(),
       executiveSummary: await this.generateExecutiveSummary(),
@@ -128,7 +128,7 @@ export class AnalyticsDashboard {
       operationalInsights: await this.generateOperationalInsights(),
       strategicRecommendations: await this.generateStrategicRecommendations(),
       riskAssessment: await this.generateRiskAssessment(),
-      futureOutlook: await this.generateFutureOutlook()
+      futureOutlook: await this.generateFutureOutlook(),
     };
 
     return dashboard;
@@ -138,8 +138,8 @@ export class AnalyticsDashboard {
    * Generate Predictive Analytics
    */
   async generatePredictiveAnalytics() {
-    console.log('🔮 Generating Predictive Analytics...');
-    
+    console.log("🔮 Generating Predictive Analytics...");
+
     const predictions = {
       laborCostForecasts: await this.predictLaborCosts(),
       efficiencyTrends: await this.predictEfficiencyTrends(),
@@ -147,7 +147,7 @@ export class AnalyticsDashboard {
       operationalRisks: await this.predictOperationalRisks(),
       demandForecasts: await this.predictDemandPatterns(),
       seasonalAdjustments: await this.predictSeasonalAdjustments(),
-      confidenceIntervals: await this.calculatePredictionConfidence()
+      confidenceIntervals: await this.calculatePredictionConfidence(),
     };
 
     return predictions;
@@ -157,8 +157,8 @@ export class AnalyticsDashboard {
    * ROI Analysis
    */
   async performROIAnalysis() {
-    console.log('💰 Performing ROI Analysis...');
-    
+    console.log("💰 Performing ROI Analysis...");
+
     const roiAnalysis = {
       timeFrame: this.config.roiCalculationPeriod,
       aiImplementationCosts: await this.calculateImplementationCosts(),
@@ -168,7 +168,7 @@ export class AnalyticsDashboard {
       overallROI: await this.calculateOverallROI(),
       paybackPeriod: await this.calculatePaybackPeriod(),
       netPresentValue: await this.calculateNetPresentValue(),
-      projectedSavings: await this.calculateProjectedSavings()
+      projectedSavings: await this.calculateProjectedSavings(),
     };
 
     return roiAnalysis;
@@ -178,15 +178,15 @@ export class AnalyticsDashboard {
    * Benchmark Comparisons
    */
   async performBenchmarkAnalysis() {
-    console.log('📏 Performing Benchmark Analysis...');
-    
+    console.log("📏 Performing Benchmark Analysis...");
+
     const benchmarks = {
       industryStandards: await this.getIndustryBenchmarks(),
       competitorAnalysis: await this.performCompetitorAnalysis(),
       performanceGaps: await this.identifyPerformanceGaps(),
       bestPractices: await this.identifyBestPractices(),
       improvementOpportunities: await this.identifyImprovementOpportunities(),
-      benchmarkScores: await this.calculateBenchmarkScores()
+      benchmarkScores: await this.calculateBenchmarkScores(),
     };
 
     return benchmarks;
@@ -202,7 +202,7 @@ export class AnalyticsDashboard {
       systemHealth: this.getSystemHealth(),
       activeOperations: this.getActiveOperations(),
       performanceIndicators: this.getPerformanceIndicators(),
-      trendIndicators: this.getTrendIndicators()
+      trendIndicators: this.getTrendIndicators(),
     };
   }
 
@@ -210,8 +210,8 @@ export class AnalyticsDashboard {
    * Strategic Planning Dashboard
    */
   async generateStrategicPlanningDashboard() {
-    console.log('🎯 Generating Strategic Planning Dashboard...');
-    
+    console.log("🎯 Generating Strategic Planning Dashboard...");
+
     const strategic = {
       longTermTrends: await this.analyzeLongTermTrends(),
       capacityPlanning: await this.performCapacityPlanning(),
@@ -219,7 +219,7 @@ export class AnalyticsDashboard {
       technologyRoadmap: await this.generateTechnologyRoadmap(),
       marketAnalysis: await this.performMarketAnalysis(),
       scenarioPlanning: await this.performScenarioPlanning(),
-      strategicInitiatives: await this.identifyStrategicInitiatives()
+      strategicInitiatives: await this.identifyStrategicInitiatives(),
     };
 
     return strategic;
@@ -232,16 +232,17 @@ export class AnalyticsDashboard {
     const metrics = {
       schedulingAccuracy: await this.calculateSchedulingAccuracy(),
       constraintCompliance: await this.calculateConstraintCompliance(),
-      optimizationEffectiveness: await this.calculateOptimizationEffectiveness(),
+      optimizationEffectiveness:
+        await this.calculateOptimizationEffectiveness(),
       userSatisfaction: await this.calculateUserSatisfaction(),
       systemReliability: await this.calculateSystemReliability(),
       processingSpeed: await this.calculateProcessingSpeed(),
-      resourceUtilization: await this.calculateResourceUtilization()
+      resourceUtilization: await this.calculateResourceUtilization(),
     };
 
     // Store metrics
-    this.state.kpiMetrics.set('performance', metrics);
-    
+    this.state.kpiMetrics.set("performance", metrics);
+
     return metrics;
   }
 
@@ -249,28 +250,31 @@ export class AnalyticsDashboard {
    * Trend Analysis
    */
   async performTrendAnalysis() {
-    console.log('📈 Performing Trend Analysis...');
-    
+    console.log("📈 Performing Trend Analysis...");
+
     const trends = {
       performanceTrends: await this.analyzers.trend.analyzePerformanceTrends(),
       financialTrends: await this.analyzers.trend.analyzeFinancialTrends(),
       operationalTrends: await this.analyzers.trend.analyzeOperationalTrends(),
       staffTrends: await this.analyzers.trend.analyzeStaffTrends(),
       seasonalPatterns: await this.analyzers.trend.analyzeSeasonalPatterns(),
-      correlationAnalysis: await this.analyzers.trend.performCorrelationAnalysis()
+      correlationAnalysis:
+        await this.analyzers.trend.performCorrelationAnalysis(),
     };
 
     this.state.trendAnalysis.set(Date.now(), trends);
-    
+
     return trends;
   }
 
   /**
    * Generate Automated Reports
    */
-  async generateAutomatedReport(reportType, period = 'monthly') {
-    console.log(`📄 Generating automated ${reportType} report for ${period}...`);
-    
+  async generateAutomatedReport(reportType, period = "monthly") {
+    console.log(
+      `📄 Generating automated ${reportType} report for ${period}...`,
+    );
+
     const report = {
       type: reportType,
       period,
@@ -278,30 +282,32 @@ export class AnalyticsDashboard {
       data: {},
       insights: [],
       recommendations: [],
-      attachments: []
+      attachments: [],
     };
 
     switch (reportType) {
-      case 'executive':
+      case "executive":
         report.data = await this.generateExecutiveDashboard();
         break;
-      case 'operational':
+      case "operational":
         report.data = await this.generateOperationalReport();
         break;
-      case 'financial':
+      case "financial":
         report.data = await this.generateFinancialReport();
         break;
-      case 'performance':
+      case "performance":
         report.data = await this.generatePerformanceReport();
         break;
-      case 'strategic':
+      case "strategic":
         report.data = await this.generateStrategicPlanningDashboard();
         break;
     }
 
     // Add insights and recommendations
     report.insights = await this.generateReportInsights(report.data);
-    report.recommendations = await this.generateReportRecommendations(report.data);
+    report.recommendations = await this.generateReportRecommendations(
+      report.data,
+    );
 
     return report;
   }
@@ -311,25 +317,25 @@ export class AnalyticsDashboard {
    */
   async processAlerts() {
     const alerts = [];
-    
+
     // Performance alerts
     const performanceAlerts = await this.checkPerformanceAlerts();
     alerts.push(...performanceAlerts);
-    
+
     // Financial alerts
     const financialAlerts = await this.checkFinancialAlerts();
     alerts.push(...financialAlerts);
-    
+
     // Operational alerts
     const operationalAlerts = await this.checkOperationalAlerts();
     alerts.push(...operationalAlerts);
-    
+
     // Predictive alerts
     const predictiveAlerts = await this.checkPredictiveAlerts();
     alerts.push(...predictiveAlerts);
 
     this.state.alerts = alerts;
-    
+
     return alerts;
   }
 
@@ -343,35 +349,35 @@ export class AnalyticsDashboard {
       comparisonCharts: this.generateComparisonCharts(),
       heatmaps: this.generateHeatmaps(),
       dashboards: this.generateDashboards(),
-      tables: this.generateDataTables()
+      tables: this.generateDataTables(),
     };
   }
 
   /**
    * Export Dashboard Data
    */
-  async exportDashboardData(format = 'json', filters = {}) {
+  async exportDashboardData(format = "json", filters = {}) {
     const data = {
       metadata: {
         exportedAt: Date.now(),
         format,
-        filters
+        filters,
       },
       executiveDashboard: await this.generateExecutiveDashboard(),
       predictiveAnalytics: await this.generatePredictiveAnalytics(),
       roiAnalysis: await this.performROIAnalysis(),
       benchmarkAnalysis: await this.performBenchmarkAnalysis(),
-      trendAnalysis: await this.performTrendAnalysis()
+      trendAnalysis: await this.performTrendAnalysis(),
     };
 
     switch (format) {
-      case 'json':
+      case "json":
         return JSON.stringify(data, null, 2);
-      case 'csv':
+      case "csv":
         return this.convertToCSV(data);
-      case 'excel':
+      case "excel":
         return this.convertToExcel(data);
-      case 'pdf':
+      case "pdf":
         return this.convertToPDF(data);
       default:
         return data;
@@ -386,7 +392,7 @@ export class AnalyticsDashboard {
       this.dataCollectors.performance.collectHistoricalData(),
       this.dataCollectors.financial.collectHistoricalData(),
       this.dataCollectors.operational.collectHistoricalData(),
-      this.dataCollectors.staff.collectHistoricalData()
+      this.dataCollectors.staff.collectHistoricalData(),
     ]);
 
     this.state.dashboardData = this.processInitialData(initialData);
@@ -403,101 +409,250 @@ export class AnalyticsDashboard {
       const updates = await Promise.all([
         this.collectPerformanceMetrics(),
         this.performTrendAnalysis(),
-        this.processAlerts()
+        this.processAlerts(),
       ]);
 
       this.state.lastUpdate = Date.now();
-      
+
       // Emit update event
       this.emitDashboardUpdate(updates);
     } catch (error) {
-      console.error('Failed to update dashboard data:', error);
+      console.error("Failed to update dashboard data:", error);
     }
   }
 
   initializeDashboardComponents() {
-    this.dashboardComponents.set('executive', new ExecutiveDashboardComponent());
-    this.dashboardComponents.set('performance', new PerformanceDashboardComponent());
-    this.dashboardComponents.set('financial', new FinancialDashboardComponent());
-    this.dashboardComponents.set('operational', new OperationalDashboardComponent());
-    this.dashboardComponents.set('strategic', new StrategicDashboardComponent());
+    this.dashboardComponents.set(
+      "executive",
+      new ExecutiveDashboardComponent(),
+    );
+    this.dashboardComponents.set(
+      "performance",
+      new PerformanceDashboardComponent(),
+    );
+    this.dashboardComponents.set(
+      "financial",
+      new FinancialDashboardComponent(),
+    );
+    this.dashboardComponents.set(
+      "operational",
+      new OperationalDashboardComponent(),
+    );
+    this.dashboardComponents.set(
+      "strategic",
+      new StrategicDashboardComponent(),
+    );
   }
 
   // Placeholder implementations (would be fully implemented based on specific requirements)
-  async generateExecutiveSummary() { return {}; }
-  async generateKPIOverview() { return {}; }
-  async generateFinancialMetrics() { return {}; }
-  async generateOperationalInsights() { return {}; }
-  async generateStrategicRecommendations() { return []; }
-  async generateRiskAssessment() { return {}; }
-  async generateFutureOutlook() { return {}; }
-  async predictLaborCosts() { return {}; }
-  async predictEfficiencyTrends() { return {}; }
-  async predictStaffSatisfaction() { return {}; }
-  async predictOperationalRisks() { return {}; }
-  async predictDemandPatterns() { return {}; }
-  async predictSeasonalAdjustments() { return {}; }
-  async calculatePredictionConfidence() { return {}; }
-  async calculateImplementationCosts() { return 0; }
-  async calculateLaborSavings() { return 0; }
-  async calculateEfficiencyGains() { return 0; }
-  async calculateQualityImprovements() { return 0; }
-  async calculateOverallROI() { return 0; }
-  async calculatePaybackPeriod() { return 0; }
-  async calculateNetPresentValue() { return 0; }
-  async calculateProjectedSavings() { return 0; }
-  async getIndustryBenchmarks() { return {}; }
-  async performCompetitorAnalysis() { return {}; }
-  async identifyPerformanceGaps() { return []; }
-  async identifyBestPractices() { return []; }
-  async identifyImprovementOpportunities() { return []; }
-  async calculateBenchmarkScores() { return {}; }
-  getCurrentMetrics() { return {}; }
-  getLiveAlerts() { return []; }
-  getSystemHealth() { return 'optimal'; }
-  getActiveOperations() { return []; }
-  getPerformanceIndicators() { return {}; }
-  getTrendIndicators() { return {}; }
-  async analyzeLongTermTrends() { return {}; }
-  async performCapacityPlanning() { return {}; }
-  async analyzeStaffDevelopment() { return {}; }
-  async generateTechnologyRoadmap() { return {}; }
-  async performMarketAnalysis() { return {}; }
-  async performScenarioPlanning() { return {}; }
-  async identifyStrategicInitiatives() { return []; }
-  async calculateSchedulingAccuracy() { return 0.95; }
-  async calculateConstraintCompliance() { return 0.98; }
-  async calculateOptimizationEffectiveness() { return 0.92; }
-  async calculateUserSatisfaction() { return 0.89; }
-  async calculateSystemReliability() { return 0.997; }
-  async calculateProcessingSpeed() { return 1.2; }
-  async calculateResourceUtilization() { return 0.78; }
-  async generateOperationalReport() { return {}; }
-  async generateFinancialReport() { return {}; }
-  async generatePerformanceReport() { return {}; }
-  async generateReportInsights(data) { return []; }
-  async generateReportRecommendations(data) { return []; }
-  async checkPerformanceAlerts() { return []; }
-  async checkFinancialAlerts() { return []; }
-  async checkOperationalAlerts() { return []; }
-  async checkPredictiveAlerts() { return []; }
-  generateKPICards() { return []; }
-  generateTrendCharts() { return []; }
-  generateComparisonCharts() { return []; }
-  generateHeatmaps() { return []; }
-  generateDashboards() { return []; }
-  generateDataTables() { return []; }
-  convertToCSV(data) { return ''; }
-  convertToExcel(data) { return ''; }
-  convertToPDF(data) { return ''; }
-  processInitialData(data) { return {}; }
+  async generateExecutiveSummary() {
+    return {};
+  }
+  async generateKPIOverview() {
+    return {};
+  }
+  async generateFinancialMetrics() {
+    return {};
+  }
+  async generateOperationalInsights() {
+    return {};
+  }
+  async generateStrategicRecommendations() {
+    return [];
+  }
+  async generateRiskAssessment() {
+    return {};
+  }
+  async generateFutureOutlook() {
+    return {};
+  }
+  async predictLaborCosts() {
+    return {};
+  }
+  async predictEfficiencyTrends() {
+    return {};
+  }
+  async predictStaffSatisfaction() {
+    return {};
+  }
+  async predictOperationalRisks() {
+    return {};
+  }
+  async predictDemandPatterns() {
+    return {};
+  }
+  async predictSeasonalAdjustments() {
+    return {};
+  }
+  async calculatePredictionConfidence() {
+    return {};
+  }
+  async calculateImplementationCosts() {
+    return 0;
+  }
+  async calculateLaborSavings() {
+    return 0;
+  }
+  async calculateEfficiencyGains() {
+    return 0;
+  }
+  async calculateQualityImprovements() {
+    return 0;
+  }
+  async calculateOverallROI() {
+    return 0;
+  }
+  async calculatePaybackPeriod() {
+    return 0;
+  }
+  async calculateNetPresentValue() {
+    return 0;
+  }
+  async calculateProjectedSavings() {
+    return 0;
+  }
+  async getIndustryBenchmarks() {
+    return {};
+  }
+  async performCompetitorAnalysis() {
+    return {};
+  }
+  async identifyPerformanceGaps() {
+    return [];
+  }
+  async identifyBestPractices() {
+    return [];
+  }
+  async identifyImprovementOpportunities() {
+    return [];
+  }
+  async calculateBenchmarkScores() {
+    return {};
+  }
+  getCurrentMetrics() {
+    return {};
+  }
+  getLiveAlerts() {
+    return [];
+  }
+  getSystemHealth() {
+    return "optimal";
+  }
+  getActiveOperations() {
+    return [];
+  }
+  getPerformanceIndicators() {
+    return {};
+  }
+  getTrendIndicators() {
+    return {};
+  }
+  async analyzeLongTermTrends() {
+    return {};
+  }
+  async performCapacityPlanning() {
+    return {};
+  }
+  async analyzeStaffDevelopment() {
+    return {};
+  }
+  async generateTechnologyRoadmap() {
+    return {};
+  }
+  async performMarketAnalysis() {
+    return {};
+  }
+  async performScenarioPlanning() {
+    return {};
+  }
+  async identifyStrategicInitiatives() {
+    return [];
+  }
+  async calculateSchedulingAccuracy() {
+    return 0.95;
+  }
+  async calculateConstraintCompliance() {
+    return 0.98;
+  }
+  async calculateOptimizationEffectiveness() {
+    return 0.92;
+  }
+  async calculateUserSatisfaction() {
+    return 0.89;
+  }
+  async calculateSystemReliability() {
+    return 0.997;
+  }
+  async calculateProcessingSpeed() {
+    return 1.2;
+  }
+  async calculateResourceUtilization() {
+    return 0.78;
+  }
+  async generateOperationalReport() {
+    return {};
+  }
+  async generateFinancialReport() {
+    return {};
+  }
+  async generatePerformanceReport() {
+    return {};
+  }
+  async generateReportInsights(data) {
+    return [];
+  }
+  async generateReportRecommendations(data) {
+    return [];
+  }
+  async checkPerformanceAlerts() {
+    return [];
+  }
+  async checkFinancialAlerts() {
+    return [];
+  }
+  async checkOperationalAlerts() {
+    return [];
+  }
+  async checkPredictiveAlerts() {
+    return [];
+  }
+  generateKPICards() {
+    return [];
+  }
+  generateTrendCharts() {
+    return [];
+  }
+  generateComparisonCharts() {
+    return [];
+  }
+  generateHeatmaps() {
+    return [];
+  }
+  generateDashboards() {
+    return [];
+  }
+  generateDataTables() {
+    return [];
+  }
+  convertToCSV(data) {
+    return "";
+  }
+  convertToExcel(data) {
+    return "";
+  }
+  convertToPDF(data) {
+    return "";
+  }
+  processInitialData(data) {
+    return {};
+  }
   emitDashboardUpdate(updates) {}
 }
 
 // React Component for Dashboard UI
 export const AnalyticsDashboardComponent = ({ analytics }) => {
-  const [activeTab, setActiveTab] = useState('executive');
-  const [timeRange, setTimeRange] = useState('30d');
+  const [activeTab, setActiveTab] = useState("executive");
+  const [timeRange, setTimeRange] = useState("30d");
   const [dashboardData, setDashboardData] = useState({});
   const [isLoading, setIsLoading] = useState(true);
 
@@ -510,19 +665,19 @@ export const AnalyticsDashboardComponent = ({ analytics }) => {
     try {
       let data;
       switch (activeTab) {
-        case 'executive':
+        case "executive":
           data = await analytics.generateExecutiveDashboard();
           break;
-        case 'predictive':
+        case "predictive":
           data = await analytics.generatePredictiveAnalytics();
           break;
-        case 'roi':
+        case "roi":
           data = await analytics.performROIAnalysis();
           break;
-        case 'benchmark':
+        case "benchmark":
           data = await analytics.performBenchmarkAnalysis();
           break;
-        case 'strategic':
+        case "strategic":
           data = await analytics.generateStrategicPlanningDashboard();
           break;
         default:
@@ -530,18 +685,18 @@ export const AnalyticsDashboardComponent = ({ analytics }) => {
       }
       setDashboardData(data);
     } catch (error) {
-      console.error('Failed to load dashboard data:', error);
+      console.error("Failed to load dashboard data:", error);
     } finally {
       setIsLoading(false);
     }
   };
 
   const tabConfig = [
-    { id: 'executive', label: 'Executive', icon: TrendingUp },
-    { id: 'predictive', label: 'Predictive', icon: Brain },
-    { id: 'roi', label: 'ROI Analysis', icon: DollarSign },
-    { id: 'benchmark', label: 'Benchmarks', icon: Target },
-    { id: 'strategic', label: 'Strategic', icon: Zap }
+    { id: "executive", label: "Executive", icon: TrendingUp },
+    { id: "predictive", label: "Predictive", icon: Brain },
+    { id: "roi", label: "ROI Analysis", icon: DollarSign },
+    { id: "benchmark", label: "Benchmarks", icon: Target },
+    { id: "strategic", label: "Strategic", icon: Zap },
   ];
 
   return (
@@ -553,8 +708,8 @@ export const AnalyticsDashboardComponent = ({ analytics }) => {
             Analytics Dashboard
           </h1>
           <div className="flex items-center space-x-4">
-            <select 
-              value={timeRange} 
+            <select
+              value={timeRange}
               onChange={(e) => setTimeRange(e.target.value)}
               className="px-3 py-2 border border-gray-300 rounded-md"
             >
@@ -563,7 +718,7 @@ export const AnalyticsDashboardComponent = ({ analytics }) => {
               <option value="90d">Last 90 days</option>
               <option value="1y">Last year</option>
             </select>
-            <button 
+            <button
               onClick={loadDashboardData}
               className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
             >
@@ -582,8 +737,8 @@ export const AnalyticsDashboardComponent = ({ analytics }) => {
               onClick={() => setActiveTab(id)}
               className={`py-4 px-2 border-b-2 font-medium text-sm flex items-center space-x-2 ${
                 activeTab === id
-                  ? 'border-blue-500 text-blue-600'
-                  : 'border-transparent text-gray-500 hover:text-gray-700'
+                  ? "border-blue-500 text-blue-600"
+                  : "border-transparent text-gray-500 hover:text-gray-700"
               }`}
             >
               <Icon size={16} />
@@ -600,9 +755,9 @@ export const AnalyticsDashboardComponent = ({ analytics }) => {
             <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
           </div>
         ) : (
-          <DashboardTabContent 
-            activeTab={activeTab} 
-            data={dashboardData} 
+          <DashboardTabContent
+            activeTab={activeTab}
+            data={dashboardData}
             timeRange={timeRange}
           />
         )}
@@ -614,15 +769,15 @@ export const AnalyticsDashboardComponent = ({ analytics }) => {
 // Dashboard Tab Content Component
 const DashboardTabContent = ({ activeTab, data, timeRange }) => {
   switch (activeTab) {
-    case 'executive':
+    case "executive":
       return <ExecutiveTabContent data={data} timeRange={timeRange} />;
-    case 'predictive':
+    case "predictive":
       return <PredictiveTabContent data={data} timeRange={timeRange} />;
-    case 'roi':
+    case "roi":
       return <ROITabContent data={data} timeRange={timeRange} />;
-    case 'benchmark':
+    case "benchmark":
       return <BenchmarkTabContent data={data} timeRange={timeRange} />;
-    case 'strategic':
+    case "strategic":
       return <StrategicTabContent data={data} timeRange={timeRange} />;
     default:
       return <div>Dashboard content loading...</div>;
@@ -678,38 +833,60 @@ const StrategicTabContent = ({ data, timeRange }) => (
 // Supporting Data Collector Classes
 class PerformanceCollector {
   async initialize() {}
-  async collectHistoricalData() { return {}; }
+  async collectHistoricalData() {
+    return {};
+  }
 }
 
 class FinancialCollector {
   async initialize() {}
-  async collectHistoricalData() { return {}; }
+  async collectHistoricalData() {
+    return {};
+  }
 }
 
 class OperationalCollector {
   async initialize() {}
-  async collectHistoricalData() { return {}; }
+  async collectHistoricalData() {
+    return {};
+  }
 }
 
 class StaffCollector {
   async initialize() {}
-  async collectHistoricalData() { return {}; }
+  async collectHistoricalData() {
+    return {};
+  }
 }
 
 class ExternalDataCollector {
   async initialize() {}
-  async collectHistoricalData() { return {}; }
+  async collectHistoricalData() {
+    return {};
+  }
 }
 
 // Supporting Analyzer Classes
 class TrendAnalyzer {
   async initialize() {}
-  async analyzePerformanceTrends() { return {}; }
-  async analyzeFinancialTrends() { return {}; }
-  async analyzeOperationalTrends() { return {}; }
-  async analyzeStaffTrends() { return {}; }
-  async analyzeSeasonalPatterns() { return {}; }
-  async performCorrelationAnalysis() { return {}; }
+  async analyzePerformanceTrends() {
+    return {};
+  }
+  async analyzeFinancialTrends() {
+    return {};
+  }
+  async analyzeOperationalTrends() {
+    return {};
+  }
+  async analyzeStaffTrends() {
+    return {};
+  }
+  async analyzeSeasonalPatterns() {
+    return {};
+  }
+  async performCorrelationAnalysis() {
+    return {};
+  }
 }
 
 class PredictiveAnalyzer {
@@ -730,25 +907,47 @@ class BenchmarkAnalyzer {
 
 // Supporting Dashboard Components (placeholder implementations)
 const KPIOverview = ({ kpis }) => <div>KPI Overview Component</div>;
-const FinancialMetrics = ({ metrics }) => <div>Financial Metrics Component</div>;
-const OperationalInsights = ({ insights }) => <div>Operational Insights Component</div>;
-const StrategicRecommendations = ({ recommendations }) => <div>Strategic Recommendations Component</div>;
-const LaborCostForecasts = ({ forecasts }) => <div>Labor Cost Forecasts Component</div>;
+const FinancialMetrics = ({ metrics }) => (
+  <div>Financial Metrics Component</div>
+);
+const OperationalInsights = ({ insights }) => (
+  <div>Operational Insights Component</div>
+);
+const StrategicRecommendations = ({ recommendations }) => (
+  <div>Strategic Recommendations Component</div>
+);
+const LaborCostForecasts = ({ forecasts }) => (
+  <div>Labor Cost Forecasts Component</div>
+);
 const EfficiencyTrends = ({ trends }) => <div>Efficiency Trends Component</div>;
-const StaffSatisfactionTrends = ({ trends }) => <div>Staff Satisfaction Trends Component</div>;
+const StaffSatisfactionTrends = ({ trends }) => (
+  <div>Staff Satisfaction Trends Component</div>
+);
 const OperationalRisks = ({ risks }) => <div>Operational Risks Component</div>;
 const ROIOverview = ({ roi }) => <div>ROI Overview Component</div>;
-const CostSavingsAnalysis = ({ savings }) => <div>Cost Savings Analysis Component</div>;
+const CostSavingsAnalysis = ({ savings }) => (
+  <div>Cost Savings Analysis Component</div>
+);
 const EfficiencyGains = ({ gains }) => <div>Efficiency Gains Component</div>;
 const PaybackAnalysis = ({ payback }) => <div>Payback Analysis Component</div>;
-const IndustryComparison = ({ benchmarks }) => <div>Industry Comparison Component</div>;
+const IndustryComparison = ({ benchmarks }) => (
+  <div>Industry Comparison Component</div>
+);
 const PerformanceGaps = ({ gaps }) => <div>Performance Gaps Component</div>;
 const BestPractices = ({ practices }) => <div>Best Practices Component</div>;
-const ImprovementOpportunities = ({ opportunities }) => <div>Improvement Opportunities Component</div>;
+const ImprovementOpportunities = ({ opportunities }) => (
+  <div>Improvement Opportunities Component</div>
+);
 const LongTermTrends = ({ trends }) => <div>Long Term Trends Component</div>;
-const CapacityPlanning = ({ planning }) => <div>Capacity Planning Component</div>;
-const StaffDevelopment = ({ development }) => <div>Staff Development Component</div>;
-const StrategicInitiatives = ({ initiatives }) => <div>Strategic Initiatives Component</div>;
+const CapacityPlanning = ({ planning }) => (
+  <div>Capacity Planning Component</div>
+);
+const StaffDevelopment = ({ development }) => (
+  <div>Staff Development Component</div>
+);
+const StrategicInitiatives = ({ initiatives }) => (
+  <div>Strategic Initiatives Component</div>
+);
 
 // Supporting Component Classes
 class ExecutiveDashboardComponent {}

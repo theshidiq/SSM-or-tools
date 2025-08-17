@@ -17,19 +17,20 @@ export const useSupabase = () => {
         .from("schedules")
         .select("count")
         .limit(1);
-      
+
       if (connectionError) throw connectionError;
-      
+
       // Check if configuration tables exist and are accessible
       const tableChecks = await Promise.allSettled([
         supabase.from("config_versions").select("count").limit(1),
         supabase.from("ml_model_configs").select("count").limit(1),
         supabase.from("restaurants").select("count").limit(1),
       ]);
-      
+
       const configTablesAccessible = tableChecks.every(
-        result => result.status === 'fulfilled' || 
-        (result.status === 'rejected' && result.reason?.code === 'PGRST116') // No rows is OK
+        (result) =>
+          result.status === "fulfilled" ||
+          (result.status === "rejected" && result.reason?.code === "PGRST116"), // No rows is OK
       );
 
       // Additional check for proper configuration initialization
@@ -40,7 +41,7 @@ export const useSupabase = () => {
             .from("restaurants")
             .select("id")
             .limit(1);
-          
+
           if (restaurants && restaurants.length > 0) {
             const { data: activeConfigVersions } = await supabase
               .from("config_versions")
@@ -48,27 +49,30 @@ export const useSupabase = () => {
               .eq("restaurant_id", restaurants[0].id)
               .eq("is_active", true)
               .limit(1);
-            
-            hasActiveConfig = activeConfigVersions && activeConfigVersions.length > 0;
+
+            hasActiveConfig =
+              activeConfigVersions && activeConfigVersions.length > 0;
           }
         } catch (checkError) {
-          console.warn('Configuration initialization check failed:', checkError);
+          console.warn(
+            "Configuration initialization check failed:",
+            checkError,
+          );
           hasActiveConfig = false;
         }
       }
-      
+
       setIsConnected(true);
       setError(null);
-      
+
       // Store table accessibility info for other components to use
       window.supabaseTableStatus = {
         schedules: true,
         configuration: configTablesAccessible && hasActiveConfig,
         configTablesExist: configTablesAccessible,
         hasActiveConfiguration: hasActiveConfig,
-        lastChecked: Date.now()
+        lastChecked: Date.now(),
       };
-      
     } catch (err) {
       setIsConnected(false);
       setError(err.message);
@@ -78,7 +82,7 @@ export const useSupabase = () => {
         configTablesExist: false,
         hasActiveConfiguration: false,
         lastChecked: Date.now(),
-        error: err.message
+        error: err.message,
       };
     }
   }, []);

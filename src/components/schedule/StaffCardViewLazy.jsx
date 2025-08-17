@@ -1,16 +1,16 @@
 import React, { Suspense, lazy } from "react";
 
 // Lazy load the card view components to reduce initial bundle size
-const StaffCardViewOptimized = lazy(() => 
-  import("./StaffCardViewOptimized").then(module => ({
-    default: module.default
-  }))
+const StaffCardViewOptimized = lazy(() =>
+  import("./StaffCardViewOptimized").then((module) => ({
+    default: module.default,
+  })),
 );
 
-const StaffCardViewVirtualized = lazy(() => 
-  import("./StaffCardViewVirtualized").then(module => ({
-    default: module.default
-  }))
+const StaffCardViewVirtualized = lazy(() =>
+  import("./StaffCardViewVirtualized").then((module) => ({
+    default: module.default,
+  })),
 );
 
 // Loading component for card view
@@ -37,7 +37,10 @@ const CardViewLoading = React.memo(() => (
           {/* Statistics skeleton */}
           <div className="grid grid-cols-2 gap-3 mb-4">
             {[1, 2, 3, 4].map((j) => (
-              <div key={`stat-${j}`} className="text-center p-2 bg-gray-50 rounded-lg">
+              <div
+                key={`stat-${j}`}
+                className="text-center p-2 bg-gray-50 rounded-lg"
+              >
                 <div className="h-6 bg-gray-200 rounded mb-1 w-8 mx-auto"></div>
                 <div className="h-3 bg-gray-200 rounded w-10 mx-auto"></div>
               </div>
@@ -49,7 +52,10 @@ const CardViewLoading = React.memo(() => (
             <div className="h-3 bg-gray-200 rounded w-12 mb-1"></div>
             <div className="flex flex-wrap gap-1">
               {[1, 2, 3].map((k) => (
-                <div key={`date-${k}`} className="h-6 bg-gray-200 rounded w-8"></div>
+                <div
+                  key={`date-${k}`}
+                  className="h-6 bg-gray-200 rounded w-8"
+                ></div>
               ))}
             </div>
           </div>
@@ -64,37 +70,40 @@ const CardViewLoading = React.memo(() => (
   </div>
 ));
 
-CardViewLoading.displayName = 'CardViewLoading';
+CardViewLoading.displayName = "CardViewLoading";
 
 // Main lazy wrapper component
-const StaffCardViewLazy = React.memo(({ 
-  orderedStaffMembers, 
-  dateRange, 
-  schedule, 
-  virtualizationThreshold = 50 
-}) => {
-  const shouldUseVirtualization = orderedStaffMembers?.length > virtualizationThreshold;
+const StaffCardViewLazy = React.memo(
+  ({
+    orderedStaffMembers,
+    dateRange,
+    schedule,
+    virtualizationThreshold = 50,
+  }) => {
+    const shouldUseVirtualization =
+      orderedStaffMembers?.length > virtualizationThreshold;
 
-  return (
-    <Suspense fallback={<CardViewLoading />}>
-      {shouldUseVirtualization ? (
-        <StaffCardViewVirtualized
-          orderedStaffMembers={orderedStaffMembers}
-          dateRange={dateRange}
-          schedule={schedule}
-          threshold={virtualizationThreshold}
-        />
-      ) : (
-        <StaffCardViewOptimized
-          orderedStaffMembers={orderedStaffMembers}
-          dateRange={dateRange}
-          schedule={schedule}
-        />
-      )}
-    </Suspense>
-  );
-});
+    return (
+      <Suspense fallback={<CardViewLoading />}>
+        {shouldUseVirtualization ? (
+          <StaffCardViewVirtualized
+            orderedStaffMembers={orderedStaffMembers}
+            dateRange={dateRange}
+            schedule={schedule}
+            threshold={virtualizationThreshold}
+          />
+        ) : (
+          <StaffCardViewOptimized
+            orderedStaffMembers={orderedStaffMembers}
+            dateRange={dateRange}
+            schedule={schedule}
+          />
+        )}
+      </Suspense>
+    );
+  },
+);
 
-StaffCardViewLazy.displayName = 'StaffCardViewLazy';
+StaffCardViewLazy.displayName = "StaffCardViewLazy";
 
 export default StaffCardViewLazy;

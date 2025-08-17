@@ -28,11 +28,11 @@ class PerformanceCollector {
   measure(name, startMark, endMark) {
     try {
       performance.measure(name, startMark, endMark);
-      const entries = performance.getEntriesByName(name, 'measure');
+      const entries = performance.getEntriesByName(name, "measure");
       const latest = entries[entries.length - 1];
       return latest ? latest.duration : 0;
     } catch (error) {
-      console.warn('Performance measure failed:', error);
+      console.warn("Performance measure failed:", error);
       return 0;
     }
   }
@@ -58,14 +58,14 @@ class PerformanceCollector {
 
     const measureFrame = (currentTime) => {
       frameCount++;
-      
+
       if (currentTime - lastTime >= 1000) {
         const fps = Math.round((frameCount * 1000) / (currentTime - lastTime));
         callback(fps);
         frameCount = 0;
         lastTime = currentTime;
       }
-      
+
       requestAnimationFrame(measureFrame);
     };
 
@@ -74,29 +74,29 @@ class PerformanceCollector {
 
   // Long task detection
   detectLongTasks(callback) {
-    if ('PerformanceObserver' in window) {
+    if ("PerformanceObserver" in window) {
       const observer = new PerformanceObserver((list) => {
         list.getEntries().forEach((entry) => {
           callback({
             duration: entry.duration,
             startTime: entry.startTime,
-            name: entry.name || 'Unknown'
+            name: entry.name || "Unknown",
           });
         });
       });
 
       try {
-        observer.observe({ type: 'longtask', buffered: true });
+        observer.observe({ type: "longtask", buffered: true });
         this.observers.push(observer);
       } catch (error) {
-        console.warn('Long task detection not supported');
+        console.warn("Long task detection not supported");
       }
     }
   }
 
   // Cleanup
   disconnect() {
-    this.observers.forEach(observer => observer.disconnect());
+    this.observers.forEach((observer) => observer.disconnect());
     this.observers = [];
   }
 }
@@ -108,7 +108,7 @@ export const usePerformanceMonitoring = (options = {}) => {
     trackMemory = true,
     trackFrameRate = false,
     trackLongTasks = true,
-    sampleRate = 0.1 // Only track for 10% of sessions to reduce overhead
+    sampleRate = 0.1, // Only track for 10% of sessions to reduce overhead
   } = options;
 
   const [metrics, setMetrics] = useState({});
@@ -125,13 +125,13 @@ export const usePerformanceMonitoring = (options = {}) => {
     setIsMonitoring(true);
 
     const updateMetric = (metric) => {
-      setMetrics(prev => ({
+      setMetrics((prev) => ({
         ...prev,
         [metric.name]: {
           value: metric.value,
           rating: metric.rating,
-          timestamp: Date.now()
-        }
+          timestamp: Date.now(),
+        },
       }));
     };
 
@@ -145,9 +145,14 @@ export const usePerformanceMonitoring = (options = {}) => {
         const memory = collector.getMemoryUsage();
         if (memory) {
           updateMetric({
-            name: 'memory',
+            name: "memory",
             value: memory.used,
-            rating: memory.used > 50 ? 'poor' : memory.used > 25 ? 'needs-improvement' : 'good'
+            rating:
+              memory.used > 50
+                ? "poor"
+                : memory.used > 25
+                  ? "needs-improvement"
+                  : "good",
           });
         }
       };
@@ -159,9 +164,9 @@ export const usePerformanceMonitoring = (options = {}) => {
     if (trackFrameRate) {
       collector.startFrameRateMonitor((fps) => {
         updateMetric({
-          name: 'fps',
+          name: "fps",
           value: fps,
-          rating: fps < 30 ? 'poor' : fps < 50 ? 'needs-improvement' : 'good'
+          rating: fps < 30 ? "poor" : fps < 50 ? "needs-improvement" : "good",
         });
       });
     }
@@ -169,9 +174,14 @@ export const usePerformanceMonitoring = (options = {}) => {
     if (trackLongTasks) {
       collector.detectLongTasks((task) => {
         updateMetric({
-          name: 'longtask',
+          name: "longtask",
           value: task.duration,
-          rating: task.duration > 100 ? 'poor' : task.duration > 50 ? 'needs-improvement' : 'good'
+          rating:
+            task.duration > 100
+              ? "poor"
+              : task.duration > 50
+                ? "needs-improvement"
+                : "good",
         });
       });
     }
@@ -180,101 +190,130 @@ export const usePerformanceMonitoring = (options = {}) => {
       collector.disconnect();
       setIsMonitoring(false);
     };
-  }, [shouldTrack, trackWebVitals, trackMemory, trackFrameRate, trackLongTasks]);
+  }, [
+    shouldTrack,
+    trackWebVitals,
+    trackMemory,
+    trackFrameRate,
+    trackLongTasks,
+  ]);
 
-  const markStart = useCallback((name) => {
-    if (collectorRef.current && shouldTrack) {
-      collectorRef.current.mark(`${name}-start`);
-    }
-  }, [shouldTrack]);
+  const markStart = useCallback(
+    (name) => {
+      if (collectorRef.current && shouldTrack) {
+        collectorRef.current.mark(`${name}-start`);
+      }
+    },
+    [shouldTrack],
+  );
 
-  const markEnd = useCallback((name) => {
-    if (collectorRef.current && shouldTrack) {
-      collectorRef.current.mark(`${name}-end`);
-      const duration = collectorRef.current.measure(name, `${name}-start`, `${name}-end`);
-      
-      setMetrics(prev => ({
-        ...prev,
-        [name]: {
-          value: duration,
-          rating: duration > 500 ? 'poor' : duration > 200 ? 'needs-improvement' : 'good',
-          timestamp: Date.now()
-        }
-      }));
-    }
-  }, [shouldTrack]);
+  const markEnd = useCallback(
+    (name) => {
+      if (collectorRef.current && shouldTrack) {
+        collectorRef.current.mark(`${name}-end`);
+        const duration = collectorRef.current.measure(
+          name,
+          `${name}-start`,
+          `${name}-end`,
+        );
+
+        setMetrics((prev) => ({
+          ...prev,
+          [name]: {
+            value: duration,
+            rating:
+              duration > 500
+                ? "poor"
+                : duration > 200
+                  ? "needs-improvement"
+                  : "good",
+            timestamp: Date.now(),
+          },
+        }));
+      }
+    },
+    [shouldTrack],
+  );
 
   return {
     metrics,
     isMonitoring,
     markStart,
-    markEnd
+    markEnd,
   };
 };
 
 // Performance monitoring component
-const PerformanceMonitor = React.memo(({ 
-  enabled = process.env.NODE_ENV === 'development',
-  showDevTools = false,
-  onMetric 
-}) => {
-  const { metrics, isMonitoring, markStart, markEnd } = usePerformanceMonitoring({
-    trackWebVitals: enabled,
-    trackMemory: enabled,
-    trackFrameRate: showDevTools,
-    trackLongTasks: enabled,
-    sampleRate: enabled ? 1.0 : 0.1 // Always track in development
-  });
-
-  // Report metrics to external service
-  useEffect(() => {
-    if (onMetric && Object.keys(metrics).length > 0) {
-      Object.entries(metrics).forEach(([name, metric]) => {
-        onMetric(name, metric);
+const PerformanceMonitor = React.memo(
+  ({
+    enabled = process.env.NODE_ENV === "development",
+    showDevTools = false,
+    onMetric,
+  }) => {
+    const { metrics, isMonitoring, markStart, markEnd } =
+      usePerformanceMonitoring({
+        trackWebVitals: enabled,
+        trackMemory: enabled,
+        trackFrameRate: showDevTools,
+        trackLongTasks: enabled,
+        sampleRate: enabled ? 1.0 : 0.1, // Always track in development
       });
+
+    // Report metrics to external service
+    useEffect(() => {
+      if (onMetric && Object.keys(metrics).length > 0) {
+        Object.entries(metrics).forEach(([name, metric]) => {
+          onMetric(name, metric);
+        });
+      }
+    }, [metrics, onMetric]);
+
+    // Expose performance tools globally in development
+    useEffect(() => {
+      if (enabled && typeof window !== "undefined") {
+        window.performance.markCardRenderStart = () => markStart("card-render");
+        window.performance.markCardRenderEnd = () => markEnd("card-render");
+        window.performance.markViewSwitchStart = () => markStart("view-switch");
+        window.performance.markViewSwitchEnd = () => markEnd("view-switch");
+        window.performance.getMetrics = () => metrics;
+      }
+    }, [enabled, markStart, markEnd, metrics]);
+
+    if (!showDevTools) {
+      return null;
     }
-  }, [metrics, onMetric]);
 
-  // Expose performance tools globally in development
-  useEffect(() => {
-    if (enabled && typeof window !== 'undefined') {
-      window.performance.markCardRenderStart = () => markStart('card-render');
-      window.performance.markCardRenderEnd = () => markEnd('card-render');
-      window.performance.markViewSwitchStart = () => markStart('view-switch');
-      window.performance.markViewSwitchEnd = () => markEnd('view-switch');
-      window.performance.getMetrics = () => metrics;
-    }
-  }, [enabled, markStart, markEnd, metrics]);
-
-  if (!showDevTools) {
-    return null;
-  }
-
-  return (
-    <div className="fixed bottom-4 right-4 z-50 bg-black bg-opacity-80 text-white p-3 rounded-lg text-xs font-mono max-w-xs">
-      <div className="font-bold mb-2">Performance Monitor</div>
-      <div className="space-y-1">
-        <div>Status: {isMonitoring ? '🟢 Active' : '🔴 Inactive'}</div>
-        {Object.entries(metrics).map(([name, metric]) => (
-          <div key={name} className="flex justify-between">
-            <span>{name}:</span>
-            <span className={`ml-2 ${
-              metric.rating === 'good' ? 'text-green-400' :
-              metric.rating === 'needs-improvement' ? 'text-yellow-400' :
-              'text-red-400'
-            }`}>
-              {typeof metric.value === 'number' ? 
-                (name === 'memory' ? `${metric.value}MB` : `${Math.round(metric.value)}ms`) :
-                metric.value
-              }
-            </span>
-          </div>
-        ))}
+    return (
+      <div className="fixed bottom-4 right-4 z-50 bg-black bg-opacity-80 text-white p-3 rounded-lg text-xs font-mono max-w-xs">
+        <div className="font-bold mb-2">Performance Monitor</div>
+        <div className="space-y-1">
+          <div>Status: {isMonitoring ? "🟢 Active" : "🔴 Inactive"}</div>
+          {Object.entries(metrics).map(([name, metric]) => (
+            <div key={name} className="flex justify-between">
+              <span>{name}:</span>
+              <span
+                className={`ml-2 ${
+                  metric.rating === "good"
+                    ? "text-green-400"
+                    : metric.rating === "needs-improvement"
+                      ? "text-yellow-400"
+                      : "text-red-400"
+                }`}
+              >
+                {typeof metric.value === "number"
+                  ? name === "memory"
+                    ? `${metric.value}MB`
+                    : `${Math.round(metric.value)}ms`
+                  : metric.value}
+              </span>
+            </div>
+          ))}
+        </div>
       </div>
-    </div>
-  );
-});
+    );
+  },
+);
 
-PerformanceMonitor.displayName = 'PerformanceMonitor';
+PerformanceMonitor.displayName = "PerformanceMonitor";
 
 export default PerformanceMonitor;

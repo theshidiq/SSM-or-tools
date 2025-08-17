@@ -1,5 +1,12 @@
-import React, { useState } from "react";
-import { Plus, Trash2, Calendar, AlertTriangle, Save, Edit2, Clock } from "lucide-react";
+import React, { useState, useEffect } from "react";
+import {
+  Plus,
+  Trash2,
+  Calendar,
+  AlertTriangle,
+  Edit2,
+  Clock,
+} from "lucide-react";
 import FormField from "../shared/FormField";
 import NumberInput from "../shared/NumberInput";
 import ToggleSwitch from "../shared/ToggleSwitch";
@@ -42,6 +49,18 @@ const DailyLimitsTab = ({
   const monthlyLimits = settings?.monthlyLimits || [];
   const staffGroups = settings?.staffGroups || [];
 
+  // Add escape key listener to exit edit mode
+  useEffect(() => {
+    const handleKeyDown = (event) => {
+      if (event.key === "Escape" && editingLimit) {
+        setEditingLimit(null);
+      }
+    };
+
+    document.addEventListener("keydown", handleKeyDown);
+    return () => document.removeEventListener("keydown", handleKeyDown);
+  }, [editingLimit]);
+
   const updateDailyLimits = (newLimits) => {
     onSettingsChange({
       ...settings,
@@ -62,7 +81,7 @@ const DailyLimitsTab = ({
       name: "New Daily Limit",
       shiftType: "any",
       maxCount: 3,
-      daysOfWeek: DAYS_OF_WEEK.map(d => d.id), // All days by default
+      daysOfWeek: DAYS_OF_WEEK.map((d) => d.id), // All days by default
       scope: "all",
       targetIds: [],
       isHardConstraint: true,
@@ -96,39 +115,41 @@ const DailyLimitsTab = ({
   };
 
   const updateDailyLimit = (limitId, updates) => {
-    const updatedLimits = dailyLimits.map(limit =>
-      limit.id === limitId ? { ...limit, ...updates } : limit
+    const updatedLimits = dailyLimits.map((limit) =>
+      limit.id === limitId ? { ...limit, ...updates } : limit,
     );
     updateDailyLimits(updatedLimits);
   };
 
   const updateMonthlyLimit = (limitId, updates) => {
-    const updatedLimits = monthlyLimits.map(limit =>
-      limit.id === limitId ? { ...limit, ...updates } : limit
+    const updatedLimits = monthlyLimits.map((limit) =>
+      limit.id === limitId ? { ...limit, ...updates } : limit,
     );
     updateMonthlyLimits(updatedLimits);
   };
 
   const deleteDailyLimit = (limitId) => {
     if (window.confirm("Are you sure you want to delete this daily limit?")) {
-      const updatedLimits = dailyLimits.filter(limit => limit.id !== limitId);
+      const updatedLimits = dailyLimits.filter((limit) => limit.id !== limitId);
       updateDailyLimits(updatedLimits);
     }
   };
 
   const deleteMonthlyLimit = (limitId) => {
     if (window.confirm("Are you sure you want to delete this monthly limit?")) {
-      const updatedLimits = monthlyLimits.filter(limit => limit.id !== limitId);
+      const updatedLimits = monthlyLimits.filter(
+        (limit) => limit.id !== limitId,
+      );
       updateMonthlyLimits(updatedLimits);
     }
   };
 
   const toggleDayOfWeek = (limitId, dayId) => {
-    const limit = dailyLimits.find(l => l.id === limitId);
+    const limit = dailyLimits.find((l) => l.id === limitId);
     if (!limit) return;
 
     const updatedDays = limit.daysOfWeek.includes(dayId)
-      ? limit.daysOfWeek.filter(d => d !== dayId)
+      ? limit.daysOfWeek.filter((d) => d !== dayId)
       : [...limit.daysOfWeek, dayId];
 
     updateDailyLimit(limitId, { daysOfWeek: updatedDays });
@@ -137,12 +158,20 @@ const DailyLimitsTab = ({
   const getTargetOptions = (scope) => {
     switch (scope) {
       case "position":
-        const positions = [...new Set(staffMembers.map(s => s.position).filter(Boolean))];
-        return positions.map(pos => ({ id: pos, label: pos }));
+        const positions = [
+          ...new Set(staffMembers.map((s) => s.position).filter(Boolean)),
+        ];
+        return positions.map((pos) => ({ id: pos, label: pos }));
       case "group":
-        return staffGroups.map(group => ({ id: group.id, label: group.name }));
+        return staffGroups.map((group) => ({
+          id: group.id,
+          label: group.name,
+        }));
       case "individual":
-        return staffMembers.map(staff => ({ id: staff.id, label: staff.name }));
+        return staffMembers.map((staff) => ({
+          id: staff.id,
+          label: staff.name,
+        }));
       default:
         return [];
     }
@@ -151,9 +180,11 @@ const DailyLimitsTab = ({
   const renderDaySelector = (limit) => {
     return (
       <div className="space-y-2">
-        <label className="text-sm font-medium text-gray-700">Days of Week</label>
+        <label className="text-sm font-medium text-gray-700">
+          Days of Week
+        </label>
         <div className="flex flex-wrap gap-2">
-          {DAYS_OF_WEEK.map(day => (
+          {DAYS_OF_WEEK.map((day) => (
             <button
               key={day.id}
               onClick={() => toggleDayOfWeek(limit.id, day.id)}
@@ -168,7 +199,10 @@ const DailyLimitsTab = ({
           ))}
         </div>
         <p className="text-xs text-gray-500">
-          Selected days: {limit.daysOfWeek.length === 7 ? "All days" : `${limit.daysOfWeek.length} days`}
+          Selected days:{" "}
+          {limit.daysOfWeek.length === 7
+            ? "All days"
+            : `${limit.daysOfWeek.length} days`}
         </p>
       </div>
     );
@@ -183,19 +217,25 @@ const DailyLimitsTab = ({
     return (
       <div className="space-y-2">
         <label className="text-sm font-medium text-gray-700">
-          {limit.scope === "position" ? "Positions" :
-           limit.scope === "group" ? "Groups" : "Staff Members"}
+          {limit.scope === "position"
+            ? "Positions"
+            : limit.scope === "group"
+              ? "Groups"
+              : "Staff Members"}
         </label>
         <div className="space-y-2 max-h-32 overflow-y-auto border border-gray-200 rounded-lg p-2">
-          {options.map(option => (
-            <label key={option.id} className="flex items-center gap-2 cursor-pointer">
+          {options.map((option) => (
+            <label
+              key={option.id}
+              className="flex items-center gap-2 cursor-pointer"
+            >
               <input
                 type="checkbox"
                 checked={limit.targetIds.includes(option.id)}
                 onChange={(e) => {
                   const updatedTargets = e.target.checked
                     ? [...limit.targetIds, option.id]
-                    : limit.targetIds.filter(id => id !== option.id);
+                    : limit.targetIds.filter((id) => id !== option.id);
                   updateFunc(limit.id, { targetIds: updatedTargets });
                 }}
                 className="w-4 h-4 text-blue-600 rounded focus:ring-blue-500"
@@ -205,7 +245,9 @@ const DailyLimitsTab = ({
           ))}
         </div>
         {limit.targetIds.length === 0 && (
-          <p className="text-xs text-red-600">At least one target must be selected</p>
+          <p className="text-xs text-red-600">
+            At least one target must be selected
+          </p>
         )}
       </div>
     );
@@ -213,10 +255,13 @@ const DailyLimitsTab = ({
 
   const renderDailyLimitCard = (limit) => {
     const isEditing = editingLimit === limit.id;
-    const shiftType = SHIFT_TYPES.find(st => st.id === limit.shiftType);
+    const shiftType = SHIFT_TYPES.find((st) => st.id === limit.shiftType);
 
     return (
-      <div key={limit.id} className="bg-white rounded-xl border border-gray-200 p-6 hover:shadow-md transition-shadow">
+      <div
+        key={limit.id}
+        className="bg-white rounded-xl border border-gray-200 p-6 hover:shadow-md transition-shadow"
+      >
         {/* Header */}
         <div className="flex items-start justify-between mb-4">
           <div className="flex items-center gap-3">
@@ -228,12 +273,16 @@ const DailyLimitsTab = ({
                 <input
                   type="text"
                   value={limit.name}
-                  onChange={(e) => updateDailyLimit(limit.id, { name: e.target.value })}
+                  onChange={(e) =>
+                    updateDailyLimit(limit.id, { name: e.target.value })
+                  }
                   className="text-lg font-semibold bg-transparent border-b-2 border-blue-500 focus:outline-none"
                   autoFocus
                 />
               ) : (
-                <h3 className="text-lg font-semibold text-gray-800">{limit.name}</h3>
+                <h3 className="text-lg font-semibold text-gray-800">
+                  {limit.name}
+                </h3>
               )}
               <p className="text-sm text-gray-600">
                 {shiftType?.label} • Max {limit.maxCount} per day
@@ -241,15 +290,17 @@ const DailyLimitsTab = ({
               </p>
             </div>
           </div>
-          
+
           <div className="flex items-center gap-2">
-            <button
-              onClick={() => setEditingLimit(isEditing ? null : limit.id)}
-              className="p-2 text-gray-500 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
-              title={isEditing ? "Save" : "Edit"}
-            >
-              {isEditing ? <Save size={16} /> : <Edit2 size={16} />}
-            </button>
+            {!isEditing && (
+              <button
+                onClick={() => setEditingLimit(limit.id)}
+                className="p-2 text-gray-500 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                title="Edit"
+              >
+                <Edit2 size={16} />
+              </button>
+            )}
             <button
               onClick={() => deleteDailyLimit(limit.id)}
               className="p-2 text-gray-500 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
@@ -266,7 +317,9 @@ const DailyLimitsTab = ({
             <FormField label="Description">
               <textarea
                 value={limit.description}
-                onChange={(e) => updateDailyLimit(limit.id, { description: e.target.value })}
+                onChange={(e) =>
+                  updateDailyLimit(limit.id, { description: e.target.value })
+                }
                 placeholder="Describe this limit rule..."
                 rows={2}
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
@@ -277,10 +330,12 @@ const DailyLimitsTab = ({
             <FormField label="Shift Type">
               <select
                 value={limit.shiftType}
-                onChange={(e) => updateDailyLimit(limit.id, { shiftType: e.target.value })}
+                onChange={(e) =>
+                  updateDailyLimit(limit.id, { shiftType: e.target.value })
+                }
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
               >
-                {SHIFT_TYPES.map(st => (
+                {SHIFT_TYPES.map((st) => (
                   <option key={st.id} value={st.id}>
                     {st.icon} {st.label}
                   </option>
@@ -294,7 +349,9 @@ const DailyLimitsTab = ({
               value={limit.maxCount}
               min={0}
               max={20}
-              onChange={(value) => updateDailyLimit(limit.id, { maxCount: value })}
+              onChange={(value) =>
+                updateDailyLimit(limit.id, { maxCount: value })
+              }
               description="Maximum number of this shift type allowed per day"
             />
 
@@ -305,14 +362,18 @@ const DailyLimitsTab = ({
             <FormField label="Apply To">
               <select
                 value={limit.scope}
-                onChange={(e) => updateDailyLimit(limit.id, { 
-                  scope: e.target.value,
-                  targetIds: [] // Reset targets when scope changes
-                })}
+                onChange={(e) =>
+                  updateDailyLimit(limit.id, {
+                    scope: e.target.value,
+                    targetIds: [], // Reset targets when scope changes
+                  })
+                }
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
               >
-                {LIMIT_SCOPES.map(scope => (
-                  <option key={scope.id} value={scope.id}>{scope.label}</option>
+                {LIMIT_SCOPES.map((scope) => (
+                  <option key={scope.id} value={scope.id}>
+                    {scope.label}
+                  </option>
                 ))}
               </select>
             </FormField>
@@ -326,7 +387,9 @@ const DailyLimitsTab = ({
                 label="Hard Constraint"
                 description="Cannot be violated vs. soft preference"
                 checked={limit.isHardConstraint}
-                onChange={(checked) => updateDailyLimit(limit.id, { isHardConstraint: checked })}
+                onChange={(checked) =>
+                  updateDailyLimit(limit.id, { isHardConstraint: checked })
+                }
               />
             </div>
 
@@ -336,7 +399,9 @@ const DailyLimitsTab = ({
               value={limit.penaltyWeight}
               min={1}
               max={100}
-              onChange={(value) => updateDailyLimit(limit.id, { penaltyWeight: value })}
+              onChange={(value) =>
+                updateDailyLimit(limit.id, { penaltyWeight: value })
+              }
               description="Higher values make this constraint more important"
               colorScheme={limit.isHardConstraint ? "red" : "orange"}
             />
@@ -351,13 +416,17 @@ const DailyLimitsTab = ({
           <div className="flex items-center gap-4 text-sm text-gray-600">
             <span className="flex items-center gap-1">
               <Calendar size={14} />
-              {limit.daysOfWeek.length === 7 ? "All days" : `${limit.daysOfWeek.length} days`}
+              {limit.daysOfWeek.length === 7
+                ? "All days"
+                : `${limit.daysOfWeek.length} days`}
             </span>
-            <span className={`px-2 py-1 rounded text-xs ${
-              limit.isHardConstraint
-                ? "bg-red-100 text-red-700"
-                : "bg-yellow-100 text-yellow-700"
-            }`}>
+            <span
+              className={`px-2 py-1 rounded text-xs ${
+                limit.isHardConstraint
+                  ? "bg-red-100 text-red-700"
+                  : "bg-yellow-100 text-yellow-700"
+              }`}
+            >
               {limit.isHardConstraint ? "Hard" : "Soft"}
             </span>
             <span>Weight: {limit.penaltyWeight}</span>
@@ -369,7 +438,10 @@ const DailyLimitsTab = ({
 
   const renderMonthlyLimitCard = (limit) => {
     return (
-      <div key={limit.id} className="bg-white rounded-xl border border-gray-200 p-6 hover:shadow-md transition-shadow">
+      <div
+        key={limit.id}
+        className="bg-white rounded-xl border border-gray-200 p-6 hover:shadow-md transition-shadow"
+      >
         {/* Header */}
         <div className="flex items-start justify-between mb-4">
           <div className="flex items-center gap-3">
@@ -377,13 +449,16 @@ const DailyLimitsTab = ({
               <Calendar size={20} className="text-green-600" />
             </div>
             <div>
-              <h3 className="text-lg font-semibold text-gray-800">{limit.name}</h3>
+              <h3 className="text-lg font-semibold text-gray-800">
+                {limit.name}
+              </h3>
               <p className="text-sm text-gray-600">
-                {limit.limitType.replace(/_/g, " ")} • Max {limit.maxCount} per month
+                {limit.limitType.replace(/_/g, " ")} • Max {limit.maxCount} per
+                month
               </p>
             </div>
           </div>
-          
+
           <div className="flex items-center gap-2">
             <button
               onClick={() => deleteMonthlyLimit(limit.id)}
@@ -402,7 +477,7 @@ const DailyLimitsTab = ({
         {/* Distribution Rules */}
         <div className="space-y-3">
           <h4 className="font-medium text-gray-800">Distribution Rules</h4>
-          
+
           <div className="grid grid-cols-2 gap-4">
             <div>
               <NumberInput
@@ -410,28 +485,32 @@ const DailyLimitsTab = ({
                 value={limit.distributionRules?.minDaysBetween || 1}
                 min={0}
                 max={7}
-                onChange={(value) => updateMonthlyLimit(limit.id, {
-                  distributionRules: {
-                    ...limit.distributionRules,
-                    minDaysBetween: value
-                  }
-                })}
+                onChange={(value) =>
+                  updateMonthlyLimit(limit.id, {
+                    distributionRules: {
+                      ...limit.distributionRules,
+                      minDaysBetween: value,
+                    },
+                  })
+                }
                 size="small"
               />
             </div>
-            
+
             <div>
               <NumberInput
                 label="Max Consecutive"
                 value={limit.distributionRules?.maxConsecutive || 2}
                 min={1}
                 max={7}
-                onChange={(value) => updateMonthlyLimit(limit.id, {
-                  distributionRules: {
-                    ...limit.distributionRules,
-                    maxConsecutive: value
-                  }
-                })}
+                onChange={(value) =>
+                  updateMonthlyLimit(limit.id, {
+                    distributionRules: {
+                      ...limit.distributionRules,
+                      maxConsecutive: value,
+                    },
+                  })
+                }
                 size="small"
               />
             </div>
@@ -440,22 +519,26 @@ const DailyLimitsTab = ({
           <ToggleSwitch
             label="Prefer Weekends"
             checked={limit.distributionRules?.preferWeekends || false}
-            onChange={(checked) => updateMonthlyLimit(limit.id, {
-              distributionRules: {
-                ...limit.distributionRules,
-                preferWeekends: checked
-              }
-            })}
+            onChange={(checked) =>
+              updateMonthlyLimit(limit.id, {
+                distributionRules: {
+                  ...limit.distributionRules,
+                  preferWeekends: checked,
+                },
+              })
+            }
             size="small"
           />
         </div>
 
         <div className="mt-4 flex items-center gap-4 text-sm text-gray-600">
-          <span className={`px-2 py-1 rounded text-xs ${
-            limit.isHardConstraint
-              ? "bg-red-100 text-red-700"
-              : "bg-yellow-100 text-yellow-700"
-          }`}>
+          <span
+            className={`px-2 py-1 rounded text-xs ${
+              limit.isHardConstraint
+                ? "bg-red-100 text-red-700"
+                : "bg-yellow-100 text-yellow-700"
+            }`}
+          >
             {limit.isHardConstraint ? "Hard" : "Soft"}
           </span>
           <span>Weight: {limit.penaltyWeight}</span>
@@ -469,9 +552,12 @@ const DailyLimitsTab = ({
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-2xl font-bold text-gray-800">Daily & Monthly Limits</h2>
+          <h2 className="text-2xl font-bold text-gray-800">
+            Daily & Monthly Limits
+          </h2>
           <p className="text-gray-600">
-            Configure scheduling limits and constraints for better work-life balance.
+            Configure scheduling limits and constraints for better work-life
+            balance.
           </p>
         </div>
       </div>
@@ -495,12 +581,14 @@ const DailyLimitsTab = ({
       <div className="space-y-6">
         <div className="flex items-center justify-between">
           <div>
-            <h3 className="text-xl font-semibold text-gray-800">Daily Limits</h3>
+            <h3 className="text-xl font-semibold text-gray-800">
+              Daily Limits
+            </h3>
             <p className="text-gray-600 text-sm">
               Set maximum counts for shift types per day.
             </p>
           </div>
-          
+
           <button
             onClick={createNewDailyLimit}
             className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
@@ -517,9 +605,12 @@ const DailyLimitsTab = ({
         ) : (
           <div className="text-center py-12 bg-gray-50 rounded-xl">
             <Clock size={48} className="mx-auto text-gray-400 mb-4" />
-            <h3 className="text-lg font-medium text-gray-800 mb-2">No Daily Limits</h3>
+            <h3 className="text-lg font-medium text-gray-800 mb-2">
+              No Daily Limits
+            </h3>
             <p className="text-gray-600 mb-4">
-              Create daily limits to control how many staff can have the same shift type per day.
+              Create daily limits to control how many staff can have the same
+              shift type per day.
             </p>
             <button
               onClick={createNewDailyLimit}
@@ -536,12 +627,14 @@ const DailyLimitsTab = ({
       <div className="space-y-6">
         <div className="flex items-center justify-between">
           <div>
-            <h3 className="text-xl font-semibold text-gray-800">Monthly Limits</h3>
+            <h3 className="text-xl font-semibold text-gray-800">
+              Monthly Limits
+            </h3>
             <p className="text-gray-600 text-sm">
               Set monthly constraints and distribution rules.
             </p>
           </div>
-          
+
           <button
             onClick={createNewMonthlyLimit}
             className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
@@ -558,9 +651,12 @@ const DailyLimitsTab = ({
         ) : (
           <div className="text-center py-12 bg-gray-50 rounded-xl">
             <Calendar size={48} className="mx-auto text-gray-400 mb-4" />
-            <h3 className="text-lg font-medium text-gray-800 mb-2">No Monthly Limits</h3>
+            <h3 className="text-lg font-medium text-gray-800 mb-2">
+              No Monthly Limits
+            </h3>
             <p className="text-gray-600 mb-4">
-              Create monthly limits to ensure fair distribution of off days and shift patterns.
+              Create monthly limits to ensure fair distribution of off days and
+              shift patterns.
             </p>
             <button
               onClick={createNewMonthlyLimit}

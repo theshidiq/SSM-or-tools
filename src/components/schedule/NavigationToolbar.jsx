@@ -49,7 +49,7 @@ const NavigationToolbar = ({
   onShowSettings,
 }) => {
   const [showAIModal, setShowAIModal] = useState(false);
-  
+
   const {
     isInitialized,
     isProcessing,
@@ -60,8 +60,13 @@ const NavigationToolbar = ({
     systemType,
     systemHealth,
     isEnhanced,
-    isMLReady
-  } = useAIAssistant(scheduleData, staffMembers, currentMonthIndex, updateSchedule);
+    isMLReady,
+  } = useAIAssistant(
+    scheduleData,
+    staffMembers,
+    currentMonthIndex,
+    updateSchedule,
+  );
 
   // Initialize AI on first render
   useEffect(() => {
@@ -262,27 +267,29 @@ const NavigationToolbar = ({
           <button
             onClick={handleAIClick}
             className={`flex items-center px-3 py-2 h-10 text-sm font-medium rounded-lg border transition-all duration-200 ${
-              isProcessing 
-                ? 'border-yellow-400 bg-yellow-50 animate-pulse' 
+              isProcessing
+                ? "border-yellow-400 bg-yellow-50 animate-pulse"
                 : isEnhanced && isMLReady && isMLReady()
-                  ? 'border-violet-400 bg-violet-50 hover:bg-violet-100'
-                  : 'border-gray-300 bg-white hover:border-gray-400'
+                  ? "border-violet-400 bg-violet-50 hover:bg-violet-100"
+                  : "border-gray-300 bg-white hover:border-gray-400"
             } focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-violet-500`}
             title={`${
-              isEnhanced 
-                ? (isMLReady && isMLReady() ? 'ハイブリッドAI (ML準備完了)' : 'ハイブリッドAI (ML初期化中)')
-                : 'AI Assistant'
+              isEnhanced
+                ? isMLReady && isMLReady()
+                  ? "ハイブリッドAI (ML準備完了)"
+                  : "ハイブリッドAI (ML初期化中)"
+                : "AI Assistant"
             }`}
             disabled={isProcessing}
           >
             <Sparkles
               size={16}
               className={`${
-                isProcessing 
-                  ? 'text-yellow-600 animate-spin' 
+                isProcessing
+                  ? "text-yellow-600 animate-spin"
                   : isEnhanced
-                    ? 'text-violet-600 hover:text-violet-700'
-                    : 'text-gray-600 hover:text-gray-700'
+                    ? "text-violet-600 hover:text-violet-700"
+                    : "text-gray-600 hover:text-gray-700"
               }`}
             />
           </button>
@@ -317,10 +324,7 @@ const NavigationToolbar = ({
             className="flex items-center px-3 py-2 h-10 text-sm font-medium rounded-lg border border-gray-300 bg-white hover:border-gray-400 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-all duration-200"
             title="Settings - Configure ML models and business rules"
           >
-            <Settings
-              size={16}
-              className="text-blue-600 hover:text-blue-700"
-            />
+            <Settings size={16} className="text-blue-600 hover:text-blue-700" />
           </button>
 
           {/* Delete Current Period */}

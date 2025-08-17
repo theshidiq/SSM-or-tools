@@ -53,14 +53,16 @@ const ToggleSwitch = ({
           <p className="text-xs text-gray-500 mt-1">{description}</p>
         )}
       </div>
-      
+
       <div className="flex items-center gap-3">
         {showLabels && (
-          <span className={`text-sm ${!checked ? "font-medium text-gray-900" : "text-gray-500"}`}>
+          <span
+            className={`text-sm ${!checked ? "font-medium text-gray-900" : "text-gray-500"}`}
+          >
             {offLabel}
           </span>
         )}
-        
+
         <button
           type="button"
           role="switch"
@@ -72,8 +74,8 @@ const ToggleSwitch = ({
             disabled
               ? "opacity-50 cursor-not-allowed bg-gray-200"
               : checked
-              ? activeColor
-              : "bg-gray-200"
+                ? activeColor
+                : "bg-gray-200"
           }`}
         >
           <span
@@ -83,9 +85,11 @@ const ToggleSwitch = ({
             }`}
           />
         </button>
-        
+
         {showLabels && (
-          <span className={`text-sm ${checked ? "font-medium text-gray-900" : "text-gray-500"}`}>
+          <span
+            className={`text-sm ${checked ? "font-medium text-gray-900" : "text-gray-500"}`}
+          >
             {onLabel}
           </span>
         )}

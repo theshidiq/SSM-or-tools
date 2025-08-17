@@ -1,12 +1,12 @@
 /**
  * BusinessRuleValidator.js
- * 
+ *
  * Business rule validation system for schedule predictions.
  * Ensures predictions comply with labor laws, staffing requirements,
  * and restaurant operational constraints.
  */
 
-import { 
+import {
   validateAllConstraints,
   validateMonthlyOffLimits,
   validateDailyLimits,
@@ -31,31 +31,30 @@ import {
   isNormalShift,
   isWorkingShift,
   isWeekday,
-  getDayOfWeek
-} from '../constraints/ConstraintEngine';
-
-import { ConfigurationService } from '../../services/ConfigurationService.js';
+  getDayOfWeek,
+} from "../constraints/ConstraintEngine";
+import { ConfigurationService } from "../../services/ConfigurationService.js";
 
 export class BusinessRuleValidator {
   constructor() {
     this.initialized = false;
-    this.status = 'idle';
+    this.status = "idle";
     this.validationHistory = [];
     this.correctionStrategies = new Map();
     this.metrics = {
       validationsPerformed: 0,
       violationsFound: 0,
       correctionsApplied: 0,
-      successRate: 0
+      successRate: 0,
     };
-    
+
     // Configuration service integration
     this.configService = null;
     this.restaurantId = null;
     this.configurationCache = new Map();
     this.lastConfigRefresh = 0;
     this.configRefreshInterval = 5 * 60 * 1000; // 5 minutes
-    
+
     // Initialize correction strategies
     this.initializeCorrectionStrategies();
   }
@@ -72,7 +71,7 @@ export class BusinessRuleValidator {
         prioritizeStaffSatisfaction: true,
         prioritizeOperationalNeeds: true,
         maxCorrectionAttempts: 3,
-        ...options
+        ...options,
       };
 
       // Extract restaurant ID for configuration service
@@ -82,15 +81,24 @@ export class BusinessRuleValidator {
       if (this.restaurantId) {
         try {
           // Initialize constraint engine configuration
-          this.configService = await initializeConstraintConfiguration(this.restaurantId);
-          
+          this.configService = await initializeConstraintConfiguration(
+            this.restaurantId,
+          );
+
           if (!this.configService) {
-            console.warn('⚠️ Configuration service not available, using fallback static configuration');
+            console.warn(
+              "⚠️ Configuration service not available, using fallback static configuration",
+            );
           } else {
-            console.log('✅ Configuration service integrated with BusinessRuleValidator');
+            console.log(
+              "✅ Configuration service integrated with BusinessRuleValidator",
+            );
           }
         } catch (error) {
-          console.warn('⚠️ Configuration service initialization failed, using static fallback:', error);
+          console.warn(
+            "⚠️ Configuration service initialization failed, using static fallback:",
+            error,
+          );
           this.configService = null;
         }
       }
@@ -99,12 +107,11 @@ export class BusinessRuleValidator {
       await this.refreshConfiguration();
 
       this.initialized = true;
-      this.status = 'ready';
-      console.log('✅ BusinessRuleValidator initialized');
-
+      this.status = "ready";
+      console.log("✅ BusinessRuleValidator initialized");
     } catch (error) {
-      this.status = 'error';
-      console.error('❌ BusinessRuleValidator initialization failed:', error);
+      this.status = "error";
+      console.error("❌ BusinessRuleValidator initialization failed:", error);
       throw error;
     }
   }
@@ -114,7 +121,7 @@ export class BusinessRuleValidator {
    * @returns {boolean} Ready status
    */
   isReady() {
-    return this.initialized && this.status === 'ready';
+    return this.initialized && this.status === "ready";
   }
 
   /**
@@ -132,24 +139,24 @@ export class BusinessRuleValidator {
       }
 
       // Load configurations
-      const [dailyLimits, monthlyLimits, priorityRules, staffGroups] = await Promise.all([
-        getDailyLimits(),
-        getMonthlyLimits(new Date().getFullYear(), new Date().getMonth() + 1),
-        getPriorityRules(),
-        getStaffConflictGroups()
-      ]);
+      const [dailyLimits, monthlyLimits, priorityRules, staffGroups] =
+        await Promise.all([
+          getDailyLimits(),
+          getMonthlyLimits(new Date().getFullYear(), new Date().getMonth() + 1),
+          getPriorityRules(),
+          getStaffConflictGroups(),
+        ]);
 
       // Cache configurations
-      this.configurationCache.set('dailyLimits', dailyLimits);
-      this.configurationCache.set('monthlyLimits', monthlyLimits);
-      this.configurationCache.set('priorityRules', priorityRules);
-      this.configurationCache.set('staffGroups', staffGroups);
-      
-      this.lastConfigRefresh = now;
-      console.log('🔄 BusinessRuleValidator configuration refreshed');
+      this.configurationCache.set("dailyLimits", dailyLimits);
+      this.configurationCache.set("monthlyLimits", monthlyLimits);
+      this.configurationCache.set("priorityRules", priorityRules);
+      this.configurationCache.set("staffGroups", staffGroups);
 
+      this.lastConfigRefresh = now;
+      console.log("🔄 BusinessRuleValidator configuration refreshed");
     } catch (error) {
-      console.warn('⚠️ Configuration refresh failed:', error);
+      console.warn("⚠️ Configuration refresh failed:", error);
       // Continue using cached or static configuration
     }
   }
@@ -160,58 +167,61 @@ export class BusinessRuleValidator {
   initializeCorrectionStrategies() {
     // Monthly off limit corrections
     this.correctionStrategies.set(VIOLATION_TYPES.MONTHLY_OFF_LIMIT, {
-      priority: 'high',
+      priority: "high",
       strategy: this.correctMonthlyOffLimit.bind(this),
-      description: 'Reduce excessive off days for staff member'
+      description: "Reduce excessive off days for staff member",
     });
 
     // Daily off limit corrections
     this.correctionStrategies.set(VIOLATION_TYPES.DAILY_OFF_LIMIT, {
-      priority: 'high',
+      priority: "high",
       strategy: this.correctDailyOffLimit.bind(this),
-      description: 'Redistribute off days to ensure adequate coverage'
+      description: "Redistribute off days to ensure adequate coverage",
     });
 
     // Staff group conflict corrections
     this.correctionStrategies.set(VIOLATION_TYPES.STAFF_GROUP_CONFLICT, {
-      priority: 'high',
+      priority: "high",
       strategy: this.correctStaffGroupConflict.bind(this),
-      description: 'Resolve conflicts between grouped staff members'
+      description: "Resolve conflicts between grouped staff members",
     });
 
     // Priority rule corrections
     this.correctionStrategies.set(VIOLATION_TYPES.PRIORITY_RULE_VIOLATION, {
-      priority: 'medium',
+      priority: "medium",
       strategy: this.correctPriorityRuleViolation.bind(this),
-      description: 'Apply staff priority preferences'
+      description: "Apply staff priority preferences",
     });
 
     // Coverage compensation corrections
-    this.correctionStrategies.set(VIOLATION_TYPES.COVERAGE_COMPENSATION_VIOLATION, {
-      priority: 'high',
-      strategy: this.correctCoverageCompensation.bind(this),
-      description: 'Ensure backup staff coverage when primary staff is off'
-    });
+    this.correctionStrategies.set(
+      VIOLATION_TYPES.COVERAGE_COMPENSATION_VIOLATION,
+      {
+        priority: "high",
+        strategy: this.correctCoverageCompensation.bind(this),
+        description: "Ensure backup staff coverage when primary staff is off",
+      },
+    );
 
     // Insufficient coverage corrections
     this.correctionStrategies.set(VIOLATION_TYPES.INSUFFICIENT_COVERAGE, {
-      priority: 'critical',
+      priority: "critical",
       strategy: this.correctInsufficientCoverage.bind(this),
-      description: 'Increase staffing to meet minimum requirements'
+      description: "Increase staffing to meet minimum requirements",
     });
 
     // Consecutive days off corrections
     this.correctionStrategies.set(VIOLATION_TYPES.CONSECUTIVE_DAYS_OFF, {
-      priority: 'medium',
+      priority: "medium",
       strategy: this.correctConsecutiveDaysOff.bind(this),
-      description: 'Break up long consecutive off periods'
+      description: "Break up long consecutive off periods",
     });
 
     // Proximity pattern corrections
     this.correctionStrategies.set(VIOLATION_TYPES.PROXIMITY_PATTERN_VIOLATION, {
-      priority: 'medium',
+      priority: "medium",
       strategy: this.correctProximityPattern.bind(this),
-      description: 'Adjust related staff off day patterns'
+      description: "Adjust related staff off day patterns",
     });
   }
 
@@ -224,40 +234,45 @@ export class BusinessRuleValidator {
    */
   async validateSchedule(schedule, staffMembers, dateRange) {
     if (!this.isReady()) {
-      throw new Error('BusinessRuleValidator not initialized');
+      throw new Error("BusinessRuleValidator not initialized");
     }
 
-    this.status = 'validating';
+    this.status = "validating";
     const startTime = Date.now();
 
     try {
-      console.log('🔍 Validating schedule against business rules...');
+      console.log("🔍 Validating schedule against business rules...");
 
       // Refresh configuration if needed
       await this.refreshConfiguration();
 
       // Perform comprehensive constraint validation
-      const validationResult = await validateAllConstraints(schedule, staffMembers, dateRange);
+      const validationResult = await validateAllConstraints(
+        schedule,
+        staffMembers,
+        dateRange,
+      );
 
       // Additional business-specific validations
-      const businessSpecificValidation = await this.performBusinessSpecificValidation(
-        schedule, 
-        staffMembers, 
-        dateRange
-      );
+      const businessSpecificValidation =
+        await this.performBusinessSpecificValidation(
+          schedule,
+          staffMembers,
+          dateRange,
+        );
 
       // Combine results
       const combinedResult = {
         valid: validationResult.valid && businessSpecificValidation.valid,
         violations: [
           ...(validationResult.violations || []),
-          ...(businessSpecificValidation.violations || [])
+          ...(businessSpecificValidation.violations || []),
         ],
         summary: {
           ...validationResult.summary,
           businessSpecific: businessSpecificValidation.summary,
-          processingTime: Date.now() - startTime
-        }
+          processingTime: Date.now() - startTime,
+        },
       };
 
       // Update metrics
@@ -268,17 +283,18 @@ export class BusinessRuleValidator {
         timestamp: new Date().toISOString(),
         valid: combinedResult.valid,
         violationCount: combinedResult.violations.length,
-        processingTime: combinedResult.summary.processingTime
+        processingTime: combinedResult.summary.processingTime,
       });
 
-      this.status = 'ready';
-      console.log(`🎯 Validation completed: ${combinedResult.valid ? 'VALID' : 'VIOLATIONS'} (${combinedResult.summary.processingTime}ms)`);
+      this.status = "ready";
+      console.log(
+        `🎯 Validation completed: ${combinedResult.valid ? "VALID" : "VIOLATIONS"} (${combinedResult.summary.processingTime}ms)`,
+      );
 
       return combinedResult;
-
     } catch (error) {
-      this.status = 'error';
-      console.error('❌ Schedule validation failed:', error);
+      this.status = "error";
+      console.error("❌ Schedule validation failed:", error);
       throw error;
     }
   }
@@ -295,40 +311,64 @@ export class BusinessRuleValidator {
     const metrics = {
       laborLawCompliance: true,
       operationalEfficiency: 0,
-      staffSatisfaction: 0
+      staffSatisfaction: 0,
     };
 
     try {
       // Check labor law compliance (maximum consecutive work days)
-      await this.validateLaborLawCompliance(schedule, staffMembers, dateRange, violations);
+      await this.validateLaborLawCompliance(
+        schedule,
+        staffMembers,
+        dateRange,
+        violations,
+      );
 
       // Check operational efficiency
-      metrics.operationalEfficiency = await this.calculateOperationalEfficiency(schedule, staffMembers, dateRange);
+      metrics.operationalEfficiency = await this.calculateOperationalEfficiency(
+        schedule,
+        staffMembers,
+        dateRange,
+      );
 
       // Check staff satisfaction indicators
-      metrics.staffSatisfaction = await this.calculateStaffSatisfaction(schedule, staffMembers, dateRange);
+      metrics.staffSatisfaction = await this.calculateStaffSatisfaction(
+        schedule,
+        staffMembers,
+        dateRange,
+      );
 
       // Validate seasonal/holiday requirements
-      await this.validateSeasonalRequirements(schedule, staffMembers, dateRange, violations);
+      await this.validateSeasonalRequirements(
+        schedule,
+        staffMembers,
+        dateRange,
+        violations,
+      );
 
       return {
         valid: violations.length === 0,
         violations,
         summary: {
           metrics,
-          checksPerformed: ['labor_law', 'operational_efficiency', 'staff_satisfaction', 'seasonal_requirements']
-        }
+          checksPerformed: [
+            "labor_law",
+            "operational_efficiency",
+            "staff_satisfaction",
+            "seasonal_requirements",
+          ],
+        },
       };
-
     } catch (error) {
       return {
         valid: false,
-        violations: [{
-          type: 'business_validation_error',
-          message: `Business validation failed: ${error.message}`,
-          severity: 'critical'
-        }],
-        summary: { error: error.message }
+        violations: [
+          {
+            type: "business_validation_error",
+            message: `Business validation failed: ${error.message}`,
+            severity: "critical",
+          },
+        ],
+        summary: { error: error.message },
       };
     }
   }
@@ -340,18 +380,23 @@ export class BusinessRuleValidator {
    * @param {Array} dateRange - Date range
    * @param {Array} violations - Violations array to populate
    */
-  async validateLaborLawCompliance(schedule, staffMembers, dateRange, violations) {
+  async validateLaborLawCompliance(
+    schedule,
+    staffMembers,
+    dateRange,
+    violations,
+  ) {
     const MAX_CONSECUTIVE_WORK_DAYS = 6; // Japanese labor standard
 
-    staffMembers.forEach(staff => {
+    staffMembers.forEach((staff) => {
       if (!schedule[staff.id]) return;
 
       let consecutiveWorkDays = 0;
       let maxConsecutive = 0;
       let currentStreak = [];
 
-      dateRange.forEach(date => {
-        const dateKey = date.toISOString().split('T')[0];
+      dateRange.forEach((date) => {
+        const dateKey = date.toISOString().split("T")[0];
         const shift = schedule[staff.id][dateKey];
 
         if (shift !== undefined && isWorkingShift(shift)) {
@@ -361,15 +406,15 @@ export class BusinessRuleValidator {
         } else {
           if (consecutiveWorkDays > MAX_CONSECUTIVE_WORK_DAYS) {
             violations.push({
-              type: 'labor_law_violation',
+              type: "labor_law_violation",
               staffName: staff.name,
               message: `${staff.name} has ${consecutiveWorkDays} consecutive work days, exceeding legal limit of ${MAX_CONSECUTIVE_WORK_DAYS}`,
-              severity: 'critical',
+              severity: "critical",
               details: {
                 consecutiveDays: currentStreak.length,
                 limit: MAX_CONSECUTIVE_WORK_DAYS,
-                period: currentStreak
-              }
+                period: currentStreak,
+              },
             });
           }
           consecutiveWorkDays = 0;
@@ -380,15 +425,15 @@ export class BusinessRuleValidator {
       // Check final streak
       if (consecutiveWorkDays > MAX_CONSECUTIVE_WORK_DAYS) {
         violations.push({
-          type: 'labor_law_violation',
+          type: "labor_law_violation",
           staffName: staff.name,
           message: `${staff.name} has ${consecutiveWorkDays} consecutive work days at period end, exceeding legal limit`,
-          severity: 'critical',
+          severity: "critical",
           details: {
             consecutiveDays: currentStreak.length,
             limit: MAX_CONSECUTIVE_WORK_DAYS,
-            period: currentStreak
-          }
+            period: currentStreak,
+          },
         });
       }
     });
@@ -405,15 +450,15 @@ export class BusinessRuleValidator {
     let totalCoverage = 0;
     let optimalCoverage = 0;
 
-    dateRange.forEach(date => {
-      const dateKey = date.toISOString().split('T')[0];
+    dateRange.forEach((date) => {
+      const dateKey = date.toISOString().split("T")[0];
       const dayOfWeek = getDayOfWeek(dateKey);
-      
+
       let workingStaff = 0;
       let earlyShifts = 0;
       let lateShifts = 0;
 
-      staffMembers.forEach(staff => {
+      staffMembers.forEach((staff) => {
         if (schedule[staff.id] && schedule[staff.id][dateKey]) {
           const shift = schedule[staff.id][dateKey];
           if (isWorkingShift(shift)) {
@@ -425,9 +470,11 @@ export class BusinessRuleValidator {
       });
 
       // Define optimal staffing based on day of week
-      const isWeekendDay = dayOfWeek === 'saturday' || dayOfWeek === 'sunday';
-      const optimalStaff = isWeekendDay ? Math.ceil(staffMembers.length * 0.8) : Math.ceil(staffMembers.length * 0.9);
-      
+      const isWeekendDay = dayOfWeek === "saturday" || dayOfWeek === "sunday";
+      const optimalStaff = isWeekendDay
+        ? Math.ceil(staffMembers.length * 0.8)
+        : Math.ceil(staffMembers.length * 0.9);
+
       totalCoverage += Math.min(workingStaff / optimalStaff, 1.0);
       optimalCoverage += 1.0;
     });
@@ -446,7 +493,7 @@ export class BusinessRuleValidator {
     let totalSatisfaction = 0;
     let staffCount = 0;
 
-    staffMembers.forEach(staff => {
+    staffMembers.forEach((staff) => {
       if (!schedule[staff.id]) return;
 
       let staffSatisfaction = 100; // Start with perfect score
@@ -455,11 +502,11 @@ export class BusinessRuleValidator {
       let weekendWork = 0;
       let weekendOff = 0;
 
-      dateRange.forEach(date => {
-        const dateKey = date.toISOString().split('T')[0];
+      dateRange.forEach((date) => {
+        const dateKey = date.toISOString().split("T")[0];
         const shift = schedule[staff.id][dateKey];
         const dayOfWeek = getDayOfWeek(dateKey);
-        const isWeekendDay = dayOfWeek === 'saturday' || dayOfWeek === 'sunday';
+        const isWeekendDay = dayOfWeek === "saturday" || dayOfWeek === "sunday";
 
         if (shift !== undefined) {
           if (isWorkingShift(shift)) {
@@ -475,14 +522,15 @@ export class BusinessRuleValidator {
       // Adjust satisfaction based on work-life balance
       const workRatio = workDays / (workDays + offDays);
       if (workRatio > 0.85) staffSatisfaction -= 20; // Too much work
-      if (workRatio < 0.60) staffSatisfaction -= 10; // Too little work
+      if (workRatio < 0.6) staffSatisfaction -= 10; // Too little work
 
       // Weekend work balance
       const weekendWorkRatio = weekendWork / (weekendWork + weekendOff);
-      if (weekendWorkRatio > 0.70) staffSatisfaction -= 15; // Too many weekends
-      
+      if (weekendWorkRatio > 0.7) staffSatisfaction -= 15; // Too many weekends
+
       // Priority rule satisfaction
-      const priorityRules = this.configurationCache.get('priorityRules') || PRIORITY_RULES;
+      const priorityRules =
+        this.configurationCache.get("priorityRules") || PRIORITY_RULES;
       if (priorityRules[staff.name] || priorityRules[staff.id]) {
         // Check if priority rules are followed (simplified check)
         staffSatisfaction += 10; // Bonus for having priority rules considered
@@ -502,19 +550,27 @@ export class BusinessRuleValidator {
    * @param {Array} dateRange - Date range
    * @param {Array} violations - Violations array to populate
    */
-  async validateSeasonalRequirements(schedule, staffMembers, dateRange, violations) {
+  async validateSeasonalRequirements(
+    schedule,
+    staffMembers,
+    dateRange,
+    violations,
+  ) {
     // Check for holiday coverage (simplified - could be enhanced)
-    dateRange.forEach(date => {
-      const dayOfWeek = getDayOfWeek(date.toISOString().split('T')[0]);
-      
+    dateRange.forEach((date) => {
+      const dayOfWeek = getDayOfWeek(date.toISOString().split("T")[0]);
+
       // Weekend and holiday coverage requirements
-      if (dayOfWeek === 'saturday' || dayOfWeek === 'sunday') {
-        const dateKey = date.toISOString().split('T')[0];
+      if (dayOfWeek === "saturday" || dayOfWeek === "sunday") {
+        const dateKey = date.toISOString().split("T")[0];
         let workingStaff = 0;
 
-        staffMembers.forEach(staff => {
-          if (schedule[staff.id] && schedule[staff.id][dateKey] && 
-              isWorkingShift(schedule[staff.id][dateKey])) {
+        staffMembers.forEach((staff) => {
+          if (
+            schedule[staff.id] &&
+            schedule[staff.id][dateKey] &&
+            isWorkingShift(schedule[staff.id][dateKey])
+          ) {
             workingStaff++;
           }
         });
@@ -522,15 +578,15 @@ export class BusinessRuleValidator {
         const minWeekendStaff = Math.ceil(staffMembers.length * 0.6);
         if (workingStaff < minWeekendStaff) {
           violations.push({
-            type: 'weekend_coverage_violation',
+            type: "weekend_coverage_violation",
             date: dateKey,
             message: `Insufficient weekend coverage on ${dateKey}: ${workingStaff} staff, need at least ${minWeekendStaff}`,
-            severity: 'high',
+            severity: "high",
             details: {
               workingStaff,
               requiredMinimum: minWeekendStaff,
-              deficit: minWeekendStaff - workingStaff
-            }
+              deficit: minWeekendStaff - workingStaff,
+            },
           });
         }
       }
@@ -547,18 +603,24 @@ export class BusinessRuleValidator {
    */
   async correctViolation(schedule, violation, staffMembers, dateRange) {
     const strategy = this.correctionStrategies.get(violation.type);
-    
+
     if (!strategy) {
-      console.warn(`⚠️ No correction strategy found for violation type: ${violation.type}`);
+      console.warn(
+        `⚠️ No correction strategy found for violation type: ${violation.type}`,
+      );
       return schedule; // Return unchanged schedule
     }
 
     try {
       console.log(`🔧 Applying correction for ${violation.type}...`);
-      const correctedSchedule = await strategy.strategy(schedule, violation, staffMembers, dateRange);
+      const correctedSchedule = await strategy.strategy(
+        schedule,
+        violation,
+        staffMembers,
+        dateRange,
+      );
       this.metrics.correctionsApplied++;
       return correctedSchedule;
-
     } catch (error) {
       console.error(`❌ Correction failed for ${violation.type}:`, error);
       return schedule; // Return unchanged schedule on error
@@ -575,8 +637,10 @@ export class BusinessRuleValidator {
    */
   async correctMonthlyOffLimit(schedule, violation, staffMembers, dateRange) {
     const correctedSchedule = JSON.parse(JSON.stringify(schedule));
-    const staffMember = staffMembers.find(s => s.name === violation.staffName);
-    
+    const staffMember = staffMembers.find(
+      (s) => s.name === violation.staffName,
+    );
+
     if (!staffMember || !violation.details.offDays) {
       return correctedSchedule;
     }
@@ -584,11 +648,11 @@ export class BusinessRuleValidator {
     // Convert excess off days to working days
     const excessDays = violation.details.excess;
     const offDays = violation.details.offDays.slice(); // Copy array
-    
+
     for (let i = 0; i < Math.min(excessDays, offDays.length); i++) {
       const dateKey = offDays[i];
       // Convert to normal working shift
-      correctedSchedule[staffMember.id][dateKey] = '';
+      correctedSchedule[staffMember.id][dateKey] = "";
     }
 
     return correctedSchedule;
@@ -611,10 +675,10 @@ export class BusinessRuleValidator {
     // Convert some off staff to working
     for (let i = 0; i < Math.min(excess, staffOff.length); i++) {
       const staffName = staffOff[i];
-      const staffMember = staffMembers.find(s => s.name === staffName);
-      
+      const staffMember = staffMembers.find((s) => s.name === staffName);
+
       if (staffMember && correctedSchedule[staffMember.id]) {
-        correctedSchedule[staffMember.id][dateKey] = ''; // Normal shift
+        correctedSchedule[staffMember.id][dateKey] = ""; // Normal shift
       }
     }
 
@@ -629,18 +693,23 @@ export class BusinessRuleValidator {
    * @param {Array} dateRange - Date range
    * @returns {Object} Corrected schedule
    */
-  async correctStaffGroupConflict(schedule, violation, staffMembers, dateRange) {
+  async correctStaffGroupConflict(
+    schedule,
+    violation,
+    staffMembers,
+    dateRange,
+  ) {
     const correctedSchedule = JSON.parse(JSON.stringify(schedule));
     const dateKey = violation.date;
     const conflictingMembers = violation.details.conflictingMembers || [];
 
     // Change the first conflicting member to working shift
     if (conflictingMembers.length > 0) {
-      const memberInfo = conflictingMembers[0].split(' (')[0]; // Extract name
-      const staffMember = staffMembers.find(s => s.name === memberInfo);
-      
+      const memberInfo = conflictingMembers[0].split(" (")[0]; // Extract name
+      const staffMember = staffMembers.find((s) => s.name === memberInfo);
+
       if (staffMember && correctedSchedule[staffMember.id]) {
-        correctedSchedule[staffMember.id][dateKey] = ''; // Normal shift
+        correctedSchedule[staffMember.id][dateKey] = ""; // Normal shift
       }
     }
 
@@ -655,9 +724,16 @@ export class BusinessRuleValidator {
    * @param {Array} dateRange - Date range
    * @returns {Object} Corrected schedule
    */
-  async correctPriorityRuleViolation(schedule, violation, staffMembers, dateRange) {
+  async correctPriorityRuleViolation(
+    schedule,
+    violation,
+    staffMembers,
+    dateRange,
+  ) {
     const correctedSchedule = JSON.parse(JSON.stringify(schedule));
-    const staffMember = staffMembers.find(s => s.name === violation.staffName);
+    const staffMember = staffMembers.find(
+      (s) => s.name === violation.staffName,
+    );
     const dateKey = violation.date;
 
     if (!staffMember || !correctedSchedule[staffMember.id]) {
@@ -666,20 +742,20 @@ export class BusinessRuleValidator {
 
     // Apply the expected shift from the priority rule
     const rule = violation.details.rule;
-    let targetShift = '';
+    let targetShift = "";
 
     switch (rule.shift) {
-      case 'early':
-        targetShift = '△';
+      case "early":
+        targetShift = "△";
         break;
-      case 'off':
-        targetShift = '×';
+      case "off":
+        targetShift = "×";
         break;
-      case 'late':
-        targetShift = '◇';
+      case "late":
+        targetShift = "◇";
         break;
       default:
-        targetShift = '';
+        targetShift = "";
     }
 
     correctedSchedule[staffMember.id][dateKey] = targetShift;
@@ -694,15 +770,20 @@ export class BusinessRuleValidator {
    * @param {Array} dateRange - Date range
    * @returns {Object} Corrected schedule
    */
-  async correctCoverageCompensation(schedule, violation, staffMembers, dateRange) {
+  async correctCoverageCompensation(
+    schedule,
+    violation,
+    staffMembers,
+    dateRange,
+  ) {
     const correctedSchedule = JSON.parse(JSON.stringify(schedule));
     const backupStaffName = violation.details.backupStaff;
     const dateKey = violation.date;
-    const backupStaff = staffMembers.find(s => s.name === backupStaffName);
+    const backupStaff = staffMembers.find((s) => s.name === backupStaffName);
 
     if (backupStaff && correctedSchedule[backupStaff.id]) {
       // Set backup staff to normal shift
-      correctedSchedule[backupStaff.id][dateKey] = '';
+      correctedSchedule[backupStaff.id][dateKey] = "";
     }
 
     return correctedSchedule;
@@ -716,7 +797,12 @@ export class BusinessRuleValidator {
    * @param {Array} dateRange - Date range
    * @returns {Object} Corrected schedule
    */
-  async correctInsufficientCoverage(schedule, violation, staffMembers, dateRange) {
+  async correctInsufficientCoverage(
+    schedule,
+    violation,
+    staffMembers,
+    dateRange,
+  ) {
     const correctedSchedule = JSON.parse(JSON.stringify(schedule));
     const dateKey = violation.date;
     const deficit = violation.details.deficit || 1;
@@ -725,10 +811,13 @@ export class BusinessRuleValidator {
     let convertedCount = 0;
     for (const staff of staffMembers) {
       if (convertedCount >= deficit) break;
-      
-      if (correctedSchedule[staff.id] && correctedSchedule[staff.id][dateKey] && 
-          isOffDay(correctedSchedule[staff.id][dateKey])) {
-        correctedSchedule[staff.id][dateKey] = ''; // Normal shift
+
+      if (
+        correctedSchedule[staff.id] &&
+        correctedSchedule[staff.id][dateKey] &&
+        isOffDay(correctedSchedule[staff.id][dateKey])
+      ) {
+        correctedSchedule[staff.id][dateKey] = ""; // Normal shift
         convertedCount++;
       }
     }
@@ -744,9 +833,16 @@ export class BusinessRuleValidator {
    * @param {Array} dateRange - Date range
    * @returns {Object} Corrected schedule
    */
-  async correctConsecutiveDaysOff(schedule, violation, staffMembers, dateRange) {
+  async correctConsecutiveDaysOff(
+    schedule,
+    violation,
+    staffMembers,
+    dateRange,
+  ) {
     const correctedSchedule = JSON.parse(JSON.stringify(schedule));
-    const staffMember = staffMembers.find(s => s.name === violation.staffName);
+    const staffMember = staffMembers.find(
+      (s) => s.name === violation.staffName,
+    );
     const consecutiveDays = violation.details.consecutiveDays || [];
 
     if (!staffMember || consecutiveDays.length === 0) {
@@ -756,9 +852,9 @@ export class BusinessRuleValidator {
     // Convert middle day of consecutive streak to working day
     const middleIndex = Math.floor(consecutiveDays.length / 2);
     const middleDate = consecutiveDays[middleIndex];
-    
+
     if (correctedSchedule[staffMember.id]) {
-      correctedSchedule[staffMember.id][middleDate] = ''; // Normal shift
+      correctedSchedule[staffMember.id][middleDate] = ""; // Normal shift
     }
 
     return correctedSchedule;
@@ -777,8 +873,8 @@ export class BusinessRuleValidator {
     const targetStaffName = violation.details.targetStaff;
     const triggerDate = new Date(violation.details.triggerOffDay);
     const proximityRange = violation.details.proximityRange || 2;
-    
-    const targetStaff = staffMembers.find(s => s.name === targetStaffName);
+
+    const targetStaff = staffMembers.find((s) => s.name === targetStaffName);
     if (!targetStaff || !correctedSchedule[targetStaff.id]) {
       return correctedSchedule;
     }
@@ -787,11 +883,13 @@ export class BusinessRuleValidator {
     for (let offset = 1; offset <= proximityRange; offset++) {
       const checkDate = new Date(triggerDate);
       checkDate.setDate(checkDate.getDate() + offset);
-      const checkDateKey = checkDate.toISOString().split('T')[0];
+      const checkDateKey = checkDate.toISOString().split("T")[0];
 
-      if (correctedSchedule[targetStaff.id][checkDateKey] !== undefined &&
-          !isOffDay(correctedSchedule[targetStaff.id][checkDateKey])) {
-        correctedSchedule[targetStaff.id][checkDateKey] = '×'; // Set as off day
+      if (
+        correctedSchedule[targetStaff.id][checkDateKey] !== undefined &&
+        !isOffDay(correctedSchedule[targetStaff.id][checkDateKey])
+      ) {
+        correctedSchedule[targetStaff.id][checkDateKey] = "×"; // Set as off day
         break;
       }
     }
@@ -808,15 +906,15 @@ export class BusinessRuleValidator {
    */
   async generateRuleBasedSchedule(inputData, staffMembers, dateRange) {
     try {
-      console.log('🎯 Generating rule-based schedule...');
-      
+      console.log("🎯 Generating rule-based schedule...");
+
       // Initialize empty schedule
       const schedule = {};
-      staffMembers.forEach(staff => {
+      staffMembers.forEach((staff) => {
         schedule[staff.id] = {};
-        dateRange.forEach(date => {
-          const dateKey = date.toISOString().split('T')[0];
-          schedule[staff.id][dateKey] = ''; // Start with normal shifts
+        dateRange.forEach((date) => {
+          const dateKey = date.toISOString().split("T")[0];
+          schedule[staff.id][dateKey] = ""; // Start with normal shifts
         });
       });
 
@@ -835,11 +933,10 @@ export class BusinessRuleValidator {
       // Final validation and adjustments
       await this.applyFinalAdjustments(schedule, staffMembers, dateRange);
 
-      console.log('✅ Rule-based schedule generated');
+      console.log("✅ Rule-based schedule generated");
       return schedule;
-
     } catch (error) {
-      console.error('❌ Rule-based schedule generation failed:', error);
+      console.error("❌ Rule-based schedule generation failed:", error);
       throw error;
     }
   }
@@ -852,38 +949,41 @@ export class BusinessRuleValidator {
    */
   async applyPriorityRules(schedule, staffMembers, dateRange) {
     // Get priority rules from cache or fallback to static
-    const priorityRules = this.configurationCache.get('priorityRules') || PRIORITY_RULES;
-    
-    Object.keys(priorityRules).forEach(staffIdentifier => {
+    const priorityRules =
+      this.configurationCache.get("priorityRules") || PRIORITY_RULES;
+
+    Object.keys(priorityRules).forEach((staffIdentifier) => {
       // Find staff by name or ID
-      const staff = staffMembers.find(s => s.name === staffIdentifier || s.id === staffIdentifier);
+      const staff = staffMembers.find(
+        (s) => s.name === staffIdentifier || s.id === staffIdentifier,
+      );
       if (!staff || !schedule[staff.id]) return;
 
       const rules = priorityRules[staffIdentifier];
       const preferredShifts = rules.preferredShifts || [];
-      
-      dateRange.forEach(date => {
-        const dateKey = date.toISOString().split('T')[0];
+
+      dateRange.forEach((date) => {
+        const dateKey = date.toISOString().split("T")[0];
         const dayOfWeek = getDayOfWeek(dateKey);
-        
-        preferredShifts.forEach(rule => {
+
+        preferredShifts.forEach((rule) => {
           if (rule.day === dayOfWeek) {
-            let shiftValue = '';
-            
+            let shiftValue = "";
+
             switch (rule.shift) {
-              case 'early':
-                shiftValue = '△';
+              case "early":
+                shiftValue = "△";
                 break;
-              case 'off':
-                shiftValue = '×';
+              case "off":
+                shiftValue = "×";
                 break;
-              case 'late':
-                shiftValue = '◇';
+              case "late":
+                shiftValue = "◇";
                 break;
               default:
-                shiftValue = '';
+                shiftValue = "";
             }
-            
+
             schedule[staff.id][dateKey] = shiftValue;
           }
         });
@@ -901,7 +1001,7 @@ export class BusinessRuleValidator {
     // This is a simplified implementation
     // In a full implementation, this would check all group constraints
     // and make adjustments to prevent conflicts
-    console.log('🔧 Applying staff group constraints...');
+    console.log("🔧 Applying staff group constraints...");
   }
 
   /**
@@ -912,40 +1012,46 @@ export class BusinessRuleValidator {
    */
   async distributeOffDays(schedule, staffMembers, dateRange) {
     // Use cached monthly limits or fallback
-    const cachedMonthlyLimits = this.configurationCache.get('monthlyLimits');
-    const monthLimits = cachedMonthlyLimits || await getMonthlyLimits(
-      dateRange[0].getFullYear(),
-      dateRange[0].getMonth() + 1
-    );
+    const cachedMonthlyLimits = this.configurationCache.get("monthlyLimits");
+    const monthLimits =
+      cachedMonthlyLimits ||
+      (await getMonthlyLimits(
+        dateRange[0].getFullYear(),
+        dateRange[0].getMonth() + 1,
+      ));
 
     // Use cached daily limits or fallback
-    const dailyLimits = this.configurationCache.get('dailyLimits') || DAILY_LIMITS;
+    const dailyLimits =
+      this.configurationCache.get("dailyLimits") || DAILY_LIMITS;
 
-    staffMembers.forEach(staff => {
+    staffMembers.forEach((staff) => {
       if (!schedule[staff.id]) return;
 
       let offDaysSet = 0;
       const targetOffDays = Math.min(monthLimits.maxOffDaysPerMonth - 1, 6); // Conservative target
 
       // Set off days, avoiding violations
-      dateRange.forEach(date => {
-        const dateKey = date.toISOString().split('T')[0];
-        
-        if (offDaysSet < targetOffDays && 
-            schedule[staff.id][dateKey] === '' && // Not already set by priority rules
-            Math.random() < 0.25) { // 25% chance for each available day
-          
+      dateRange.forEach((date) => {
+        const dateKey = date.toISOString().split("T")[0];
+
+        if (
+          offDaysSet < targetOffDays &&
+          schedule[staff.id][dateKey] === "" && // Not already set by priority rules
+          Math.random() < 0.25
+        ) {
+          // 25% chance for each available day
+
           // Check if setting this as off day would violate daily limits
           let currentOffCount = 0;
-          staffMembers.forEach(otherStaff => {
-            if (schedule[otherStaff.id][dateKey] === '×') {
+          staffMembers.forEach((otherStaff) => {
+            if (schedule[otherStaff.id][dateKey] === "×") {
               currentOffCount++;
             }
           });
 
           const maxOffPerDay = dailyLimits.maxOffPerDay || 4;
           if (currentOffCount < maxOffPerDay) {
-            schedule[staff.id][dateKey] = '×';
+            schedule[staff.id][dateKey] = "×";
             offDaysSet++;
           }
         }
@@ -961,31 +1067,34 @@ export class BusinessRuleValidator {
    */
   async applyCoverageCompensation(schedule, staffMembers, dateRange) {
     // Get staff groups from cache or fallback
-    const staffGroups = this.configurationCache.get('staffGroups') || STAFF_CONFLICT_GROUPS;
-    
+    const staffGroups =
+      this.configurationCache.get("staffGroups") || STAFF_CONFLICT_GROUPS;
+
     // Apply Group 2 coverage compensation rule
-    const group2 = staffGroups.find(g => g.name === 'Group 2');
+    const group2 = staffGroups.find((g) => g.name === "Group 2");
     if (!group2 || !group2.coverageRule) return;
 
-    const backupStaff = staffMembers.find(s => s.name === group2.coverageRule.backupStaff);
+    const backupStaff = staffMembers.find(
+      (s) => s.name === group2.coverageRule.backupStaff,
+    );
     if (!backupStaff) return;
 
-    dateRange.forEach(date => {
-      const dateKey = date.toISOString().split('T')[0];
-      
+    dateRange.forEach((date) => {
+      const dateKey = date.toISOString().split("T")[0];
+
       // Check if any Group 2 member is off
       let group2MemberOff = false;
       const members = group2.members || [];
-      members.forEach(memberName => {
-        const staff = staffMembers.find(s => s.name === memberName);
-        if (staff && schedule[staff.id][dateKey] === '×') {
+      members.forEach((memberName) => {
+        const staff = staffMembers.find((s) => s.name === memberName);
+        if (staff && schedule[staff.id][dateKey] === "×") {
           group2MemberOff = true;
         }
       });
 
       // If Group 2 member is off, ensure backup staff works normal shift
       if (group2MemberOff && schedule[backupStaff.id]) {
-        schedule[backupStaff.id][dateKey] = ''; // Normal shift
+        schedule[backupStaff.id][dateKey] = ""; // Normal shift
       }
     });
   }
@@ -998,15 +1107,16 @@ export class BusinessRuleValidator {
    */
   async applyFinalAdjustments(schedule, staffMembers, dateRange) {
     // Use cached daily limits or fallback
-    const dailyLimits = this.configurationCache.get('dailyLimits') || DAILY_LIMITS;
-    
+    const dailyLimits =
+      this.configurationCache.get("dailyLimits") || DAILY_LIMITS;
+
     // Ensure minimum coverage each day
-    dateRange.forEach(date => {
-      const dateKey = date.toISOString().split('T')[0];
-      
+    dateRange.forEach((date) => {
+      const dateKey = date.toISOString().split("T")[0];
+
       let workingStaff = 0;
-      staffMembers.forEach(staff => {
-        if (schedule[staff.id][dateKey] !== '×') {
+      staffMembers.forEach((staff) => {
+        if (schedule[staff.id][dateKey] !== "×") {
           workingStaff++;
         }
       });
@@ -1016,12 +1126,12 @@ export class BusinessRuleValidator {
       if (workingStaff < minWorkingStaffPerDay) {
         const deficit = minWorkingStaffPerDay - workingStaff;
         let converted = 0;
-        
+
         for (const staff of staffMembers) {
           if (converted >= deficit) break;
-          
-          if (schedule[staff.id][dateKey] === '×') {
-            schedule[staff.id][dateKey] = ''; // Convert to normal shift
+
+          if (schedule[staff.id][dateKey] === "×") {
+            schedule[staff.id][dateKey] = ""; // Convert to normal shift
             converted++;
           }
         }
@@ -1036,17 +1146,16 @@ export class BusinessRuleValidator {
   updateValidationMetrics(result) {
     this.metrics.validationsPerformed++;
     this.metrics.violationsFound += result.violations.length;
-    
+
     if (result.valid) {
-      this.metrics.successRate = (
-        (this.metrics.successRate * (this.metrics.validationsPerformed - 1) + 100) / 
-        this.metrics.validationsPerformed
-      );
+      this.metrics.successRate =
+        (this.metrics.successRate * (this.metrics.validationsPerformed - 1) +
+          100) /
+        this.metrics.validationsPerformed;
     } else {
-      this.metrics.successRate = (
-        (this.metrics.successRate * (this.metrics.validationsPerformed - 1)) / 
-        this.metrics.validationsPerformed
-      );
+      this.metrics.successRate =
+        (this.metrics.successRate * (this.metrics.validationsPerformed - 1)) /
+        this.metrics.validationsPerformed;
     }
   }
 
@@ -1061,7 +1170,7 @@ export class BusinessRuleValidator {
       ready: this.isReady(),
       metrics: { ...this.metrics },
       correctionStrategies: Array.from(this.correctionStrategies.keys()),
-      validationHistory: this.validationHistory.slice(-10) // Last 10 validations
+      validationHistory: this.validationHistory.slice(-10), // Last 10 validations
     };
   }
 
@@ -1074,21 +1183,23 @@ export class BusinessRuleValidator {
       validationsPerformed: 0,
       violationsFound: 0,
       correctionsApplied: 0,
-      successRate: 0
+      successRate: 0,
     };
     // Reset enhanced features
     this.performanceMetrics = {
       validationSpeed: 0,
       cacheHitRate: 0,
-      averageComplexity: 0
+      averageComplexity: 0,
     };
-    
+
     this.validationCache.clear();
     this.lastEfficiencyBreakdown = null;
     this.lastSatisfactionBreakdown = null;
-    
-    this.status = 'idle';
-    console.log('🔄 BusinessRuleValidator reset completed with enhanced cleanup');
+
+    this.status = "idle";
+    console.log(
+      "🔄 BusinessRuleValidator reset completed with enhanced cleanup",
+    );
   }
 
   // ============================================================================
@@ -1102,10 +1213,10 @@ export class BusinessRuleValidator {
    */
   estimateShiftEndTime(shift) {
     const shiftTimes = {
-      '△': 15, // Early shift: 6:00-15:00
-      '○': 22, // Normal shift: 10:00-22:00  
-      '▽': 24, // Late shift: 18:00-24:00
-      '': 22   // Default normal hours
+      "△": 15, // Early shift: 6:00-15:00
+      "○": 22, // Normal shift: 10:00-22:00
+      "▽": 24, // Late shift: 18:00-24:00
+      "": 22, // Default normal hours
     };
     return shiftTimes[shift] || 22;
   }
@@ -1117,10 +1228,10 @@ export class BusinessRuleValidator {
    */
   estimateShiftStartTime(shift) {
     const shiftTimes = {
-      '△': 6,  // Early shift: 6:00-15:00
-      '○': 10, // Normal shift: 10:00-22:00
-      '▽': 18, // Late shift: 18:00-24:00
-      '': 10   // Default normal hours
+      "△": 6, // Early shift: 6:00-15:00
+      "○": 10, // Normal shift: 10:00-22:00
+      "▽": 18, // Late shift: 18:00-24:00
+      "": 10, // Default normal hours
     };
     return shiftTimes[shift] || 10;
   }
@@ -1135,11 +1246,14 @@ export class BusinessRuleValidator {
     let currentWeek = [];
     let currentWeekStart = null;
 
-    dateRange.forEach(date => {
+    dateRange.forEach((date) => {
       const dayOfWeek = date.getDay();
-      
+
       // Start new week on Monday (or first date)
-      if (currentWeekStart === null || (dayOfWeek === 1 && currentWeek.length > 0)) {
+      if (
+        currentWeekStart === null ||
+        (dayOfWeek === 1 && currentWeek.length > 0)
+      ) {
         if (currentWeek.length > 0) {
           weeks.push([...currentWeek]);
         }
@@ -1168,21 +1282,21 @@ export class BusinessRuleValidator {
     // In a real system, this would check against a holiday calendar
     const month = date.getMonth() + 1;
     const day = date.getDate();
-    
+
     // Japanese national holidays (simplified)
     const holidays = [
-      '1-1',   // New Year's Day
-      '2-11',  // National Foundation Day
-      '4-29',  // Showa Day
-      '5-3',   // Constitution Memorial Day
-      '5-4',   // Greenery Day
-      '5-5',   // Children's Day
-      '8-11',  // Mountain Day
-      '11-3',  // Culture Day
-      '11-23', // Labor Thanksgiving Day
-      '12-23'  // Emperor's Birthday
+      "1-1", // New Year's Day
+      "2-11", // National Foundation Day
+      "4-29", // Showa Day
+      "5-3", // Constitution Memorial Day
+      "5-4", // Greenery Day
+      "5-5", // Children's Day
+      "8-11", // Mountain Day
+      "11-3", // Culture Day
+      "11-23", // Labor Thanksgiving Day
+      "12-23", // Emperor's Birthday
     ];
-    
+
     return holidays.includes(`${month}-${day}`);
   }
 
@@ -1192,7 +1306,7 @@ export class BusinessRuleValidator {
    * @returns {number} Number of peak days
    */
   countPeakDays(dateRange) {
-    return dateRange.filter(date => {
+    return dateRange.filter((date) => {
       const dayOfWeek = date.getDay();
       const isWeekend = dayOfWeek === 0 || dayOfWeek === 6;
       const isHoliday = this.isHoliday(date);
@@ -1209,18 +1323,18 @@ export class BusinessRuleValidator {
    */
   calculateFlexibilityScore(schedule, staffMembers, dateRange) {
     let flexibilityScore = 0;
-    const shiftTypes = ['△', '○', '▽', '', '×'];
-    
-    staffMembers.forEach(staff => {
+    const shiftTypes = ["△", "○", "▽", "", "×"];
+
+    staffMembers.forEach((staff) => {
       if (!schedule[staff.id]) return;
-      
+
       const staffShifts = Object.values(schedule[staff.id]);
-      const uniqueShifts = new Set(staffShifts.filter(s => s !== undefined));
-      
+      const uniqueShifts = new Set(staffShifts.filter((s) => s !== undefined));
+
       // Higher score for staff with variety in shift types
       flexibilityScore += (uniqueShifts.size / shiftTypes.length) * 100;
     });
-    
+
     return staffMembers.length > 0 ? flexibilityScore / staffMembers.length : 0;
   }
 
@@ -1241,14 +1355,14 @@ export class BusinessRuleValidator {
       consecutiveOffStreaks: [],
       shiftVariety: {},
       peakDayWork: 0,
-      totalPeakDays: 0
+      totalPeakDays: 0,
     };
 
     let currentWorkStreak = 0;
     let currentOffStreak = 0;
 
-    dateRange.forEach(date => {
-      const dateKey = date.toISOString().split('T')[0];
+    dateRange.forEach((date) => {
+      const dateKey = date.toISOString().split("T")[0];
       const shift = staffSchedule[dateKey];
       const dayOfWeek = date.getDay();
       const isWeekend = dayOfWeek === 0 || dayOfWeek === 6;
@@ -1261,9 +1375,9 @@ export class BusinessRuleValidator {
         patterns.workDays++;
         if (isWeekend) patterns.weekendWork++;
         if (isPeakDay) patterns.peakDayWork++;
-        
+
         patterns.shiftVariety[shift] = (patterns.shiftVariety[shift] || 0) + 1;
-        
+
         currentWorkStreak++;
         if (currentOffStreak > 0) {
           patterns.consecutiveOffStreaks.push(currentOffStreak);
@@ -1278,7 +1392,7 @@ export class BusinessRuleValidator {
         }
       } else {
         // Empty cell - handle based on staff type
-        if (staff.status === '社員') {
+        if (staff.status === "社員") {
           // For regular staff, empty usually means work
           patterns.workDays++;
           currentWorkStreak++;
@@ -1291,8 +1405,10 @@ export class BusinessRuleValidator {
     });
 
     // Add final streaks
-    if (currentWorkStreak > 0) patterns.consecutiveWorkStreaks.push(currentWorkStreak);
-    if (currentOffStreak > 0) patterns.consecutiveOffStreaks.push(currentOffStreak);
+    if (currentWorkStreak > 0)
+      patterns.consecutiveWorkStreaks.push(currentWorkStreak);
+    if (currentOffStreak > 0)
+      patterns.consecutiveOffStreaks.push(currentOffStreak);
 
     return patterns;
   }
@@ -1306,22 +1422,35 @@ export class BusinessRuleValidator {
     // Look for consistent patterns vs erratic scheduling
     const workStreaks = workPatterns.consecutiveWorkStreaks;
     const offStreaks = workPatterns.consecutiveOffStreaks;
-    
+
     if (workStreaks.length === 0) return 50; // No work pattern to analyze
-    
+
     // Calculate variance in work streaks (lower variance = more consistent)
-    const avgWorkStreak = workStreaks.reduce((a, b) => a + b, 0) / workStreaks.length;
-    const workVariance = workStreaks.reduce((sum, streak) => sum + Math.pow(streak - avgWorkStreak, 2), 0) / workStreaks.length;
-    
+    const avgWorkStreak =
+      workStreaks.reduce((a, b) => a + b, 0) / workStreaks.length;
+    const workVariance =
+      workStreaks.reduce(
+        (sum, streak) => sum + Math.pow(streak - avgWorkStreak, 2),
+        0,
+      ) / workStreaks.length;
+
     // Calculate variance in off streaks
     let offVariance = 0;
     if (offStreaks.length > 0) {
-      const avgOffStreak = offStreaks.reduce((a, b) => a + b, 0) / offStreaks.length;
-      offVariance = offStreaks.reduce((sum, streak) => sum + Math.pow(streak - avgOffStreak, 2), 0) / offStreaks.length;
+      const avgOffStreak =
+        offStreaks.reduce((a, b) => a + b, 0) / offStreaks.length;
+      offVariance =
+        offStreaks.reduce(
+          (sum, streak) => sum + Math.pow(streak - avgOffStreak, 2),
+          0,
+        ) / offStreaks.length;
     }
-    
+
     // Lower variance = higher consistency score
-    const consistencyScore = Math.max(0, 100 - (Math.sqrt(workVariance + offVariance) * 10));
+    const consistencyScore = Math.max(
+      0,
+      100 - Math.sqrt(workVariance + offVariance) * 10,
+    );
     return Math.min(100, consistencyScore);
   }
 
@@ -1333,39 +1462,52 @@ export class BusinessRuleValidator {
    * @returns {number} Compliance score (0-1)
    */
   async calculatePreferenceCompliance(staffSchedule, staff, dateRange) {
-    const priorityRules = this.configurationCache.get('priorityRules') || PRIORITY_RULES;
+    const priorityRules =
+      this.configurationCache.get("priorityRules") || PRIORITY_RULES;
     const rules = priorityRules[staff.name] || priorityRules[staff.id];
     if (!rules || !rules.preferredShifts) return 0.8; // Default good score if no rules
-    
+
     let totalPreferences = 0;
     let matchedPreferences = 0;
-    
-    dateRange.forEach(date => {
-      const dateKey = date.toISOString().split('T')[0];
+
+    dateRange.forEach((date) => {
+      const dateKey = date.toISOString().split("T")[0];
       const actualShift = staffSchedule[dateKey];
       const dayOfWeek = getDayOfWeek(dateKey);
-      
+
       // Find matching preference rules for this day
-      const dayPreferences = rules.preferredShifts.filter(pref => pref.day === dayOfWeek);
-      
-      dayPreferences.forEach(pref => {
+      const dayPreferences = rules.preferredShifts.filter(
+        (pref) => pref.day === dayOfWeek,
+      );
+
+      dayPreferences.forEach((pref) => {
         totalPreferences++;
-        
-        let expectedShift = '';
+
+        let expectedShift = "";
         switch (pref.shift) {
-          case 'early': expectedShift = '△'; break;
-          case 'off': expectedShift = '×'; break;
-          case 'late': expectedShift = '▽'; break;
-          default: expectedShift = '';
+          case "early":
+            expectedShift = "△";
+            break;
+          case "off":
+            expectedShift = "×";
+            break;
+          case "late":
+            expectedShift = "▽";
+            break;
+          default:
+            expectedShift = "";
         }
-        
-        if (actualShift === expectedShift || 
-            (pref.shift === 'normal' && (actualShift === '' || actualShift === '○'))) {
+
+        if (
+          actualShift === expectedShift ||
+          (pref.shift === "normal" &&
+            (actualShift === "" || actualShift === "○"))
+        ) {
           matchedPreferences++;
         }
       });
     });
-    
+
     return totalPreferences > 0 ? matchedPreferences / totalPreferences : 0.8;
   }
 
@@ -1376,12 +1518,12 @@ export class BusinessRuleValidator {
    */
   assessConsecutiveDaysOffQuality(workPatterns) {
     const offStreaks = workPatterns.consecutiveOffStreaks;
-    
+
     if (offStreaks.length === 0) return 50; // No consecutive off days
-    
+
     // Ideal consecutive off days: 2-3 days
     let qualityScore = 0;
-    offStreaks.forEach(streak => {
+    offStreaks.forEach((streak) => {
       if (streak === 2 || streak === 3) {
         qualityScore += 100; // Perfect
       } else if (streak === 1 || streak === 4) {
@@ -1392,7 +1534,7 @@ export class BusinessRuleValidator {
         qualityScore += 30; // Very short streaks
       }
     });
-    
+
     return qualityScore / offStreaks.length;
   }
 
@@ -1405,41 +1547,64 @@ export class BusinessRuleValidator {
    * @param {Array} dateRange - Date range
    * @returns {number} Fairness score (0-100)
    */
-  async calculateFairnessPerception(staff, workPatterns, schedule, staffMembers, dateRange) {
+  async calculateFairnessPerception(
+    staff,
+    workPatterns,
+    schedule,
+    staffMembers,
+    dateRange,
+  ) {
     // Compare work distribution with similar staff (same type)
-    const similarStaff = staffMembers.filter(s => s.status === staff.status && s.id !== staff.id);
-    
+    const similarStaff = staffMembers.filter(
+      (s) => s.status === staff.status && s.id !== staff.id,
+    );
+
     if (similarStaff.length === 0) return 90; // No comparison possible, assume fair
-    
-    const currentWorkRatio = workPatterns.workDays / (workPatterns.workDays + workPatterns.offDays);
-    const currentWeekendRatio = workPatterns.weekendWork / Math.max(workPatterns.totalWeekends, 1);
-    
+
+    const currentWorkRatio =
+      workPatterns.workDays / (workPatterns.workDays + workPatterns.offDays);
+    const currentWeekendRatio =
+      workPatterns.weekendWork / Math.max(workPatterns.totalWeekends, 1);
+
     let workRatioSum = 0;
     let weekendRatioSum = 0;
     let validComparisons = 0;
-    
-    similarStaff.forEach(otherStaff => {
+
+    similarStaff.forEach((otherStaff) => {
       if (!schedule[otherStaff.id]) return;
-      
-      const otherPatterns = this.analyzeStaffWorkPatterns(schedule[otherStaff.id], otherStaff, dateRange);
-      const otherWorkRatio = otherPatterns.workDays / (otherPatterns.workDays + otherPatterns.offDays);
-      const otherWeekendRatio = otherPatterns.weekendWork / Math.max(otherPatterns.totalWeekends, 1);
-      
+
+      const otherPatterns = this.analyzeStaffWorkPatterns(
+        schedule[otherStaff.id],
+        otherStaff,
+        dateRange,
+      );
+      const otherWorkRatio =
+        otherPatterns.workDays /
+        (otherPatterns.workDays + otherPatterns.offDays);
+      const otherWeekendRatio =
+        otherPatterns.weekendWork / Math.max(otherPatterns.totalWeekends, 1);
+
       workRatioSum += otherWorkRatio;
       weekendRatioSum += otherWeekendRatio;
       validComparisons++;
     });
-    
+
     if (validComparisons === 0) return 90;
-    
+
     const avgWorkRatio = workRatioSum / validComparisons;
     const avgWeekendRatio = weekendRatioSum / validComparisons;
-    
+
     // Calculate fairness based on how close current staff is to average
-    const workRatioFairness = Math.max(0, 100 - (Math.abs(currentWorkRatio - avgWorkRatio) * 200));
-    const weekendRatioFairness = Math.max(0, 100 - (Math.abs(currentWeekendRatio - avgWeekendRatio) * 150));
-    
-    return (workRatioFairness * 0.6) + (weekendRatioFairness * 0.4);
+    const workRatioFairness = Math.max(
+      0,
+      100 - Math.abs(currentWorkRatio - avgWorkRatio) * 200,
+    );
+    const weekendRatioFairness = Math.max(
+      0,
+      100 - Math.abs(currentWeekendRatio - avgWeekendRatio) * 150,
+    );
+
+    return workRatioFairness * 0.6 + weekendRatioFairness * 0.4;
   }
 
   /**
@@ -1450,27 +1615,27 @@ export class BusinessRuleValidator {
    */
   assessFlexibilityAccommodation(workPatterns, staff) {
     // For part-time staff, flexibility is more important
-    const baseScore = staff.status === 'パート' ? 85 : 90;
-    
+    const baseScore = staff.status === "パート" ? 85 : 90;
+
     // Variety in shift types indicates good flexibility
     const shiftVariety = Object.keys(workPatterns.shiftVariety).length;
     const varietyBonus = Math.min(15, shiftVariety * 3);
-    
+
     // Reasonable consecutive work streaks indicate good balance
     const maxWorkStreak = Math.max(...workPatterns.consecutiveWorkStreaks, 0);
     const streakPenalty = Math.max(0, (maxWorkStreak - 5) * 2); // Penalty for very long streaks
-    
+
     return Math.max(0, Math.min(100, baseScore + varietyBonus - streakPenalty));
   }
 
   // ============================================================================
-  // ENHANCED PRODUCTION-READY FEATURES  
+  // ENHANCED PRODUCTION-READY FEATURES
   // ============================================================================
 
   /**
    * Enhanced staff satisfaction calculation with detailed breakdown
    * @param {Object} schedule - Schedule data
-   * @param {Array} staffMembers - Staff member data  
+   * @param {Array} staffMembers - Staff member data
    * @param {Array} dateRange - Date range
    * @returns {Promise<Object>} Enhanced satisfaction analysis
    */
@@ -1484,9 +1649,9 @@ export class BusinessRuleValidator {
           fairness: 0,
           preferences: 0,
           flexibility: 0,
-          consecutiveDaysOff: 0
+          consecutiveDaysOff: 0,
         },
-        recommendations: []
+        recommendations: [],
       };
 
       let totalSatisfaction = 0;
@@ -1495,27 +1660,44 @@ export class BusinessRuleValidator {
       for (const staff of staffMembers) {
         if (!schedule[staff.id]) continue;
 
-        const staffPatterns = this.analyzeStaffWorkPatterns(schedule[staff.id], staff, dateRange);
+        const staffPatterns = this.analyzeStaffWorkPatterns(
+          schedule[staff.id],
+          staff,
+          dateRange,
+        );
         const staffAnalysis = {
           workLifeBalance: this.calculateWorkLifeBalance(staffPatterns),
-          fairness: await this.calculateFairnessPerception(staff, staffPatterns, schedule, staffMembers, dateRange),
-          preferences: await this.calculatePreferenceCompliance(schedule[staff.id], staff, dateRange),
-          flexibility: this.assessFlexibilityAccommodation(staffPatterns, staff),
-          consecutiveDaysOff: this.assessConsecutiveDaysOffQuality(staffPatterns)
+          fairness: await this.calculateFairnessPerception(
+            staff,
+            staffPatterns,
+            schedule,
+            staffMembers,
+            dateRange,
+          ),
+          preferences: await this.calculatePreferenceCompliance(
+            schedule[staff.id],
+            staff,
+            dateRange,
+          ),
+          flexibility: this.assessFlexibilityAccommodation(
+            staffPatterns,
+            staff,
+          ),
+          consecutiveDaysOff:
+            this.assessConsecutiveDaysOffQuality(staffPatterns),
         };
 
         // Calculate staff overall satisfaction
-        const staffSatisfaction = (
+        const staffSatisfaction =
           staffAnalysis.workLifeBalance * 0.3 +
           staffAnalysis.fairness * 0.25 +
           staffAnalysis.preferences * 100 * 0.2 +
           staffAnalysis.flexibility * 0.15 +
-          staffAnalysis.consecutiveDaysOff * 0.1
-        );
+          staffAnalysis.consecutiveDaysOff * 0.1;
 
         satisfactionBreakdown.byStaff[staff.name] = {
           overall: Math.min(100, Math.max(0, staffSatisfaction)),
-          ...staffAnalysis
+          ...staffAnalysis,
         };
 
         totalSatisfaction += staffSatisfaction;
@@ -1525,33 +1707,37 @@ export class BusinessRuleValidator {
         if (staffSatisfaction < 60) {
           satisfactionBreakdown.recommendations.push({
             staff: staff.name,
-            issue: 'Low satisfaction score',
-            suggestions: this.generateSatisfactionRecommendations(staffAnalysis)
+            issue: "Low satisfaction score",
+            suggestions:
+              this.generateSatisfactionRecommendations(staffAnalysis),
           });
         }
       }
 
       // Calculate overall metrics
-      satisfactionBreakdown.overall = validStaffCount > 0 ? totalSatisfaction / validStaffCount : 0;
-      
+      satisfactionBreakdown.overall =
+        validStaffCount > 0 ? totalSatisfaction / validStaffCount : 0;
+
       // Calculate factor averages
-      Object.keys(satisfactionBreakdown.factors).forEach(factor => {
-        const factorSum = Object.values(satisfactionBreakdown.byStaff)
-          .reduce((sum, staff) => sum + (staff[factor] || 0), 0);
-        satisfactionBreakdown.factors[factor] = validStaffCount > 0 ? factorSum / validStaffCount : 0;
+      Object.keys(satisfactionBreakdown.factors).forEach((factor) => {
+        const factorSum = Object.values(satisfactionBreakdown.byStaff).reduce(
+          (sum, staff) => sum + (staff[factor] || 0),
+          0,
+        );
+        satisfactionBreakdown.factors[factor] =
+          validStaffCount > 0 ? factorSum / validStaffCount : 0;
       });
 
       this.lastSatisfactionBreakdown = satisfactionBreakdown;
       return satisfactionBreakdown;
-
     } catch (error) {
-      console.error('❌ Enhanced satisfaction calculation failed:', error);
+      console.error("❌ Enhanced satisfaction calculation failed:", error);
       return {
         overall: 0,
         byStaff: {},
         factors: {},
         recommendations: [],
-        error: error.message
+        error: error.message,
       };
     }
   }
@@ -1562,17 +1748,19 @@ export class BusinessRuleValidator {
    * @returns {number} Work-life balance score (0-100)
    */
   calculateWorkLifeBalance(workPatterns) {
-    const workRatio = workPatterns.workDays / (workPatterns.workDays + workPatterns.offDays);
-    const weekendRatio = workPatterns.weekendWork / Math.max(workPatterns.totalWeekends, 1);
-    
+    const workRatio =
+      workPatterns.workDays / (workPatterns.workDays + workPatterns.offDays);
+    const weekendRatio =
+      workPatterns.weekendWork / Math.max(workPatterns.totalWeekends, 1);
+
     // Ideal work ratio: 70-80%
     let workBalanceScore = 100;
     if (workRatio > 0.8) workBalanceScore -= (workRatio - 0.8) * 200;
     if (workRatio < 0.6) workBalanceScore -= (0.6 - workRatio) * 150;
-    
+
     // Weekend work penalty
     if (weekendRatio > 0.7) workBalanceScore -= (weekendRatio - 0.7) * 100;
-    
+
     return Math.max(0, Math.min(100, workBalanceScore));
   }
 
@@ -1583,28 +1771,36 @@ export class BusinessRuleValidator {
    */
   generateSatisfactionRecommendations(staffAnalysis) {
     const recommendations = [];
-    
+
     if (staffAnalysis.workLifeBalance < 60) {
-      recommendations.push('Improve work-life balance by reducing excessive work hours');
+      recommendations.push(
+        "Improve work-life balance by reducing excessive work hours",
+      );
     }
-    
+
     if (staffAnalysis.fairness < 70) {
-      recommendations.push('Review shift distribution for fairness compared to peers');
+      recommendations.push(
+        "Review shift distribution for fairness compared to peers",
+      );
     }
-    
+
     if (staffAnalysis.preferences < 0.6) {
-      recommendations.push('Better accommodate staff preferred shifts and days');
+      recommendations.push(
+        "Better accommodate staff preferred shifts and days",
+      );
     }
-    
+
     if (staffAnalysis.flexibility < 70) {
-      recommendations.push('Increase schedule flexibility and variety');
+      recommendations.push("Increase schedule flexibility and variety");
     }
-    
+
     if (staffAnalysis.consecutiveDaysOff < 60) {
-      recommendations.push('Improve consecutive days off patterns');
+      recommendations.push("Improve consecutive days off patterns");
     }
-    
-    return recommendations.length > 0 ? recommendations : ['Schedule appears optimal for this staff member'];
+
+    return recommendations.length > 0
+      ? recommendations
+      : ["Schedule appears optimal for this staff member"];
   }
 
   /**
@@ -1614,7 +1810,11 @@ export class BusinessRuleValidator {
    * @param {Array} dateRange - Date range
    * @returns {Promise<Object>} Enhanced efficiency analysis
    */
-  async calculateEnhancedOperationalEfficiency(schedule, staffMembers, dateRange) {
+  async calculateEnhancedOperationalEfficiency(
+    schedule,
+    staffMembers,
+    dateRange,
+  ) {
     try {
       const efficiencyBreakdown = {
         overall: 0,
@@ -1623,7 +1823,7 @@ export class BusinessRuleValidator {
         flexibility: 0,
         costEfficiency: 0,
         dailyBreakdown: {},
-        recommendations: []
+        recommendations: [],
       };
 
       let totalCoverage = 0;
@@ -1631,46 +1831,52 @@ export class BusinessRuleValidator {
       let flexibilitySum = 0;
       let costEfficiencySum = 0;
 
-      dateRange.forEach(date => {
-        const dateKey = date.toISOString().split('T')[0];
-        const dayAnalysis = this.analyzeDailyEfficiency(schedule, staffMembers, date);
-        
+      dateRange.forEach((date) => {
+        const dateKey = date.toISOString().split("T")[0];
+        const dayAnalysis = this.analyzeDailyEfficiency(
+          schedule,
+          staffMembers,
+          date,
+        );
+
         efficiencyBreakdown.dailyBreakdown[dateKey] = dayAnalysis;
-        
+
         totalCoverage += dayAnalysis.coverage;
         totalUtilization += dayAnalysis.utilization;
         flexibilitySum += dayAnalysis.flexibility;
         costEfficiencySum += dayAnalysis.costEfficiency;
-        
+
         // Generate daily recommendations
         if (dayAnalysis.coverage < 70) {
           efficiencyBreakdown.recommendations.push({
             date: dateKey,
-            issue: 'Insufficient coverage',
-            suggestion: `Increase staffing on ${dateKey}`
+            issue: "Insufficient coverage",
+            suggestion: `Increase staffing on ${dateKey}`,
           });
         }
       });
 
       const dayCount = dateRange.length;
-      efficiencyBreakdown.coverage = dayCount > 0 ? totalCoverage / dayCount : 0;
-      efficiencyBreakdown.utilization = dayCount > 0 ? totalUtilization / dayCount : 0;
-      efficiencyBreakdown.flexibility = dayCount > 0 ? flexibilitySum / dayCount : 0;
-      efficiencyBreakdown.costEfficiency = dayCount > 0 ? costEfficiencySum / dayCount : 0;
-      
+      efficiencyBreakdown.coverage =
+        dayCount > 0 ? totalCoverage / dayCount : 0;
+      efficiencyBreakdown.utilization =
+        dayCount > 0 ? totalUtilization / dayCount : 0;
+      efficiencyBreakdown.flexibility =
+        dayCount > 0 ? flexibilitySum / dayCount : 0;
+      efficiencyBreakdown.costEfficiency =
+        dayCount > 0 ? costEfficiencySum / dayCount : 0;
+
       // Calculate overall efficiency score
-      efficiencyBreakdown.overall = (
+      efficiencyBreakdown.overall =
         efficiencyBreakdown.coverage * 0.4 +
         efficiencyBreakdown.utilization * 0.3 +
         efficiencyBreakdown.flexibility * 0.2 +
-        efficiencyBreakdown.costEfficiency * 0.1
-      );
+        efficiencyBreakdown.costEfficiency * 0.1;
 
       this.lastEfficiencyBreakdown = efficiencyBreakdown;
       return efficiencyBreakdown;
-
     } catch (error) {
-      console.error('❌ Enhanced efficiency calculation failed:', error);
+      console.error("❌ Enhanced efficiency calculation failed:", error);
       return {
         overall: 0,
         coverage: 0,
@@ -1679,7 +1885,7 @@ export class BusinessRuleValidator {
         costEfficiency: 0,
         dailyBreakdown: {},
         recommendations: [],
-        error: error.message
+        error: error.message,
       };
     }
   }
@@ -1692,51 +1898,56 @@ export class BusinessRuleValidator {
    * @returns {Object} Daily efficiency metrics
    */
   analyzeDailyEfficiency(schedule, staffMembers, date) {
-    const dateKey = date.toISOString().split('T')[0];
+    const dateKey = date.toISOString().split("T")[0];
     const dayOfWeek = getDayOfWeek(dateKey);
-    const isWeekend = dayOfWeek === 'saturday' || dayOfWeek === 'sunday';
-    
+    const isWeekend = dayOfWeek === "saturday" || dayOfWeek === "sunday";
+
     let workingStaff = 0;
     let regularStaff = 0;
     let partTimeStaff = 0;
     let earlyShifts = 0;
     let lateShifts = 0;
     let normalShifts = 0;
-    
-    staffMembers.forEach(staff => {
+
+    staffMembers.forEach((staff) => {
       if (schedule[staff.id] && schedule[staff.id][dateKey] !== undefined) {
         const shift = schedule[staff.id][dateKey];
-        
+
         if (isWorkingShift(shift)) {
           workingStaff++;
-          
-          if (staff.status === '社員') {
+
+          if (staff.status === "社員") {
             regularStaff++;
           } else {
             partTimeStaff++;
           }
-          
+
           if (isEarlyShift(shift)) earlyShifts++;
           else if (isLateShift(shift)) lateShifts++;
           else normalShifts++;
         }
       }
     });
-    
+
     // Calculate metrics
-    const optimalStaff = isWeekend ? Math.ceil(staffMembers.length * 0.75) : Math.ceil(staffMembers.length * 0.85);
+    const optimalStaff = isWeekend
+      ? Math.ceil(staffMembers.length * 0.75)
+      : Math.ceil(staffMembers.length * 0.85);
     const coverage = Math.min(100, (workingStaff / optimalStaff) * 100);
     const utilization = (workingStaff / staffMembers.length) * 100;
-    
+
     // Flexibility based on shift variety
-    const shiftTypes = [earlyShifts, normalShifts, lateShifts].filter(count => count > 0).length;
+    const shiftTypes = [earlyShifts, normalShifts, lateShifts].filter(
+      (count) => count > 0,
+    ).length;
     const flexibility = Math.min(100, (shiftTypes / 3) * 100);
-    
+
     // Cost efficiency (prefer part-time for non-peak days)
     const partTimeRatio = workingStaff > 0 ? partTimeStaff / workingStaff : 0;
     const idealPartTimeRatio = isWeekend ? 0.6 : 0.4;
-    const costEfficiency = 100 - Math.abs(partTimeRatio - idealPartTimeRatio) * 100;
-    
+    const costEfficiency =
+      100 - Math.abs(partTimeRatio - idealPartTimeRatio) * 100;
+
     return {
       coverage: Math.max(0, coverage),
       utilization: Math.max(0, utilization),
@@ -1746,9 +1957,13 @@ export class BusinessRuleValidator {
         workingStaff,
         regularStaff,
         partTimeStaff,
-        shiftDistribution: { early: earlyShifts, normal: normalShifts, late: lateShifts },
-        isWeekend
-      }
+        shiftDistribution: {
+          early: earlyShifts,
+          normal: normalShifts,
+          late: lateShifts,
+        },
+        isWeekend,
+      },
     };
   }
 
@@ -1763,47 +1978,55 @@ export class BusinessRuleValidator {
     try {
       let totalCost = 0;
       let optimalCost = 0;
-      
-      dateRange.forEach(date => {
-        const dateKey = date.toISOString().split('T')[0];
+
+      dateRange.forEach((date) => {
+        const dateKey = date.toISOString().split("T")[0];
         const dayOfWeek = getDayOfWeek(dateKey);
-        const isWeekend = dayOfWeek === 'saturday' || dayOfWeek === 'sunday';
-        
+        const isWeekend = dayOfWeek === "saturday" || dayOfWeek === "sunday";
+
         let regularStaffWorking = 0;
         let partTimeStaffWorking = 0;
-        
-        staffMembers.forEach(staff => {
-          if (schedule[staff.id] && schedule[staff.id][dateKey] && 
-              isWorkingShift(schedule[staff.id][dateKey])) {
-            if (staff.status === '社員') {
+
+        staffMembers.forEach((staff) => {
+          if (
+            schedule[staff.id] &&
+            schedule[staff.id][dateKey] &&
+            isWorkingShift(schedule[staff.id][dateKey])
+          ) {
+            if (staff.status === "社員") {
               regularStaffWorking++;
             } else {
               partTimeStaffWorking++;
             }
           }
         });
-        
+
         // Assume regular staff cost 1.5x part-time, weekends 1.2x multiplier
         const weekendMultiplier = isWeekend ? 1.2 : 1.0;
-        const dayCost = (regularStaffWorking * 1.5 + partTimeStaffWorking * 1.0) * weekendMultiplier;
+        const dayCost =
+          (regularStaffWorking * 1.5 + partTimeStaffWorking * 1.0) *
+          weekendMultiplier;
         totalCost += dayCost;
-        
+
         // Calculate optimal cost (prefer part-time on weekdays, balanced on weekends)
         const totalWorking = regularStaffWorking + partTimeStaffWorking;
         const optimalPartTimeRatio = isWeekend ? 0.5 : 0.6;
         const optimalPartTime = Math.round(totalWorking * optimalPartTimeRatio);
         const optimalRegular = totalWorking - optimalPartTime;
-        const optimalDayCost = (optimalRegular * 1.5 + optimalPartTime * 1.0) * weekendMultiplier;
+        const optimalDayCost =
+          (optimalRegular * 1.5 + optimalPartTime * 1.0) * weekendMultiplier;
         optimalCost += optimalDayCost;
       });
-      
+
       if (optimalCost === 0) return 100;
-      
-      const efficiency = Math.max(0, Math.min(100, (optimalCost / totalCost) * 100));
+
+      const efficiency = Math.max(
+        0,
+        Math.min(100, (optimalCost / totalCost) * 100),
+      );
       return efficiency;
-      
     } catch (error) {
-      console.warn('⚠️ Cost efficiency calculation failed:', error.message);
+      console.warn("⚠️ Cost efficiency calculation failed:", error.message);
       return 75; // Default reasonable score
     }
   }

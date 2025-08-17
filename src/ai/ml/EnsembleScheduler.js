@@ -8,9 +8,9 @@
 
 import * as tf from "@tensorflow/tfjs";
 import { extractAllDataForAI } from "../utils/DataExtractor.js";
+import { ConfigurationService } from "../../services/ConfigurationService.js";
 import { AdvancedNeuralArchitecture } from "./AdvancedNeuralArchitecture.js";
 import { AdvancedFeatureEngineering } from "./AdvancedFeatureEngineering.js";
-import { ConfigurationService } from '../../services/ConfigurationService.js';
 
 export class EnsembleScheduler {
   constructor() {
@@ -91,24 +91,35 @@ export class EnsembleScheduler {
       // Initialize configuration service integration
       if (this.restaurantId) {
         try {
-          console.log('🔧 Initializing configuration service for ensemble...');
+          console.log("🔧 Initializing configuration service for ensemble...");
           this.configService = new ConfigurationService();
-          await this.configService.initialize({ restaurantId: this.restaurantId });
-          
+          await this.configService.initialize({
+            restaurantId: this.restaurantId,
+          });
+
           // Load ML configuration from database
           await this.loadMLConfiguration();
-          
-          console.log('✅ Ensemble configuration service integrated');
+
+          console.log("✅ Ensemble configuration service integrated");
         } catch (error) {
-          console.warn('⚠️ Ensemble configuration service integration failed:', error);
+          console.warn(
+            "⚠️ Ensemble configuration service integration failed:",
+            error,
+          );
           this.configService = null;
         }
       }
 
       // Merge options (prioritize database config over options)
       if (this.mlConfig && this.mlConfig.parameters) {
-        Object.assign(this.ensembleConfig, this.mlConfig.parameters.ensemble || {});
-        Object.assign(this.trainingConfig, this.mlConfig.parameters.training || {});
+        Object.assign(
+          this.ensembleConfig,
+          this.mlConfig.parameters.ensemble || {},
+        );
+        Object.assign(
+          this.trainingConfig,
+          this.mlConfig.parameters.training || {},
+        );
       }
       Object.assign(this.ensembleConfig, options.ensemble || {});
       Object.assign(this.trainingConfig, options.training || {});
@@ -145,31 +156,33 @@ export class EnsembleScheduler {
   async loadMLConfiguration() {
     try {
       if (!this.configService) return;
-      
-      this.mlConfig = await this.configService.getMLModelConfig('ensemble_scheduler');
-      
+
+      this.mlConfig =
+        await this.configService.getMLModelConfig("ensemble_scheduler");
+
       if (this.mlConfig) {
-        console.log(`📋 Loaded ensemble ML configuration: ${this.mlConfig.model_name}`);
-        
+        console.log(
+          `📋 Loaded ensemble ML configuration: ${this.mlConfig.model_name}`,
+        );
+
         // Cache configuration
-        this.configurationCache.set('mlConfig', this.mlConfig);
-        this.configurationCache.set('loadTime', Date.now());
-        
+        this.configurationCache.set("mlConfig", this.mlConfig);
+        this.configurationCache.set("loadTime", Date.now());
+
         return this.mlConfig;
       } else {
         // Try to get default config
         this.mlConfig = await this.configService.getMLModelConfig();
         if (this.mlConfig) {
           console.log(`📋 Using default ML configuration for ensemble`);
-          this.configurationCache.set('mlConfig', this.mlConfig);
-          this.configurationCache.set('loadTime', Date.now());
+          this.configurationCache.set("mlConfig", this.mlConfig);
+          this.configurationCache.set("loadTime", Date.now());
         }
-        
+
         return this.mlConfig;
       }
-      
     } catch (error) {
-      console.warn('⚠️ Failed to load ensemble ML configuration:', error);
+      console.warn("⚠️ Failed to load ensemble ML configuration:", error);
       return null;
     }
   }
@@ -180,18 +193,18 @@ export class EnsembleScheduler {
   async refreshConfiguration() {
     try {
       if (!this.configService) return;
-      
+
       const now = Date.now();
-      const lastLoad = this.configurationCache.get('loadTime') || 0;
+      const lastLoad = this.configurationCache.get("loadTime") || 0;
       const refreshInterval = 10 * 60 * 1000; // 10 minutes
-      
+
       if (now - lastLoad < refreshInterval) {
         return; // Cache still valid
       }
-      
-      console.log('🔄 Refreshing ensemble configuration...');
+
+      console.log("🔄 Refreshing ensemble configuration...");
       await this.loadMLConfiguration();
-      
+
       // Update ensemble config if new parameters available
       if (this.mlConfig && this.mlConfig.parameters) {
         if (this.mlConfig.parameters.ensemble) {
@@ -200,11 +213,10 @@ export class EnsembleScheduler {
         if (this.mlConfig.parameters.training) {
           Object.assign(this.trainingConfig, this.mlConfig.parameters.training);
         }
-        console.log('✅ Ensemble configuration refreshed');
+        console.log("✅ Ensemble configuration refreshed");
       }
-      
     } catch (error) {
-      console.warn('⚠️ Ensemble configuration refresh failed:', error);
+      console.warn("⚠️ Ensemble configuration refresh failed:", error);
     }
   }
 
@@ -221,21 +233,24 @@ export class EnsembleScheduler {
       sequenceLength: 30,
       transformerLayers: 3,
       hiddenDim: 128,
-      dropoutRate: 0.15
+      dropoutRate: 0.15,
     };
 
     // 1. Advanced Transformer Model (Main)
     console.log("🔹 Creating Transformer model...");
     const transformerConfig = {
       inputDim: modelParams.inputDim || defaultParams.inputDim,
-      sequenceLength: modelParams.sequenceLength || defaultParams.sequenceLength,
+      sequenceLength:
+        modelParams.sequenceLength || defaultParams.sequenceLength,
       numHeads: modelParams.numHeads || 4,
-      numLayers: modelParams.transformerLayers || defaultParams.transformerLayers,
+      numLayers:
+        modelParams.transformerLayers || defaultParams.transformerLayers,
       hiddenDim: modelParams.hiddenDim || defaultParams.hiddenDim,
       dropoutRate: modelParams.dropoutRate || defaultParams.dropoutRate,
     };
-    
-    const transformerModel = this.neuralArchitecture.createTransformerModel(transformerConfig);
+
+    const transformerModel =
+      this.neuralArchitecture.createTransformerModel(transformerConfig);
 
     models.push({
       name: "transformer",
@@ -581,10 +596,10 @@ export class EnsembleScheduler {
       // Fix data structure - use correct format from DataExtractor
       const { data } = dataResult;
       const { rawPeriodData, staffProfiles } = data;
-      const allStaffMembers = Object.keys(staffProfiles).map(staffId => ({
+      const allStaffMembers = Object.keys(staffProfiles).map((staffId) => ({
         id: staffId,
         name: staffProfiles[staffId].name || staffId,
-        position: staffProfiles[staffId].position || 'staff'
+        position: staffProfiles[staffId].position || "staff",
       }));
       const targetStaffMembers = staffMembers || allStaffMembers;
 
@@ -592,7 +607,12 @@ export class EnsembleScheduler {
       const allSamples = [];
 
       for (const periodData of rawPeriodData) {
-        if (!periodData.success || !periodData.scheduleData || !periodData.dateRange) continue;
+        if (
+          !periodData.success ||
+          !periodData.scheduleData ||
+          !periodData.dateRange
+        )
+          continue;
 
         for (const staff of targetStaffMembers) {
           for (const [dateIndex, date] of periodData.dateRange.entries()) {
@@ -630,7 +650,7 @@ export class EnsembleScheduler {
                   staffId: staff.id,
                   staffName: staff.name,
                   date: dateKey,
-                  period: periodData.monthIndex || 'unknown',
+                  period: periodData.monthIndex || "unknown",
                   originalShift: shift,
                 },
               });
@@ -981,17 +1001,19 @@ export class EnsembleScheduler {
   encodeShiftLabel(shift) {
     // Convert shift symbol to one-hot encoded label
     const shiftMap = { "": 0, "○": 1, "△": 2, "▽": 3, "×": 4 };
-    
+
     // Only return valid labels, don't default to empty for undefined shifts
     if (shift === undefined || shift === null) {
       return null; // Signal to skip this sample
     }
-    
-    const index = Object.prototype.hasOwnProperty.call(shiftMap, shift) ? shiftMap[shift] : null;
+
+    const index = Object.prototype.hasOwnProperty.call(shiftMap, shift)
+      ? shiftMap[shift]
+      : null;
     if (index === null) {
       return null; // Skip unknown shift types
     }
-    
+
     const oneHot = new Array(5).fill(0);
     oneHot[index] = 1;
     return oneHot;
@@ -1141,13 +1163,15 @@ class SyntheticDataGenerator {
 
     for (let i = 0; i < syntheticCount; i++) {
       // Pick a random existing sample as template
-      const templateIndex = Math.floor(Math.random() * trainingData.features.length);
+      const templateIndex = Math.floor(
+        Math.random() * trainingData.features.length,
+      );
       const templateFeatures = [...trainingData.features[templateIndex]];
       const templateLabel = [...trainingData.labels[templateIndex]];
 
       // Add small amount of noise to features (10% variation)
-      const noisyFeatures = templateFeatures.map(val => 
-        val + (Math.random() - 0.5) * options.noiseLevel
+      const noisyFeatures = templateFeatures.map(
+        (val) => val + (Math.random() - 0.5) * options.noiseLevel,
       );
 
       // Preserve realistic label distribution instead of pure random

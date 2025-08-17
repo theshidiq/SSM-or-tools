@@ -1,46 +1,56 @@
 /**
  * StaffGroupModel.js
- * 
+ *
  * Model classes for staff group definitions and conflict management.
  * Provides structured representation of staff groups and their relationships.
  */
 
-import { STAFF_CONFLICT_GROUPS } from '../constraints/ConstraintEngine';
+import { STAFF_CONFLICT_GROUPS } from "../constraints/ConstraintEngine";
 
 /**
  * Class representing a staff group with conflict rules
  */
 export class StaffGroup {
-  constructor(name, members = [], conflictRules = {}, coverageRule = null, proximityPattern = null) {
+  constructor(
+    name,
+    members = [],
+    conflictRules = {},
+    coverageRule = null,
+    proximityPattern = null,
+  ) {
     this.name = name;
     this.members = [...members];
     this.conflictRules = {
       maxSimultaneousOff: 1,
       maxSimultaneousEarly: 1,
       allowsConflict: false,
-      ...conflictRules
+      ...conflictRules,
     };
-    this.priority = 'medium';
-    this.description = '';
+    this.priority = "medium";
+    this.description = "";
     this.active = true;
-    
+
     // New: Coverage compensation rule
-    this.coverageRule = coverageRule ? {
-      backupStaff: coverageRule.backupStaff,
-      requiredShift: coverageRule.requiredShift || 'normal',
-      description: coverageRule.description || '',
-      ...coverageRule
-    } : null;
-    
+    this.coverageRule = coverageRule
+      ? {
+          backupStaff: coverageRule.backupStaff,
+          requiredShift: coverageRule.requiredShift || "normal",
+          description: coverageRule.description || "",
+          ...coverageRule,
+        }
+      : null;
+
     // New: Proximity pattern for related day offs
-    this.proximityPattern = proximityPattern ? {
-      trigger: proximityPattern.trigger,
-      condition: proximityPattern.condition || 'weekday_off',
-      target: proximityPattern.target,
-      proximity: proximityPattern.proximity || 2,
-      description: proximityPattern.description || '',
-      ...proximityPattern
-    } : null;
+    this.proximityPattern = proximityPattern
+      ? {
+          trigger: proximityPattern.trigger,
+          condition: proximityPattern.condition || "weekday_off",
+          target: proximityPattern.target,
+          proximity: proximityPattern.proximity || 2,
+          description: proximityPattern.description || "",
+          ...proximityPattern,
+        }
+      : null;
   }
 
   /**
@@ -58,7 +68,7 @@ export class StaffGroup {
    * @param {string} memberName - Name of the staff member
    */
   removeMember(memberName) {
-    this.members = this.members.filter(member => member !== memberName);
+    this.members = this.members.filter((member) => member !== memberName);
   }
 
   /**
@@ -86,14 +96,19 @@ export class StaffGroup {
    * @returns {Object} Conflict check result
    */
   checkConflict(scheduleData, dateKey, staffMembers) {
-    const groupSchedule = this.getGroupScheduleForDate(scheduleData, dateKey, staffMembers);
-    
-    const offCount = groupSchedule.filter(member => 
-      member.shift === '×' || member.shift === 'off' || member.shift === '★'
+    const groupSchedule = this.getGroupScheduleForDate(
+      scheduleData,
+      dateKey,
+      staffMembers,
+    );
+
+    const offCount = groupSchedule.filter(
+      (member) =>
+        member.shift === "×" || member.shift === "off" || member.shift === "★",
     ).length;
-    
-    const earlyCount = groupSchedule.filter(member => 
-      member.shift === '△' || member.shift === 'early'
+
+    const earlyCount = groupSchedule.filter(
+      (member) => member.shift === "△" || member.shift === "early",
     ).length;
 
     const conflicts = [];
@@ -101,33 +116,35 @@ export class StaffGroup {
     // Check off day conflicts
     if (offCount > this.conflictRules.maxSimultaneousOff) {
       conflicts.push({
-        type: 'simultaneous_off',
+        type: "simultaneous_off",
         count: offCount,
         limit: this.conflictRules.maxSimultaneousOff,
         excess: offCount - this.conflictRules.maxSimultaneousOff,
-        members: groupSchedule.filter(m => 
-          m.shift === '×' || m.shift === 'off' || m.shift === '★'
-        ).map(m => m.name)
+        members: groupSchedule
+          .filter(
+            (m) => m.shift === "×" || m.shift === "off" || m.shift === "★",
+          )
+          .map((m) => m.name),
       });
     }
 
     // Check early shift conflicts
     if (earlyCount > this.conflictRules.maxSimultaneousEarly) {
       conflicts.push({
-        type: 'simultaneous_early',
+        type: "simultaneous_early",
         count: earlyCount,
         limit: this.conflictRules.maxSimultaneousEarly,
         excess: earlyCount - this.conflictRules.maxSimultaneousEarly,
-        members: groupSchedule.filter(m => 
-          m.shift === '△' || m.shift === 'early'
-        ).map(m => m.name)
+        members: groupSchedule
+          .filter((m) => m.shift === "△" || m.shift === "early")
+          .map((m) => m.name),
       });
     }
 
     return {
       hasConflict: conflicts.length > 0,
       conflicts,
-      groupSchedule
+      groupSchedule,
     };
   }
 
@@ -139,23 +156,29 @@ export class StaffGroup {
    * @returns {Array} Array of group member schedules
    */
   getGroupScheduleForDate(scheduleData, dateKey, staffMembers) {
-    return this.members.map(memberName => {
-      const staff = staffMembers.find(s => s.name === memberName);
-      if (staff && scheduleData[staff.id] && scheduleData[staff.id][dateKey] !== undefined) {
+    return this.members
+      .map((memberName) => {
+        const staff = staffMembers.find((s) => s.name === memberName);
+        if (
+          staff &&
+          scheduleData[staff.id] &&
+          scheduleData[staff.id][dateKey] !== undefined
+        ) {
+          return {
+            name: memberName,
+            staffId: staff.id,
+            shift: scheduleData[staff.id][dateKey],
+            position: staff.position,
+          };
+        }
         return {
           name: memberName,
-          staffId: staff.id,
-          shift: scheduleData[staff.id][dateKey],
-          position: staff.position
+          staffId: null,
+          shift: null,
+          position: "Unknown",
         };
-      }
-      return {
-        name: memberName,
-        staffId: null,
-        shift: null,
-        position: 'Unknown'
-      };
-    }).filter(member => member.staffId !== null);
+      })
+      .filter((member) => member.staffId !== null);
   }
 
   /**
@@ -167,45 +190,45 @@ export class StaffGroup {
   getConflictResolutions(conflictResult, dateKey) {
     const resolutions = [];
 
-    conflictResult.conflicts.forEach(conflict => {
-      if (conflict.type === 'simultaneous_off') {
+    conflictResult.conflicts.forEach((conflict) => {
+      if (conflict.type === "simultaneous_off") {
         // Suggest changing some off days to working days
         const membersToChange = conflict.members.slice(0, conflict.excess);
         resolutions.push({
-          type: 'change_off_to_work',
-          action: 'Change off days to working days',
+          type: "change_off_to_work",
+          action: "Change off days to working days",
           affectedMembers: membersToChange,
-          priority: 'high',
-          description: `Change ${membersToChange.join(', ')} from off to working on ${dateKey}`
+          priority: "high",
+          description: `Change ${membersToChange.join(", ")} from off to working on ${dateKey}`,
         });
 
         // Suggest moving off days to different dates
         resolutions.push({
-          type: 'reschedule_off_days',
-          action: 'Move off days to different dates',
+          type: "reschedule_off_days",
+          action: "Move off days to different dates",
           affectedMembers: membersToChange,
-          priority: 'medium',
-          description: `Reschedule off days for ${membersToChange.join(', ')} to different dates`
+          priority: "medium",
+          description: `Reschedule off days for ${membersToChange.join(", ")} to different dates`,
         });
       }
 
-      if (conflict.type === 'simultaneous_early') {
+      if (conflict.type === "simultaneous_early") {
         // Suggest changing some early shifts to normal or late
         const membersToChange = conflict.members.slice(0, conflict.excess);
         resolutions.push({
-          type: 'change_early_to_normal',
-          action: 'Change early shifts to normal shifts',
+          type: "change_early_to_normal",
+          action: "Change early shifts to normal shifts",
           affectedMembers: membersToChange,
-          priority: 'high',
-          description: `Change ${membersToChange.join(', ')} from early to normal shift on ${dateKey}`
+          priority: "high",
+          description: `Change ${membersToChange.join(", ")} from early to normal shift on ${dateKey}`,
         });
 
         resolutions.push({
-          type: 'change_early_to_late',
-          action: 'Change early shifts to late shifts',
+          type: "change_early_to_late",
+          action: "Change early shifts to late shifts",
           affectedMembers: membersToChange,
-          priority: 'medium',
-          description: `Change ${membersToChange.join(', ')} from early to late shift on ${dateKey}`
+          priority: "medium",
+          description: `Change ${membersToChange.join(", ")} from early to late shift on ${dateKey}`,
         });
       }
     });
@@ -224,7 +247,7 @@ export class StaffGroup {
       conflictRules: { ...this.conflictRules },
       priority: this.priority,
       description: this.description,
-      active: this.active
+      active: this.active,
     };
   }
 
@@ -235,8 +258,8 @@ export class StaffGroup {
    */
   static fromJSON(json) {
     const group = new StaffGroup(json.name, json.members, json.conflictRules);
-    group.priority = json.priority || 'medium';
-    group.description = json.description || '';
+    group.priority = json.priority || "medium";
+    group.description = json.description || "";
     group.active = json.active !== undefined ? json.active : true;
     return group;
   }
@@ -256,20 +279,20 @@ export class StaffGroupManager {
    * Initialize default staff groups from constraint engine
    */
   initializeDefaultGroups() {
-    STAFF_CONFLICT_GROUPS.forEach(groupDef => {
+    STAFF_CONFLICT_GROUPS.forEach((groupDef) => {
       const group = new StaffGroup(
-        groupDef.name, 
-        groupDef.members, 
+        groupDef.name,
+        groupDef.members,
         {
           maxSimultaneousOff: 1,
           maxSimultaneousEarly: 1,
-          allowsConflict: false
+          allowsConflict: false,
         },
         groupDef.coverageRule,
-        groupDef.proximityPattern
+        groupDef.proximityPattern,
       );
-      group.description = `Default conflict group: ${groupDef.members.join(', ')}`;
-      group.priority = 'high';
+      group.description = `Default conflict group: ${groupDef.members.join(", ")}`;
+      group.priority = "high";
       this.groups.set(groupDef.name, group);
     });
   }
@@ -313,8 +336,8 @@ export class StaffGroupManager {
    * @returns {Array} Array of groups containing the member
    */
   getGroupsForMember(memberName) {
-    return Array.from(this.groups.values()).filter(group => 
-      group.hasMember(memberName) && group.active
+    return Array.from(this.groups.values()).filter(
+      (group) => group.hasMember(memberName) && group.active,
     );
   }
 
@@ -332,25 +355,29 @@ export class StaffGroupManager {
       groupConflicts: [],
       affectedGroups: [],
       totalConflicts: 0,
-      resolutions: []
+      resolutions: [],
     };
 
-    Array.from(this.groups.values()).forEach(group => {
+    Array.from(this.groups.values()).forEach((group) => {
       if (group.active) {
-        const conflictResult = group.checkConflict(scheduleData, dateKey, staffMembers);
-        
+        const conflictResult = group.checkConflict(
+          scheduleData,
+          dateKey,
+          staffMembers,
+        );
+
         if (conflictResult.hasConflict) {
           conflictResults.hasConflicts = true;
           conflictResults.totalConflicts += conflictResult.conflicts.length;
           conflictResults.affectedGroups.push(group.name);
-          
+
           const groupConflictInfo = {
             groupName: group.name,
             conflicts: conflictResult.conflicts,
             groupSchedule: conflictResult.groupSchedule,
-            resolutions: group.getConflictResolutions(conflictResult, dateKey)
+            resolutions: group.getConflictResolutions(conflictResult, dateKey),
           };
-          
+
           conflictResults.groupConflicts.push(groupConflictInfo);
           conflictResults.resolutions.push(...groupConflictInfo.resolutions);
         }
@@ -363,7 +390,7 @@ export class StaffGroupManager {
         date: dateKey,
         timestamp: new Date().toISOString(),
         conflicts: conflictResults.groupConflicts.length,
-        affectedGroups: [...conflictResults.affectedGroups]
+        affectedGroups: [...conflictResults.affectedGroups],
       });
 
       // Keep only last 100 conflict records
@@ -387,19 +414,24 @@ export class StaffGroupManager {
       conflictTrends: {
         increasing: false,
         stable: false,
-        decreasing: false
+        decreasing: false,
       },
-      recentConflicts: this.conflictHistory.slice(-10)
+      recentConflicts: this.conflictHistory.slice(-10),
     };
 
     if (this.conflictHistory.length > 0) {
-      const totalConflicts = this.conflictHistory.reduce((sum, record) => sum + record.conflicts, 0);
-      stats.averageConflictsPerDay = totalConflicts / this.conflictHistory.length;
+      const totalConflicts = this.conflictHistory.reduce(
+        (sum, record) => sum + record.conflicts,
+        0,
+      );
+      stats.averageConflictsPerDay =
+        totalConflicts / this.conflictHistory.length;
 
       // Count most conflicted groups
-      this.conflictHistory.forEach(record => {
-        record.affectedGroups.forEach(groupName => {
-          stats.mostConflictedGroups[groupName] = (stats.mostConflictedGroups[groupName] || 0) + 1;
+      this.conflictHistory.forEach((record) => {
+        record.affectedGroups.forEach((groupName) => {
+          stats.mostConflictedGroups[groupName] =
+            (stats.mostConflictedGroups[groupName] || 0) + 1;
         });
       });
 
@@ -407,10 +439,12 @@ export class StaffGroupManager {
       if (this.conflictHistory.length >= 20) {
         const recent10 = this.conflictHistory.slice(-10);
         const previous10 = this.conflictHistory.slice(-20, -10);
-        
-        const recentAvg = recent10.reduce((sum, r) => sum + r.conflicts, 0) / 10;
-        const previousAvg = previous10.reduce((sum, r) => sum + r.conflicts, 0) / 10;
-        
+
+        const recentAvg =
+          recent10.reduce((sum, r) => sum + r.conflicts, 0) / 10;
+        const previousAvg =
+          previous10.reduce((sum, r) => sum + r.conflicts, 0) / 10;
+
         if (recentAvg > previousAvg * 1.1) {
           stats.conflictTrends.increasing = true;
         } else if (recentAvg < previousAvg * 0.9) {
@@ -430,7 +464,7 @@ export class StaffGroupManager {
    * @param {string} newName - New name
    */
   updateMemberName(oldName, newName) {
-    Array.from(this.groups.values()).forEach(group => {
+    Array.from(this.groups.values()).forEach((group) => {
       if (group.hasMember(oldName)) {
         group.removeMember(oldName);
         group.addMember(newName);
@@ -450,12 +484,12 @@ export class StaffGroupManager {
       maxSimultaneousOff: 1,
       maxSimultaneousEarly: 1,
       allowsConflict: false,
-      ...conflictRules
+      ...conflictRules,
     });
-    
-    group.priority = 'custom';
+
+    group.priority = "custom";
     group.description = `Custom group created with ${members.length} members`;
-    
+
     this.addGroup(group);
     return group;
   }
@@ -468,7 +502,7 @@ export class StaffGroupManager {
     const exported = {
       exportedAt: new Date().toISOString(),
       groups: {},
-      conflictHistory: [...this.conflictHistory]
+      conflictHistory: [...this.conflictHistory],
     };
 
     Array.from(this.groups.entries()).forEach(([name, group]) => {
@@ -501,61 +535,65 @@ export class StaffGroupManager {
     const stats = this.getConflictStatistics();
 
     // Recommend based on most conflicted groups
-    Object.entries(stats.mostConflictedGroups).forEach(([groupName, conflictCount]) => {
-      if (conflictCount > 5) {
-        const group = this.getGroup(groupName);
-        if (group) {
-          recommendations.push({
-            type: 'group_optimization',
-            groupName,
-            conflictCount,
-            priority: 'high',
-            suggestion: `Consider adjusting ${groupName} conflict rules or member assignments`,
-            details: {
-              currentMembers: group.members,
-              conflictRules: group.conflictRules,
-              suggestions: [
-                'Increase maxSimultaneousOff limit',
-                'Reassign some members to different groups',
-                'Implement rotation system within group'
-              ]
-            }
-          });
+    Object.entries(stats.mostConflictedGroups).forEach(
+      ([groupName, conflictCount]) => {
+        if (conflictCount > 5) {
+          const group = this.getGroup(groupName);
+          if (group) {
+            recommendations.push({
+              type: "group_optimization",
+              groupName,
+              conflictCount,
+              priority: "high",
+              suggestion: `Consider adjusting ${groupName} conflict rules or member assignments`,
+              details: {
+                currentMembers: group.members,
+                conflictRules: group.conflictRules,
+                suggestions: [
+                  "Increase maxSimultaneousOff limit",
+                  "Reassign some members to different groups",
+                  "Implement rotation system within group",
+                ],
+              },
+            });
+          }
         }
-      }
-    });
+      },
+    );
 
     // Recommend based on trends
     if (stats.conflictTrends.increasing) {
       recommendations.push({
-        type: 'trend_alert',
-        priority: 'high',
-        suggestion: 'Conflicts are increasing. Review group assignments and rules.',
+        type: "trend_alert",
+        priority: "high",
+        suggestion:
+          "Conflicts are increasing. Review group assignments and rules.",
         details: {
           recentConflicts: stats.recentConflicts,
           suggestions: [
-            'Review recent schedule changes',
-            'Consider temporary rule adjustments',
-            'Analyze staff availability patterns'
-          ]
-        }
+            "Review recent schedule changes",
+            "Consider temporary rule adjustments",
+            "Analyze staff availability patterns",
+          ],
+        },
       });
     }
 
     // Recommend for high conflict days
     if (stats.averageConflictsPerDay > 2) {
       recommendations.push({
-        type: 'general_optimization',
-        priority: 'medium',
-        suggestion: 'High average conflicts per day. Consider systematic review.',
+        type: "general_optimization",
+        priority: "medium",
+        suggestion:
+          "High average conflicts per day. Consider systematic review.",
         details: {
           averageConflicts: stats.averageConflictsPerDay,
           suggestions: [
-            'Implement more flexible group rules',
-            'Create overlap groups for busy periods',
-            'Consider staff cross-training'
-          ]
-        }
+            "Implement more flexible group rules",
+            "Create overlap groups for busy periods",
+            "Consider staff cross-training",
+          ],
+        },
       });
     }
 

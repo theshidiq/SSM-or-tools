@@ -1,23 +1,27 @@
 /**
  * ConstraintModel.js
- * 
+ *
  * Model classes for constraint definitions and management.
  * Provides structured representation of scheduling constraints and rules.
  */
 
-import { VIOLATION_TYPES, DAILY_LIMITS, getMonthlyLimits } from '../constraints/ConstraintEngine';
+import {
+  VIOLATION_TYPES,
+  DAILY_LIMITS,
+  getMonthlyLimits,
+} from "../constraints/ConstraintEngine";
 
 /**
  * Base constraint class
  */
 export class Constraint {
-  constructor(name, type, priority = 'medium') {
+  constructor(name, type, priority = "medium") {
     this.id = this.generateId();
     this.name = name;
     this.type = type;
     this.priority = priority; // 'critical', 'high', 'medium', 'low'
     this.active = true;
-    this.description = '';
+    this.description = "";
     this.tags = [];
     this.createdAt = new Date().toISOString();
     this.lastModified = new Date().toISOString();
@@ -39,7 +43,7 @@ export class Constraint {
    * @returns {Object} Validation result
    */
   validate(scheduleData, staffMembers, dateRange) {
-    throw new Error('validate method must be implemented by subclass');
+    throw new Error("validate method must be implemented by subclass");
   }
 
   /**
@@ -47,8 +51,8 @@ export class Constraint {
    * @param {Object} updates - Updates to apply
    */
   update(updates) {
-    Object.keys(updates).forEach(key => {
-      if (key !== 'id' && key !== 'createdAt') {
+    Object.keys(updates).forEach((key) => {
+      if (key !== "id" && key !== "createdAt") {
         this[key] = updates[key];
       }
     });
@@ -71,7 +75,7 @@ export class Constraint {
    * @param {string} tag - Tag to remove
    */
   removeTag(tag) {
-    this.tags = this.tags.filter(t => t !== tag);
+    this.tags = this.tags.filter((t) => t !== tag);
     this.lastModified = new Date().toISOString();
   }
 
@@ -89,7 +93,7 @@ export class Constraint {
       description: this.description,
       tags: [...this.tags],
       createdAt: this.createdAt,
-      lastModified: this.lastModified
+      lastModified: this.lastModified,
     };
   }
 }
@@ -99,7 +103,7 @@ export class Constraint {
  */
 export class MonthlyLimitConstraint extends Constraint {
   constructor(name, limitType, maxValue, minValue = 0) {
-    super(name, 'monthly_limit', 'high');
+    super(name, "monthly_limit", "high");
     this.limitType = limitType; // 'off_days', 'work_days', 'early_shifts', etc.
     this.maxValue = maxValue;
     this.minValue = minValue;
@@ -137,11 +141,11 @@ export class MonthlyLimitConstraint extends Constraint {
     if (this.exemptStaff.includes(staffId)) {
       return { max: Infinity, min: 0 };
     }
-    
+
     if (this.customLimits[staffId]) {
       return this.customLimits[staffId];
     }
-    
+
     return { max: this.maxValue, min: this.minValue };
   }
 
@@ -154,8 +158,8 @@ export class MonthlyLimitConstraint extends Constraint {
    */
   validate(scheduleData, staffMembers, dateRange) {
     const violations = [];
-    
-    staffMembers.forEach(staff => {
+
+    staffMembers.forEach((staff) => {
       if (!this.active || this.exemptStaff.includes(staff.id)) {
         return;
       }
@@ -167,10 +171,10 @@ export class MonthlyLimitConstraint extends Constraint {
       let count = 0;
 
       // Count based on limit type
-      dateRange.forEach(date => {
-        const dateKey = date.toISOString().split('T')[0];
+      dateRange.forEach((date) => {
+        const dateKey = date.toISOString().split("T")[0];
         const shift = staffSchedule[dateKey];
-        
+
         if (this.shiftMatchesType(shift)) {
           count++;
         }
@@ -189,8 +193,8 @@ export class MonthlyLimitConstraint extends Constraint {
             limitType: this.limitType,
             count,
             maxLimit: limits.max,
-            excess: count - limits.max
-          }
+            excess: count - limits.max,
+          },
         });
       } else if (count < limits.min) {
         violations.push({
@@ -204,8 +208,8 @@ export class MonthlyLimitConstraint extends Constraint {
             limitType: this.limitType,
             count,
             minLimit: limits.min,
-            deficit: limits.min - count
-          }
+            deficit: limits.min - count,
+          },
         });
       }
     });
@@ -214,7 +218,7 @@ export class MonthlyLimitConstraint extends Constraint {
       valid: violations.length === 0,
       violations,
       constraintId: this.id,
-      constraintName: this.name
+      constraintName: this.name,
     };
   }
 
@@ -225,14 +229,19 @@ export class MonthlyLimitConstraint extends Constraint {
    */
   shiftMatchesType(shift) {
     switch (this.limitType) {
-      case 'off_days':
-        return shift === '×' || shift === 'off' || shift === '★';
-      case 'early_shifts':
-        return shift === '△' || shift === 'early';
-      case 'late_shifts':
-        return shift === '◇' || shift === 'late';
-      case 'work_days':
-        return shift !== '×' && shift !== 'off' && shift !== '★' && shift !== undefined;
+      case "off_days":
+        return shift === "×" || shift === "off" || shift === "★";
+      case "early_shifts":
+        return shift === "△" || shift === "early";
+      case "late_shifts":
+        return shift === "◇" || shift === "late";
+      case "work_days":
+        return (
+          shift !== "×" &&
+          shift !== "off" &&
+          shift !== "★" &&
+          shift !== undefined
+        );
       default:
         return false;
     }
@@ -250,7 +259,7 @@ export class MonthlyLimitConstraint extends Constraint {
       minValue: this.minValue,
       appliesToAllStaff: this.appliesToAllStaff,
       exemptStaff: [...this.exemptStaff],
-      customLimits: { ...this.customLimits }
+      customLimits: { ...this.customLimits },
     };
   }
 }
@@ -260,11 +269,19 @@ export class MonthlyLimitConstraint extends Constraint {
  */
 export class DailyLimitConstraint extends Constraint {
   constructor(name, limitType, maxValue, minValue = 0) {
-    super(name, 'daily_limit', 'high');
+    super(name, "daily_limit", "high");
     this.limitType = limitType; // 'off_count', 'early_count', 'working_count', etc.
     this.maxValue = maxValue;
     this.minValue = minValue;
-    this.daysOfWeek = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
+    this.daysOfWeek = [
+      "sunday",
+      "monday",
+      "tuesday",
+      "wednesday",
+      "thursday",
+      "friday",
+      "saturday",
+    ];
     this.customLimitsByDay = {}; // { 'monday': { max: 3, min: 1 }, ... }
   }
 
@@ -285,7 +302,12 @@ export class DailyLimitConstraint extends Constraint {
    * @returns {Object} Limit object with max and min values
    */
   getLimitForDay(dayOfWeek) {
-    return this.customLimitsByDay[dayOfWeek] || { max: this.maxValue, min: this.minValue };
+    return (
+      this.customLimitsByDay[dayOfWeek] || {
+        max: this.maxValue,
+        min: this.minValue,
+      }
+    );
   }
 
   /**
@@ -298,10 +320,18 @@ export class DailyLimitConstraint extends Constraint {
   validate(scheduleData, staffMembers, dateRange) {
     const violations = [];
 
-    dateRange.forEach(date => {
-      const dateKey = date.toISOString().split('T')[0];
-      const dayOfWeek = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'][date.getDay()];
-      
+    dateRange.forEach((date) => {
+      const dateKey = date.toISOString().split("T")[0];
+      const dayOfWeek = [
+        "sunday",
+        "monday",
+        "tuesday",
+        "wednesday",
+        "thursday",
+        "friday",
+        "saturday",
+      ][date.getDay()];
+
       if (!this.daysOfWeek.includes(dayOfWeek)) {
         return; // Skip days not included in constraint
       }
@@ -311,17 +341,17 @@ export class DailyLimitConstraint extends Constraint {
       const affectedStaff = [];
 
       // Count based on limit type
-      staffMembers.forEach(staff => {
+      staffMembers.forEach((staff) => {
         const staffSchedule = scheduleData[staff.id];
         if (staffSchedule && staffSchedule[dateKey] !== undefined) {
           const shift = staffSchedule[dateKey];
-          
+
           if (this.shiftMatchesType(shift)) {
             count++;
             affectedStaff.push({
               id: staff.id,
               name: staff.name,
-              shift
+              shift,
             });
           }
         }
@@ -341,8 +371,8 @@ export class DailyLimitConstraint extends Constraint {
             count,
             maxLimit: limits.max,
             excess: count - limits.max,
-            affectedStaff
-          }
+            affectedStaff,
+          },
         });
       } else if (count < limits.min) {
         violations.push({
@@ -357,8 +387,8 @@ export class DailyLimitConstraint extends Constraint {
             count,
             minLimit: limits.min,
             deficit: limits.min - count,
-            affectedStaff
-          }
+            affectedStaff,
+          },
         });
       }
     });
@@ -367,7 +397,7 @@ export class DailyLimitConstraint extends Constraint {
       valid: violations.length === 0,
       violations,
       constraintId: this.id,
-      constraintName: this.name
+      constraintName: this.name,
     };
   }
 
@@ -378,16 +408,21 @@ export class DailyLimitConstraint extends Constraint {
    */
   shiftMatchesType(shift) {
     switch (this.limitType) {
-      case 'off_count':
-        return shift === '×' || shift === 'off' || shift === '★';
-      case 'early_count':
-        return shift === '△' || shift === 'early';
-      case 'late_count':
-        return shift === '◇' || shift === 'late';
-      case 'working_count':
-        return shift !== '×' && shift !== 'off' && shift !== '★' && shift !== undefined;
-      case 'normal_count':
-        return shift === '' || shift === 'normal';
+      case "off_count":
+        return shift === "×" || shift === "off" || shift === "★";
+      case "early_count":
+        return shift === "△" || shift === "early";
+      case "late_count":
+        return shift === "◇" || shift === "late";
+      case "working_count":
+        return (
+          shift !== "×" &&
+          shift !== "off" &&
+          shift !== "★" &&
+          shift !== undefined
+        );
+      case "normal_count":
+        return shift === "" || shift === "normal";
       default:
         return false;
     }
@@ -404,7 +439,7 @@ export class DailyLimitConstraint extends Constraint {
       maxValue: this.maxValue,
       minValue: this.minValue,
       daysOfWeek: [...this.daysOfWeek],
-      customLimitsByDay: { ...this.customLimitsByDay }
+      customLimitsByDay: { ...this.customLimitsByDay },
     };
   }
 }
@@ -413,8 +448,8 @@ export class DailyLimitConstraint extends Constraint {
  * Staff group conflict constraint
  */
 export class StaffGroupConstraint extends Constraint {
-  constructor(name, groupMembers, conflictType = 'simultaneous_off') {
-    super(name, 'staff_group', 'high');
+  constructor(name, groupMembers, conflictType = "simultaneous_off") {
+    super(name, "staff_group", "high");
     this.groupMembers = [...groupMembers];
     this.conflictType = conflictType; // 'simultaneous_off', 'simultaneous_early', 'simultaneous_late'
     this.maxSimultaneous = 1;
@@ -438,7 +473,9 @@ export class StaffGroupConstraint extends Constraint {
    * @param {string} memberName - Staff member name
    */
   removeMember(memberName) {
-    this.groupMembers = this.groupMembers.filter(member => member !== memberName);
+    this.groupMembers = this.groupMembers.filter(
+      (member) => member !== memberName,
+    );
     this.lastModified = new Date().toISOString();
   }
 
@@ -463,9 +500,9 @@ export class StaffGroupConstraint extends Constraint {
   validate(scheduleData, staffMembers, dateRange) {
     const violations = [];
 
-    dateRange.forEach(date => {
-      const dateKey = date.toISOString().split('T')[0];
-      
+    dateRange.forEach((date) => {
+      const dateKey = date.toISOString().split("T")[0];
+
       if (this.exemptDates.includes(dateKey)) {
         return; // Skip exempt dates
       }
@@ -474,17 +511,21 @@ export class StaffGroupConstraint extends Constraint {
       const conflictingStaff = [];
 
       // Check each group member
-      this.groupMembers.forEach(memberName => {
-        const staff = staffMembers.find(s => s.name === memberName);
-        if (staff && scheduleData[staff.id] && scheduleData[staff.id][dateKey] !== undefined) {
+      this.groupMembers.forEach((memberName) => {
+        const staff = staffMembers.find((s) => s.name === memberName);
+        if (
+          staff &&
+          scheduleData[staff.id] &&
+          scheduleData[staff.id][dateKey] !== undefined
+        ) {
           const shift = scheduleData[staff.id][dateKey];
-          
+
           if (this.shiftMatchesConflictType(shift)) {
             count++;
             conflictingStaff.push({
               id: staff.id,
               name: staff.name,
-              shift
+              shift,
             });
           }
         }
@@ -505,8 +546,8 @@ export class StaffGroupConstraint extends Constraint {
             maxSimultaneous: this.maxSimultaneous,
             excess: count - this.maxSimultaneous,
             conflictingStaff,
-            groupMembers: [...this.groupMembers]
-          }
+            groupMembers: [...this.groupMembers],
+          },
         });
       }
     });
@@ -515,7 +556,7 @@ export class StaffGroupConstraint extends Constraint {
       valid: violations.length === 0,
       violations,
       constraintId: this.id,
-      constraintName: this.name
+      constraintName: this.name,
     };
   }
 
@@ -526,14 +567,19 @@ export class StaffGroupConstraint extends Constraint {
    */
   shiftMatchesConflictType(shift) {
     switch (this.conflictType) {
-      case 'simultaneous_off':
-        return shift === '×' || shift === 'off' || shift === '★';
-      case 'simultaneous_early':
-        return shift === '△' || shift === 'early';
-      case 'simultaneous_late':
-        return shift === '◇' || shift === 'late';
-      case 'simultaneous_work':
-        return shift !== '×' && shift !== 'off' && shift !== '★' && shift !== undefined;
+      case "simultaneous_off":
+        return shift === "×" || shift === "off" || shift === "★";
+      case "simultaneous_early":
+        return shift === "△" || shift === "early";
+      case "simultaneous_late":
+        return shift === "◇" || shift === "late";
+      case "simultaneous_work":
+        return (
+          shift !== "×" &&
+          shift !== "off" &&
+          shift !== "★" &&
+          shift !== undefined
+        );
       default:
         return false;
     }
@@ -550,7 +596,7 @@ export class StaffGroupConstraint extends Constraint {
       conflictType: this.conflictType,
       maxSimultaneous: this.maxSimultaneous,
       exemptDates: [...this.exemptDates],
-      allowOverride: this.allowOverride
+      allowOverride: this.allowOverride,
     };
   }
 }
@@ -560,10 +606,10 @@ export class StaffGroupConstraint extends Constraint {
  */
 export class PriorityRuleConstraint extends Constraint {
   constructor(name, staffName, rule) {
-    super(name, 'priority_rule', 'medium');
+    super(name, "priority_rule", "medium");
     this.staffName = staffName;
     this.rule = rule; // { day: 'sunday', shift: 'early', priority: 'high' }
-    this.flexibility = 'strict'; // 'strict', 'flexible', 'preferred'
+    this.flexibility = "strict"; // 'strict', 'flexible', 'preferred'
     this.exemptDates = [];
   }
 
@@ -576,16 +622,29 @@ export class PriorityRuleConstraint extends Constraint {
    */
   validate(scheduleData, staffMembers, dateRange) {
     const violations = [];
-    const staff = staffMembers.find(s => s.name === this.staffName);
-    
+    const staff = staffMembers.find((s) => s.name === this.staffName);
+
     if (!staff || !scheduleData[staff.id]) {
-      return { valid: true, violations: [], constraintId: this.id, constraintName: this.name };
+      return {
+        valid: true,
+        violations: [],
+        constraintId: this.id,
+        constraintName: this.name,
+      };
     }
 
-    dateRange.forEach(date => {
-      const dateKey = date.toISOString().split('T')[0];
-      const dayOfWeek = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'][date.getDay()];
-      
+    dateRange.forEach((date) => {
+      const dateKey = date.toISOString().split("T")[0];
+      const dayOfWeek = [
+        "sunday",
+        "monday",
+        "tuesday",
+        "wednesday",
+        "thursday",
+        "friday",
+        "saturday",
+      ][date.getDay()];
+
       if (this.exemptDates.includes(dateKey) || dayOfWeek !== this.rule.day) {
         return;
       }
@@ -597,19 +656,35 @@ export class PriorityRuleConstraint extends Constraint {
       let ruleViolated = false;
 
       // Check if actual shift matches expected shift
-      if (expectedShift === 'off' && !(actualShift === '×' || actualShift === 'off' || actualShift === '★')) {
+      if (
+        expectedShift === "off" &&
+        !(actualShift === "×" || actualShift === "off" || actualShift === "★")
+      ) {
         ruleViolated = true;
-      } else if (expectedShift === 'early' && !(actualShift === '△' || actualShift === 'early')) {
+      } else if (
+        expectedShift === "early" &&
+        !(actualShift === "△" || actualShift === "early")
+      ) {
         ruleViolated = true;
-      } else if (expectedShift === 'late' && !(actualShift === '◇' || actualShift === 'late')) {
+      } else if (
+        expectedShift === "late" &&
+        !(actualShift === "◇" || actualShift === "late")
+      ) {
         ruleViolated = true;
-      } else if (expectedShift === 'normal' && !(actualShift === '' || actualShift === 'normal')) {
+      } else if (
+        expectedShift === "normal" &&
+        !(actualShift === "" || actualShift === "normal")
+      ) {
         ruleViolated = true;
       }
 
       if (ruleViolated) {
-        const severity = this.flexibility === 'strict' ? this.priority : 
-                        this.flexibility === 'flexible' ? 'low' : 'medium';
+        const severity =
+          this.flexibility === "strict"
+            ? this.priority
+            : this.flexibility === "flexible"
+              ? "low"
+              : "medium";
 
         violations.push({
           type: VIOLATION_TYPES.PRIORITY_RULE_VIOLATION,
@@ -624,8 +699,8 @@ export class PriorityRuleConstraint extends Constraint {
             rule: { ...this.rule },
             expectedShift,
             actualShift,
-            flexibility: this.flexibility
-          }
+            flexibility: this.flexibility,
+          },
         });
       }
     });
@@ -634,7 +709,7 @@ export class PriorityRuleConstraint extends Constraint {
       valid: violations.length === 0,
       violations,
       constraintId: this.id,
-      constraintName: this.name
+      constraintName: this.name,
     };
   }
 
@@ -648,7 +723,7 @@ export class PriorityRuleConstraint extends Constraint {
       staffName: this.staffName,
       rule: { ...this.rule },
       flexibility: this.flexibility,
-      exemptDates: [...this.exemptDates]
+      exemptDates: [...this.exemptDates],
     };
   }
 }
@@ -669,37 +744,37 @@ export class ConstraintManager {
   initializeDefaultConstraints() {
     // Monthly off day limits
     const monthlyOffLimit = new MonthlyLimitConstraint(
-      'Monthly Off Day Limit',
-      'off_days',
+      "Monthly Off Day Limit",
+      "off_days",
       8, // max 8 off days for 31-day months, 7 for 30-day months
-      0
+      0,
     );
     this.addConstraint(monthlyOffLimit);
 
     // Daily off limit
     const dailyOffLimit = new DailyLimitConstraint(
-      'Daily Off Limit',
-      'off_count',
+      "Daily Off Limit",
+      "off_count",
       DAILY_LIMITS.maxOffPerDay,
-      0
+      0,
     );
     this.addConstraint(dailyOffLimit);
 
     // Daily early shift limit
     const dailyEarlyLimit = new DailyLimitConstraint(
-      'Daily Early Shift Limit',
-      'early_count',
+      "Daily Early Shift Limit",
+      "early_count",
       DAILY_LIMITS.maxEarlyPerDay,
-      0
+      0,
     );
     this.addConstraint(dailyEarlyLimit);
 
     // Minimum working staff
     const minWorkingStaff = new DailyLimitConstraint(
-      'Minimum Working Staff',
-      'working_count',
+      "Minimum Working Staff",
+      "working_count",
       Infinity,
-      DAILY_LIMITS.minWorkingStaffPerDay
+      DAILY_LIMITS.minWorkingStaffPerDay,
     );
     this.addConstraint(minWorkingStaff);
   }
@@ -743,8 +818,8 @@ export class ConstraintManager {
    * @returns {Array} Array of constraints of the specified type
    */
   getConstraintsByType(type) {
-    return Array.from(this.constraints.values()).filter(constraint => 
-      constraint.type === type && constraint.active
+    return Array.from(this.constraints.values()).filter(
+      (constraint) => constraint.type === type && constraint.active,
     );
   }
 
@@ -756,8 +831,8 @@ export class ConstraintManager {
    * @returns {Object} Complete validation result
    */
   validateAllConstraints(scheduleData, staffMembers, dateRange) {
-    console.log('🔍 Validating all constraints...');
-    
+    console.log("🔍 Validating all constraints...");
+
     const validationResult = {
       valid: true,
       timestamp: new Date().toISOString(),
@@ -768,27 +843,31 @@ export class ConstraintManager {
         critical: 0,
         high: 0,
         medium: 0,
-        low: 0
+        low: 0,
       },
       constraintResults: [],
       allViolations: [],
-      summary: {}
+      summary: {},
     };
 
     // Validate each active constraint
-    Array.from(this.constraints.values()).forEach(constraint => {
+    Array.from(this.constraints.values()).forEach((constraint) => {
       if (constraint.active) {
         validationResult.totalConstraints++;
-        
-        const result = constraint.validate(scheduleData, staffMembers, dateRange);
+
+        const result = constraint.validate(
+          scheduleData,
+          staffMembers,
+          dateRange,
+        );
         validationResult.constraintResults.push(result);
-        
+
         if (!result.valid) {
           validationResult.valid = false;
           validationResult.violatedConstraints++;
           validationResult.totalViolations += result.violations.length;
-          
-          result.violations.forEach(violation => {
+
+          result.violations.forEach((violation) => {
             validationResult.allViolations.push(violation);
             validationResult.violationsBySeverity[violation.severity]++;
           });
@@ -801,7 +880,7 @@ export class ConstraintManager {
       timestamp: validationResult.timestamp,
       valid: validationResult.valid,
       totalViolations: validationResult.totalViolations,
-      violationsBySeverity: { ...validationResult.violationsBySeverity }
+      violationsBySeverity: { ...validationResult.violationsBySeverity },
     });
 
     // Keep only last 50 validation records
@@ -811,13 +890,22 @@ export class ConstraintManager {
 
     // Generate summary
     validationResult.summary = {
-      complianceRate: validationResult.totalConstraints > 0 ? 
-        ((validationResult.totalConstraints - validationResult.violatedConstraints) / validationResult.totalConstraints) * 100 : 100,
+      complianceRate:
+        validationResult.totalConstraints > 0
+          ? ((validationResult.totalConstraints -
+              validationResult.violatedConstraints) /
+              validationResult.totalConstraints) *
+            100
+          : 100,
       criticalIssues: validationResult.violationsBySeverity.critical > 0,
-      recommendedActions: this.generateRecommendedActions(validationResult.allViolations)
+      recommendedActions: this.generateRecommendedActions(
+        validationResult.allViolations,
+      ),
     };
 
-    console.log(`✅ Constraint validation completed: ${validationResult.valid ? 'VALID' : 'VIOLATIONS FOUND'}`);
+    console.log(
+      `✅ Constraint validation completed: ${validationResult.valid ? "VALID" : "VIOLATIONS FOUND"}`,
+    );
     return validationResult;
   }
 
@@ -831,7 +919,7 @@ export class ConstraintManager {
     const violationTypes = {};
 
     // Group violations by type
-    violations.forEach(violation => {
+    violations.forEach((violation) => {
       if (!violationTypes[violation.type]) {
         violationTypes[violation.type] = [];
       }
@@ -839,57 +927,57 @@ export class ConstraintManager {
     });
 
     // Generate actions for each violation type
-    Object.keys(violationTypes).forEach(type => {
+    Object.keys(violationTypes).forEach((type) => {
       const typeViolations = violationTypes[type];
-      
+
       switch (type) {
         case VIOLATION_TYPES.MONTHLY_OFF_LIMIT:
           actions.push({
-            type: 'redistribute_monthly_off',
-            priority: 'high',
+            type: "redistribute_monthly_off",
+            priority: "high",
             affectedCount: typeViolations.length,
-            description: 'Redistribute monthly off days for affected staff',
-            violations: typeViolations
+            description: "Redistribute monthly off days for affected staff",
+            violations: typeViolations,
           });
           break;
-          
+
         case VIOLATION_TYPES.DAILY_OFF_LIMIT:
           actions.push({
-            type: 'adjust_daily_off',
-            priority: 'high',
+            type: "adjust_daily_off",
+            priority: "high",
             affectedCount: typeViolations.length,
-            description: 'Adjust daily off assignments to meet limits',
-            violations: typeViolations
+            description: "Adjust daily off assignments to meet limits",
+            violations: typeViolations,
           });
           break;
-          
+
         case VIOLATION_TYPES.STAFF_GROUP_CONFLICT:
           actions.push({
-            type: 'resolve_group_conflicts',
-            priority: 'high',
+            type: "resolve_group_conflicts",
+            priority: "high",
             affectedCount: typeViolations.length,
-            description: 'Resolve staff group conflicts',
-            violations: typeViolations
+            description: "Resolve staff group conflicts",
+            violations: typeViolations,
           });
           break;
-          
+
         case VIOLATION_TYPES.PRIORITY_RULE_VIOLATION:
           actions.push({
-            type: 'apply_priority_rules',
-            priority: 'medium',
+            type: "apply_priority_rules",
+            priority: "medium",
             affectedCount: typeViolations.length,
-            description: 'Apply staff priority rules',
-            violations: typeViolations
+            description: "Apply staff priority rules",
+            violations: typeViolations,
           });
           break;
-          
+
         case VIOLATION_TYPES.INSUFFICIENT_COVERAGE:
           actions.push({
-            type: 'increase_coverage',
-            priority: 'critical',
+            type: "increase_coverage",
+            priority: "critical",
             affectedCount: typeViolations.length,
-            description: 'Increase staff coverage for affected days',
-            violations: typeViolations
+            description: "Increase staff coverage for affected days",
+            violations: typeViolations,
           });
           break;
       }
@@ -909,7 +997,7 @@ export class ConstraintManager {
     const exported = {
       exportedAt: new Date().toISOString(),
       constraints: {},
-      validationHistory: [...this.validationHistory]
+      validationHistory: [...this.validationHistory],
     };
 
     Array.from(this.constraints.entries()).forEach(([id, constraint]) => {
@@ -927,54 +1015,56 @@ export class ConstraintManager {
     this.constraints.clear();
     this.validationHistory = jsonData.validationHistory || [];
 
-    Object.entries(jsonData.constraints || {}).forEach(([id, constraintData]) => {
-      let constraint;
-      
-      switch (constraintData.type) {
-        case 'monthly_limit':
-          constraint = new MonthlyLimitConstraint(
-            constraintData.name,
-            constraintData.limitType,
-            constraintData.maxValue,
-            constraintData.minValue
-          );
-          break;
-        case 'daily_limit':
-          constraint = new DailyLimitConstraint(
-            constraintData.name,
-            constraintData.limitType,
-            constraintData.maxValue,
-            constraintData.minValue
-          );
-          break;
-        case 'staff_group':
-          constraint = new StaffGroupConstraint(
-            constraintData.name,
-            constraintData.groupMembers,
-            constraintData.conflictType
-          );
-          break;
-        case 'priority_rule':
-          constraint = new PriorityRuleConstraint(
-            constraintData.name,
-            constraintData.staffName,
-            constraintData.rule
-          );
-          break;
-        default:
-          return;
-      }
-      
-      // Apply common properties
-      constraint.id = constraintData.id;
-      constraint.priority = constraintData.priority;
-      constraint.active = constraintData.active;
-      constraint.description = constraintData.description;
-      constraint.tags = constraintData.tags || [];
-      constraint.createdAt = constraintData.createdAt;
-      constraint.lastModified = constraintData.lastModified;
-      
-      this.constraints.set(id, constraint);
-    });
+    Object.entries(jsonData.constraints || {}).forEach(
+      ([id, constraintData]) => {
+        let constraint;
+
+        switch (constraintData.type) {
+          case "monthly_limit":
+            constraint = new MonthlyLimitConstraint(
+              constraintData.name,
+              constraintData.limitType,
+              constraintData.maxValue,
+              constraintData.minValue,
+            );
+            break;
+          case "daily_limit":
+            constraint = new DailyLimitConstraint(
+              constraintData.name,
+              constraintData.limitType,
+              constraintData.maxValue,
+              constraintData.minValue,
+            );
+            break;
+          case "staff_group":
+            constraint = new StaffGroupConstraint(
+              constraintData.name,
+              constraintData.groupMembers,
+              constraintData.conflictType,
+            );
+            break;
+          case "priority_rule":
+            constraint = new PriorityRuleConstraint(
+              constraintData.name,
+              constraintData.staffName,
+              constraintData.rule,
+            );
+            break;
+          default:
+            return;
+        }
+
+        // Apply common properties
+        constraint.id = constraintData.id;
+        constraint.priority = constraintData.priority;
+        constraint.active = constraintData.active;
+        constraint.description = constraintData.description;
+        constraint.tags = constraintData.tags || [];
+        constraint.createdAt = constraintData.createdAt;
+        constraint.lastModified = constraintData.lastModified;
+
+        this.constraints.set(id, constraint);
+      },
+    );
   }
 }

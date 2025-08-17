@@ -2,21 +2,21 @@
 // Centralized export for all settings-related components
 
 // Main Settings Modal
-export { default as SettingsModal } from './SettingsModal';
+export { default as SettingsModal } from "./SettingsModal";
 
 // Tab Components
-export { default as StaffGroupsTab } from './tabs/StaffGroupsTab';
-export { default as DailyLimitsTab } from './tabs/DailyLimitsTab';
-export { default as PriorityRulesTab } from './tabs/PriorityRulesTab';
-export { default as MLParametersTab } from './tabs/MLParametersTab';
-export { default as ConstraintWeightsTab } from './tabs/ConstraintWeightsTab';
+export { default as StaffGroupsTab } from "./tabs/StaffGroupsTab";
+export { default as DailyLimitsTab } from "./tabs/DailyLimitsTab";
+export { default as PriorityRulesTab } from "./tabs/PriorityRulesTab";
+export { default as MLParametersTab } from "./tabs/MLParametersTab";
+export { default as ConstraintWeightsTab } from "./tabs/ConstraintWeightsTab";
 
 // Shared UI Components
-export { default as TabButton } from './shared/TabButton';
-export { default as Slider } from './shared/Slider';
-export { default as ToggleSwitch } from './shared/ToggleSwitch';
-export { default as NumberInput } from './shared/NumberInput';
-export { default as FormField } from './shared/FormField';
+export { default as TabButton } from "./shared/TabButton";
+export { default as Slider } from "./shared/Slider";
+export { default as ToggleSwitch } from "./shared/ToggleSwitch";
+export { default as NumberInput } from "./shared/NumberInput";
+export { default as FormField } from "./shared/FormField";
 
 // Hooks
-export { useSettingsData } from '../../hooks/useSettingsData';
+export { useSettingsData } from "../../hooks/useSettingsData";

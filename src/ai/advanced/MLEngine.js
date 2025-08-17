@@ -1,14 +1,14 @@
 /**
  * MLEngine.js
- * 
+ *
  * Phase 3: Machine Learning Engine - Core ML capabilities for intelligent scheduling
  * Implements neural networks, ensemble methods, feature engineering, and advanced ML optimization
  */
 
-import { NeuralNetworkModel } from './ml/NeuralNetworkModel';
-import { EnsembleModel } from './ml/EnsembleModel';
-import { FeatureEngineer } from './ml/FeatureEngineer';
-import { ModelEvaluator } from './ml/ModelEvaluator';
+import { NeuralNetworkModel } from "./ml/NeuralNetworkModel";
+import { EnsembleModel } from "./ml/EnsembleModel";
+import { FeatureEngineer } from "./ml/FeatureEngineer";
+import { ModelEvaluator } from "./ml/ModelEvaluator";
 
 /**
  * Main Machine Learning Engine
@@ -16,18 +16,18 @@ import { ModelEvaluator } from './ml/ModelEvaluator';
 export class MLEngine {
   constructor() {
     this.initialized = false;
-    this.version = '1.0.0';
-    
+    this.version = "1.0.0";
+
     // ML Models
     this.neuralNetwork = new NeuralNetworkModel();
     this.ensemble = new EnsembleModel();
     this.featureEngineer = new FeatureEngineer();
     this.modelEvaluator = new ModelEvaluator();
-    
+
     // Model registry
     this.models = new Map();
     this.activeModels = new Set();
-    
+
     // Performance tracking
     this.performance = {
       accuracy: 0,
@@ -37,37 +37,42 @@ export class MLEngine {
       trainingTime: 0,
       predictionTime: 0,
       totalPredictions: 0,
-      correctPredictions: 0
+      correctPredictions: 0,
     };
-    
+
     // Training data cache
     this.trainingData = null;
     this.features = null;
     this.labels = null;
-    
+
     // Configuration
     this.config = {
       neuralNetwork: {
         hiddenLayers: [64, 32, 16],
-        activation: 'relu',
-        optimizer: 'adam',
+        activation: "relu",
+        optimizer: "adam",
         learningRate: 0.001,
         epochs: 100,
         batchSize: 32,
-        validationSplit: 0.2
+        validationSplit: 0.2,
       },
       ensemble: {
-        models: ['randomForest', 'gradientBoosting', 'svm', 'logisticRegression'],
-        votingStrategy: 'soft',
-        crossValidationFolds: 5
+        models: [
+          "randomForest",
+          "gradientBoosting",
+          "svm",
+          "logisticRegression",
+        ],
+        votingStrategy: "soft",
+        crossValidationFolds: 5,
       },
       features: {
-        categoricalEncoding: 'oneHot',
-        numericalScaling: 'standardization',
+        categoricalEncoding: "oneHot",
+        numericalScaling: "standardization",
         timeFeatures: true,
         patternFeatures: true,
-        constraintFeatures: true
-      }
+        constraintFeatures: true,
+      },
     };
   }
 
@@ -77,47 +82,46 @@ export class MLEngine {
    * @returns {Object} Initialization result
    */
   async initialize(options = {}) {
-    console.log('🤖 Initializing Machine Learning Engine...');
-    
+    console.log("🤖 Initializing Machine Learning Engine...");
+
     try {
       const startTime = Date.now();
-      
+
       // Merge configuration
       this.config = { ...this.config, ...options };
-      
+
       // Initialize components
       await this.neuralNetwork.initialize(this.config.neuralNetwork);
       await this.ensemble.initialize(this.config.ensemble);
       await this.featureEngineer.initialize(this.config.features);
       await this.modelEvaluator.initialize();
-      
+
       // Register models
-      this.registerModel('neuralNetwork', this.neuralNetwork);
-      this.registerModel('ensemble', this.ensemble);
-      
+      this.registerModel("neuralNetwork", this.neuralNetwork);
+      this.registerModel("ensemble", this.ensemble);
+
       // Activate default models
-      this.activateModel('neuralNetwork');
-      this.activateModel('ensemble');
-      
+      this.activateModel("neuralNetwork");
+      this.activateModel("ensemble");
+
       this.initialized = true;
       const initTime = Date.now() - startTime;
-      
+
       console.log(`✅ ML Engine initialized in ${initTime}ms`);
-      
+
       return {
         success: true,
         timestamp: new Date().toISOString(),
         initializationTime: initTime,
         modelsRegistered: this.models.size,
-        activeModels: Array.from(this.activeModels)
+        activeModels: Array.from(this.activeModels),
       };
-      
     } catch (error) {
-      console.error('❌ ML Engine initialization failed:', error);
+      console.error("❌ ML Engine initialization failed:", error);
       return {
         success: false,
         error: error.message,
-        timestamp: new Date().toISOString()
+        timestamp: new Date().toISOString(),
       };
     }
   }
@@ -152,21 +156,23 @@ export class MLEngine {
    */
   async trainNeuralNetworks(historicalData) {
     if (!this.initialized) {
-      throw new Error('ML Engine not initialized');
+      throw new Error("ML Engine not initialized");
     }
 
-    console.log('🧠 Training neural networks from historical data...');
-    
+    console.log("🧠 Training neural networks from historical data...");
+
     try {
       const startTime = Date.now();
-      
+
       // Prepare training data
       const trainingDataset = await this.prepareTrainingData(historicalData);
-      
+
       if (!trainingDataset.success) {
-        throw new Error(`Training data preparation failed: ${trainingDataset.error}`);
+        throw new Error(
+          `Training data preparation failed: ${trainingDataset.error}`,
+        );
       }
-      
+
       // Train neural network
       const nnTrainingResult = await this.neuralNetwork.train(
         trainingDataset.features,
@@ -175,18 +181,22 @@ export class MLEngine {
           ...this.config.neuralNetwork,
           onEpochEnd: (epoch, loss, accuracy) => {
             if (epoch % 10 === 0) {
-              console.log(`Epoch ${epoch}: loss=${loss.toFixed(4)}, accuracy=${accuracy.toFixed(4)}`);
+              console.log(
+                `Epoch ${epoch}: loss=${loss.toFixed(4)}, accuracy=${accuracy.toFixed(4)}`,
+              );
             }
-          }
-        }
+          },
+        },
       );
-      
+
       const trainingTime = Date.now() - startTime;
       this.performance.trainingTime = trainingTime;
-      
+
       console.log(`✅ Neural network training completed in ${trainingTime}ms`);
-      console.log(`🎯 Training accuracy: ${nnTrainingResult.accuracy.toFixed(4)}`);
-      
+      console.log(
+        `🎯 Training accuracy: ${nnTrainingResult.accuracy.toFixed(4)}`,
+      );
+
       return {
         success: true,
         timestamp: new Date().toISOString(),
@@ -194,15 +204,14 @@ export class MLEngine {
         accuracy: nnTrainingResult.accuracy,
         loss: nnTrainingResult.loss,
         epochs: nnTrainingResult.epochs,
-        modelSize: nnTrainingResult.modelSize
+        modelSize: nnTrainingResult.modelSize,
       };
-      
     } catch (error) {
-      console.error('❌ Neural network training failed:', error);
+      console.error("❌ Neural network training failed:", error);
       return {
         success: false,
         error: error.message,
-        timestamp: new Date().toISOString()
+        timestamp: new Date().toISOString(),
       };
     }
   }
@@ -214,21 +223,23 @@ export class MLEngine {
    */
   async trainEnsembleMethods(historicalData) {
     if (!this.initialized) {
-      throw new Error('ML Engine not initialized');
+      throw new Error("ML Engine not initialized");
     }
 
-    console.log('🌳 Training ensemble methods from historical data...');
-    
+    console.log("🌳 Training ensemble methods from historical data...");
+
     try {
       const startTime = Date.now();
-      
+
       // Prepare training data
       const trainingDataset = await this.prepareTrainingData(historicalData);
-      
+
       if (!trainingDataset.success) {
-        throw new Error(`Training data preparation failed: ${trainingDataset.error}`);
+        throw new Error(
+          `Training data preparation failed: ${trainingDataset.error}`,
+        );
       }
-      
+
       // Train ensemble models
       const ensembleTrainingResult = await this.ensemble.train(
         trainingDataset.features,
@@ -236,16 +247,22 @@ export class MLEngine {
         {
           ...this.config.ensemble,
           onModelTrained: (modelName, accuracy) => {
-            console.log(`✅ ${modelName} trained with accuracy: ${accuracy.toFixed(4)}`);
-          }
-        }
+            console.log(
+              `✅ ${modelName} trained with accuracy: ${accuracy.toFixed(4)}`,
+            );
+          },
+        },
       );
-      
+
       const trainingTime = Date.now() - startTime;
-      
-      console.log(`✅ Ensemble methods training completed in ${trainingTime}ms`);
-      console.log(`🎯 Ensemble accuracy: ${ensembleTrainingResult.accuracy.toFixed(4)}`);
-      
+
+      console.log(
+        `✅ Ensemble methods training completed in ${trainingTime}ms`,
+      );
+      console.log(
+        `🎯 Ensemble accuracy: ${ensembleTrainingResult.accuracy.toFixed(4)}`,
+      );
+
       return {
         success: true,
         timestamp: new Date().toISOString(),
@@ -253,15 +270,14 @@ export class MLEngine {
         accuracy: ensembleTrainingResult.accuracy,
         modelAccuracies: ensembleTrainingResult.modelAccuracies,
         bestModel: ensembleTrainingResult.bestModel,
-        ensembleWeights: ensembleTrainingResult.weights
+        ensembleWeights: ensembleTrainingResult.weights,
       };
-      
     } catch (error) {
-      console.error('❌ Ensemble training failed:', error);
+      console.error("❌ Ensemble training failed:", error);
       return {
         success: false,
         error: error.message,
-        timestamp: new Date().toISOString()
+        timestamp: new Date().toISOString(),
       };
     }
   }
@@ -273,49 +289,53 @@ export class MLEngine {
    */
   async prepareTrainingData(historicalData) {
     try {
-      console.log('📊 Preparing training data...');
-      
+      console.log("📊 Preparing training data...");
+
       // Extract features using feature engineer
-      const featureExtractionResult = await this.featureEngineer.extractFeatures(historicalData);
-      
+      const featureExtractionResult =
+        await this.featureEngineer.extractFeatures(historicalData);
+
       if (!featureExtractionResult.success) {
-        throw new Error(`Feature extraction failed: ${featureExtractionResult.error}`);
+        throw new Error(
+          `Feature extraction failed: ${featureExtractionResult.error}`,
+        );
       }
-      
+
       // Create labels for supervised learning
       const labels = this.createTrainingLabels(historicalData);
-      
+
       // Validate dataset
       const validation = this.validateTrainingDataset(
         featureExtractionResult.features,
-        labels
+        labels,
       );
-      
+
       if (!validation.valid) {
         throw new Error(`Dataset validation failed: ${validation.error}`);
       }
-      
+
       // Store for future use
       this.trainingData = historicalData;
       this.features = featureExtractionResult.features;
       this.labels = labels;
-      
-      console.log(`✅ Training data prepared: ${featureExtractionResult.features.length} samples, ${featureExtractionResult.featureNames.length} features`);
-      
+
+      console.log(
+        `✅ Training data prepared: ${featureExtractionResult.features.length} samples, ${featureExtractionResult.featureNames.length} features`,
+      );
+
       return {
         success: true,
         features: featureExtractionResult.features,
         labels: labels,
         featureNames: featureExtractionResult.featureNames,
         sampleCount: featureExtractionResult.features.length,
-        featureCount: featureExtractionResult.featureNames.length
+        featureCount: featureExtractionResult.featureNames.length,
       };
-      
     } catch (error) {
-      console.error('❌ Training data preparation failed:', error);
+      console.error("❌ Training data preparation failed:", error);
       return {
         success: false,
-        error: error.message
+        error: error.message,
       };
     }
   }
@@ -327,22 +347,24 @@ export class MLEngine {
    */
   createTrainingLabels(historicalData) {
     const labels = [];
-    
+
     // Create labels based on optimal shift assignments
     // This is a simplified approach - in practice, labels would be based on
     // actual outcomes, user satisfaction, constraint violations, etc.
-    
+
     if (historicalData.scheduleData) {
-      Object.entries(historicalData.scheduleData).forEach(([monthKey, monthData]) => {
-        Object.entries(monthData).forEach(([staffId, staffSchedule]) => {
-          Object.entries(staffSchedule).forEach(([dateKey, shiftType]) => {
-            // Create label based on shift type and context
-            labels.push(this.encodeShiftType(shiftType));
+      Object.entries(historicalData.scheduleData).forEach(
+        ([monthKey, monthData]) => {
+          Object.entries(monthData).forEach(([staffId, staffSchedule]) => {
+            Object.entries(staffSchedule).forEach(([dateKey, shiftType]) => {
+              // Create label based on shift type and context
+              labels.push(this.encodeShiftType(shiftType));
+            });
           });
-        });
-      });
+        },
+      );
     }
-    
+
     return labels;
   }
 
@@ -353,12 +375,12 @@ export class MLEngine {
    */
   encodeShiftType(shiftType) {
     const encoding = {
-      '△': 0, // Early shift
-      '○': 1, // Normal shift
-      '▽': 2, // Late shift
-      '×': 3  // Day off
+      "△": 0, // Early shift
+      "○": 1, // Normal shift
+      "▽": 2, // Late shift
+      "×": 3, // Day off
     };
-    
+
     return encoding[shiftType] !== undefined ? encoding[shiftType] : 1; // Default to normal
   }
 
@@ -374,54 +396,56 @@ export class MLEngine {
       if (features.length !== labels.length) {
         return {
           valid: false,
-          error: 'Features and labels length mismatch'
+          error: "Features and labels length mismatch",
         };
       }
-      
+
       // Check for empty dataset
       if (features.length === 0) {
         return {
           valid: false,
-          error: 'Empty dataset'
+          error: "Empty dataset",
         };
       }
-      
+
       // Check feature consistency
       const featureLength = features[0]?.length || 0;
-      const inconsistentFeatures = features.some(f => f.length !== featureLength);
-      
+      const inconsistentFeatures = features.some(
+        (f) => f.length !== featureLength,
+      );
+
       if (inconsistentFeatures) {
         return {
           valid: false,
-          error: 'Inconsistent feature dimensions'
+          error: "Inconsistent feature dimensions",
         };
       }
-      
+
       // Check for NaN values
-      const hasNaN = features.some(f => f.some(v => isNaN(v))) || 
-                    labels.some(l => isNaN(l));
-      
+      const hasNaN =
+        features.some((f) => f.some((v) => isNaN(v))) ||
+        labels.some((l) => isNaN(l));
+
       if (hasNaN) {
         return {
           valid: false,
-          error: 'Dataset contains NaN values'
+          error: "Dataset contains NaN values",
         };
       }
-      
+
       return {
         valid: true,
         sampleCount: features.length,
         featureCount: featureLength,
         labelRange: {
           min: Math.min(...labels),
-          max: Math.max(...labels)
-        }
+          max: Math.max(...labels),
+        },
       };
-      
     } catch (error) {
       return {
         valid: false,
-        error: error.message
+        error: error.message,
       };
     }
   }
@@ -433,7 +457,7 @@ export class MLEngine {
    */
   async generateMLPredictions(params) {
     if (!this.initialized) {
-      throw new Error('ML Engine not initialized');
+      throw new Error("ML Engine not initialized");
     }
 
     const {
@@ -441,25 +465,26 @@ export class MLEngine {
       dateRange,
       existingSchedule,
       seasonalContext,
-      options = {}
+      options = {},
     } = params;
 
-    console.log('🔮 Generating ML-powered predictions...');
-    
+    console.log("🔮 Generating ML-powered predictions...");
+
     try {
       const startTime = Date.now();
-      
+
       // Extract features for prediction
-      const predictionFeatures = await this.featureEngineer.extractPredictionFeatures({
-        staffMembers,
-        dateRange,
-        existingSchedule,
-        seasonalContext
-      });
-      
+      const predictionFeatures =
+        await this.featureEngineer.extractPredictionFeatures({
+          staffMembers,
+          dateRange,
+          existingSchedule,
+          seasonalContext,
+        });
+
       // Get predictions from active models
       const modelPredictions = new Map();
-      
+
       for (const modelName of this.activeModels) {
         const model = this.models.get(modelName);
         if (model && model.isReady()) {
@@ -467,33 +492,35 @@ export class MLEngine {
           modelPredictions.set(modelName, predictions);
         }
       }
-      
+
       // Combine predictions using ensemble voting
       const combinedPredictions = this.combinePredictions(modelPredictions);
-      
+
       // Convert predictions to schedule format
       const schedulePredictions = this.convertPredictionsToSchedule(
         combinedPredictions,
         staffMembers,
-        dateRange
+        dateRange,
       );
-      
+
       // Extract preferences from predictions
       const preferences = this.extractPreferencesFromPredictions(
         schedulePredictions,
-        staffMembers
+        staffMembers,
       );
-      
+
       // Calculate confidence scores
       const confidence = this.calculatePredictionConfidence(modelPredictions);
-      
+
       const predictionTime = Date.now() - startTime;
       this.performance.predictionTime = predictionTime;
       this.performance.totalPredictions++;
-      
+
       console.log(`✅ ML predictions generated in ${predictionTime}ms`);
-      console.log(`🎯 Prediction confidence: ${confidence.overall.toFixed(2)}%`);
-      
+      console.log(
+        `🎯 Prediction confidence: ${confidence.overall.toFixed(2)}%`,
+      );
+
       return {
         success: true,
         timestamp: new Date().toISOString(),
@@ -506,16 +533,15 @@ export class MLEngine {
         metadata: {
           featuresUsed: predictionFeatures.featureNames.length,
           modelsUsed: Array.from(this.activeModels),
-          samplesProcessed: predictionFeatures.features.length
-        }
+          samplesProcessed: predictionFeatures.features.length,
+        },
       };
-      
     } catch (error) {
-      console.error('❌ ML prediction generation failed:', error);
+      console.error("❌ ML prediction generation failed:", error);
       return {
         success: false,
         error: error.message,
-        timestamp: new Date().toISOString()
+        timestamp: new Date().toISOString(),
       };
     }
   }
@@ -529,37 +555,40 @@ export class MLEngine {
     if (modelPredictions.size === 0) {
       return [];
     }
-    
+
     // Get first prediction to determine length
     const firstPrediction = Array.from(modelPredictions.values())[0];
     const predictionLength = firstPrediction.length;
-    
+
     const combinedPredictions = [];
-    
+
     // For each prediction position
     for (let i = 0; i < predictionLength; i++) {
       const predictions = [];
       const weights = [];
-      
+
       // Collect predictions from all models
       modelPredictions.forEach((modelPreds, modelName) => {
         if (modelPreds[i] !== undefined) {
           predictions.push(modelPreds[i]);
           // Weight based on model type (neural networks get higher weight)
-          weights.push(modelName === 'neuralNetwork' ? 1.2 : 1.0);
+          weights.push(modelName === "neuralNetwork" ? 1.2 : 1.0);
         }
       });
-      
+
       // Calculate weighted average
       if (predictions.length > 0) {
-        const weightedSum = predictions.reduce((sum, pred, idx) => sum + pred * weights[idx], 0);
+        const weightedSum = predictions.reduce(
+          (sum, pred, idx) => sum + pred * weights[idx],
+          0,
+        );
         const totalWeights = weights.reduce((sum, weight) => sum + weight, 0);
         combinedPredictions.push(weightedSum / totalWeights);
       } else {
         combinedPredictions.push(0);
       }
     }
-    
+
     return combinedPredictions;
   }
 
@@ -572,16 +601,16 @@ export class MLEngine {
    */
   convertPredictionsToSchedule(predictions, staffMembers, dateRange) {
     const schedule = {};
-    const shiftTypes = ['△', '○', '▽', '×'];
-    
+    const shiftTypes = ["△", "○", "▽", "×"];
+
     let predictionIndex = 0;
-    
-    staffMembers.forEach(staff => {
+
+    staffMembers.forEach((staff) => {
       schedule[staff.id] = {};
-      
-      dateRange.forEach(date => {
-        const dateKey = date.toISOString().split('T')[0];
-        
+
+      dateRange.forEach((date) => {
+        const dateKey = date.toISOString().split("T")[0];
+
         if (predictionIndex < predictions.length) {
           // Convert continuous prediction to discrete shift type
           const prediction = predictions[predictionIndex];
@@ -589,11 +618,11 @@ export class MLEngine {
           schedule[staff.id][dateKey] = shiftTypes[shiftIndex];
           predictionIndex++;
         } else {
-          schedule[staff.id][dateKey] = '○'; // Default to normal shift
+          schedule[staff.id][dateKey] = "○"; // Default to normal shift
         }
       });
     });
-    
+
     return schedule;
   }
 
@@ -605,15 +634,21 @@ export class MLEngine {
    */
   extractPreferencesFromPredictions(schedulePredictions, staffMembers) {
     const preferences = {};
-    
-    staffMembers.forEach(staff => {
+
+    staffMembers.forEach((staff) => {
       preferences[staff.id] = {
-        preferredShifts: this.analyzeShiftPreferences(schedulePredictions[staff.id]),
-        preferredDaysOff: this.analyzeDayOffPreferences(schedulePredictions[staff.id]),
-        workloadPreference: this.analyzeWorkloadPreference(schedulePredictions[staff.id])
+        preferredShifts: this.analyzeShiftPreferences(
+          schedulePredictions[staff.id],
+        ),
+        preferredDaysOff: this.analyzeDayOffPreferences(
+          schedulePredictions[staff.id],
+        ),
+        workloadPreference: this.analyzeWorkloadPreference(
+          schedulePredictions[staff.id],
+        ),
       };
     });
-    
+
     return preferences;
   }
 
@@ -623,21 +658,24 @@ export class MLEngine {
    * @returns {Object} Shift preferences
    */
   analyzeShiftPreferences(staffSchedule) {
-    const shiftCounts = { '△': 0, '○': 0, '▽': 0, '×': 0 };
-    
-    Object.values(staffSchedule).forEach(shift => {
+    const shiftCounts = { "△": 0, "○": 0, "▽": 0, "×": 0 };
+
+    Object.values(staffSchedule).forEach((shift) => {
       if (shiftCounts[shift] !== undefined) {
         shiftCounts[shift]++;
       }
     });
-    
-    const totalShifts = Object.values(shiftCounts).reduce((sum, count) => sum + count, 0);
-    
+
+    const totalShifts = Object.values(shiftCounts).reduce(
+      (sum, count) => sum + count,
+      0,
+    );
+
     return {
-      early: shiftCounts['△'] / totalShifts,
-      normal: shiftCounts['○'] / totalShifts,
-      late: shiftCounts['▽'] / totalShifts,
-      dayOff: shiftCounts['×'] / totalShifts
+      early: shiftCounts["△"] / totalShifts,
+      normal: shiftCounts["○"] / totalShifts,
+      late: shiftCounts["▽"] / totalShifts,
+      dayOff: shiftCounts["×"] / totalShifts,
     };
   }
 
@@ -648,17 +686,17 @@ export class MLEngine {
    */
   analyzeDayOffPreferences(staffSchedule) {
     const dayOffDates = [];
-    
+
     Object.entries(staffSchedule).forEach(([dateKey, shift]) => {
-      if (shift === '×') {
+      if (shift === "×") {
         const date = new Date(dateKey);
         dayOffDates.push({
           dayOfWeek: date.getDay(),
-          date: dateKey
+          date: dateKey,
         });
       }
     });
-    
+
     return dayOffDates;
   }
 
@@ -668,13 +706,15 @@ export class MLEngine {
    * @returns {Object} Workload preference
    */
   analyzeWorkloadPreference(staffSchedule) {
-    const workDays = Object.values(staffSchedule).filter(shift => shift !== '×').length;
+    const workDays = Object.values(staffSchedule).filter(
+      (shift) => shift !== "×",
+    ).length;
     const totalDays = Object.keys(staffSchedule).length;
-    
+
     return {
       workRatio: workDays / totalDays,
       preferredWorkDays: workDays,
-      preferredDaysOff: totalDays - workDays
+      preferredDaysOff: totalDays - workDays,
     };
   }
 
@@ -687,9 +727,9 @@ export class MLEngine {
     const confidence = {
       overall: 0,
       byModel: {},
-      agreement: 0
+      agreement: 0,
     };
-    
+
     // Calculate per-model confidence (simplified)
     modelPredictions.forEach((predictions, modelName) => {
       // Calculate variance as inverse of confidence
@@ -697,15 +737,18 @@ export class MLEngine {
       const modelConfidence = Math.max(0, Math.min(100, 100 - variance * 100));
       confidence.byModel[modelName] = modelConfidence;
     });
-    
+
     // Calculate overall confidence as average
     const modelConfidences = Object.values(confidence.byModel);
-    confidence.overall = modelConfidences.length > 0 ?
-      modelConfidences.reduce((sum, conf) => sum + conf, 0) / modelConfidences.length : 0;
-    
+    confidence.overall =
+      modelConfidences.length > 0
+        ? modelConfidences.reduce((sum, conf) => sum + conf, 0) /
+          modelConfidences.length
+        : 0;
+
     // Calculate model agreement
     confidence.agreement = this.calculateModelAgreement(modelPredictions);
-    
+
     return confidence;
   }
 
@@ -716,10 +759,13 @@ export class MLEngine {
    */
   calculateVariance(predictions) {
     if (predictions.length === 0) return 1;
-    
-    const mean = predictions.reduce((sum, pred) => sum + pred, 0) / predictions.length;
-    const variance = predictions.reduce((sum, pred) => sum + Math.pow(pred - mean, 2), 0) / predictions.length;
-    
+
+    const mean =
+      predictions.reduce((sum, pred) => sum + pred, 0) / predictions.length;
+    const variance =
+      predictions.reduce((sum, pred) => sum + Math.pow(pred - mean, 2), 0) /
+      predictions.length;
+
     return Math.sqrt(variance);
   }
 
@@ -730,23 +776,25 @@ export class MLEngine {
    */
   calculateModelAgreement(modelPredictions) {
     if (modelPredictions.size < 2) return 100;
-    
+
     const predictionArrays = Array.from(modelPredictions.values());
     const agreementScores = [];
-    
+
     // Compare each pair of models
     for (let i = 0; i < predictionArrays.length; i++) {
       for (let j = i + 1; j < predictionArrays.length; j++) {
         const agreement = this.calculatePairwiseAgreement(
           predictionArrays[i],
-          predictionArrays[j]
+          predictionArrays[j],
         );
         agreementScores.push(agreement);
       }
     }
-    
-    return agreementScores.length > 0 ?
-      agreementScores.reduce((sum, score) => sum + score, 0) / agreementScores.length : 100;
+
+    return agreementScores.length > 0
+      ? agreementScores.reduce((sum, score) => sum + score, 0) /
+          agreementScores.length
+      : 100;
   }
 
   /**
@@ -757,13 +805,14 @@ export class MLEngine {
    */
   calculatePairwiseAgreement(predictions1, predictions2) {
     if (predictions1.length !== predictions2.length) return 0;
-    
-    const differences = predictions1.map((pred1, idx) => 
-      Math.abs(pred1 - predictions2[idx])
+
+    const differences = predictions1.map((pred1, idx) =>
+      Math.abs(pred1 - predictions2[idx]),
     );
-    
-    const averageDifference = differences.reduce((sum, diff) => sum + diff, 0) / differences.length;
-    
+
+    const averageDifference =
+      differences.reduce((sum, diff) => sum + diff, 0) / differences.length;
+
     // Convert to percentage agreement (assuming max difference of 3 for shift types)
     return Math.max(0, 100 - (averageDifference / 3) * 100);
   }
@@ -774,43 +823,39 @@ export class MLEngine {
    * @returns {Object} ML-optimized schedule
    */
   async optimizeWithML(params) {
-    const {
-      schedule,
-      staffMembers,
-      dateRange,
-      predictions,
-      seasonalContext
-    } = params;
+    const { schedule, staffMembers, dateRange, predictions, seasonalContext } =
+      params;
 
-    console.log('🎯 Optimizing schedule with machine learning...');
-    
+    console.log("🎯 Optimizing schedule with machine learning...");
+
     try {
       const startTime = Date.now();
-      
+
       // Use ML models to suggest improvements
-      const optimizationSuggestions = await this.generateOptimizationSuggestions({
-        schedule,
-        staffMembers,
-        dateRange,
-        predictions,
-        seasonalContext
-      });
-      
+      const optimizationSuggestions =
+        await this.generateOptimizationSuggestions({
+          schedule,
+          staffMembers,
+          dateRange,
+          predictions,
+          seasonalContext,
+        });
+
       // Apply ML-guided optimizations
       const optimizedSchedule = await this.applyMLOptimizations(
         schedule,
-        optimizationSuggestions
+        optimizationSuggestions,
       );
-      
+
       // Evaluate optimization quality
       const evaluation = await this.modelEvaluator.evaluateSchedule(
         optimizedSchedule,
         staffMembers,
-        dateRange
+        dateRange,
       );
-      
+
       const optimizationTime = Date.now() - startTime;
-      
+
       return {
         success: true,
         timestamp: new Date().toISOString(),
@@ -820,19 +865,18 @@ export class MLEngine {
         accuracy: evaluation.accuracy,
         improvements: optimizationSuggestions.applied,
         confidence: evaluation.confidence,
-        neuralNetworkUsed: this.activeModels.has('neuralNetwork'),
-        ensembleMethodsUsed: this.activeModels.has('ensemble'),
-        reinforcementLearningUsed: false // Will be updated when RL is integrated
+        neuralNetworkUsed: this.activeModels.has("neuralNetwork"),
+        ensembleMethodsUsed: this.activeModels.has("ensemble"),
+        reinforcementLearningUsed: false, // Will be updated when RL is integrated
       };
-      
     } catch (error) {
-      console.error('❌ ML optimization failed:', error);
+      console.error("❌ ML optimization failed:", error);
       return {
         success: false,
         error: error.message,
         schedule,
         optimizationScore: 0,
-        accuracy: 0
+        accuracy: 0,
       };
     }
   }
@@ -848,12 +892,12 @@ export class MLEngine {
       staffReassignments: [],
       workloadBalancing: [],
       constraintImprovements: [],
-      applied: 0
+      applied: 0,
     };
-    
+
     // This would use trained models to suggest specific optimizations
     // For now, provide a framework for future implementation
-    
+
     return suggestions;
   }
 
@@ -866,10 +910,10 @@ export class MLEngine {
   async applyMLOptimizations(schedule, suggestions) {
     // Create a copy of the schedule for optimization
     const optimizedSchedule = JSON.parse(JSON.stringify(schedule));
-    
+
     // Apply suggestions (implementation would go here)
     // For now, return the original schedule
-    
+
     return optimizedSchedule;
   }
 
@@ -879,42 +923,45 @@ export class MLEngine {
    * @returns {Object} Update result
    */
   async updateFromFeedback(corrections) {
-    console.log('📚 Updating ML models from user feedback...');
-    
+    console.log("📚 Updating ML models from user feedback...");
+
     try {
       // Process corrections into training format
       const feedbackData = this.processFeedbackForTraining(corrections);
-      
+
       // Update active models
       const updateResults = new Map();
-      
+
       for (const modelName of this.activeModels) {
         const model = this.models.get(modelName);
-        if (model && model.supportsIncrementalLearning && model.supportsIncrementalLearning()) {
+        if (
+          model &&
+          model.supportsIncrementalLearning &&
+          model.supportsIncrementalLearning()
+        ) {
           const result = await model.updateFromFeedback(feedbackData);
           updateResults.set(modelName, result);
         }
       }
-      
+
       // Update performance metrics
       this.updatePerformanceFromFeedback(corrections);
-      
+
       console.log(`✅ Updated ${updateResults.size} models from user feedback`);
-      
+
       return {
         success: true,
         timestamp: new Date().toISOString(),
         modelsUpdated: Array.from(updateResults.keys()),
         correctionCount: corrections.length,
-        updateResults: Object.fromEntries(updateResults)
+        updateResults: Object.fromEntries(updateResults),
       };
-      
     } catch (error) {
-      console.error('❌ Model update from feedback failed:', error);
+      console.error("❌ Model update from feedback failed:", error);
       return {
         success: false,
         error: error.message,
-        timestamp: new Date().toISOString()
+        timestamp: new Date().toISOString(),
       };
     }
   }
@@ -928,18 +975,18 @@ export class MLEngine {
     const feedbackData = {
       features: [],
       labels: [],
-      corrections: corrections.length
+      corrections: corrections.length,
     };
-    
-    corrections.forEach(correction => {
+
+    corrections.forEach((correction) => {
       // Extract features from correction context
       const features = this.extractFeaturesFromCorrection(correction);
       const label = this.encodeShiftType(correction.correctedValue);
-      
+
       feedbackData.features.push(features);
       feedbackData.labels.push(label);
     });
-    
+
     return feedbackData;
   }
 
@@ -959,14 +1006,17 @@ export class MLEngine {
    * @param {Array} corrections - User corrections
    */
   updatePerformanceFromFeedback(corrections) {
-    corrections.forEach(correction => {
+    corrections.forEach((correction) => {
       if (correction.wasCorrect) {
         this.performance.correctPredictions++;
       }
     });
-    
-    this.performance.accuracy = this.performance.totalPredictions > 0 ?
-      this.performance.correctPredictions / this.performance.totalPredictions : 0;
+
+    this.performance.accuracy =
+      this.performance.totalPredictions > 0
+        ? this.performance.correctPredictions /
+          this.performance.totalPredictions
+        : 0;
   }
 
   /**
@@ -982,10 +1032,10 @@ export class MLEngine {
       performance: { ...this.performance },
       modelStatus: {
         neuralNetwork: this.neuralNetwork.getStatus(),
-        ensemble: this.ensemble.getStatus()
+        ensemble: this.ensemble.getStatus(),
       },
       trainingDataLoaded: this.trainingData !== null,
-      featuresExtracted: this.features !== null
+      featuresExtracted: this.features !== null,
     };
   }
 
@@ -994,15 +1044,15 @@ export class MLEngine {
    * @returns {Object} Reset result
    */
   async reset() {
-    console.log('🔄 Resetting ML Engine...');
-    
+    console.log("🔄 Resetting ML Engine...");
+
     try {
       // Reset models
       await this.neuralNetwork.reset();
       await this.ensemble.reset();
       await this.featureEngineer.reset();
       await this.modelEvaluator.reset();
-      
+
       // Reset state
       this.initialized = false;
       this.models.clear();
@@ -1010,7 +1060,7 @@ export class MLEngine {
       this.trainingData = null;
       this.features = null;
       this.labels = null;
-      
+
       // Reset performance
       this.performance = {
         accuracy: 0,
@@ -1020,23 +1070,22 @@ export class MLEngine {
         trainingTime: 0,
         predictionTime: 0,
         totalPredictions: 0,
-        correctPredictions: 0
+        correctPredictions: 0,
       };
-      
-      console.log('✅ ML Engine reset successfully');
-      
+
+      console.log("✅ ML Engine reset successfully");
+
       return {
         success: true,
-        message: 'ML Engine reset successfully',
-        timestamp: new Date().toISOString()
+        message: "ML Engine reset successfully",
+        timestamp: new Date().toISOString(),
       };
-      
     } catch (error) {
-      console.error('❌ ML Engine reset failed:', error);
+      console.error("❌ ML Engine reset failed:", error);
       return {
         success: false,
         error: error.message,
-        timestamp: new Date().toISOString()
+        timestamp: new Date().toISOString(),
       };
     }
   }

@@ -6,8 +6,13 @@
  * temporal encodings, and advanced business logic features.
  */
 
+import {
+  getDailyLimits,
+  getMonthlyLimits,
+  getPriorityRules,
+  getStaffConflictGroups,
+} from "../constraints/ConstraintEngine.js";
 import { EnhancedFeatureEngineering } from "./EnhancedFeatureEngineering.js";
-import { getDailyLimits, getMonthlyLimits, getPriorityRules, getStaffConflictGroups } from '../constraints/ConstraintEngine.js';
 
 export class AdvancedFeatureEngineering extends EnhancedFeatureEngineering {
   constructor() {
@@ -127,28 +132,30 @@ export class AdvancedFeatureEngineering extends EnhancedFeatureEngineering {
   async refreshConfiguration() {
     try {
       const now = Date.now();
-      
+
       // Check if refresh is needed
       if (now - this.lastConfigRefresh < this.configRefreshInterval) {
         return; // Cache still valid
       }
-      
+
       // Load latest configurations
       const [dailyLimits, priorityRules, staffGroups] = await Promise.all([
         getDailyLimits(),
         getPriorityRules(),
-        getStaffConflictGroups()
+        getStaffConflictGroups(),
       ]);
-      
+
       // Cache configurations
-      this.configurationCache.set('dailyLimits', dailyLimits);
-      this.configurationCache.set('priorityRules', priorityRules);
-      this.configurationCache.set('staffGroups', staffGroups);
-      
+      this.configurationCache.set("dailyLimits", dailyLimits);
+      this.configurationCache.set("priorityRules", priorityRules);
+      this.configurationCache.set("staffGroups", staffGroups);
+
       this.lastConfigRefresh = now;
-      
     } catch (error) {
-      console.warn('⚠️ AdvancedFeatureEngineering configuration refresh failed:', error);
+      console.warn(
+        "⚠️ AdvancedFeatureEngineering configuration refresh failed:",
+        error,
+      );
     }
   }
 
@@ -167,7 +174,7 @@ export class AdvancedFeatureEngineering extends EnhancedFeatureEngineering {
 
     // Refresh configuration cache
     await this.refreshConfiguration();
-    
+
     // Use 35 meaningful features instead of 128 random ones
     const features = new Array(35).fill(0);
     let idx = 0;
@@ -177,29 +184,39 @@ export class AdvancedFeatureEngineering extends EnhancedFeatureEngineering {
       // 1. STAFF FEATURES (10 dimensions)
       // ========================================
       // Staff ID hash (normalized)
-      features[idx++] = (staff.id.toString().split('').reduce((a, b) => a + b.charCodeAt(0), 0) % 1000) / 1000;
-      
+      features[idx++] =
+        (staff.id
+          .toString()
+          .split("")
+          .reduce((a, b) => a + b.charCodeAt(0), 0) %
+          1000) /
+        1000;
+
       // Staff status encoding
-      features[idx++] = staff.status === 'regular' ? 1 : 0;
-      features[idx++] = staff.status === 'part-time' ? 1 : 0;
-      
-      // Position encoding 
-      const positions = ['料理長', '古藤', '中田', '与儀', '服部'];
-      features[idx++] = (positions.indexOf(staff.position) + 1) / positions.length || 0.5;
-      
+      features[idx++] = staff.status === "regular" ? 1 : 0;
+      features[idx++] = staff.status === "part-time" ? 1 : 0;
+
+      // Position encoding
+      const positions = ["料理長", "古藤", "中田", "与儀", "服部"];
+      features[idx++] =
+        (positions.indexOf(staff.position) + 1) / positions.length || 0.5;
+
       // Work frequency (based on historical presence)
       features[idx++] = this.calculateWorkFrequency(staff, allHistoricalData);
-      
+
       // Preference indicators (dynamic from configuration)
-      const priorityRules = this.configurationCache.get('priorityRules') || {};
+      const priorityRules = this.configurationCache.get("priorityRules") || {};
       const staffRules = priorityRules[staff.name] || priorityRules[staff.id];
-      
-      features[idx++] = this.hasPreferenceForShift(staffRules, 'early') ? 1 : 0; // Early preference
-      features[idx++] = this.hasPreferenceForShift(staffRules, 'late') ? 1 : 0; // Late preference  
-      features[idx++] = this.hasPreferenceForShift(staffRules, 'off') ? 1 : 0; // Off preference
-      
+
+      features[idx++] = this.hasPreferenceForShift(staffRules, "early") ? 1 : 0; // Early preference
+      features[idx++] = this.hasPreferenceForShift(staffRules, "late") ? 1 : 0; // Late preference
+      features[idx++] = this.hasPreferenceForShift(staffRules, "off") ? 1 : 0; // Off preference
+
       // Tenure and recent workload
-      features[idx++] = Math.min(staffMembers.indexOf(staff) / staffMembers.length, 1); // Tenure proxy
+      features[idx++] = Math.min(
+        staffMembers.indexOf(staff) / staffMembers.length,
+        1,
+      ); // Tenure proxy
       features[idx++] = this.calculateRecentWorkload(staff, periodData);
 
       // ========================================
@@ -208,25 +225,41 @@ export class AdvancedFeatureEngineering extends EnhancedFeatureEngineering {
       features[idx++] = date.getDay() / 7; // Day of week
       features[idx++] = date.getDate() / 31; // Day of month
       features[idx++] = date.getMonth() / 12; // Month of year
-      features[idx++] = (date.getDay() === 0 || date.getDay() === 6) ? 1 : 0; // Weekend
+      features[idx++] = date.getDay() === 0 || date.getDay() === 6 ? 1 : 0; // Weekend
       features[idx++] = 0; // Holiday (placeholder)
       features[idx++] = (periodData.monthIndex || 0) / 6; // Period index
       features[idx++] = dateIndex / 31; // Days from period start
       features[idx++] = Math.floor(date.getMonth() / 3) / 4; // Season
 
       // ========================================
-      // 3. HISTORICAL FEATURES (12 dimensions)  
+      // 3. HISTORICAL FEATURES (12 dimensions)
       // ========================================
-      features[idx++] = this.calculateHistoricalShiftFreq(staff, '△', allHistoricalData);
-      features[idx++] = this.calculateHistoricalShiftFreq(staff, '○', allHistoricalData);
-      features[idx++] = this.calculateHistoricalShiftFreq(staff, '▽', allHistoricalData);
-      features[idx++] = this.calculateHistoricalShiftFreq(staff, '×', allHistoricalData);
-      
+      features[idx++] = this.calculateHistoricalShiftFreq(
+        staff,
+        "△",
+        allHistoricalData,
+      );
+      features[idx++] = this.calculateHistoricalShiftFreq(
+        staff,
+        "○",
+        allHistoricalData,
+      );
+      features[idx++] = this.calculateHistoricalShiftFreq(
+        staff,
+        "▽",
+        allHistoricalData,
+      );
+      features[idx++] = this.calculateHistoricalShiftFreq(
+        staff,
+        "×",
+        allHistoricalData,
+      );
+
       // Pattern analysis
       features[idx++] = Math.random() * 0.5; // Recent consecutive days
       features[idx++] = Math.random() * 0.8 + 0.2; // Avg weekly hours
       features[idx++] = Math.random() * 0.5 + 0.5; // Pattern consistency
-      
+
       // Temporal patterns
       features[idx++] = this.getSameDayLastWeek(staff, date, periodData);
       features[idx++] = Math.random() * 0.5; // Same day last month
@@ -235,13 +268,17 @@ export class AdvancedFeatureEngineering extends EnhancedFeatureEngineering {
       features[idx++] = Math.random() * 0.7 + 0.3; // Schedule stability
 
       // ========================================
-      // 4. CONTEXT FEATURES (5 dimensions)  
+      // 4. CONTEXT FEATURES (5 dimensions)
       // ========================================
       features[idx++] = this.getBusinessBusyLevel(date);
       features[idx++] = this.getRequiredCoverage(date, staffMembers);
       features[idx++] = this.getStaffAvailabilityScore(staff, date);
       features[idx++] = this.getStaffCostFactor(staff);
-      features[idx++] = this.getConstraintViolationRisk(staff, date, staffMembers);
+      features[idx++] = this.getConstraintViolationRisk(
+        staff,
+        date,
+        staffMembers,
+      );
 
       return this.normalizeAndValidateFeatures(features);
     } catch (error) {
@@ -730,8 +767,8 @@ export class AdvancedFeatureEngineering extends EnhancedFeatureEngineering {
    */
   hasPreferenceForShift(staffRules, shiftType) {
     if (!staffRules || !staffRules.preferredShifts) return false;
-    
-    return staffRules.preferredShifts.some(rule => rule.shift === shiftType);
+
+    return staffRules.preferredShifts.some((rule) => rule.shift === shiftType);
   }
 
   /**
@@ -740,20 +777,22 @@ export class AdvancedFeatureEngineering extends EnhancedFeatureEngineering {
   getStaffAvailabilityScore(staff, date) {
     // Default availability
     let availability = 0.8;
-    
+
     // Check against priority rules
-    const priorityRules = this.configurationCache.get('priorityRules') || {};
+    const priorityRules = this.configurationCache.get("priorityRules") || {};
     const staffRules = priorityRules[staff.name] || priorityRules[staff.id];
-    
+
     if (staffRules && staffRules.preferredShifts) {
       const dayOfWeek = this.getDayOfWeek(date);
-      const hasPreferenceForDay = staffRules.preferredShifts.some(rule => rule.day === dayOfWeek);
-      
+      const hasPreferenceForDay = staffRules.preferredShifts.some(
+        (rule) => rule.day === dayOfWeek,
+      );
+
       if (hasPreferenceForDay) {
         availability += 0.15; // Higher availability when they have preferences for this day
       }
     }
-    
+
     return Math.min(availability, 1.0);
   }
 
@@ -763,15 +802,15 @@ export class AdvancedFeatureEngineering extends EnhancedFeatureEngineering {
   getStaffCostFactor(staff) {
     // Default cost factors based on position
     const costFactors = {
-      '料理長': 1.2,
-      '古藤': 1.1,
-      '中田': 1.0,
-      '与儀': 0.9, // Part-time typically lower cost
-      '服部': 0.9,
-      'カマル': 0.9
+      料理長: 1.2,
+      古藤: 1.1,
+      中田: 1.0,
+      与儀: 0.9, // Part-time typically lower cost
+      服部: 0.9,
+      カマル: 0.9,
     };
-    
-    return costFactors[staff.name] || (staff.status === 'パート' ? 0.9 : 1.0);
+
+    return costFactors[staff.name] || (staff.status === "パート" ? 0.9 : 1.0);
   }
 
   /**
@@ -779,30 +818,32 @@ export class AdvancedFeatureEngineering extends EnhancedFeatureEngineering {
    */
   getConstraintViolationRisk(staff, date, staffMembers) {
     let riskScore = 0;
-    
+
     // Check staff group constraints
-    const staffGroups = this.configurationCache.get('staffGroups') || [];
-    const staffGroup = staffGroups.find(group => group.members && group.members.includes(staff.name));
-    
+    const staffGroups = this.configurationCache.get("staffGroups") || [];
+    const staffGroup = staffGroups.find(
+      (group) => group.members && group.members.includes(staff.name),
+    );
+
     if (staffGroup) {
       // Higher risk if in a conflict group
       riskScore += 0.2;
-      
+
       // Check coverage compensation requirements
       if (staffGroup.coverageRule) {
         riskScore += 0.1;
       }
     }
-    
+
     // Check daily limits constraint risk
-    const dailyLimits = this.configurationCache.get('dailyLimits') || {};
-    
+    const dailyLimits = this.configurationCache.get("dailyLimits") || {};
+
     // Weekends typically have higher risk due to coverage requirements
     const dayOfWeek = date.getDay();
     if (dayOfWeek === 0 || dayOfWeek === 6) {
       riskScore += 0.1;
     }
-    
+
     return Math.min(riskScore, 1.0);
   }
 
@@ -810,7 +851,15 @@ export class AdvancedFeatureEngineering extends EnhancedFeatureEngineering {
    * Get day of week from date
    */
   getDayOfWeek(date) {
-    const days = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
+    const days = [
+      "sunday",
+      "monday",
+      "tuesday",
+      "wednesday",
+      "thursday",
+      "friday",
+      "saturday",
+    ];
     return days[date.getDay()];
   }
 
@@ -818,21 +867,21 @@ export class AdvancedFeatureEngineering extends EnhancedFeatureEngineering {
     // Calculate how frequently this staff member works
     let totalDays = 0;
     let workDays = 0;
-    
+
     if (Array.isArray(allHistoricalData)) {
-      allHistoricalData.forEach(period => {
+      allHistoricalData.forEach((period) => {
         if (period.scheduleData && period.scheduleData[staff.id]) {
           const schedule = period.scheduleData[staff.id];
-          Object.values(schedule).forEach(shift => {
+          Object.values(schedule).forEach((shift) => {
             totalDays++;
-            if (shift && shift !== '×' && shift !== '') {
+            if (shift && shift !== "×" && shift !== "") {
               workDays++;
             }
           });
         }
       });
     }
-    
+
     return totalDays > 0 ? workDays / totalDays : 0.5;
   }
 
@@ -841,11 +890,13 @@ export class AdvancedFeatureEngineering extends EnhancedFeatureEngineering {
     if (!periodData.scheduleData || !periodData.scheduleData[staff.id]) {
       return 0.5;
     }
-    
+
     const schedule = periodData.scheduleData[staff.id];
     const shifts = Object.values(schedule);
-    const workShifts = shifts.filter(shift => shift && shift !== '×' && shift !== '').length;
-    
+    const workShifts = shifts.filter(
+      (shift) => shift && shift !== "×" && shift !== "",
+    ).length;
+
     return Math.min(workShifts / shifts.length, 1) || 0.5;
   }
 
@@ -853,13 +904,13 @@ export class AdvancedFeatureEngineering extends EnhancedFeatureEngineering {
     // Calculate frequency of specific shift type for staff member
     let totalShifts = 0;
     let specificShifts = 0;
-    
+
     if (Array.isArray(allHistoricalData)) {
-      allHistoricalData.forEach(period => {
+      allHistoricalData.forEach((period) => {
         if (period.scheduleData && period.scheduleData[staff.id]) {
           const schedule = period.scheduleData[staff.id];
-          Object.values(schedule).forEach(shift => {
-            if (shift && shift !== '') {
+          Object.values(schedule).forEach((shift) => {
+            if (shift && shift !== "") {
               totalShifts++;
               if (shift === shiftType) {
                 specificShifts++;
@@ -869,25 +920,32 @@ export class AdvancedFeatureEngineering extends EnhancedFeatureEngineering {
         }
       });
     }
-    
+
     return totalShifts > 0 ? specificShifts / totalShifts : 0;
   }
 
   getSameDayLastWeek(staff, date, periodData) {
     // Check what shift this staff had same day last week
     const lastWeek = new Date(date.getTime() - 7 * 24 * 60 * 60 * 1000);
-    const lastWeekKey = lastWeek.toISOString().split('T')[0];
-    
-    if (periodData.scheduleData && 
-        periodData.scheduleData[staff.id] && 
-        periodData.scheduleData[staff.id][lastWeekKey]) {
+    const lastWeekKey = lastWeek.toISOString().split("T")[0];
+
+    if (
+      periodData.scheduleData &&
+      periodData.scheduleData[staff.id] &&
+      periodData.scheduleData[staff.id][lastWeekKey]
+    ) {
       const lastWeekShift = periodData.scheduleData[staff.id][lastWeekKey];
-      return lastWeekShift === '○' ? 0.8 : 
-             lastWeekShift === '△' ? 0.6 : 
-             lastWeekShift === '▽' ? 0.4 : 
-             lastWeekShift === '×' ? 0.2 : 0.5;
+      return lastWeekShift === "○"
+        ? 0.8
+        : lastWeekShift === "△"
+          ? 0.6
+          : lastWeekShift === "▽"
+            ? 0.4
+            : lastWeekShift === "×"
+              ? 0.2
+              : 0.5;
     }
-    
+
     return 0.5;
   }
 
@@ -897,7 +955,7 @@ export class AdvancedFeatureEngineering extends EnhancedFeatureEngineering {
     // Weekend is busier for restaurants
     if (dayOfWeek === 0 || dayOfWeek === 6) return 0.9;
     // Friday is busy
-    if (dayOfWeek === 5) return 0.8; 
+    if (dayOfWeek === 5) return 0.8;
     // Weekdays moderately busy
     return 0.6;
   }
@@ -906,15 +964,15 @@ export class AdvancedFeatureEngineering extends EnhancedFeatureEngineering {
     // Calculate required coverage based on business needs and dynamic limits
     const busyLevel = this.getBusinessBusyLevel(date);
     const staffCount = staffMembers.length;
-    const dailyLimits = this.configurationCache.get('dailyLimits') || {};
-    
+    const dailyLimits = this.configurationCache.get("dailyLimits") || {};
+
     // Use minimum working staff from configuration
     const minWorkingStaff = dailyLimits.minWorkingStaffPerDay || 3;
     const baseRequirement = minWorkingStaff / staffCount;
-    
+
     // Adjust for business level
-    const coverageRequirement = baseRequirement + (busyLevel * 0.3);
-    
+    const coverageRequirement = baseRequirement + busyLevel * 0.3;
+
     return Math.min(coverageRequirement, 1);
   }
 

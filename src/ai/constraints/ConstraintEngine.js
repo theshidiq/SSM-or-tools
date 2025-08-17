@@ -1,16 +1,16 @@
 /**
  * ConstraintEngine.js
- * 
+ *
  * Core constraint validation engine for shift scheduling.
  * Implements all business rules and constraints for restaurant staff scheduling.
  */
 
-import { getDaysInMonth } from '../../utils/dateUtils';
-import { ConfigurationService } from '../../services/ConfigurationService.js';
+import { getDaysInMonth } from "../../utils/dateUtils";
+import { ConfigurationService } from "../../services/ConfigurationService.js";
 
 // Configuration service instance - will be initialized when first used
 let configService = null;
-let configCache = new Map();
+const configCache = new Map();
 let cacheTimestamp = 0;
 const CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
 
@@ -22,7 +22,7 @@ export const initializeConstraintConfiguration = async (restaurantId) => {
   if (!configService && restaurantId) {
     configService = new ConfigurationService();
     await configService.initialize({ restaurantId });
-    console.log('✅ Constraint Engine configuration service initialized');
+    console.log("✅ Constraint Engine configuration service initialized");
   }
   return configService;
 };
@@ -34,36 +34,36 @@ export const initializeConstraintConfiguration = async (restaurantId) => {
 const getCachedConfig = async (configType) => {
   const now = Date.now();
   const cacheKey = `${configType}_${now}`;
-  
+
   // Check if cache is still valid
-  if (configCache.has(configType) && (now - cacheTimestamp) < CACHE_DURATION) {
+  if (configCache.has(configType) && now - cacheTimestamp < CACHE_DURATION) {
     return configCache.get(configType);
   }
-  
+
   // Load fresh configuration
   if (configService) {
     try {
       let config;
       switch (configType) {
-        case 'staff_groups':
+        case "staff_groups":
           config = await configService.getStaffGroupsWithMembers();
           break;
-        case 'priority_rules':
+        case "priority_rules":
           config = await configService.getPriorityRules();
           break;
-        case 'daily_limits':
+        case "daily_limits":
           config = await configService.getDailyLimits();
           break;
-        case 'monthly_limits':
+        case "monthly_limits":
           config = await configService.getMonthlyLimits();
           break;
-        case 'conflict_rules':
+        case "conflict_rules":
           config = await configService.getConflictRules();
           break;
         default:
           config = null;
       }
-      
+
       if (config) {
         configCache.set(configType, config);
         cacheTimestamp = now;
@@ -73,7 +73,7 @@ const getCachedConfig = async (configType) => {
       console.warn(`⚠️ Failed to load ${configType} configuration:`, error);
     }
   }
-  
+
   // Fallback to static configuration
   return getStaticConfiguration(configType);
 };
@@ -83,13 +83,13 @@ const getCachedConfig = async (configType) => {
  */
 const getStaticConfiguration = (configType) => {
   switch (configType) {
-    case 'staff_groups':
+    case "staff_groups":
       return STATIC_STAFF_CONFLICT_GROUPS;
-    case 'priority_rules':
+    case "priority_rules":
       return STATIC_PRIORITY_RULES;
-    case 'daily_limits':
+    case "daily_limits":
       return STATIC_DAILY_LIMITS;
-    case 'monthly_limits':
+    case "monthly_limits":
       return (year, month) => getStaticMonthlyLimits(year, month);
     default:
       return null;
@@ -101,45 +101,43 @@ const getStaticConfiguration = (configType) => {
  * Static fallback configuration - Updated to match new group structure
  */
 const STATIC_STAFF_CONFLICT_GROUPS = [
-  { name: 'Group 1', members: ['料理長', '井関'] },
-  { 
-    name: 'Group 2', 
-    members: ['料理長', '古藤'],
+  { name: "Group 1", members: ["料理長", "井関"] },
+  {
+    name: "Group 2",
+    members: ["料理長", "古藤"],
     coverageRule: {
-      backupStaff: '中田',
-      requiredShift: 'normal',
-      description: 'When Group 2 member has day off, 中田 must work normal shift'
+      backupStaff: "中田",
+      requiredShift: "normal",
+      description:
+        "When Group 2 member has day off, 中田 must work normal shift",
     },
     proximityPattern: {
-      trigger: '料理長',
-      condition: 'weekday_off',
-      target: '古藤',
+      trigger: "料理長",
+      condition: "weekday_off",
+      target: "古藤",
       proximity: 2,
-      description: 'When 料理長 has weekday day off, 古藤\'s day off should be within ±2 days'
-    }
+      description:
+        "When 料理長 has weekday day off, 古藤's day off should be within ±2 days",
+    },
   },
-  { name: 'Group 3', members: ['井関', '小池'] },
-  { name: 'Group 4', members: ['田辺', '小池'] },
-  { name: 'Group 5', members: ['古藤', '岸'] },
-  { name: 'Group 6', members: ['与儀', 'カマル'] },
-  { name: 'Group 7', members: ['カマル', '高野'] },
-  { name: 'Group 8', members: ['高野', '派遣スタッフ'] }
+  { name: "Group 3", members: ["井関", "小池"] },
+  { name: "Group 4", members: ["田辺", "小池"] },
+  { name: "Group 5", members: ["古藤", "岸"] },
+  { name: "Group 6", members: ["与儀", "カマル"] },
+  { name: "Group 7", members: ["カマル", "高野"] },
+  { name: "Group 8", members: ["高野", "派遣スタッフ"] },
 ];
 
 /**
  * Static priority rules for specific staff members
  */
 const STATIC_PRIORITY_RULES = {
-  '料理長': {
-    preferredShifts: [
-      { day: 'sunday', shift: 'early', priority: 'high' }
-    ]
+  料理長: {
+    preferredShifts: [{ day: "sunday", shift: "early", priority: "high" }],
   },
-  '与儀': {
-    preferredShifts: [
-      { day: 'sunday', shift: 'off', priority: 'high' }
-    ]
-  }
+  与儀: {
+    preferredShifts: [{ day: "sunday", shift: "off", priority: "high" }],
+  },
 };
 
 /**
@@ -149,7 +147,7 @@ const STATIC_DAILY_LIMITS = {
   maxOffPerDay: 4,
   maxEarlyPerDay: 4,
   maxLatePerDay: 3,
-  minWorkingStaffPerDay: 3
+  minWorkingStaffPerDay: 3,
 };
 
 /**
@@ -159,37 +157,38 @@ const getStaticMonthlyLimits = (year, month) => {
   const daysInMonth = getDaysInMonth(year, month);
   return {
     maxOffDaysPerMonth: daysInMonth === 31 ? 8 : 7,
-    minWorkDaysPerMonth: daysInMonth === 31 ? 23 : 23
+    minWorkDaysPerMonth: daysInMonth === 31 ? 23 : 23,
   };
 };
 
 // Dynamic getters that use configuration service or fall back to static config
 export const getStaffConflictGroups = async () => {
-  return await getCachedConfig('staff_groups');
+  return await getCachedConfig("staff_groups");
 };
 
 export const getPriorityRules = async () => {
-  return await getCachedConfig('priority_rules');
+  return await getCachedConfig("priority_rules");
 };
 
 export const getDailyLimits = async () => {
-  return await getCachedConfig('daily_limits');
+  return await getCachedConfig("daily_limits");
 };
 
 export const getMonthlyLimits = async (year, month) => {
-  const limits = await getCachedConfig('monthly_limits');
-  
-  if (typeof limits === 'function') {
+  const limits = await getCachedConfig("monthly_limits");
+
+  if (typeof limits === "function") {
     return limits(year, month);
-  } else if (limits && typeof limits === 'object') {
+  } else if (limits && typeof limits === "object") {
     // Database configuration format
     const daysInMonth = getDaysInMonth(year, month);
     return {
-      maxOffDaysPerMonth: limits.maxOffDaysPerMonth || (daysInMonth === 31 ? 8 : 7),
-      minWorkDaysPerMonth: limits.minWorkDaysPerMonth || 23
+      maxOffDaysPerMonth:
+        limits.maxOffDaysPerMonth || (daysInMonth === 31 ? 8 : 7),
+      minWorkDaysPerMonth: limits.minWorkDaysPerMonth || 23,
     };
   }
-  
+
   // Fallback to static calculation
   return getStaticMonthlyLimits(year, month);
 };
@@ -203,15 +202,15 @@ export const DAILY_LIMITS = STATIC_DAILY_LIMITS;
  * Constraint violation types
  */
 export const VIOLATION_TYPES = {
-  MONTHLY_OFF_LIMIT: 'monthly_off_limit',
-  DAILY_OFF_LIMIT: 'daily_off_limit',
-  DAILY_EARLY_LIMIT: 'daily_early_limit',
-  STAFF_GROUP_CONFLICT: 'staff_group_conflict',
-  PRIORITY_RULE_VIOLATION: 'priority_rule_violation',
-  INSUFFICIENT_COVERAGE: 'insufficient_coverage',
-  CONSECUTIVE_DAYS_OFF: 'consecutive_days_off',
-  COVERAGE_COMPENSATION_VIOLATION: 'coverage_compensation_violation',
-  PROXIMITY_PATTERN_VIOLATION: 'proximity_pattern_violation'
+  MONTHLY_OFF_LIMIT: "monthly_off_limit",
+  DAILY_OFF_LIMIT: "daily_off_limit",
+  DAILY_EARLY_LIMIT: "daily_early_limit",
+  STAFF_GROUP_CONFLICT: "staff_group_conflict",
+  PRIORITY_RULE_VIOLATION: "priority_rule_violation",
+  INSUFFICIENT_COVERAGE: "insufficient_coverage",
+  CONSECUTIVE_DAYS_OFF: "consecutive_days_off",
+  COVERAGE_COMPENSATION_VIOLATION: "coverage_compensation_violation",
+  PROXIMITY_PATTERN_VIOLATION: "proximity_pattern_violation",
 };
 
 /**
@@ -220,7 +219,12 @@ export const VIOLATION_TYPES = {
  * @returns {boolean} True if it's an off day
  */
 export const isOffDay = (shiftValue) => {
-  return shiftValue === '×' || shiftValue === 'off' || shiftValue === '★' || shiftValue === 'holiday';
+  return (
+    shiftValue === "×" ||
+    shiftValue === "off" ||
+    shiftValue === "★" ||
+    shiftValue === "holiday"
+  );
 };
 
 /**
@@ -229,7 +233,7 @@ export const isOffDay = (shiftValue) => {
  * @returns {boolean} True if it's an early shift
  */
 export const isEarlyShift = (shiftValue) => {
-  return shiftValue === '△' || shiftValue === 'early';
+  return shiftValue === "△" || shiftValue === "early";
 };
 
 /**
@@ -238,7 +242,7 @@ export const isEarlyShift = (shiftValue) => {
  * @returns {boolean} True if it's a late shift
  */
 export const isLateShift = (shiftValue) => {
-  return shiftValue === '◇' || shiftValue === 'late';
+  return shiftValue === "◇" || shiftValue === "late";
 };
 
 /**
@@ -247,7 +251,7 @@ export const isLateShift = (shiftValue) => {
  * @returns {boolean} True if it's a normal shift
  */
 export const isNormalShift = (shiftValue) => {
-  return shiftValue === '' || shiftValue === '○' || shiftValue === 'normal';
+  return shiftValue === "" || shiftValue === "○" || shiftValue === "normal";
 };
 
 /**
@@ -256,7 +260,9 @@ export const isNormalShift = (shiftValue) => {
  * @returns {boolean} True if it's a working shift
  */
 export const isWorkingShift = (shiftValue) => {
-  return !isOffDay(shiftValue) && shiftValue !== undefined && shiftValue !== null;
+  return (
+    !isOffDay(shiftValue) && shiftValue !== undefined && shiftValue !== null
+  );
 };
 
 /**
@@ -277,7 +283,15 @@ export const isWeekday = (dateKey) => {
  */
 export const getDayOfWeek = (dateKey) => {
   const date = new Date(dateKey);
-  const days = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
+  const days = [
+    "sunday",
+    "monday",
+    "tuesday",
+    "wednesday",
+    "thursday",
+    "friday",
+    "saturday",
+  ];
   return days[date.getDay()];
 };
 
@@ -288,7 +302,11 @@ export const getDayOfWeek = (dateKey) => {
  * @param {Array} dateRange - Array of dates for the month
  * @returns {Object} Validation result
  */
-export const validateMonthlyOffLimits = async (staffSchedule, staffName, dateRange) => {
+export const validateMonthlyOffLimits = async (
+  staffSchedule,
+  staffName,
+  dateRange,
+) => {
   if (!staffSchedule || !dateRange.length) {
     return { valid: true, violations: [] };
   }
@@ -301,8 +319,8 @@ export const validateMonthlyOffLimits = async (staffSchedule, staffName, dateRan
   let offDaysCount = 0;
   const offDays = [];
 
-  dateRange.forEach(date => {
-    const dateKey = date.toISOString().split('T')[0];
+  dateRange.forEach((date) => {
+    const dateKey = date.toISOString().split("T")[0];
     if (staffSchedule[dateKey] && isOffDay(staffSchedule[dateKey])) {
       offDaysCount++;
       offDays.push(dateKey);
@@ -315,13 +333,13 @@ export const validateMonthlyOffLimits = async (staffSchedule, staffName, dateRan
       type: VIOLATION_TYPES.MONTHLY_OFF_LIMIT,
       staffName,
       message: `${staffName} has ${offDaysCount} off days, exceeding limit of ${monthlyLimits.maxOffDaysPerMonth}`,
-      severity: 'high',
+      severity: "high",
       details: {
         offDaysCount,
         limit: monthlyLimits.maxOffDaysPerMonth,
         offDays,
-        excess: offDaysCount - monthlyLimits.maxOffDaysPerMonth
-      }
+        excess: offDaysCount - monthlyLimits.maxOffDaysPerMonth,
+      },
     });
   }
 
@@ -331,8 +349,8 @@ export const validateMonthlyOffLimits = async (staffSchedule, staffName, dateRan
     summary: {
       offDaysCount,
       limit: monthlyLimits.maxOffDaysPerMonth,
-      remaining: Math.max(0, monthlyLimits.maxOffDaysPerMonth - offDaysCount)
-    }
+      remaining: Math.max(0, monthlyLimits.maxOffDaysPerMonth - offDaysCount),
+    },
   };
 };
 
@@ -343,10 +361,14 @@ export const validateMonthlyOffLimits = async (staffSchedule, staffName, dateRan
  * @param {Array} staffMembers - Array of staff member objects
  * @returns {Object} Validation result
  */
-export const validateDailyLimits = async (scheduleData, dateKey, staffMembers) => {
+export const validateDailyLimits = async (
+  scheduleData,
+  dateKey,
+  staffMembers,
+) => {
   const violations = [];
   const dailyLimits = await getDailyLimits();
-  
+
   let offCount = 0;
   let earlyCount = 0;
   let lateCount = 0;
@@ -357,13 +379,16 @@ export const validateDailyLimits = async (scheduleData, dateKey, staffMembers) =
     off: [],
     early: [],
     late: [],
-    working: []
+    working: [],
   };
 
-  staffMembers.forEach(staff => {
-    if (scheduleData[staff.id] && scheduleData[staff.id][dateKey] !== undefined) {
+  staffMembers.forEach((staff) => {
+    if (
+      scheduleData[staff.id] &&
+      scheduleData[staff.id][dateKey] !== undefined
+    ) {
       const shift = scheduleData[staff.id][dateKey];
-      
+
       if (isOffDay(shift)) {
         offCount++;
         dayData.off.push(staff.name);
@@ -374,7 +399,7 @@ export const validateDailyLimits = async (scheduleData, dateKey, staffMembers) =
         lateCount++;
         dayData.late.push(staff.name);
       }
-      
+
       if (isWorkingShift(shift)) {
         workingCount++;
         dayData.working.push(staff.name);
@@ -389,13 +414,13 @@ export const validateDailyLimits = async (scheduleData, dateKey, staffMembers) =
       type: VIOLATION_TYPES.DAILY_OFF_LIMIT,
       date: dateKey,
       message: `Too many staff off on ${dateKey}: ${offCount} exceeds limit of ${maxOffPerDay}`,
-      severity: 'high',
+      severity: "high",
       details: {
         offCount,
         limit: maxOffPerDay,
         staffOff: dayData.off,
-        excess: offCount - maxOffPerDay
-      }
+        excess: offCount - maxOffPerDay,
+      },
     });
   }
 
@@ -406,13 +431,13 @@ export const validateDailyLimits = async (scheduleData, dateKey, staffMembers) =
       type: VIOLATION_TYPES.DAILY_EARLY_LIMIT,
       date: dateKey,
       message: `Too many early shifts on ${dateKey}: ${earlyCount} exceeds limit of ${maxEarlyPerDay}`,
-      severity: 'medium',
+      severity: "medium",
       details: {
         earlyCount,
         limit: maxEarlyPerDay,
         staffEarly: dayData.early,
-        excess: earlyCount - maxEarlyPerDay
-      }
+        excess: earlyCount - maxEarlyPerDay,
+      },
     });
   }
 
@@ -423,13 +448,13 @@ export const validateDailyLimits = async (scheduleData, dateKey, staffMembers) =
       type: VIOLATION_TYPES.INSUFFICIENT_COVERAGE,
       date: dateKey,
       message: `Insufficient coverage on ${dateKey}: only ${workingCount} working, need at least ${minWorkingStaffPerDay}`,
-      severity: 'critical',
+      severity: "critical",
       details: {
         workingCount,
         requiredMinimum: minWorkingStaffPerDay,
         deficit: minWorkingStaffPerDay - workingCount,
-        staffWorking: dayData.working
-      }
+        staffWorking: dayData.working,
+      },
     });
   }
 
@@ -442,8 +467,8 @@ export const validateDailyLimits = async (scheduleData, dateKey, staffMembers) =
       earlyCount,
       lateCount,
       workingCount,
-      coverage: totalStaff > 0 ? (workingCount / totalStaff) * 100 : 0
-    }
+      coverage: totalStaff > 0 ? (workingCount / totalStaff) * 100 : 0,
+    },
   };
 };
 
@@ -454,21 +479,29 @@ export const validateDailyLimits = async (scheduleData, dateKey, staffMembers) =
  * @param {Array} staffMembers - Array of staff member objects
  * @returns {Object} Validation result
  */
-export const validateStaffGroupConflicts = async (scheduleData, dateKey, staffMembers) => {
+export const validateStaffGroupConflicts = async (
+  scheduleData,
+  dateKey,
+  staffMembers,
+) => {
   const violations = [];
   const staffGroups = await getStaffConflictGroups();
 
-  staffGroups.forEach(group => {
+  staffGroups.forEach((group) => {
     const groupMembers = [];
     let offOrEarlyCount = 0;
 
     const members = group.members || [];
-    members.forEach(memberName => {
-      const staff = staffMembers.find(s => s.name === memberName);
-      if (staff && scheduleData[staff.id] && scheduleData[staff.id][dateKey] !== undefined) {
+    members.forEach((memberName) => {
+      const staff = staffMembers.find((s) => s.name === memberName);
+      if (
+        staff &&
+        scheduleData[staff.id] &&
+        scheduleData[staff.id][dateKey] !== undefined
+      ) {
         const shift = scheduleData[staff.id][dateKey];
         groupMembers.push({ name: memberName, shift });
-        
+
         if (isOffDay(shift) || isEarlyShift(shift)) {
           offOrEarlyCount++;
         }
@@ -478,28 +511,30 @@ export const validateStaffGroupConflicts = async (scheduleData, dateKey, staffMe
     // Check if more than one member in the group is off or on early shift
     if (offOrEarlyCount > 1) {
       const conflictingMembers = groupMembers
-        .filter(member => isOffDay(member.shift) || isEarlyShift(member.shift))
-        .map(member => `${member.name} (${member.shift})`);
+        .filter(
+          (member) => isOffDay(member.shift) || isEarlyShift(member.shift),
+        )
+        .map((member) => `${member.name} (${member.shift})`);
 
       violations.push({
         type: VIOLATION_TYPES.STAFF_GROUP_CONFLICT,
         date: dateKey,
         group: group.name,
-        message: `${group.name} conflict on ${dateKey}: multiple members off/early - ${conflictingMembers.join(', ')}`,
-        severity: 'high',
+        message: `${group.name} conflict on ${dateKey}: multiple members off/early - ${conflictingMembers.join(", ")}`,
+        severity: "high",
         details: {
           groupName: group.name,
           groupMembers: members,
           conflictingMembers,
-          conflictCount: offOrEarlyCount
-        }
+          conflictCount: offOrEarlyCount,
+        },
       });
     }
   });
 
   return {
     valid: violations.length === 0,
-    violations
+    violations,
   };
 };
 
@@ -510,7 +545,11 @@ export const validateStaffGroupConflicts = async (scheduleData, dateKey, staffMe
  * @param {Array} staffMembers - Array of staff member objects
  * @returns {Object} Validation result
  */
-export const validatePriorityRules = async (scheduleData, dateKey, staffMembers) => {
+export const validatePriorityRules = async (
+  scheduleData,
+  dateKey,
+  staffMembers,
+) => {
   const violations = [];
   const dayOfWeek = getDayOfWeek(dateKey);
   const priorityRules = await getPriorityRules();
@@ -518,31 +557,37 @@ export const validatePriorityRules = async (scheduleData, dateKey, staffMembers)
   // Handle both database format (by staff ID) and static format (by staff name)
   const processRules = (staffIdentifier, rules) => {
     // Find staff by name or ID
-    const staff = staffMembers.find(s => s.name === staffIdentifier || s.id === staffIdentifier);
-    if (!staff || !scheduleData[staff.id] || scheduleData[staff.id][dateKey] === undefined) {
+    const staff = staffMembers.find(
+      (s) => s.name === staffIdentifier || s.id === staffIdentifier,
+    );
+    if (
+      !staff ||
+      !scheduleData[staff.id] ||
+      scheduleData[staff.id][dateKey] === undefined
+    ) {
       return;
     }
 
     const currentShift = scheduleData[staff.id][dateKey];
     const preferredShifts = rules.preferredShifts || [];
 
-    preferredShifts.forEach(rule => {
+    preferredShifts.forEach((rule) => {
       if (rule.day === dayOfWeek) {
         let ruleViolated = false;
-        let expectedShift = '';
+        let expectedShift = "";
 
         switch (rule.shift) {
-          case 'early':
+          case "early":
             ruleViolated = !isEarlyShift(currentShift);
-            expectedShift = 'early shift (△)';
+            expectedShift = "early shift (△)";
             break;
-          case 'off':
+          case "off":
             ruleViolated = !isOffDay(currentShift);
-            expectedShift = 'day off (×)';
+            expectedShift = "day off (×)";
             break;
-          case 'late':
+          case "late":
             ruleViolated = !isLateShift(currentShift);
-            expectedShift = 'late shift (◇)';
+            expectedShift = "late shift (◇)";
             break;
         }
 
@@ -552,13 +597,13 @@ export const validatePriorityRules = async (scheduleData, dateKey, staffMembers)
             date: dateKey,
             staffName: staff.name,
             message: `${staff.name} priority rule violated on ${dayOfWeek}: should have ${expectedShift}, but has ${currentShift}`,
-            severity: rule.priority === 'high' ? 'high' : 'medium',
+            severity: rule.priority === "high" ? "high" : "medium",
             details: {
               rule,
               expectedShift,
               actualShift: currentShift,
-              dayOfWeek
-            }
+              dayOfWeek,
+            },
           });
         }
       }
@@ -566,15 +611,15 @@ export const validatePriorityRules = async (scheduleData, dateKey, staffMembers)
   };
 
   // Process priority rules
-  if (priorityRules && typeof priorityRules === 'object') {
-    Object.keys(priorityRules).forEach(staffIdentifier => {
+  if (priorityRules && typeof priorityRules === "object") {
+    Object.keys(priorityRules).forEach((staffIdentifier) => {
       processRules(staffIdentifier, priorityRules[staffIdentifier]);
     });
   }
 
   return {
     valid: violations.length === 0,
-    violations
+    violations,
   };
 };
 
@@ -585,13 +630,17 @@ export const validatePriorityRules = async (scheduleData, dateKey, staffMembers)
  * @param {Array} dateRange - Array of dates for the month
  * @returns {Object} Validation result
  */
-export const validateConsecutiveOffDays = (staffSchedule, staffName, dateRange) => {
+export const validateConsecutiveOffDays = (
+  staffSchedule,
+  staffName,
+  dateRange,
+) => {
   const violations = [];
-  let consecutiveOffDays = [];
+  const consecutiveOffDays = [];
   let currentStreak = [];
 
-  dateRange.forEach(date => {
-    const dateKey = date.toISOString().split('T')[0];
+  dateRange.forEach((date) => {
+    const dateKey = date.toISOString().split("T")[0];
     if (staffSchedule[dateKey] && isOffDay(staffSchedule[dateKey])) {
       currentStreak.push(dateKey);
     } else {
@@ -607,22 +656,22 @@ export const validateConsecutiveOffDays = (staffSchedule, staffName, dateRange) 
     consecutiveOffDays.push(currentStreak);
   }
 
-  consecutiveOffDays.forEach(streak => {
+  consecutiveOffDays.forEach((streak) => {
     violations.push({
       type: VIOLATION_TYPES.CONSECUTIVE_DAYS_OFF,
       staffName,
-      message: `${staffName} has ${streak.length} consecutive days off: ${streak.join(', ')}`,
-      severity: 'medium',
+      message: `${staffName} has ${streak.length} consecutive days off: ${streak.join(", ")}`,
+      severity: "medium",
       details: {
         consecutiveDays: streak,
-        streakLength: streak.length
-      }
+        streakLength: streak.length,
+      },
     });
   });
 
   return {
     valid: violations.length === 0,
-    violations
+    violations,
   };
 };
 
@@ -634,31 +683,43 @@ export const validateConsecutiveOffDays = (staffSchedule, staffName, dateRange) 
  * @param {Array} staffMembers - Array of staff member objects
  * @returns {Object} Validation result
  */
-export const validateCoverageCompensation = async (scheduleData, dateKey, staffMembers) => {
+export const validateCoverageCompensation = async (
+  scheduleData,
+  dateKey,
+  staffMembers,
+) => {
   const violations = [];
   const staffGroups = await getStaffConflictGroups();
-  
+
   // Find Group 2 (料理長, 古藤) and 中田
-  const group2 = staffGroups.find(g => g.name === 'Group 2');
+  const group2 = staffGroups.find((g) => g.name === "Group 2");
   if (!group2 || !group2.coverageRule) {
     return { valid: true, violations: [] };
   }
 
   const backupStaffName = group2.coverageRule.backupStaff;
-  const backupStaff = staffMembers.find(s => s.name === backupStaffName);
-  
-  if (!backupStaff || !scheduleData[backupStaff.id] || scheduleData[backupStaff.id][dateKey] === undefined) {
+  const backupStaff = staffMembers.find((s) => s.name === backupStaffName);
+
+  if (
+    !backupStaff ||
+    !scheduleData[backupStaff.id] ||
+    scheduleData[backupStaff.id][dateKey] === undefined
+  ) {
     return { valid: true, violations: [] };
   }
 
   // Check if any Group 2 member has day off
   let group2MemberOff = false;
   const offMembers = [];
-  
+
   const members = group2.members || [];
-  members.forEach(memberName => {
-    const staff = staffMembers.find(s => s.name === memberName);
-    if (staff && scheduleData[staff.id] && scheduleData[staff.id][dateKey] !== undefined) {
+  members.forEach((memberName) => {
+    const staff = staffMembers.find((s) => s.name === memberName);
+    if (
+      staff &&
+      scheduleData[staff.id] &&
+      scheduleData[staff.id][dateKey] !== undefined
+    ) {
       const shift = scheduleData[staff.id][dateKey];
       if (isOffDay(shift)) {
         group2MemberOff = true;
@@ -674,22 +735,22 @@ export const validateCoverageCompensation = async (scheduleData, dateKey, staffM
       violations.push({
         type: VIOLATION_TYPES.COVERAGE_COMPENSATION_VIOLATION,
         date: dateKey,
-        message: `Coverage compensation violated on ${dateKey}: ${offMembers.join(', ')} off but ${backupStaffName} not on normal shift (${backupShift})`,
-        severity: 'high',
+        message: `Coverage compensation violated on ${dateKey}: ${offMembers.join(", ")} off but ${backupStaffName} not on normal shift (${backupShift})`,
+        severity: "high",
         details: {
           groupMembersOff: offMembers,
           backupStaff: backupStaffName,
           backupShift,
-          requiredShift: 'normal',
-          coverageRule: group2.coverageRule
-        }
+          requiredShift: "normal",
+          coverageRule: group2.coverageRule,
+        },
       });
     }
   }
 
   return {
     valid: violations.length === 0,
-    violations
+    violations,
   };
 };
 
@@ -701,49 +762,65 @@ export const validateCoverageCompensation = async (scheduleData, dateKey, staffM
  * @param {Array} staffMembers - Array of staff member objects
  * @returns {Object} Validation result
  */
-export const validateProximityPatterns = async (scheduleData, dateRange, staffMembers) => {
+export const validateProximityPatterns = async (
+  scheduleData,
+  dateRange,
+  staffMembers,
+) => {
   const violations = [];
   const staffGroups = await getStaffConflictGroups();
-  
+
   // Find Group 2 with proximity pattern
-  const group2 = staffGroups.find(g => g.name === 'Group 2');
+  const group2 = staffGroups.find((g) => g.name === "Group 2");
   if (!group2 || !group2.proximityPattern) {
     return { valid: true, violations: [] };
   }
 
   const pattern = group2.proximityPattern;
-  const triggerStaff = staffMembers.find(s => s.name === pattern.trigger);
-  const targetStaff = staffMembers.find(s => s.name === pattern.target);
-  
-  if (!triggerStaff || !targetStaff || 
-      !scheduleData[triggerStaff.id] || !scheduleData[targetStaff.id]) {
+  const triggerStaff = staffMembers.find((s) => s.name === pattern.trigger);
+  const targetStaff = staffMembers.find((s) => s.name === pattern.target);
+
+  if (
+    !triggerStaff ||
+    !targetStaff ||
+    !scheduleData[triggerStaff.id] ||
+    !scheduleData[targetStaff.id]
+  ) {
     return { valid: true, violations: [] };
   }
 
   // Find 料理長's weekday off days
   const triggerOffDays = [];
-  dateRange.forEach(date => {
-    const dateKey = date.toISOString().split('T')[0];
-    if (isWeekday(dateKey) && 
-        scheduleData[triggerStaff.id][dateKey] !== undefined &&
-        isOffDay(scheduleData[triggerStaff.id][dateKey])) {
+  dateRange.forEach((date) => {
+    const dateKey = date.toISOString().split("T")[0];
+    if (
+      isWeekday(dateKey) &&
+      scheduleData[triggerStaff.id][dateKey] !== undefined &&
+      isOffDay(scheduleData[triggerStaff.id][dateKey])
+    ) {
       triggerOffDays.push(dateKey);
     }
   });
 
   // For each 料理長 weekday off, check if 古藤's off day is within ±2 days
-  triggerOffDays.forEach(triggerOffDay => {
+  triggerOffDays.forEach((triggerOffDay) => {
     const triggerDate = new Date(triggerOffDay);
     let targetOffWithinRange = false;
-    
+
     // Check ±2 days around trigger date
-    for (let offset = -pattern.proximity; offset <= pattern.proximity; offset++) {
+    for (
+      let offset = -pattern.proximity;
+      offset <= pattern.proximity;
+      offset++
+    ) {
       const checkDate = new Date(triggerDate);
       checkDate.setDate(checkDate.getDate() + offset);
-      const checkDateKey = checkDate.toISOString().split('T')[0];
-      
-      if (scheduleData[targetStaff.id][checkDateKey] !== undefined &&
-          isOffDay(scheduleData[targetStaff.id][checkDateKey])) {
+      const checkDateKey = checkDate.toISOString().split("T")[0];
+
+      if (
+        scheduleData[targetStaff.id][checkDateKey] !== undefined &&
+        isOffDay(scheduleData[targetStaff.id][checkDateKey])
+      ) {
         targetOffWithinRange = true;
         break;
       }
@@ -754,22 +831,22 @@ export const validateProximityPatterns = async (scheduleData, dateRange, staffMe
         type: VIOLATION_TYPES.PROXIMITY_PATTERN_VIOLATION,
         date: triggerOffDay,
         message: `Proximity pattern violated: ${pattern.trigger} off on ${triggerOffDay} (weekday), but ${pattern.target} has no day off within ±${pattern.proximity} days`,
-        severity: 'medium',
+        severity: "medium",
         details: {
           triggerStaff: pattern.trigger,
           targetStaff: pattern.target,
           triggerOffDay,
           proximityRange: pattern.proximity,
           condition: pattern.condition,
-          proximityPattern: pattern
-        }
+          proximityPattern: pattern,
+        },
       });
     }
   });
 
   return {
     valid: violations.length === 0,
-    violations
+    violations,
   };
 };
 
@@ -780,9 +857,13 @@ export const validateProximityPatterns = async (scheduleData, dateRange, staffMe
  * @param {Array} dateRange - Array of dates for the period
  * @returns {Object} Complete validation result
  */
-export const validateAllConstraints = async (scheduleData, staffMembers, dateRange) => {
-  console.log('🔍 Running comprehensive constraint validation...');
-  
+export const validateAllConstraints = async (
+  scheduleData,
+  staffMembers,
+  dateRange,
+) => {
+  console.log("🔍 Running comprehensive constraint validation...");
+
   const allViolations = [];
   const validationSummary = {
     totalConstraintsChecked: 0,
@@ -792,20 +873,28 @@ export const validateAllConstraints = async (scheduleData, staffMembers, dateRan
     mediumViolations: 0,
     byType: {},
     byStaff: {},
-    byDate: {}
+    byDate: {},
   };
 
   // Validate monthly limits for each staff member
   for (const staff of staffMembers) {
     if (scheduleData[staff.id]) {
       validationSummary.totalConstraintsChecked++;
-      
-      const monthlyResult = await validateMonthlyOffLimits(scheduleData[staff.id], staff.name, dateRange);
+
+      const monthlyResult = await validateMonthlyOffLimits(
+        scheduleData[staff.id],
+        staff.name,
+        dateRange,
+      );
       if (!monthlyResult.valid) {
         allViolations.push(...monthlyResult.violations);
       }
 
-      const consecutiveResult = validateConsecutiveOffDays(scheduleData[staff.id], staff.name, dateRange);
+      const consecutiveResult = validateConsecutiveOffDays(
+        scheduleData[staff.id],
+        staff.name,
+        dateRange,
+      );
       if (!consecutiveResult.valid) {
         allViolations.push(...consecutiveResult.violations);
       }
@@ -814,25 +903,41 @@ export const validateAllConstraints = async (scheduleData, staffMembers, dateRan
 
   // Validate daily constraints for each date
   for (const date of dateRange) {
-    const dateKey = date.toISOString().split('T')[0];
+    const dateKey = date.toISOString().split("T")[0];
     validationSummary.totalConstraintsChecked += 5; // daily limits, group conflicts, priority rules, coverage compensation, proximity patterns
 
-    const dailyLimitsResult = await validateDailyLimits(scheduleData, dateKey, staffMembers);
+    const dailyLimitsResult = await validateDailyLimits(
+      scheduleData,
+      dateKey,
+      staffMembers,
+    );
     if (!dailyLimitsResult.valid) {
       allViolations.push(...dailyLimitsResult.violations);
     }
 
-    const groupConflictsResult = await validateStaffGroupConflicts(scheduleData, dateKey, staffMembers);
+    const groupConflictsResult = await validateStaffGroupConflicts(
+      scheduleData,
+      dateKey,
+      staffMembers,
+    );
     if (!groupConflictsResult.valid) {
       allViolations.push(...groupConflictsResult.violations);
     }
 
-    const priorityRulesResult = await validatePriorityRules(scheduleData, dateKey, staffMembers);
+    const priorityRulesResult = await validatePriorityRules(
+      scheduleData,
+      dateKey,
+      staffMembers,
+    );
     if (!priorityRulesResult.valid) {
       allViolations.push(...priorityRulesResult.violations);
     }
 
-    const coverageCompensationResult = await validateCoverageCompensation(scheduleData, dateKey, staffMembers);
+    const coverageCompensationResult = await validateCoverageCompensation(
+      scheduleData,
+      dateKey,
+      staffMembers,
+    );
     if (!coverageCompensationResult.valid) {
       allViolations.push(...coverageCompensationResult.violations);
     }
@@ -840,24 +945,28 @@ export const validateAllConstraints = async (scheduleData, staffMembers, dateRan
 
   // Validate proximity patterns (needs full date range, so validate once)
   validationSummary.totalConstraintsChecked += 1;
-  const proximityPatternsResult = await validateProximityPatterns(scheduleData, dateRange, staffMembers);
+  const proximityPatternsResult = await validateProximityPatterns(
+    scheduleData,
+    dateRange,
+    staffMembers,
+  );
   if (!proximityPatternsResult.valid) {
     allViolations.push(...proximityPatternsResult.violations);
   }
 
   // Categorize violations
-  allViolations.forEach(violation => {
+  allViolations.forEach((violation) => {
     validationSummary.violationsFound++;
-    
+
     // Count by severity
     switch (violation.severity) {
-      case 'critical':
+      case "critical":
         validationSummary.criticalViolations++;
         break;
-      case 'high':
+      case "high":
         validationSummary.highViolations++;
         break;
-      case 'medium':
+      case "medium":
         validationSummary.mediumViolations++;
         break;
     }
@@ -886,23 +995,27 @@ export const validateAllConstraints = async (scheduleData, staffMembers, dateRan
   });
 
   const isValid = allViolations.length === 0;
-  
-  console.log(`✅ Constraint validation completed: ${isValid ? 'VALID' : 'VIOLATIONS FOUND'}`);
-  console.log(`📊 Summary: ${validationSummary.violationsFound} violations found in ${validationSummary.totalConstraintsChecked} checks`);
+
+  console.log(
+    `✅ Constraint validation completed: ${isValid ? "VALID" : "VIOLATIONS FOUND"}`,
+  );
+  console.log(
+    `📊 Summary: ${validationSummary.violationsFound} violations found in ${validationSummary.totalConstraintsChecked} checks`,
+  );
 
   return {
     valid: isValid,
     violations: allViolations,
     summary: validationSummary,
     constraintStatus: {
-      monthlyLimits: 'checked',
-      dailyLimits: 'checked',
-      staffGroupConflicts: 'checked',
-      priorityRules: 'checked',
-      consecutiveOffDays: 'checked',
-      coverageCompensation: 'checked',
-      proximityPatterns: 'checked'
-    }
+      monthlyLimits: "checked",
+      dailyLimits: "checked",
+      staffGroupConflicts: "checked",
+      priorityRules: "checked",
+      consecutiveOffDays: "checked",
+      coverageCompensation: "checked",
+      proximityPatterns: "checked",
+    },
   };
 };
 
@@ -914,126 +1027,129 @@ export const validateAllConstraints = async (scheduleData, staffMembers, dateRan
 export const getViolationRecommendations = (violations) => {
   const recommendations = [];
 
-  violations.forEach(violation => {
+  violations.forEach((violation) => {
     let recommendation = {};
 
     switch (violation.type) {
       case VIOLATION_TYPES.MONTHLY_OFF_LIMIT:
         recommendation = {
           violation,
-          action: 'reduce_off_days',
+          action: "reduce_off_days",
           suggestion: `Reduce ${violation.staffName}'s off days by ${violation.details.excess}`,
-          priority: 'high',
+          priority: "high",
           alternativeActions: [
-            'Convert some off days to working days',
-            'Redistribute off days to other staff members'
-          ]
+            "Convert some off days to working days",
+            "Redistribute off days to other staff members",
+          ],
         };
         break;
 
       case VIOLATION_TYPES.DAILY_OFF_LIMIT:
         recommendation = {
           violation,
-          action: 'redistribute_off_days',
+          action: "redistribute_off_days",
           suggestion: `Move ${violation.details.excess} staff from off to working on ${violation.date}`,
-          priority: 'high',
-          affectedStaff: violation.details.staffOff.slice(0, violation.details.excess),
+          priority: "high",
+          affectedStaff: violation.details.staffOff.slice(
+            0,
+            violation.details.excess,
+          ),
           alternativeActions: [
-            'Move off days to different dates',
-            'Convert to early or late shifts'
-          ]
+            "Move off days to different dates",
+            "Convert to early or late shifts",
+          ],
         };
         break;
 
       case VIOLATION_TYPES.STAFF_GROUP_CONFLICT:
         recommendation = {
           violation,
-          action: 'resolve_group_conflict',
+          action: "resolve_group_conflict",
           suggestion: `Change shift for one member of ${violation.group} on ${violation.date}`,
-          priority: 'high',
+          priority: "high",
           conflictingStaff: violation.details.conflictingMembers,
           alternativeActions: [
-            'Move one member to working shift',
-            'Swap shifts with staff from different group'
-          ]
+            "Move one member to working shift",
+            "Swap shifts with staff from different group",
+          ],
         };
         break;
 
       case VIOLATION_TYPES.PRIORITY_RULE_VIOLATION:
         recommendation = {
           violation,
-          action: 'apply_priority_rule',
+          action: "apply_priority_rule",
           suggestion: `Change ${violation.staffName}'s shift to ${violation.details.expectedShift} on ${violation.date}`,
-          priority: violation.severity === 'high' ? 'high' : 'medium',
+          priority: violation.severity === "high" ? "high" : "medium",
           alternativeActions: [
-            'Adjust other staff schedules to accommodate priority',
-            'Consider exception if business needs require it'
-          ]
+            "Adjust other staff schedules to accommodate priority",
+            "Consider exception if business needs require it",
+          ],
         };
         break;
 
       case VIOLATION_TYPES.INSUFFICIENT_COVERAGE:
         recommendation = {
           violation,
-          action: 'increase_coverage',
+          action: "increase_coverage",
           suggestion: `Add ${violation.details.deficit} more working staff on ${violation.date}`,
-          priority: 'critical',
+          priority: "critical",
           alternativeActions: [
-            'Convert off days to working days',
-            'Call in additional staff',
-            'Extend shifts for current working staff'
-          ]
+            "Convert off days to working days",
+            "Call in additional staff",
+            "Extend shifts for current working staff",
+          ],
         };
         break;
 
       case VIOLATION_TYPES.CONSECUTIVE_DAYS_OFF:
         recommendation = {
           violation,
-          action: 'break_consecutive_streak',
+          action: "break_consecutive_streak",
           suggestion: `Add working day in middle of ${violation.staffName}'s consecutive off period`,
-          priority: 'medium',
+          priority: "medium",
           streakDays: violation.details.consecutiveDays,
           alternativeActions: [
-            'Split consecutive days into smaller periods',
-            'Redistribute some off days to different weeks'
-          ]
+            "Split consecutive days into smaller periods",
+            "Redistribute some off days to different weeks",
+          ],
         };
         break;
 
       case VIOLATION_TYPES.COVERAGE_COMPENSATION_VIOLATION:
         recommendation = {
           violation,
-          action: 'apply_coverage_compensation',
-          suggestion: `Change ${violation.details.backupStaff}'s shift to normal on ${violation.date} when ${violation.details.groupMembersOff.join(', ')} is off`,
-          priority: 'high',
+          action: "apply_coverage_compensation",
+          suggestion: `Change ${violation.details.backupStaff}'s shift to normal on ${violation.date} when ${violation.details.groupMembersOff.join(", ")} is off`,
+          priority: "high",
           affectedStaff: [violation.details.backupStaff],
           alternativeActions: [
-            'Change Group 2 member from off to working shift',
-            'Arrange alternative coverage staff'
-          ]
+            "Change Group 2 member from off to working shift",
+            "Arrange alternative coverage staff",
+          ],
         };
         break;
 
       case VIOLATION_TYPES.PROXIMITY_PATTERN_VIOLATION:
         recommendation = {
           violation,
-          action: 'adjust_proximity_pattern',
+          action: "adjust_proximity_pattern",
           suggestion: `Schedule ${violation.details.targetStaff}'s day off within ±${violation.details.proximityRange} days of ${violation.details.triggerStaff}'s off day (${violation.date})`,
-          priority: 'medium',
+          priority: "medium",
           affectedStaff: [violation.details.targetStaff],
           alternativeActions: [
-            'Move target staff off day closer to trigger date',
-            'Adjust trigger staff off day if more flexible'
-          ]
+            "Move target staff off day closer to trigger date",
+            "Adjust trigger staff off day if more flexible",
+          ],
         };
         break;
 
       default:
         recommendation = {
           violation,
-          action: 'manual_review',
-          suggestion: 'Manual review required for this constraint violation',
-          priority: 'medium'
+          action: "manual_review",
+          suggestion: "Manual review required for this constraint violation",
+          priority: "medium",
         };
     }
 

@@ -1,9 +1,9 @@
 /**
  * AutomatedDatabaseSetupService.js
- * 
+ *
  * TRULY RPC-FREE database setup service - NO SQL EXECUTION DEPENDENCIES!
  * This service provides intelligent detection and comprehensive manual setup assistance.
- * 
+ *
  * Features:
  * - NO RPC functions required - works with standard Supabase client
  * - NO SQL execution dependencies - purely detection-based
@@ -16,7 +16,7 @@
  * - Sample data insertion via standard Supabase methods
  */
 
-import { supabase } from '../utils/supabase.js';
+import { supabase } from "../utils/supabase.js";
 
 export class AutomatedDatabaseSetupService {
   constructor() {
@@ -27,17 +27,17 @@ export class AutomatedDatabaseSetupService {
     this.isSetupComplete = false;
     this.existingTables = [];
     this.createdTables = [];
-    
+
     // Setup progress callbacks
     this.onProgress = null;
     this.onChunkComplete = null;
     this.onError = null;
     this.onComplete = null;
-    
+
     // Retry configuration
     this.maxRetries = 3;
     this.retryDelay = 1000; // Start with 1 second
-    
+
     // Initialize setup chunks
     this.initializeSetupChunks();
   }
@@ -48,135 +48,135 @@ export class AutomatedDatabaseSetupService {
   initializeSetupChunks() {
     this.setupChunks = [
       {
-        id: 'validate_connection',
-        name: 'Validate Connection',
-        description: 'Check database connection and permissions',
+        id: "validate_connection",
+        name: "Validate Connection",
+        description: "Check database connection and permissions",
         execute: this.validateConnection.bind(this),
         critical: true,
         retryable: true,
       },
       {
-        id: 'check_existing_tables',
-        name: 'Scan Existing Tables',
-        description: 'Check which tables already exist',
+        id: "check_existing_tables",
+        name: "Scan Existing Tables",
+        description: "Check which tables already exist",
         execute: this.checkExistingTables.bind(this),
         critical: true,
         retryable: true,
       },
       {
-        id: 'create_extensions',
-        name: 'Create Extensions',
-        description: 'Enable PostgreSQL extensions',
+        id: "create_extensions",
+        name: "Create Extensions",
+        description: "Enable PostgreSQL extensions",
         sql: this.getExtensionsSQL(),
         critical: true,
         retryable: true,
       },
       {
-        id: 'create_types',
-        name: 'Create Types',
-        description: 'Create custom database types',
+        id: "create_types",
+        name: "Create Types",
+        description: "Create custom database types",
         sql: this.getTypesSQL(),
         critical: true,
         retryable: true,
       },
       {
-        id: 'create_core_tables',
-        name: 'Create Core Tables',
-        description: 'Create restaurants and staff tables',
+        id: "create_core_tables",
+        name: "Create Core Tables",
+        description: "Create restaurants and staff tables",
         sql: this.getCoreTablesSQL(),
         critical: true,
         retryable: true,
-        skipIfExists: ['restaurants', 'staff'],
+        skipIfExists: ["restaurants", "staff"],
       },
       {
-        id: 'create_configuration_tables',
-        name: 'Create Configuration Tables',
-        description: 'Create configuration versioning system',
+        id: "create_configuration_tables",
+        name: "Create Configuration Tables",
+        description: "Create configuration versioning system",
         sql: this.getConfigurationTablesSQL(),
         critical: true,
         retryable: true,
-        skipIfExists: ['config_versions', 'config_changes'],
+        skipIfExists: ["config_versions", "config_changes"],
       },
       {
-        id: 'create_staff_groups',
-        name: 'Create Staff Groups',
-        description: 'Create staff groups and memberships',
+        id: "create_staff_groups",
+        name: "Create Staff Groups",
+        description: "Create staff groups and memberships",
         sql: this.getStaffGroupsSQL(),
         critical: true,
         retryable: true,
-        skipIfExists: ['staff_groups', 'staff_group_members'],
+        skipIfExists: ["staff_groups", "staff_group_members"],
       },
       {
-        id: 'create_business_rules',
-        name: 'Create Business Rules',
-        description: 'Create conflict and limit rules',
+        id: "create_business_rules",
+        name: "Create Business Rules",
+        description: "Create conflict and limit rules",
         sql: this.getBusinessRulesSQL(),
         critical: true,
         retryable: true,
-        skipIfExists: ['conflict_rules', 'daily_limits', 'monthly_limits'],
+        skipIfExists: ["conflict_rules", "daily_limits", "monthly_limits"],
       },
       {
-        id: 'create_priority_rules',
-        name: 'Create Priority Rules',
-        description: 'Create priority and scheduling rules',
+        id: "create_priority_rules",
+        name: "Create Priority Rules",
+        description: "Create priority and scheduling rules",
         sql: this.getPriorityRulesSQL(),
         critical: true,
         retryable: true,
-        skipIfExists: ['priority_rules'],
+        skipIfExists: ["priority_rules"],
       },
       {
-        id: 'create_ml_system',
-        name: 'Create ML System',
-        description: 'Create machine learning configuration',
+        id: "create_ml_system",
+        name: "Create ML System",
+        description: "Create machine learning configuration",
         sql: this.getMLSystemSQL(),
         critical: true,
         retryable: true,
-        skipIfExists: ['ml_model_configs', 'ml_model_performance'],
+        skipIfExists: ["ml_model_configs", "ml_model_performance"],
       },
       {
-        id: 'create_functions',
-        name: 'Create Functions',
-        description: 'Create helper functions',
+        id: "create_functions",
+        name: "Create Functions",
+        description: "Create helper functions",
         sql: this.getFunctionsSQL(),
         critical: true,
         retryable: true,
       },
       {
-        id: 'create_triggers',
-        name: 'Create Triggers',
-        description: 'Create update triggers',
+        id: "create_triggers",
+        name: "Create Triggers",
+        description: "Create update triggers",
         sql: this.getTriggersSQL(),
         critical: true,
         retryable: true,
       },
       {
-        id: 'create_indexes',
-        name: 'Create Indexes',
-        description: 'Create performance indexes',
+        id: "create_indexes",
+        name: "Create Indexes",
+        description: "Create performance indexes",
         sql: this.getIndexesSQL(),
         critical: false,
         retryable: true,
       },
       {
-        id: 'setup_rls',
-        name: 'Setup RLS Policies',
-        description: 'Configure row level security',
+        id: "setup_rls",
+        name: "Setup RLS Policies",
+        description: "Configure row level security",
         sql: this.getRLSPoliciesSQL(),
         critical: false,
         retryable: true,
       },
       {
-        id: 'insert_sample_data',
-        name: 'Insert Sample Data',
-        description: 'Create sample restaurant and configuration',
+        id: "insert_sample_data",
+        name: "Insert Sample Data",
+        description: "Create sample restaurant and configuration",
         execute: this.insertSampleData.bind(this),
         critical: false,
         retryable: true,
       },
       {
-        id: 'final_validation',
-        name: 'Final Validation',
-        description: 'Verify setup completion',
+        id: "final_validation",
+        name: "Final Validation",
+        description: "Verify setup completion",
         execute: this.performFinalValidation.bind(this),
         critical: true,
         retryable: false,
@@ -187,11 +187,15 @@ export class AutomatedDatabaseSetupService {
   /**
    * Execute complete automated database setup
    */
-  async executeSetup(progressCallback = null, errorCallback = null, completeCallback = null) {
+  async executeSetup(
+    progressCallback = null,
+    errorCallback = null,
+    completeCallback = null,
+  ) {
     this.onProgress = progressCallback;
     this.onError = errorCallback;
     this.onComplete = completeCallback;
-    
+
     this.currentChunkIndex = 0;
     this.progress = 0;
     this.errors = [];
@@ -199,38 +203,48 @@ export class AutomatedDatabaseSetupService {
     this.createdTables = [];
 
     try {
-      console.log('🚀 Starting automated database setup...');
-      this.reportProgress('Starting automated database setup...', 0);
+      console.log("🚀 Starting automated database setup...");
+      this.reportProgress("Starting automated database setup...", 0);
 
       for (let i = 0; i < this.setupChunks.length; i++) {
         const chunk = this.setupChunks[i];
         this.currentChunkIndex = i;
-        
+
         try {
-          console.log(`📋 Executing chunk ${i + 1}/${this.setupChunks.length}: ${chunk.name}`);
-          this.reportProgress(`Executing: ${chunk.name}`, (i / this.setupChunks.length) * 100);
+          console.log(
+            `📋 Executing chunk ${i + 1}/${this.setupChunks.length}: ${chunk.name}`,
+          );
+          this.reportProgress(
+            `Executing: ${chunk.name}`,
+            (i / this.setupChunks.length) * 100,
+          );
 
           // Check if we should skip this chunk
           if (await this.shouldSkipChunk(chunk)) {
             console.log(`⏭️  Skipping ${chunk.name} - tables already exist`);
-            this.reportProgress(`Skipped: ${chunk.name}`, ((i + 1) / this.setupChunks.length) * 100);
+            this.reportProgress(
+              `Skipped: ${chunk.name}`,
+              ((i + 1) / this.setupChunks.length) * 100,
+            );
             continue;
           }
 
           // Execute the chunk with retry logic
           await this.executeChunkWithRetry(chunk);
-          
+
           console.log(`✅ Completed: ${chunk.name}`);
-          this.reportProgress(`Completed: ${chunk.name}`, ((i + 1) / this.setupChunks.length) * 100);
+          this.reportProgress(
+            `Completed: ${chunk.name}`,
+            ((i + 1) / this.setupChunks.length) * 100,
+          );
 
           if (this.onChunkComplete) {
             this.onChunkComplete(chunk, i + 1, this.setupChunks.length);
           }
-
         } catch (error) {
           const errorMsg = `Failed at chunk "${chunk.name}": ${error.message}`;
           console.error(`❌ ${errorMsg}`, error);
-          
+
           this.errors.push({
             chunk: chunk.name,
             chunkId: chunk.id,
@@ -250,16 +264,18 @@ export class AutomatedDatabaseSetupService {
           }
 
           // For non-critical chunks, log and continue
-          console.warn(`⚠️ Non-critical chunk failed, continuing: ${chunk.name}`);
+          console.warn(
+            `⚠️ Non-critical chunk failed, continuing: ${chunk.name}`,
+          );
         }
       }
 
       this.isSetupComplete = true;
       this.progress = 100;
-      
-      console.log('✅ Automated database setup completed successfully!');
-      this.reportProgress('Automated setup completed successfully!', 100);
-      
+
+      console.log("✅ Automated database setup completed successfully!");
+      this.reportProgress("Automated setup completed successfully!", 100);
+
       if (this.onComplete) {
         this.onComplete({
           success: true,
@@ -277,13 +293,12 @@ export class AutomatedDatabaseSetupService {
         tablesCreated: this.createdTables,
         tablesExisted: this.existingTables,
       };
-
     } catch (error) {
-      console.error('❌ Automated database setup failed:', error);
-      
+      console.error("❌ Automated database setup failed:", error);
+
       // Generate fallback SQL for manual execution
       const fallbackSQL = this.generateFallbackSQL();
-      
+
       const result = {
         success: false,
         error: error.message,
@@ -308,7 +323,7 @@ export class AutomatedDatabaseSetupService {
    */
   async executeChunkWithRetry(chunk) {
     let lastError = null;
-    
+
     for (let attempt = 1; attempt <= this.maxRetries; attempt++) {
       try {
         if (chunk.execute) {
@@ -321,17 +336,19 @@ export class AutomatedDatabaseSetupService {
         return; // Success
       } catch (error) {
         lastError = error;
-        
+
         if (!chunk.retryable || attempt === this.maxRetries) {
           throw error; // No more retries or not retryable
         }
-        
+
         const delay = this.retryDelay * Math.pow(2, attempt - 1); // Exponential backoff
-        console.warn(`⚠️ Chunk ${chunk.name} failed (attempt ${attempt}/${this.maxRetries}), retrying in ${delay}ms...`);
+        console.warn(
+          `⚠️ Chunk ${chunk.name} failed (attempt ${attempt}/${this.maxRetries}), retrying in ${delay}ms...`,
+        );
         await this.sleep(delay);
       }
     }
-    
+
     throw lastError;
   }
 
@@ -342,15 +359,17 @@ export class AutomatedDatabaseSetupService {
     if (!chunk.skipIfExists || chunk.skipIfExists.length === 0) {
       return false;
     }
-    
+
     // Check if all required tables already exist
     for (const tableName of chunk.skipIfExists) {
       if (!this.existingTables.includes(tableName)) {
         return false;
       }
     }
-    
-    console.log(`All tables for ${chunk.name} already exist: ${chunk.skipIfExists.join(', ')}`);
+
+    console.log(
+      `All tables for ${chunk.name} already exist: ${chunk.skipIfExists.join(", ")}`,
+    );
     return true;
   }
 
@@ -359,23 +378,23 @@ export class AutomatedDatabaseSetupService {
    */
   async testDatabaseConnection() {
     try {
-      console.log('🔍 Testing database connection...');
-      
+      console.log("🔍 Testing database connection...");
+
       // Test basic connection by attempting a simple query
       const { error } = await supabase
-        .from('information_schema.tables')
-        .select('table_name')
+        .from("information_schema.tables")
+        .select("table_name")
         .limit(1);
-      
-      if (error && !error.message.includes('permission denied')) {
-        console.log('❌ Database connection failed');
+
+      if (error && !error.message.includes("permission denied")) {
+        console.log("❌ Database connection failed");
         return false;
       }
-      
-      console.log('✅ Database connection is working');
+
+      console.log("✅ Database connection is working");
       return true;
     } catch (error) {
-      console.warn('⚠️ Database connection test failed:', error.message);
+      console.warn("⚠️ Database connection test failed:", error.message);
       return false;
     }
   }
@@ -387,44 +406,52 @@ export class AutomatedDatabaseSetupService {
    */
   async executeSQLChunk(sql, chunkName) {
     console.log(`🔧 SQL execution attempted for: ${chunkName}`);
-    console.log('⚠️ This implementation is truly RPC-free and requires manual SQL execution');
-    
+    console.log(
+      "⚠️ This implementation is truly RPC-free and requires manual SQL execution",
+    );
+
     // Since we cannot execute arbitrary SQL without RPC functions or database admin access,
     // we immediately trigger the manual setup process with clear instructions
-    throw new Error(`RPC-free setup detected: ${chunkName} requires manual SQL execution.\n\nThis is expected behavior for a truly RPC-free setup.\nPlease use the provided fallback SQL to complete the setup manually.`);
+    throw new Error(
+      `RPC-free setup detected: ${chunkName} requires manual SQL execution.\n\nThis is expected behavior for a truly RPC-free setup.\nPlease use the provided fallback SQL to complete the setup manually.`,
+    );
   }
-  
 
   /**
    * Validate database connection and permissions
    */
   async validateConnection() {
     try {
-      console.log('🔍 Validating database connection...');
-      
+      console.log("🔍 Validating database connection...");
+
       // Test database connection using our new method
       const isConnected = await this.testDatabaseConnection();
-      
+
       if (!isConnected) {
         // Try a fallback authentication test
         try {
           const { error: sessionError } = await supabase.auth.getSession();
-          
+
           if (sessionError) {
             throw new Error(`Authentication error: ${sessionError.message}`);
           }
-          
-          console.log('✅ Basic authentication validated');
-          console.log('⚠️ Limited database access detected, but proceeding with setup...');
+
+          console.log("✅ Basic authentication validated");
+          console.log(
+            "⚠️ Limited database access detected, but proceeding with setup...",
+          );
         } catch (authError) {
-          throw new Error(`Database connection and authentication both failed: ${authError.message}`);
+          throw new Error(
+            `Database connection and authentication both failed: ${authError.message}`,
+          );
         }
       } else {
-        console.log('✅ Database connection and permissions validated');
+        console.log("✅ Database connection and permissions validated");
       }
-      
     } catch (error) {
-      throw new Error(`Database connection validation failed: ${error.message}`);
+      throw new Error(
+        `Database connection validation failed: ${error.message}`,
+      );
     }
   }
 
@@ -433,10 +460,18 @@ export class AutomatedDatabaseSetupService {
    */
   async checkExistingTables() {
     const requiredTables = [
-      'restaurants', 'staff', 'config_versions', 'config_changes',
-      'staff_groups', 'staff_group_members', 'conflict_rules',
-      'daily_limits', 'monthly_limits', 'priority_rules',
-      'ml_model_configs', 'ml_model_performance'
+      "restaurants",
+      "staff",
+      "config_versions",
+      "config_changes",
+      "staff_groups",
+      "staff_group_members",
+      "conflict_rules",
+      "daily_limits",
+      "monthly_limits",
+      "priority_rules",
+      "ml_model_configs",
+      "ml_model_performance",
     ];
 
     this.existingTables = [];
@@ -444,15 +479,12 @@ export class AutomatedDatabaseSetupService {
 
     for (const table of requiredTables) {
       try {
-        const { error } = await supabase
-          .from(table)
-          .select('count')
-          .limit(1);
+        const { error } = await supabase.from(table).select("count").limit(1);
 
-        if (!error || error.code === 'PGRST116') {
+        if (!error || error.code === "PGRST116") {
           // Table exists (either no error or just no data)
           this.existingTables.push(table);
-        } else if (error.code === '42P01') {
+        } else if (error.code === "42P01") {
           // Table doesn't exist
           missingTables.push(table);
         } else {
@@ -466,13 +498,15 @@ export class AutomatedDatabaseSetupService {
       }
     }
 
-    console.log(`✅ Found existing tables: ${this.existingTables.length}/${requiredTables.length}`);
+    console.log(
+      `✅ Found existing tables: ${this.existingTables.length}/${requiredTables.length}`,
+    );
     console.log(`📋 Tables to create: ${missingTables.length}`);
 
     if (missingTables.length === 0) {
-      console.log('🎉 All required tables already exist!');
+      console.log("🎉 All required tables already exist!");
     } else {
-      console.log(`📋 Missing tables: ${missingTables.join(', ')}`);
+      console.log(`📋 Missing tables: ${missingTables.join(", ")}`);
     }
   }
 
@@ -483,17 +517,17 @@ export class AutomatedDatabaseSetupService {
     try {
       // Check if we already have sample data
       const { data: existingRestaurants, error: checkError } = await supabase
-        .from('restaurants')
-        .select('id')
+        .from("restaurants")
+        .select("id")
         .limit(1);
 
       if (checkError) {
-        console.warn('Could not check for existing sample data:', checkError);
+        console.warn("Could not check for existing sample data:", checkError);
         return;
       }
 
       if (existingRestaurants && existingRestaurants.length > 0) {
-        console.log('✅ Sample data already exists, skipping insertion');
+        console.log("✅ Sample data already exists, skipping insertion");
         // Still create configuration even if restaurant exists
         await this.createDefaultConfiguration(existingRestaurants[0].id);
         return;
@@ -501,72 +535,80 @@ export class AutomatedDatabaseSetupService {
 
       // Create sample restaurant
       const { data: restaurant, error: restaurantError } = await supabase
-        .from('restaurants')
+        .from("restaurants")
         .insert({
-          name: 'Sample Restaurant',
-          slug: 'sample-restaurant',
-          timezone: 'Asia/Tokyo',
+          name: "Sample Restaurant",
+          slug: "sample-restaurant",
+          timezone: "Asia/Tokyo",
           settings: {
-            business_hours: { open: '09:00', close: '22:00' },
+            business_hours: { open: "09:00", close: "22:00" },
             shift_duration: 8,
             min_staff_per_shift: 2,
             max_consecutive_days: 6,
-            min_rest_hours: 12
-          }
+            min_rest_hours: 12,
+          },
         })
         .select()
         .single();
 
       if (restaurantError) {
-        console.warn('Sample restaurant creation failed:', restaurantError);
+        console.warn("Sample restaurant creation failed:", restaurantError);
         return;
       }
 
       // Create sample staff
       const staffMembers = [
-        { name: '料理長', position: 'Head Chef', email: 'head.chef@sample.com' },
-        { name: '井関', position: 'Cook', email: 'iseki@sample.com' },
-        { name: '古藤', position: 'Cook', email: 'koto@sample.com' },
-        { name: '中田', position: 'Cook', email: 'nakata@sample.com' },
-        { name: '小池', position: 'Cook', email: 'koike@sample.com' },
-        { name: '田辺', position: 'Server', email: 'tanabe@sample.com' },
-        { name: '岸', position: 'Server', email: 'kishi@sample.com' },
-        { name: '与儀', position: 'Server', email: 'yogi@sample.com' },
-        { name: 'カマル', position: 'Server', email: 'kamal@sample.com' },
-        { name: '高野', position: 'Server', email: 'takano@sample.com' },
-        { name: '派遣スタッフ', position: 'Temporary', email: 'temp@sample.com' },
+        {
+          name: "料理長",
+          position: "Head Chef",
+          email: "head.chef@sample.com",
+        },
+        { name: "井関", position: "Cook", email: "iseki@sample.com" },
+        { name: "古藤", position: "Cook", email: "koto@sample.com" },
+        { name: "中田", position: "Cook", email: "nakata@sample.com" },
+        { name: "小池", position: "Cook", email: "koike@sample.com" },
+        { name: "田辺", position: "Server", email: "tanabe@sample.com" },
+        { name: "岸", position: "Server", email: "kishi@sample.com" },
+        { name: "与儀", position: "Server", email: "yogi@sample.com" },
+        { name: "カマル", position: "Server", email: "kamal@sample.com" },
+        { name: "高野", position: "Server", email: "takano@sample.com" },
+        {
+          name: "派遣スタッフ",
+          position: "Temporary",
+          email: "temp@sample.com",
+        },
       ];
 
       const { data: staffData, error: staffError } = await supabase
-        .from('staff')
+        .from("staff")
         .insert(
-          staffMembers.map(member => ({
+          staffMembers.map((member) => ({
             ...member,
             restaurant_id: restaurant.id,
-            hire_date: '2024-01-01',
+            hire_date: "2024-01-01",
             is_active: true,
             metadata: {
               skill_level: Math.floor(Math.random() * 5) + 1,
               preferences: {},
               availability: {},
               hourly_rate: null,
-              employee_id: null
-            }
-          }))
+              employee_id: null,
+            },
+          })),
         )
         .select();
 
       if (staffError) {
-        console.warn('Sample staff creation failed:', staffError);
+        console.warn("Sample staff creation failed:", staffError);
         return;
       }
 
       // Create default configuration for the restaurant
       await this.createDefaultConfiguration(restaurant.id, staffData || []);
 
-      console.log('✅ Sample data and configuration inserted successfully');
+      console.log("✅ Sample data and configuration inserted successfully");
     } catch (error) {
-      console.warn('⚠️ Sample data insertion failed (non-critical):', error);
+      console.warn("⚠️ Sample data insertion failed (non-critical):", error);
       // Sample data is non-critical, so we don't throw
     }
   }
@@ -576,36 +618,39 @@ export class AutomatedDatabaseSetupService {
    */
   async createDefaultConfiguration(restaurantId, staffData = []) {
     try {
-      console.log('🔧 Creating default configuration...');
+      console.log("🔧 Creating default configuration...");
 
       // Check if default configuration already exists
       const { data: existingVersion, error: checkVersionError } = await supabase
-        .from('config_versions')
-        .select('id')
-        .eq('restaurant_id', restaurantId)
-        .eq('is_active', true)
+        .from("config_versions")
+        .select("id")
+        .eq("restaurant_id", restaurantId)
+        .eq("is_active", true)
         .single();
 
       if (!checkVersionError && existingVersion) {
-        console.log('✅ Default configuration already exists, skipping creation');
+        console.log(
+          "✅ Default configuration already exists, skipping creation",
+        );
         return;
       }
 
       // Create default configuration version
       const { data: configVersion, error: versionError } = await supabase
-        .from('config_versions')
+        .from("config_versions")
         .insert({
           restaurant_id: restaurantId,
           version_number: 1,
-          name: 'Default Configuration',
-          description: 'Initial system configuration created during database setup',
+          name: "Default Configuration",
+          description:
+            "Initial system configuration created during database setup",
           is_active: true,
         })
         .select()
         .single();
 
       if (versionError) {
-        console.error('Failed to create config version:', versionError);
+        console.error("Failed to create config version:", versionError);
         return;
       }
 
@@ -613,12 +658,12 @@ export class AutomatedDatabaseSetupService {
 
       // Create default ML model configuration
       const { error: mlConfigError } = await supabase
-        .from('ml_model_configs')
+        .from("ml_model_configs")
         .insert({
           restaurant_id: restaurantId,
           version_id: configVersion.id,
-          model_name: 'default_genetic_algorithm',
-          model_type: 'genetic_algorithm',
+          model_name: "default_genetic_algorithm",
+          model_type: "genetic_algorithm",
           parameters: {
             populationSize: 100,
             generations: 300,
@@ -649,22 +694,23 @@ export class AutomatedDatabaseSetupService {
         });
 
       if (mlConfigError) {
-        console.warn('Failed to create ML config:', mlConfigError);
+        console.warn("Failed to create ML config:", mlConfigError);
       }
 
       // Create default daily limits
       const { error: dailyLimitsError } = await supabase
-        .from('daily_limits')
+        .from("daily_limits")
         .insert([
           {
             restaurant_id: restaurantId,
             version_id: configVersion.id,
-            name: 'Max Off Per Day',
+            name: "Max Off Per Day",
             limit_config: {
-              shift_type: 'off',
+              shift_type: "off",
               max_count: 4,
-              applies_to: 'all_staff',
-              description: 'Maximum number of staff who can be off on any given day'
+              applies_to: "all_staff",
+              description:
+                "Maximum number of staff who can be off on any given day",
             },
             penalty_weight: 50.0,
             is_hard_constraint: true,
@@ -673,12 +719,12 @@ export class AutomatedDatabaseSetupService {
           {
             restaurant_id: restaurantId,
             version_id: configVersion.id,
-            name: 'Min Working Staff',
+            name: "Min Working Staff",
             limit_config: {
-              shift_type: 'any_working',
+              shift_type: "any_working",
               min_count: 3,
-              applies_to: 'all_staff',
-              description: 'Minimum number of working staff required per day'
+              applies_to: "all_staff",
+              description: "Minimum number of working staff required per day",
             },
             penalty_weight: 100.0,
             is_hard_constraint: true,
@@ -687,22 +733,22 @@ export class AutomatedDatabaseSetupService {
         ]);
 
       if (dailyLimitsError) {
-        console.warn('Failed to create daily limits:', dailyLimitsError);
+        console.warn("Failed to create daily limits:", dailyLimitsError);
       }
 
       // Create default monthly limits
       const { error: monthlyLimitsError } = await supabase
-        .from('monthly_limits')
+        .from("monthly_limits")
         .insert([
           {
             restaurant_id: restaurantId,
             version_id: configVersion.id,
-            name: 'Max Off Days Per Month',
+            name: "Max Off Days Per Month",
             limit_config: {
-              shift_type: 'off',
+              shift_type: "off",
               max_count: 8,
-              applies_to: 'per_staff_member',
-              description: 'Maximum off days per staff member per month'
+              applies_to: "per_staff_member",
+              description: "Maximum off days per staff member per month",
             },
             penalty_weight: 30.0,
             is_hard_constraint: false,
@@ -711,12 +757,12 @@ export class AutomatedDatabaseSetupService {
           {
             restaurant_id: restaurantId,
             version_id: configVersion.id,
-            name: 'Min Work Days Per Month',
+            name: "Min Work Days Per Month",
             limit_config: {
-              shift_type: 'any_working',
+              shift_type: "any_working",
               min_count: 20,
-              applies_to: 'per_staff_member',
-              description: 'Minimum work days per staff member per month'
+              applies_to: "per_staff_member",
+              description: "Minimum work days per staff member per month",
             },
             penalty_weight: 40.0,
             is_hard_constraint: false,
@@ -725,21 +771,28 @@ export class AutomatedDatabaseSetupService {
         ]);
 
       if (monthlyLimitsError) {
-        console.warn('Failed to create monthly limits:', monthlyLimitsError);
+        console.warn("Failed to create monthly limits:", monthlyLimitsError);
       }
 
       // Create default staff groups if staff data is available
       if (staffData && staffData.length > 0) {
-        await this.createDefaultStaffGroups(restaurantId, configVersion.id, staffData);
+        await this.createDefaultStaffGroups(
+          restaurantId,
+          configVersion.id,
+          staffData,
+        );
       }
 
       // Create some default priority rules based on sample staff
-      await this.createDefaultPriorityRules(restaurantId, configVersion.id, staffData);
+      await this.createDefaultPriorityRules(
+        restaurantId,
+        configVersion.id,
+        staffData,
+      );
 
-      console.log('✅ Default configuration created successfully');
-
+      console.log("✅ Default configuration created successfully");
     } catch (error) {
-      console.error('❌ Failed to create default configuration:', error);
+      console.error("❌ Failed to create default configuration:", error);
       // Don't throw as this is non-critical for basic functionality
     }
   }
@@ -750,32 +803,36 @@ export class AutomatedDatabaseSetupService {
   async createDefaultStaffGroups(restaurantId, versionId, staffData) {
     try {
       // Find staff by name for group assignments
-      const findStaffByName = (name) => staffData.find(s => s.name === name);
+      const findStaffByName = (name) => staffData.find((s) => s.name === name);
 
       const defaultGroups = [
         {
-          name: 'Kitchen Leadership',
-          description: 'Head chef and senior kitchen staff',
-          color: '#ef4444',
-          members: ['料理長'].map(findStaffByName).filter(Boolean),
+          name: "Kitchen Leadership",
+          description: "Head chef and senior kitchen staff",
+          color: "#ef4444",
+          members: ["料理長"].map(findStaffByName).filter(Boolean),
         },
         {
-          name: 'Kitchen Core',
-          description: 'Main cooking staff',
-          color: '#f97316',
-          members: ['井関', '古藤', '中田', '小池'].map(findStaffByName).filter(Boolean),
+          name: "Kitchen Core",
+          description: "Main cooking staff",
+          color: "#f97316",
+          members: ["井関", "古藤", "中田", "小池"]
+            .map(findStaffByName)
+            .filter(Boolean),
         },
         {
-          name: 'Service Team',
-          description: 'Front-of-house service staff',
-          color: '#06b6d4',
-          members: ['田辺', '岸', '与儀', 'カマル', '高野'].map(findStaffByName).filter(Boolean),
+          name: "Service Team",
+          description: "Front-of-house service staff",
+          color: "#06b6d4",
+          members: ["田辺", "岸", "与儀", "カマル", "高野"]
+            .map(findStaffByName)
+            .filter(Boolean),
         },
         {
-          name: 'Support Staff',
-          description: 'Temporary and support staff',
-          color: '#8b5cf6',
-          members: ['派遣スタッフ'].map(findStaffByName).filter(Boolean),
+          name: "Support Staff",
+          description: "Temporary and support staff",
+          color: "#8b5cf6",
+          members: ["派遣スタッフ"].map(findStaffByName).filter(Boolean),
         },
       ];
 
@@ -784,7 +841,7 @@ export class AutomatedDatabaseSetupService {
 
         // Create staff group
         const { data: createdGroup, error: groupError } = await supabase
-          .from('staff_groups')
+          .from("staff_groups")
           .insert({
             restaurant_id: restaurantId,
             version_id: versionId,
@@ -797,30 +854,36 @@ export class AutomatedDatabaseSetupService {
           .single();
 
         if (groupError) {
-          console.warn(`Failed to create staff group ${group.name}:`, groupError);
+          console.warn(
+            `Failed to create staff group ${group.name}:`,
+            groupError,
+          );
           continue;
         }
 
         // Add members to the group
         if (group.members.length > 0) {
-          const memberInserts = group.members.map(member => ({
+          const memberInserts = group.members.map((member) => ({
             group_id: createdGroup.id,
             staff_id: member.id,
           }));
 
           const { error: membersError } = await supabase
-            .from('staff_group_members')
+            .from("staff_group_members")
             .insert(memberInserts);
 
           if (membersError) {
-            console.warn(`Failed to add members to group ${group.name}:`, membersError);
+            console.warn(
+              `Failed to add members to group ${group.name}:`,
+              membersError,
+            );
           }
         }
       }
 
-      console.log('✅ Default staff groups created');
+      console.log("✅ Default staff groups created");
     } catch (error) {
-      console.warn('Failed to create default staff groups:', error);
+      console.warn("Failed to create default staff groups:", error);
     }
   }
 
@@ -829,28 +892,28 @@ export class AutomatedDatabaseSetupService {
    */
   async createDefaultPriorityRules(restaurantId, versionId, staffData) {
     try {
-      const findStaffByName = (name) => staffData.find(s => s.name === name);
-      
+      const findStaffByName = (name) => staffData.find((s) => s.name === name);
+
       const defaultPriorityRules = [];
 
       // Create priority rule for head chef on Sundays
-      const headChef = findStaffByName('料理長');
+      const headChef = findStaffByName("料理長");
       if (headChef) {
         defaultPriorityRules.push({
           restaurant_id: restaurantId,
           version_id: versionId,
-          name: 'Head Chef Sunday Priority',
-          description: 'Head chef prefers early shifts on Sundays',
+          name: "Head Chef Sunday Priority",
+          description: "Head chef prefers early shifts on Sundays",
           priority_level: 8,
           rule_definition: {
             staff_id: headChef.id,
             staff_name: headChef.name,
-            type: 'shift_preference',
+            type: "shift_preference",
             conditions: {
-              day_of_week: 'sunday',
-              shift_type: 'early'
+              day_of_week: "sunday",
+              shift_type: "early",
             },
-            preference_strength: 0.8
+            preference_strength: 0.8,
           },
           penalty_weight: 20.0,
           is_hard_constraint: false,
@@ -859,23 +922,23 @@ export class AutomatedDatabaseSetupService {
       }
 
       // Create priority rule for server who prefers Sundays off
-      const yogi = findStaffByName('与儀');
+      const yogi = findStaffByName("与儀");
       if (yogi) {
         defaultPriorityRules.push({
           restaurant_id: restaurantId,
           version_id: versionId,
-          name: 'Yogi Sunday Off Preference',
-          description: 'Yogi prefers to have Sundays off',
+          name: "Yogi Sunday Off Preference",
+          description: "Yogi prefers to have Sundays off",
           priority_level: 6,
           rule_definition: {
             staff_id: yogi.id,
             staff_name: yogi.name,
-            type: 'day_off_preference',
+            type: "day_off_preference",
             conditions: {
-              day_of_week: 'sunday',
-              shift_type: 'off'
+              day_of_week: "sunday",
+              shift_type: "off",
             },
-            preference_strength: 0.7
+            preference_strength: 0.7,
           },
           penalty_weight: 15.0,
           is_hard_constraint: false,
@@ -885,17 +948,20 @@ export class AutomatedDatabaseSetupService {
 
       if (defaultPriorityRules.length > 0) {
         const { error: priorityRulesError } = await supabase
-          .from('priority_rules')
+          .from("priority_rules")
           .insert(defaultPriorityRules);
 
         if (priorityRulesError) {
-          console.warn('Failed to create default priority rules:', priorityRulesError);
+          console.warn(
+            "Failed to create default priority rules:",
+            priorityRulesError,
+          );
         } else {
-          console.log('✅ Default priority rules created');
+          console.log("✅ Default priority rules created");
         }
       }
     } catch (error) {
-      console.warn('Failed to create default priority rules:', error);
+      console.warn("Failed to create default priority rules:", error);
     }
   }
 
@@ -910,15 +976,17 @@ export class AutomatedDatabaseSetupService {
     };
 
     // Test table access
-    const testTables = ['restaurants', 'staff', 'config_versions', 'ml_model_configs'];
+    const testTables = [
+      "restaurants",
+      "staff",
+      "config_versions",
+      "ml_model_configs",
+    ];
     for (const table of testTables) {
       try {
-        const { error } = await supabase
-          .from(table)
-          .select('count')
-          .limit(1);
-        
-        if (!error || error.code === 'PGRST116') {
+        const { error } = await supabase.from(table).select("count").limit(1);
+
+        if (!error || error.code === "PGRST116") {
           validationResults.tablesAccessible++;
         }
       } catch (error) {
@@ -929,25 +997,31 @@ export class AutomatedDatabaseSetupService {
     // Test sample data
     try {
       const { data, error } = await supabase
-        .from('restaurants')
-        .select('id')
+        .from("restaurants")
+        .select("id")
         .limit(1);
-      
+
       if (!error && data && data.length > 0) {
         validationResults.sampleDataAvailable = true;
       }
     } catch (error) {
-      console.warn('Final validation - sample data check failed:', error);
+      console.warn("Final validation - sample data check failed:", error);
     }
 
     this.validationResults = validationResults;
 
     console.log(`✅ Final validation completed:`);
-    console.log(`   - Tables accessible: ${validationResults.tablesAccessible}/${testTables.length}`);
-    console.log(`   - Sample data: ${validationResults.sampleDataAvailable ? 'Yes' : 'No'}`);
-    
+    console.log(
+      `   - Tables accessible: ${validationResults.tablesAccessible}/${testTables.length}`,
+    );
+    console.log(
+      `   - Sample data: ${validationResults.sampleDataAvailable ? "Yes" : "No"}`,
+    );
+
     if (validationResults.tablesAccessible < testTables.length) {
-      throw new Error(`Only ${validationResults.tablesAccessible}/${testTables.length} tables are accessible. Setup may be incomplete.`);
+      throw new Error(
+        `Only ${validationResults.tablesAccessible}/${testTables.length} tables are accessible. Setup may be incomplete.`,
+      );
     }
   }
 
@@ -962,7 +1036,7 @@ export class AutomatedDatabaseSetupService {
         percentage,
         currentChunk: this.currentChunkIndex,
         totalChunks: this.setupChunks.length,
-        chunkName: this.setupChunks[this.currentChunkIndex]?.name || 'Unknown',
+        chunkName: this.setupChunks[this.currentChunkIndex]?.name || "Unknown",
       });
     }
   }
@@ -971,7 +1045,7 @@ export class AutomatedDatabaseSetupService {
    * Sleep utility for retry delays
    */
   sleep(ms) {
-    return new Promise(resolve => setTimeout(resolve, ms));
+    return new Promise((resolve) => setTimeout(resolve, ms));
   }
 
   /**
@@ -983,7 +1057,7 @@ export class AutomatedDatabaseSetupService {
       totalChunks: this.setupChunks.length,
       percentage: this.progress,
       isComplete: this.isSetupComplete,
-      chunkName: this.setupChunks[this.currentChunkIndex]?.name || 'Unknown',
+      chunkName: this.setupChunks[this.currentChunkIndex]?.name || "Unknown",
       errors: this.errors,
       existingTables: this.existingTables,
       createdTables: this.createdTables,
@@ -1441,18 +1515,18 @@ CREATE POLICY "Enable all operations for authenticated users" ON ml_model_perfor
    */
   generateFallbackSQL() {
     const chunks = [
-      { name: 'Extensions', sql: this.getExtensionsSQL() },
-      { name: 'Types', sql: this.getTypesSQL() },
-      { name: 'Core Tables', sql: this.getCoreTablesSQL() },
-      { name: 'Configuration Tables', sql: this.getConfigurationTablesSQL() },
-      { name: 'Staff Groups', sql: this.getStaffGroupsSQL() },
-      { name: 'Business Rules', sql: this.getBusinessRulesSQL() },
-      { name: 'Priority Rules', sql: this.getPriorityRulesSQL() },
-      { name: 'ML System', sql: this.getMLSystemSQL() },
-      { name: 'Functions', sql: this.getFunctionsSQL() },
-      { name: 'Triggers', sql: this.getTriggersSQL() },
-      { name: 'Indexes', sql: this.getIndexesSQL() },
-      { name: 'RLS Policies', sql: this.getRLSPoliciesSQL() },
+      { name: "Extensions", sql: this.getExtensionsSQL() },
+      { name: "Types", sql: this.getTypesSQL() },
+      { name: "Core Tables", sql: this.getCoreTablesSQL() },
+      { name: "Configuration Tables", sql: this.getConfigurationTablesSQL() },
+      { name: "Staff Groups", sql: this.getStaffGroupsSQL() },
+      { name: "Business Rules", sql: this.getBusinessRulesSQL() },
+      { name: "Priority Rules", sql: this.getPriorityRulesSQL() },
+      { name: "ML System", sql: this.getMLSystemSQL() },
+      { name: "Functions", sql: this.getFunctionsSQL() },
+      { name: "Triggers", sql: this.getTriggersSQL() },
+      { name: "Indexes", sql: this.getIndexesSQL() },
+      { name: "RLS Policies", sql: this.getRLSPoliciesSQL() },
     ];
 
     let fallbackSQL = `-- =====================================================================
@@ -1749,63 +1823,69 @@ SELECT
    */
   getFallbackInstructions() {
     return {
-      title: 'One-Time Manual Database Setup Required',
-      description: 'This RPC-free setup requires one-time manual SQL execution. After this, automated setup will work! Please follow these simple steps:',
+      title: "One-Time Manual Database Setup Required",
+      description:
+        "This RPC-free setup requires one-time manual SQL execution. After this, automated setup will work! Please follow these simple steps:",
       steps: [
         {
           step: 1,
-          title: 'Open Supabase Dashboard',
-          description: 'Go to your Supabase project dashboard at supabase.com',
-          icon: '🌐'
+          title: "Open Supabase Dashboard",
+          description: "Go to your Supabase project dashboard at supabase.com",
+          icon: "🌐",
         },
         {
           step: 2,
-          title: 'Navigate to SQL Editor',
+          title: "Navigate to SQL Editor",
           description: 'Click on "SQL Editor" in the left sidebar',
-          icon: '📝'
+          icon: "📝",
         },
         {
           step: 3,
-          title: 'Create New Query',
+          title: "Create New Query",
           description: 'Click "New Query" to create a new SQL script',
-          icon: '➕'
+          icon: "➕",
         },
         {
           step: 4,
-          title: 'Copy & Paste SQL',
-          description: 'Copy the complete generated SQL from below and paste it into the editor',
-          icon: '📋'
+          title: "Copy & Paste SQL",
+          description:
+            "Copy the complete generated SQL from below and paste it into the editor",
+          icon: "📋",
         },
         {
           step: 5,
-          title: 'Run the Query',
-          description: 'Click "Run" to execute the SQL and create all tables, functions, and RPC setup',
-          icon: '▶️'
+          title: "Run the Query",
+          description:
+            'Click "Run" to execute the SQL and create all tables, functions, and RPC setup',
+          icon: "▶️",
         },
         {
           step: 6,
-          title: 'Verify Success',
-          description: 'Check that all tables were created successfully (should see success message)',
-          icon: '✅'
+          title: "Verify Success",
+          description:
+            "Check that all tables were created successfully (should see success message)",
+          icon: "✅",
         },
         {
           step: 7,
-          title: 'Return to Application',
-          description: 'Return to this application and refresh the page - automated setup will now work!',
-          icon: '🔄'
-        }
+          title: "Return to Application",
+          description:
+            "Return to this application and refresh the page - automated setup will now work!",
+          icon: "🔄",
+        },
       ],
       tips: [
-        'You only need to do this once per Supabase project',
-        'The SQL includes RPC setup so automated setup will work next time',
-        'The SQL is safe to run multiple times - it won\'t duplicate data',
+        "You only need to do this once per Supabase project",
+        "The SQL includes RPC setup so automated setup will work next time",
+        "The SQL is safe to run multiple times - it won't duplicate data",
         'If you see "already exists" errors, that\'s normal and can be ignored',
-        'After running the SQL, this service will work automatically in the future'
+        "After running the SQL, this service will work automatically in the future",
       ],
       support: {
-        message: 'Need help? The SQL below contains everything needed to set up your database.',
-        documentation: 'Check the project README for additional setup guidance'
-      }
+        message:
+          "Need help? The SQL below contains everything needed to set up your database.",
+        documentation: "Check the project README for additional setup guidance",
+      },
     };
   }
 
@@ -1814,19 +1894,19 @@ SELECT
    */
   shouldUseFallbackMode(error) {
     const fallbackTriggers = [
-      'function does not exist',
-      'permission denied',
-      'insufficient privileges',
-      'RPC',
-      'SECURITY',
-      'cannot execute',
-      'access denied',
-      'authentication',
-      'authorization'
+      "function does not exist",
+      "permission denied",
+      "insufficient privileges",
+      "RPC",
+      "SECURITY",
+      "cannot execute",
+      "access denied",
+      "authentication",
+      "authorization",
     ];
 
-    return fallbackTriggers.some(trigger => 
-      error.message.toLowerCase().includes(trigger.toLowerCase())
+    return fallbackTriggers.some((trigger) =>
+      error.message.toLowerCase().includes(trigger.toLowerCase()),
     );
   }
 
@@ -1835,33 +1915,40 @@ SELECT
    */
   analyzeError(error) {
     const analysis = {
-      category: 'unknown',
-      severity: 'medium',
-      solution: 'Try the fallback manual setup method',
-      canRetry: false
+      category: "unknown",
+      severity: "medium",
+      solution: "Try the fallback manual setup method",
+      canRetry: false,
     };
 
     const errorMsg = error.message.toLowerCase();
 
-    if (errorMsg.includes('function does not exist')) {
-      analysis.category = 'rpc_missing';
-      analysis.severity = 'high';
-      analysis.solution = 'RPC functions not available. Use direct SQL method (already implemented).';
+    if (errorMsg.includes("function does not exist")) {
+      analysis.category = "rpc_missing";
+      analysis.severity = "high";
+      analysis.solution =
+        "RPC functions not available. Use direct SQL method (already implemented).";
       analysis.canRetry = false;
-    } else if (errorMsg.includes('permission') || errorMsg.includes('denied')) {
-      analysis.category = 'permissions';
-      analysis.severity = 'high';
-      analysis.solution = 'Check your Supabase project permissions. You may need admin access.';
+    } else if (errorMsg.includes("permission") || errorMsg.includes("denied")) {
+      analysis.category = "permissions";
+      analysis.severity = "high";
+      analysis.solution =
+        "Check your Supabase project permissions. You may need admin access.";
       analysis.canRetry = false;
-    } else if (errorMsg.includes('timeout') || errorMsg.includes('connection')) {
-      analysis.category = 'connectivity';
-      analysis.severity = 'medium';
-      analysis.solution = 'Network or database connection issue. Check your internet connection and try again.';
+    } else if (
+      errorMsg.includes("timeout") ||
+      errorMsg.includes("connection")
+    ) {
+      analysis.category = "connectivity";
+      analysis.severity = "medium";
+      analysis.solution =
+        "Network or database connection issue. Check your internet connection and try again.";
       analysis.canRetry = true;
-    } else if (errorMsg.includes('syntax') || errorMsg.includes('invalid')) {
-      analysis.category = 'sql_error';
-      analysis.severity = 'low';
-      analysis.solution = 'SQL syntax issue. This is likely a temporary problem - try again.';
+    } else if (errorMsg.includes("syntax") || errorMsg.includes("invalid")) {
+      analysis.category = "sql_error";
+      analysis.severity = "low";
+      analysis.solution =
+        "SQL syntax issue. This is likely a temporary problem - try again.";
       analysis.canRetry = true;
     }
 

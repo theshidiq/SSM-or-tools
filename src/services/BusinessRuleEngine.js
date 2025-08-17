@@ -1,9 +1,9 @@
 /**
  * BusinessRuleEngine.js
- * 
+ *
  * Dynamic business rule engine with real-time updates, conflict detection,
  * and rule priority management for shift scheduling.
- * 
+ *
  * Features:
  * - Dynamic rule loading from database
  * - Real-time rule updates without system restart
@@ -15,8 +15,8 @@
  * - Audit trail for rule changes
  */
 
-import { ConfigurationService } from './ConfigurationService.js';
-import { ConfigurationCacheManager } from './ConfigurationCacheManager.js';
+import { ConfigurationService } from "./ConfigurationService.js";
+import { ConfigurationCacheManager } from "./ConfigurationCacheManager.js";
 
 export class BusinessRuleEngine {
   constructor(restaurantId = null) {
@@ -29,7 +29,7 @@ export class BusinessRuleEngine {
     this.rulesByCategory = new Map(); // category -> Set<rule_id>
     this.ruleDependencies = new Map(); // rule_id -> Set<dependency_rule_id>
     this.ruleConflicts = new Map(); // rule_id -> Set<conflicting_rule_id>
-    
+
     // Rule execution context
     this.executionContext = {
       activeRules: new Set(),
@@ -52,21 +52,21 @@ export class BusinessRuleEngine {
 
     // Rule categories
     this.categories = {
-      STAFF_AVAILABILITY: 'staff_availability',
-      SHIFT_PATTERNS: 'shift_patterns', 
-      BUSINESS_CONSTRAINTS: 'business_constraints',
-      PREFERENCE_RULES: 'preference_rules',
-      REGULATORY_COMPLIANCE: 'regulatory_compliance',
-      CUSTOM_BUSINESS_LOGIC: 'custom_business_logic',
+      STAFF_AVAILABILITY: "staff_availability",
+      SHIFT_PATTERNS: "shift_patterns",
+      BUSINESS_CONSTRAINTS: "business_constraints",
+      PREFERENCE_RULES: "preference_rules",
+      REGULATORY_COMPLIANCE: "regulatory_compliance",
+      CUSTOM_BUSINESS_LOGIC: "custom_business_logic",
     };
 
     // Conflict resolution strategies
     this.conflictStrategies = {
-      PRIORITY: 'priority', // Higher priority wins
-      LATEST: 'latest', // Most recently updated wins
-      STRICT: 'strict', // Block conflicting rules
-      MERGE: 'merge', // Attempt to merge conditions
-      USER_DEFINED: 'user_defined', // Custom resolution logic
+      PRIORITY: "priority", // Higher priority wins
+      LATEST: "latest", // Most recently updated wins
+      STRICT: "strict", // Block conflicting rules
+      MERGE: "merge", // Attempt to merge conditions
+      USER_DEFINED: "user_defined", // Custom resolution logic
     };
 
     // Real-time subscription handlers
@@ -92,13 +92,15 @@ export class BusinessRuleEngine {
     if (this.isInitialized) return true;
 
     try {
-      console.log('🔧 Initializing Business Rule Engine...');
+      console.log("🔧 Initializing Business Rule Engine...");
       const startTime = Date.now();
 
       // Initialize configuration service
       if (this.restaurantId) {
         this.configService = new ConfigurationService();
-        await this.configService.initialize({ restaurantId: this.restaurantId });
+        await this.configService.initialize({
+          restaurantId: this.restaurantId,
+        });
 
         // Initialize cache manager
         this.cacheManager = new ConfigurationCacheManager({
@@ -108,7 +110,7 @@ export class BusinessRuleEngine {
         });
         await this.cacheManager.initialize();
 
-        console.log('✅ Configuration service connected for rule engine');
+        console.log("✅ Configuration service connected for rule engine");
       }
 
       // Load initial rules from database
@@ -130,12 +132,13 @@ export class BusinessRuleEngine {
       const initTime = Date.now() - startTime;
 
       console.log(`✅ Business Rule Engine initialized in ${initTime}ms`);
-      console.log(`📊 Loaded ${this.performance.totalRulesLoaded} rules with ${this.performance.conflictingRules} conflicts`);
+      console.log(
+        `📊 Loaded ${this.performance.totalRulesLoaded} rules with ${this.performance.conflictingRules} conflicts`,
+      );
 
       return true;
-
     } catch (error) {
-      console.error('❌ Business Rule Engine initialization failed:', error);
+      console.error("❌ Business Rule Engine initialization failed:", error);
       return false;
     }
   }
@@ -146,11 +149,11 @@ export class BusinessRuleEngine {
   async loadRulesFromDatabase() {
     try {
       if (!this.configService) {
-        console.warn('⚠️ No configuration service available for rule loading');
+        console.warn("⚠️ No configuration service available for rule loading");
         return;
       }
 
-      console.log('📋 Loading business rules from database...');
+      console.log("📋 Loading business rules from database...");
 
       // Check cache first
       const cacheKey = `business_rules_${this.restaurantId}`;
@@ -168,13 +171,13 @@ export class BusinessRuleEngine {
           // Cache rules data
           await this.cacheManager.set(cacheKey, rulesData, {
             ttl: 10 * 60 * 1000, // 10 minutes
-            priority: 'high',
+            priority: "high",
           });
         }
       }
 
       if (!rulesData || !Array.isArray(rulesData)) {
-        console.warn('⚠️ No business rules found in database');
+        console.warn("⚠️ No business rules found in database");
         return;
       }
 
@@ -189,10 +192,11 @@ export class BusinessRuleEngine {
       this.performance.totalRulesLoaded = this.rules.size;
       this.performance.lastUpdateTime = Date.now();
 
-      console.log(`✅ Loaded ${this.performance.totalRulesLoaded} business rules`);
-
+      console.log(
+        `✅ Loaded ${this.performance.totalRulesLoaded} business rules`,
+      );
     } catch (error) {
-      console.error('❌ Failed to load rules from database:', error);
+      console.error("❌ Failed to load rules from database:", error);
     }
   }
 
@@ -204,7 +208,7 @@ export class BusinessRuleEngine {
       return {
         id: ruleData.id,
         name: ruleData.name || `Rule ${ruleData.id}`,
-        description: ruleData.description || '',
+        description: ruleData.description || "",
         category: ruleData.category || this.categories.CUSTOM_BUSINESS_LOGIC,
         priority: ruleData.priority || 100,
         isActive: ruleData.is_active !== false,
@@ -212,11 +216,12 @@ export class BusinessRuleEngine {
         actions: this.parseActions(ruleData.actions),
         dependencies: ruleData.dependencies || [],
         conflictsWith: ruleData.conflicts_with || [],
-        conflictResolution: ruleData.conflict_resolution || this.conflictStrategies.PRIORITY,
+        conflictResolution:
+          ruleData.conflict_resolution || this.conflictStrategies.PRIORITY,
         metadata: {
           createdAt: new Date(ruleData.created_at || Date.now()),
           updatedAt: new Date(ruleData.updated_at || Date.now()),
-          createdBy: ruleData.created_by || 'system',
+          createdBy: ruleData.created_by || "system",
           version: ruleData.version || 1,
           tags: ruleData.tags || [],
         },
@@ -227,7 +232,6 @@ export class BusinessRuleEngine {
           successRate: 1.0,
         },
       };
-
     } catch (error) {
       console.error(`❌ Failed to parse rule ${ruleData.id}:`, error);
       return null;
@@ -242,7 +246,7 @@ export class BusinessRuleEngine {
 
     try {
       // Handle different condition formats
-      if (typeof conditionsData === 'string') {
+      if (typeof conditionsData === "string") {
         conditionsData = JSON.parse(conditionsData);
       }
 
@@ -250,16 +254,15 @@ export class BusinessRuleEngine {
         conditionsData = [conditionsData];
       }
 
-      return conditionsData.map(condition => ({
+      return conditionsData.map((condition) => ({
         field: condition.field,
         operator: condition.operator, // 'equals', 'not_equals', 'greater_than', 'less_than', 'contains', etc.
         value: condition.value,
-        logicalOperator: condition.logical_operator || 'AND', // 'AND', 'OR'
+        logicalOperator: condition.logical_operator || "AND", // 'AND', 'OR'
         negated: condition.negated || false,
       }));
-
     } catch (error) {
-      console.error('Failed to parse conditions:', error);
+      console.error("Failed to parse conditions:", error);
       return [];
     }
   }
@@ -271,7 +274,7 @@ export class BusinessRuleEngine {
     if (!actionsData) return [];
 
     try {
-      if (typeof actionsData === 'string') {
+      if (typeof actionsData === "string") {
         actionsData = JSON.parse(actionsData);
       }
 
@@ -279,15 +282,14 @@ export class BusinessRuleEngine {
         actionsData = [actionsData];
       }
 
-      return actionsData.map(action => ({
+      return actionsData.map((action) => ({
         type: action.type, // 'block', 'allow', 'modify', 'notify', etc.
         target: action.target,
         value: action.value,
         parameters: action.parameters || {},
       }));
-
     } catch (error) {
-      console.error('Failed to parse actions:', error);
+      console.error("Failed to parse actions:", error);
       return [];
     }
   }
@@ -311,7 +313,7 @@ export class BusinessRuleEngine {
     }
 
     // Emit event
-    this.emitEvent('ruleAdded', { rule });
+    this.emitEvent("ruleAdded", { rule });
   }
 
   /**
@@ -340,13 +342,20 @@ export class BusinessRuleEngine {
       // Validate updated rule
       const validation = await this.validateRule(updatedRule);
       if (!validation.isValid) {
-        throw new Error(`Rule validation failed: ${validation.errors.join(', ')}`);
+        throw new Error(
+          `Rule validation failed: ${validation.errors.join(", ")}`,
+        );
       }
 
       // Check for new conflicts
       const conflictCheck = await this.checkRuleConflicts(updatedRule);
-      if (conflictCheck.hasConflicts && updatedRule.conflictResolution === this.conflictStrategies.STRICT) {
-        throw new Error(`Rule conflicts detected: ${conflictCheck.conflicts.join(', ')}`);
+      if (
+        conflictCheck.hasConflicts &&
+        updatedRule.conflictResolution === this.conflictStrategies.STRICT
+      ) {
+        throw new Error(
+          `Rule conflicts detected: ${conflictCheck.conflicts.join(", ")}`,
+        );
       }
 
       // Update rule
@@ -363,15 +372,14 @@ export class BusinessRuleEngine {
       }
 
       // Emit event
-      this.emitEvent('ruleUpdated', { 
-        oldRule: existingRule, 
+      this.emitEvent("ruleUpdated", {
+        oldRule: existingRule,
         newRule: updatedRule,
-        conflicts: conflictCheck.conflicts 
+        conflicts: conflictCheck.conflicts,
       });
 
       console.log(`✅ Rule ${ruleId} updated successfully`);
       return updatedRule;
-
     } catch (error) {
       console.error(`❌ Failed to update rule ${ruleId}:`, error);
       throw error;
@@ -400,12 +408,12 @@ export class BusinessRuleEngine {
 
       // Analyze implicit dependencies based on conditions
       const implicitDeps = await this.analyzeImplicitDependencies(rule);
-      implicitDeps.forEach(dep => dependencies.add(dep));
+      implicitDeps.forEach((dep) => dependencies.add(dep));
 
       this.ruleDependencies.set(ruleId, dependencies);
     }
 
-    console.log('📊 Built dependency graph for rules');
+    console.log("📊 Built dependency graph for rules");
   }
 
   /**
@@ -417,8 +425,8 @@ export class BusinessRuleEngine {
     // Analyze rule conditions to find dependencies on other rules
     for (const condition of rule.conditions) {
       // Check if condition depends on results of other rules
-      if (condition.field && condition.field.startsWith('rule_result_')) {
-        const dependentRuleId = condition.field.replace('rule_result_', '');
+      if (condition.field && condition.field.startsWith("rule_result_")) {
+        const dependentRuleId = condition.field.replace("rule_result_", "");
         if (this.rules.has(dependentRuleId)) {
           dependencies.add(dependentRuleId);
         }
@@ -432,7 +440,7 @@ export class BusinessRuleEngine {
    * Detect conflicts between rules
    */
   async detectConflicts() {
-    console.log('🔍 Detecting rule conflicts...');
+    console.log("🔍 Detecting rule conflicts...");
     this.ruleConflicts.clear();
     let conflictCount = 0;
 
@@ -442,7 +450,10 @@ export class BusinessRuleEngine {
       // Check explicit conflicts
       if (rule.conflictsWith && rule.conflictsWith.length > 0) {
         for (const conflictId of rule.conflictsWith) {
-          if (this.rules.has(conflictId) && this.rules.get(conflictId).isActive) {
+          if (
+            this.rules.has(conflictId) &&
+            this.rules.get(conflictId).isActive
+          ) {
             conflicts.add(conflictId);
           }
         }
@@ -450,7 +461,7 @@ export class BusinessRuleEngine {
 
       // Detect implicit conflicts
       const implicitConflicts = await this.analyzeImplicitConflicts(rule);
-      implicitConflicts.forEach(conflictId => conflicts.add(conflictId));
+      implicitConflicts.forEach((conflictId) => conflicts.add(conflictId));
 
       if (conflicts.size > 0) {
         this.ruleConflicts.set(ruleId, conflicts);
@@ -481,7 +492,10 @@ export class BusinessRuleEngine {
       }
 
       // Check for contradictory conditions
-      const hasContradictoryConditions = this.hasContradictoryConditions(rule, otherRule);
+      const hasContradictoryConditions = this.hasContradictoryConditions(
+        rule,
+        otherRule,
+      );
       if (hasContradictoryConditions) {
         conflicts.add(otherRuleId);
       }
@@ -499,10 +513,11 @@ export class BusinessRuleEngine {
         // Same target but opposite actions
         if (action1.target === action2.target) {
           if (
-            (action1.type === 'allow' && action2.type === 'block') ||
-            (action1.type === 'block' && action2.type === 'allow') ||
-            (action1.type === 'modify' && action2.type === 'modify' && 
-             action1.value !== action2.value)
+            (action1.type === "allow" && action2.type === "block") ||
+            (action1.type === "block" && action2.type === "allow") ||
+            (action1.type === "modify" &&
+              action2.type === "modify" &&
+              action1.value !== action2.value)
           ) {
             return true;
           }
@@ -521,10 +536,12 @@ export class BusinessRuleEngine {
         // Same field but contradictory values
         if (condition1.field === condition2.field) {
           if (
-            (condition1.operator === 'equals' && condition2.operator === 'not_equals' &&
-             condition1.value === condition2.value) ||
-            (condition1.operator === 'greater_than' && condition2.operator === 'less_than' &&
-             condition1.value >= condition2.value)
+            (condition1.operator === "equals" &&
+              condition2.operator === "not_equals" &&
+              condition1.value === condition2.value) ||
+            (condition1.operator === "greater_than" &&
+              condition2.operator === "less_than" &&
+              condition1.value >= condition2.value)
           ) {
             return true;
           }
@@ -563,20 +580,20 @@ export class BusinessRuleEngine {
           break;
 
         default:
-          resolution = { action: 'log', winner: null };
+          resolution = { action: "log", winner: null };
       }
 
       // Store resolution
       this.executionContext.conflictResolutions.set(
         `${ruleId}_${conflictId}`,
-        resolution
+        resolution,
       );
 
       // Apply resolution
       await this.applyConflictResolution(rule, conflictingRule, resolution);
 
       // Emit event
-      this.emitEvent('conflictResolved', {
+      this.emitEvent("conflictResolved", {
         rule1: rule,
         rule2: conflictingRule,
         resolution: resolution,
@@ -592,10 +609,10 @@ export class BusinessRuleEngine {
     const loser = winner === rule1 ? rule2 : rule1;
 
     return {
-      strategy: 'priority',
+      strategy: "priority",
       winner: winner.id,
       loser: loser.id,
-      action: 'disable_loser',
+      action: "disable_loser",
       reason: `Rule ${winner.id} has higher priority (${winner.priority}) than rule ${loser.id} (${loser.priority})`,
     };
   }
@@ -604,14 +621,15 @@ export class BusinessRuleEngine {
    * Resolve latest-update conflicts
    */
   resolveLatestConflict(rule1, rule2) {
-    const winner = rule1.metadata.updatedAt > rule2.metadata.updatedAt ? rule1 : rule2;
+    const winner =
+      rule1.metadata.updatedAt > rule2.metadata.updatedAt ? rule1 : rule2;
     const loser = winner === rule1 ? rule2 : rule1;
 
     return {
-      strategy: 'latest',
+      strategy: "latest",
       winner: winner.id,
       loser: loser.id,
-      action: 'disable_loser',
+      action: "disable_loser",
       reason: `Rule ${winner.id} was updated more recently`,
     };
   }
@@ -621,11 +639,11 @@ export class BusinessRuleEngine {
    */
   resolveStrictConflict(rule1, rule2) {
     return {
-      strategy: 'strict',
+      strategy: "strict",
       winner: null,
       loser: null,
-      action: 'disable_both',
-      reason: 'Strict conflict resolution - both rules disabled',
+      action: "disable_both",
+      reason: "Strict conflict resolution - both rules disabled",
     };
   }
 
@@ -635,15 +653,18 @@ export class BusinessRuleEngine {
   async resolveMergeConflict(rule1, rule2) {
     // Attempt to merge compatible parts
     try {
-      const mergedConditions = this.mergeConditions(rule1.conditions, rule2.conditions);
+      const mergedConditions = this.mergeConditions(
+        rule1.conditions,
+        rule2.conditions,
+      );
       const mergedActions = this.mergeActions(rule1.actions, rule2.actions);
 
       if (mergedConditions && mergedActions) {
         return {
-          strategy: 'merge',
+          strategy: "merge",
           winner: null,
           loser: null,
-          action: 'create_merged_rule',
+          action: "create_merged_rule",
           mergedRule: {
             id: `merged_${rule1.id}_${rule2.id}`,
             name: `Merged: ${rule1.name} + ${rule2.name}`,
@@ -651,15 +672,16 @@ export class BusinessRuleEngine {
             actions: mergedActions,
             priority: Math.max(rule1.priority, rule2.priority),
           },
-          reason: 'Rules successfully merged',
+          reason: "Rules successfully merged",
         };
       } else {
         // Fallback to priority resolution
         return this.resolvePriorityConflict(rule1, rule2);
       }
-
     } catch (error) {
-      console.warn('Failed to merge conflicting rules, falling back to priority resolution');
+      console.warn(
+        "Failed to merge conflicting rules, falling back to priority resolution",
+      );
       return this.resolvePriorityConflict(rule1, rule2);
     }
   }
@@ -669,22 +691,24 @@ export class BusinessRuleEngine {
    */
   async applyConflictResolution(rule1, rule2, resolution) {
     switch (resolution.action) {
-      case 'disable_loser':
+      case "disable_loser":
         const loserId = resolution.loser;
         this.executionContext.activeRules.delete(loserId);
         this.executionContext.disabledRules.add(loserId);
         console.log(`🔧 Disabled rule ${loserId} due to conflict resolution`);
         break;
 
-      case 'disable_both':
+      case "disable_both":
         this.executionContext.activeRules.delete(rule1.id);
         this.executionContext.activeRules.delete(rule2.id);
         this.executionContext.disabledRules.add(rule1.id);
         this.executionContext.disabledRules.add(rule2.id);
-        console.log(`🔧 Disabled both rules ${rule1.id} and ${rule2.id} due to strict conflict`);
+        console.log(
+          `🔧 Disabled both rules ${rule1.id} and ${rule2.id} due to strict conflict`,
+        );
         break;
 
-      case 'create_merged_rule':
+      case "create_merged_rule":
         // Add merged rule and disable originals
         this.addRule(resolution.mergedRule);
         this.executionContext.activeRules.delete(rule1.id);
@@ -708,7 +732,9 @@ export class BusinessRuleEngine {
     // Topological sort considering dependencies and priorities
     const visit = (ruleId) => {
       if (inProgress.has(ruleId)) {
-        console.warn(`⚠️ Circular dependency detected involving rule ${ruleId}`);
+        console.warn(
+          `⚠️ Circular dependency detected involving rule ${ruleId}`,
+        );
         return;
       }
 
@@ -745,7 +771,9 @@ export class BusinessRuleEngine {
     }
 
     this.executionContext.executionOrder = executionOrder;
-    console.log(`📊 Built execution order for ${executionOrder.length} active rules`);
+    console.log(
+      `📊 Built execution order for ${executionOrder.length} active rules`,
+    );
   }
 
   /**
@@ -753,7 +781,7 @@ export class BusinessRuleEngine {
    */
   async executeRules(context) {
     if (!this.isInitialized) {
-      throw new Error('Business Rule Engine not initialized');
+      throw new Error("Business Rule Engine not initialized");
     }
 
     const startTime = Date.now();
@@ -770,12 +798,16 @@ export class BusinessRuleEngine {
 
         try {
           // Evaluate rule conditions
-          const conditionResult = await this.evaluateConditions(rule, context, results);
-          
+          const conditionResult = await this.evaluateConditions(
+            rule,
+            context,
+            results,
+          );
+
           if (conditionResult.passed) {
             // Execute rule actions
             const actionResult = await this.executeActions(rule, context);
-            
+
             const result = {
               ruleId: rule.id,
               ruleName: rule.name,
@@ -792,9 +824,9 @@ export class BusinessRuleEngine {
             // Update rule execution stats
             rule.executionData.timesExecuted++;
             rule.executionData.lastExecuted = new Date();
-            rule.executionData.averageExecutionTime = 
-              (rule.executionData.averageExecutionTime + result.executionTime) / 2;
-
+            rule.executionData.averageExecutionTime =
+              (rule.executionData.averageExecutionTime + result.executionTime) /
+              2;
           } else {
             // Rule conditions not met
             results.set(ruleId, {
@@ -808,7 +840,6 @@ export class BusinessRuleEngine {
               skipped: true,
             });
           }
-
         } catch (error) {
           console.error(`❌ Rule ${ruleId} execution failed:`, error);
           results.set(ruleId, {
@@ -821,15 +852,16 @@ export class BusinessRuleEngine {
           });
 
           // Update error rate
-          rule.executionData.successRate = 
-            (rule.executionData.successRate * rule.executionData.timesExecuted - 1) / 
+          rule.executionData.successRate =
+            (rule.executionData.successRate * rule.executionData.timesExecuted -
+              1) /
             (rule.executionData.timesExecuted + 1);
         }
       }
 
       // Update performance metrics
       const totalExecutionTime = Date.now() - startTime;
-      this.performance.averageExecutionTime = 
+      this.performance.averageExecutionTime =
         (this.performance.averageExecutionTime + totalExecutionTime) / 2;
       this.performance.rulesExecuted += executedCount;
 
@@ -839,9 +871,8 @@ export class BusinessRuleEngine {
         totalExecutionTime: totalExecutionTime,
         results: Object.fromEntries(results),
       };
-
     } catch (error) {
-      console.error('❌ Rule execution failed:', error);
+      console.error("❌ Rule execution failed:", error);
       return {
         success: false,
         error: error.message,
@@ -857,7 +888,7 @@ export class BusinessRuleEngine {
   async evaluateConditions(rule, context, previousResults) {
     const conditionResults = [];
     let overallResult = true;
-    let logicalOperator = 'AND';
+    let logicalOperator = "AND";
 
     for (const condition of rule.conditions) {
       let conditionMet = false;
@@ -865,7 +896,11 @@ export class BusinessRuleEngine {
 
       try {
         // Get the field value from context
-        actualValue = this.getFieldValue(condition.field, context, previousResults);
+        actualValue = this.getFieldValue(
+          condition.field,
+          context,
+          previousResults,
+        );
 
         // Evaluate condition
         conditionMet = this.evaluateCondition(condition, actualValue);
@@ -885,12 +920,14 @@ export class BusinessRuleEngine {
         });
 
         // Apply logical operator
-        if (condition.logicalOperator === 'OR') {
-          logicalOperator = 'OR';
+        if (condition.logicalOperator === "OR") {
+          logicalOperator = "OR";
         }
-
       } catch (error) {
-        console.warn(`⚠️ Condition evaluation failed for ${condition.field}:`, error);
+        console.warn(
+          `⚠️ Condition evaluation failed for ${condition.field}:`,
+          error,
+        );
         conditionResults.push({
           field: condition.field,
           operator: condition.operator,
@@ -903,9 +940,9 @@ export class BusinessRuleEngine {
       }
 
       // Update overall result based on logical operator
-      if (logicalOperator === 'AND') {
+      if (logicalOperator === "AND") {
         overallResult = overallResult && conditionMet;
-      } else if (logicalOperator === 'OR') {
+      } else if (logicalOperator === "OR") {
         overallResult = overallResult || conditionMet;
       }
     }
@@ -922,18 +959,18 @@ export class BusinessRuleEngine {
    */
   getFieldValue(field, context, previousResults) {
     // Handle rule result references
-    if (field.startsWith('rule_result_')) {
-      const ruleId = field.replace('rule_result_', '');
+    if (field.startsWith("rule_result_")) {
+      const ruleId = field.replace("rule_result_", "");
       const result = previousResults.get(ruleId);
       return result ? result.success : false;
     }
 
     // Handle nested field access
-    const fieldParts = field.split('.');
+    const fieldParts = field.split(".");
     let value = context;
 
     for (const part of fieldParts) {
-      if (value && typeof value === 'object' && part in value) {
+      if (value && typeof value === "object" && part in value) {
         value = value[part];
       } else {
         throw new Error(`Field ${field} not found in context`);
@@ -950,46 +987,50 @@ export class BusinessRuleEngine {
     const { operator, value: expectedValue } = condition;
 
     switch (operator) {
-      case 'equals':
+      case "equals":
         return actualValue === expectedValue;
-      
-      case 'not_equals':
+
+      case "not_equals":
         return actualValue !== expectedValue;
-      
-      case 'greater_than':
+
+      case "greater_than":
         return Number(actualValue) > Number(expectedValue);
-      
-      case 'greater_than_or_equal':
+
+      case "greater_than_or_equal":
         return Number(actualValue) >= Number(expectedValue);
-      
-      case 'less_than':
+
+      case "less_than":
         return Number(actualValue) < Number(expectedValue);
-      
-      case 'less_than_or_equal':
+
+      case "less_than_or_equal":
         return Number(actualValue) <= Number(expectedValue);
-      
-      case 'contains':
+
+      case "contains":
         return String(actualValue).includes(String(expectedValue));
-      
-      case 'not_contains':
+
+      case "not_contains":
         return !String(actualValue).includes(String(expectedValue));
-      
-      case 'in':
-        return Array.isArray(expectedValue) && expectedValue.includes(actualValue);
-      
-      case 'not_in':
-        return Array.isArray(expectedValue) && !expectedValue.includes(actualValue);
-      
-      case 'regex':
+
+      case "in":
+        return (
+          Array.isArray(expectedValue) && expectedValue.includes(actualValue)
+        );
+
+      case "not_in":
+        return (
+          Array.isArray(expectedValue) && !expectedValue.includes(actualValue)
+        );
+
+      case "regex":
         const regex = new RegExp(expectedValue);
         return regex.test(String(actualValue));
-      
-      case 'is_null':
+
+      case "is_null":
         return actualValue === null || actualValue === undefined;
-      
-      case 'is_not_null':
+
+      case "is_not_null":
         return actualValue !== null && actualValue !== undefined;
-      
+
       default:
         throw new Error(`Unknown operator: ${operator}`);
     }
@@ -1032,42 +1073,50 @@ export class BusinessRuleEngine {
    */
   async executeAction(action, context) {
     switch (action.type) {
-      case 'block':
+      case "block":
         // Block the operation
         context.blocked = true;
-        context.blockReason = action.value || 'Blocked by business rule';
+        context.blockReason = action.value || "Blocked by business rule";
         return { blocked: true, reason: context.blockReason };
 
-      case 'allow':
+      case "allow":
         // Explicitly allow the operation
         context.allowed = true;
         return { allowed: true };
 
-      case 'modify':
+      case "modify":
         // Modify context value
         if (action.target && action.value !== undefined) {
           this.setFieldValue(action.target, context, action.value);
-          return { modified: true, target: action.target, newValue: action.value };
+          return {
+            modified: true,
+            target: action.target,
+            newValue: action.value,
+          };
         }
         break;
 
-      case 'notify':
+      case "notify":
         // Send notification
         console.log(`📢 Rule notification: ${action.value}`);
         return { notified: true, message: action.value };
 
-      case 'log':
+      case "log":
         // Log information
         console.log(`📝 Rule log: ${action.value}`);
         return { logged: true, message: action.value };
 
-      case 'set_preference':
+      case "set_preference":
         // Set preference value
         if (!context.preferences) context.preferences = {};
         context.preferences[action.target] = action.value;
-        return { preferenceSet: true, target: action.target, value: action.value };
+        return {
+          preferenceSet: true,
+          target: action.target,
+          value: action.value,
+        };
 
-      case 'add_constraint':
+      case "add_constraint":
         // Add constraint
         if (!context.constraints) context.constraints = [];
         context.constraints.push({
@@ -1086,7 +1135,7 @@ export class BusinessRuleEngine {
    * Set field value in context
    */
   setFieldValue(field, context, value) {
-    const fieldParts = field.split('.');
+    const fieldParts = field.split(".");
     let current = context;
 
     for (let i = 0; i < fieldParts.length - 1; i++) {
@@ -1106,7 +1155,7 @@ export class BusinessRuleEngine {
    */
   async setupRealtimeSubscriptions() {
     if (!this.configService || !this.configService.supabase) {
-      console.warn('⚠️ No real-time subscriptions available');
+      console.warn("⚠️ No real-time subscriptions available");
       return;
     }
 
@@ -1115,24 +1164,23 @@ export class BusinessRuleEngine {
       const subscription = this.configService.supabase
         .channel(`business_rules_${this.restaurantId}`)
         .on(
-          'postgres_changes',
+          "postgres_changes",
           {
-            event: '*',
-            schema: 'public',
-            table: 'business_rules',
+            event: "*",
+            schema: "public",
+            table: "business_rules",
             filter: `restaurant_id=eq.${this.restaurantId}`,
           },
           async (payload) => {
             await this.handleRuleChange(payload);
-          }
+          },
         )
         .subscribe();
 
-      this.subscriptions.set('business_rules', subscription);
-      console.log('✅ Real-time rule subscriptions established');
-
+      this.subscriptions.set("business_rules", subscription);
+      console.log("✅ Real-time rule subscriptions established");
     } catch (error) {
-      console.error('❌ Failed to setup real-time subscriptions:', error);
+      console.error("❌ Failed to setup real-time subscriptions:", error);
     }
   }
 
@@ -1141,7 +1189,7 @@ export class BusinessRuleEngine {
    */
   async handleRuleChange(payload) {
     if (this.isUpdating) {
-      console.log('⏳ Skipping real-time update - manual update in progress');
+      console.log("⏳ Skipping real-time update - manual update in progress");
       return;
     }
 
@@ -1149,31 +1197,31 @@ export class BusinessRuleEngine {
       const { eventType, new: newRecord, old: oldRecord } = payload;
 
       switch (eventType) {
-        case 'INSERT':
+        case "INSERT":
           console.log(`📥 New rule added: ${newRecord.id}`);
           const newRule = this.parseRule(newRecord);
           if (newRule) {
             this.addRule(newRule);
             await this.rebuildAfterChange();
-            this.emitEvent('ruleAdded', { rule: newRule });
+            this.emitEvent("ruleAdded", { rule: newRule });
           }
           break;
 
-        case 'UPDATE':
+        case "UPDATE":
           console.log(`📝 Rule updated: ${newRecord.id}`);
           const updatedRule = this.parseRule(newRecord);
           if (updatedRule) {
             const oldRule = this.rules.get(newRecord.id);
             this.rules.set(newRecord.id, updatedRule);
             await this.rebuildAfterChange();
-            this.emitEvent('ruleUpdated', { oldRule, newRule: updatedRule });
+            this.emitEvent("ruleUpdated", { oldRule, newRule: updatedRule });
           }
           break;
 
-        case 'DELETE':
+        case "DELETE":
           console.log(`🗑️ Rule deleted: ${oldRecord.id}`);
           await this.deleteRule(oldRecord.id);
-          this.emitEvent('ruleDeleted', { ruleId: oldRecord.id });
+          this.emitEvent("ruleDeleted", { ruleId: oldRecord.id });
           break;
 
         default:
@@ -1184,9 +1232,8 @@ export class BusinessRuleEngine {
       if (this.cacheManager) {
         await this.cacheManager.delete(`business_rules_${this.restaurantId}`);
       }
-
     } catch (error) {
-      console.error('❌ Failed to handle rule change:', error);
+      console.error("❌ Failed to handle rule change:", error);
     }
   }
 
@@ -1198,13 +1245,13 @@ export class BusinessRuleEngine {
     await this.buildDependencyGraph();
     await this.detectConflicts();
     this.buildExecutionOrder();
-    
+
     this.performance.totalRulesLoaded = this.rules.size;
     this.performance.activeRules = this.executionContext.activeRules.size;
-    
-    this.emitEvent('rulesReloaded', { 
+
+    this.emitEvent("rulesReloaded", {
       totalRules: this.performance.totalRulesLoaded,
-      activeRules: this.performance.activeRules 
+      activeRules: this.performance.activeRules,
     });
   }
 
@@ -1213,7 +1260,7 @@ export class BusinessRuleEngine {
    */
   async rebuildIndexes() {
     this.rulesByCategory.clear();
-    
+
     for (const [ruleId, rule] of this.rules) {
       if (!this.rulesByCategory.has(rule.category)) {
         this.rulesByCategory.set(rule.category, new Set());
@@ -1262,17 +1309,22 @@ export class BusinessRuleEngine {
     const errors = [];
 
     // Basic structure validation
-    if (!rule.id) errors.push('Rule ID is required');
-    if (!rule.name) errors.push('Rule name is required');
-    if (!rule.category) errors.push('Rule category is required');
-    if (!Array.isArray(rule.conditions)) errors.push('Rule conditions must be an array');
-    if (!Array.isArray(rule.actions)) errors.push('Rule actions must be an array');
+    if (!rule.id) errors.push("Rule ID is required");
+    if (!rule.name) errors.push("Rule name is required");
+    if (!rule.category) errors.push("Rule category is required");
+    if (!Array.isArray(rule.conditions))
+      errors.push("Rule conditions must be an array");
+    if (!Array.isArray(rule.actions))
+      errors.push("Rule actions must be an array");
 
     // Condition validation
     for (const [index, condition] of rule.conditions.entries()) {
-      if (!condition.field) errors.push(`Condition ${index}: field is required`);
-      if (!condition.operator) errors.push(`Condition ${index}: operator is required`);
-      if (condition.value === undefined) errors.push(`Condition ${index}: value is required`);
+      if (!condition.field)
+        errors.push(`Condition ${index}: field is required`);
+      if (!condition.operator)
+        errors.push(`Condition ${index}: operator is required`);
+      if (condition.value === undefined)
+        errors.push(`Condition ${index}: value is required`);
     }
 
     // Action validation
@@ -1304,8 +1356,10 @@ export class BusinessRuleEngine {
     for (const [otherId, otherRule] of this.rules) {
       if (otherId === rule.id || !otherRule.isActive) continue;
 
-      if (this.hasConflictingActions(rule, otherRule) || 
-          this.hasContradictoryConditions(rule, otherRule)) {
+      if (
+        this.hasConflictingActions(rule, otherRule) ||
+        this.hasContradictoryConditions(rule, otherRule)
+      ) {
         conflicts.push(otherId);
       }
     }
@@ -1328,8 +1382,10 @@ export class BusinessRuleEngine {
     // Check for conflicting actions
     for (const action1 of actions1) {
       for (const action2 of actions2) {
-        if (action1.target === action2.target && 
-            action1.type !== action2.type) {
+        if (
+          action1.target === action2.target &&
+          action1.type !== action2.type
+        ) {
           return null; // Cannot merge conflicting actions
         }
       }
@@ -1344,7 +1400,9 @@ export class BusinessRuleEngine {
    */
   getRulesByCategory(category) {
     const ruleIds = this.rulesByCategory.get(category) || new Set();
-    return Array.from(ruleIds).map(id => this.rules.get(id)).filter(Boolean);
+    return Array.from(ruleIds)
+      .map((id) => this.rules.get(id))
+      .filter(Boolean);
   }
 
   /**
@@ -1386,7 +1444,7 @@ export class BusinessRuleEngine {
    */
   emitEvent(eventName, data) {
     const handlers = this.eventHandlers[eventName] || [];
-    handlers.forEach(handler => {
+    handlers.forEach((handler) => {
       try {
         handler(data);
       } catch (error) {
@@ -1401,7 +1459,7 @@ export class BusinessRuleEngine {
   async cleanup() {
     // Close subscriptions
     for (const [name, subscription] of this.subscriptions) {
-      if (subscription && typeof subscription.unsubscribe === 'function') {
+      if (subscription && typeof subscription.unsubscribe === "function") {
         subscription.unsubscribe();
       }
     }
@@ -1419,7 +1477,7 @@ export class BusinessRuleEngine {
     this.ruleConflicts.clear();
 
     this.isInitialized = false;
-    console.log('✅ Business Rule Engine cleaned up');
+    console.log("✅ Business Rule Engine cleaned up");
   }
 }
 

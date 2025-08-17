@@ -50,25 +50,26 @@ const Slider = ({
     <div className={`space-y-2 ${className}`}>
       {/* Label and Value */}
       <div className="flex items-center justify-between">
-        <label className="text-sm font-medium text-gray-700">
-          {label}
-        </label>
+        <label className="text-sm font-medium text-gray-700">{label}</label>
         {showValue && (
-          <span className={`text-sm font-semibold ${error ? "text-red-600" : "text-gray-900"}`}>
-            {value}{unit}
+          <span
+            className={`text-sm font-semibold ${error ? "text-red-600" : "text-gray-900"}`}
+          >
+            {value}
+            {unit}
           </span>
         )}
       </div>
 
       {/* Description */}
-      {description && (
-        <p className="text-xs text-gray-500">{description}</p>
-      )}
+      {description && <p className="text-xs text-gray-500">{description}</p>}
 
       {/* Slider Container */}
       <div className="relative">
         {/* Track */}
-        <div className={`w-full h-2 rounded-full ${disabled ? "bg-gray-200" : "bg-gray-200"}`}>
+        <div
+          className={`w-full h-2 rounded-full ${disabled ? "bg-gray-200" : "bg-gray-200"}`}
+        >
           {/* Progress */}
           <div
             className={`h-full rounded-full transition-all duration-200 ${
@@ -95,8 +96,8 @@ const Slider = ({
         {/* Thumb */}
         <div
           className={`absolute top-1/2 w-5 h-5 rounded-full border-2 border-white shadow-lg transform -translate-y-1/2 transition-all duration-200 ${
-            disabled 
-              ? "bg-gray-400 cursor-not-allowed" 
+            disabled
+              ? "bg-gray-400 cursor-not-allowed"
               : `${colors.thumb} cursor-pointer hover:scale-110`
           }`}
           style={{ left: `calc(${percentage}% - 10px)` }}
@@ -105,14 +106,18 @@ const Slider = ({
 
       {/* Min/Max Labels */}
       <div className="flex justify-between text-xs text-gray-500">
-        <span>{min}{unit}</span>
-        <span>{max}{unit}</span>
+        <span>
+          {min}
+          {unit}
+        </span>
+        <span>
+          {max}
+          {unit}
+        </span>
       </div>
 
       {/* Error Message */}
-      {error && (
-        <p className="text-xs text-red-600 mt-1">{error}</p>
-      )}
+      {error && <p className="text-xs text-red-600 mt-1">{error}</p>}
     </div>
   );
 };

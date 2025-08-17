@@ -1,1462 +1,343 @@
 /**
- * ConfigurationService.js
- * 
- * Comprehensive configuration service layer that integrates the database schema 
- * with the ML prediction system for restaurant shift scheduling.
- * 
- * Features:
- * - Database configuration loading and caching
- * - Real-time configuration updates via Supabase subscriptions
- * - Version management and rollback capabilities
- * - Performance optimization with intelligent caching
- * - Graceful fallback to default configurations
- * - Rule conflict detection and resolution
+ * Simple localStorage-based Configuration Service
+ *
+ * Manages application settings using localStorage for immediate functionality
+ * without database dependencies.
  */
 
-import { supabase } from '../utils/supabase.js';
+const STORAGE_KEY = "shift-schedule-settings";
 
 export class ConfigurationService {
   constructor() {
-    // Configuration cache with version tracking
-    this.configCache = new Map();
-    this.versionCache = new Map();
-    this.subscriptions = new Map();
-    
-    // Cache settings
-    this.cacheSettings = {
-      maxAge: 5 * 60 * 1000, // 5 minutes
-      maxSize: 1000,
-      refreshThreshold: 2 * 60 * 1000, // 2 minutes
-    };
-    
-    // Performance tracking
-    this.performanceMetrics = {
-      cacheHitRate: 0,
-      avgLoadTime: 0,
-      totalRequests: 0,
-      cacheHits: 0,
-      dbQueries: 0,
-      lastRefreshTime: 0,
-    };
-    
-    // Configuration state
-    this.currentVersionId = null;
-    this.currentRestaurantId = null;
-    this.isInitialized = false;
-    this.isLoading = false;
-    
-    // Real-time subscription handlers
-    this.subscriptionHandlers = {
-      config_versions: this.handleVersionChange.bind(this),
-      conflict_rules: this.handleRuleChange.bind(this),
-      daily_limits: this.handleLimitChange.bind(this),
-      monthly_limits: this.handleLimitChange.bind(this),
-      priority_rules: this.handlePriorityChange.bind(this),
-      ml_model_configs: this.handleMLConfigChange.bind(this),
-    };
-    
-    // Default configurations for fallback
-    this.defaultConfigs = this.initializeDefaultConfigurations();
-    
-    // Business rule engine
-    this.businessRuleEngine = new BusinessRuleEngine();
-    this.conflictDetector = new ConfigurationConflictDetector();
-    this.performanceMonitor = new ConfigurationPerformanceMonitor();
+    this.settings = this.loadSettings();
   }
 
   /**
-   * Initialize configuration service
-   * @param {Object} options - Configuration options
+   * Load settings from localStorage
    */
-  async initialize(options = {}) {
-    if (this.isInitialized) return true;
-
+  loadSettings() {
     try {
-      console.log('🔧 Initializing Configuration Service...');
-      const startTime = Date.now();
-
-      // Extract options
-      this.currentRestaurantId = options.restaurantId;
-      if (!this.currentRestaurantId) {
-        throw new Error('Restaurant ID is required for configuration service');
+      const stored = localStorage.getItem(STORAGE_KEY);
+      if (stored) {
+        return JSON.parse(stored);
       }
-
-      // Override cache settings if provided
-      Object.assign(this.cacheSettings, options.cache || {});
-
-      // Initialize performance monitor
-      await this.performanceMonitor.initialize();
-
-      // Load active configuration version
-      await this.loadActiveConfigVersion();
-
-      // Load all configurations
-      await this.loadAllConfigurations();
-
-      // Initialize business rule engine
-      await this.businessRuleEngine.initialize(this);
-
-      // Set up real-time subscriptions
-      await this.setupRealtimeSubscriptions();
-
-      // Start background cache maintenance
-      this.startCacheMaintenance();
-
-      this.isInitialized = true;
-      const initTime = Date.now() - startTime;
-
-      console.log(`✅ Configuration Service initialized in ${initTime}ms`);
-      console.log(`📊 Loaded ${this.configCache.size} configuration entries`);
-      console.log(`🔄 Active version: ${this.currentVersionId || 'default'}`);
-
-      return true;
-
     } catch (error) {
-      console.error('❌ Configuration Service initialization failed:', error);
-      await this.initializeFallbackMode();
+      console.warn("Failed to load settings from localStorage:", error);
+    }
+
+    // Return default settings
+    return this.getDefaultSettings();
+  }
+
+  /**
+   * Save settings to localStorage
+   */
+  saveSettings(settings) {
+    try {
+      this.settings = { ...this.settings, ...settings };
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(this.settings));
+      console.log("Settings saved successfully");
+      return true;
+    } catch (error) {
+      console.error("Failed to save settings:", error);
       return false;
     }
   }
 
   /**
-   * Load active configuration version for restaurant
+   * Get current settings
    */
-  async loadActiveConfigVersion() {
+  getSettings() {
+    return { ...this.settings };
+  }
+
+  /**
+   * Reset settings to defaults
+   */
+  resetToDefaults() {
+    this.settings = this.getDefaultSettings();
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(this.settings));
+    console.log("Settings reset to defaults");
+  }
+
+  /**
+   * Export settings to JSON
+   */
+  exportSettings() {
+    return JSON.stringify(this.settings, null, 2);
+  }
+
+  /**
+   * Import settings from JSON
+   */
+  importSettings(jsonString) {
     try {
-      const { data, error } = await supabase
-        .from('config_versions')
-        .select('*')
-        .eq('restaurant_id', this.currentRestaurantId)
-        .eq('is_active', true)
-        .single();
-
-      if (error && error.code !== 'PGRST116') { // Not found is ok
-        throw error;
-      }
-
-      if (data) {
-        this.currentVersionId = data.id;
-        this.versionCache.set('active', {
-          ...data,
-          loadTime: Date.now(),
-        });
-        console.log(`📋 Active configuration version: ${data.name} (v${data.version_number})`);
-      } else {
-        console.log('📋 No active configuration version found, trying to create default configuration');
-        // Try to create a default configuration version
-        await this.createDefaultConfigurationIfNeeded();
-      }
-
+      const imported = JSON.parse(jsonString);
+      this.saveSettings(imported);
+      return { success: true };
     } catch (error) {
-      console.warn('⚠️ Failed to load active configuration version:', error);
-      this.currentVersionId = null;
+      console.error("Failed to import settings:", error);
+      return { success: false, error: error.message };
     }
   }
 
   /**
-   * Create default configuration version if none exists
+   * Get default settings configuration
    */
-  async createDefaultConfigurationIfNeeded() {
-    try {
-      console.log('🔧 Creating default configuration version...');
-
-      // Create default configuration version
-      const { data: configVersion, error: versionError } = await supabase
-        .from('config_versions')
-        .insert({
-          restaurant_id: this.currentRestaurantId,
-          version_number: 1,
-          name: 'Default Configuration',
-          description: 'Auto-created default configuration for new restaurant setup',
-          is_active: true,
-        })
-        .select()
-        .single();
-
-      if (versionError) {
-        console.warn('Failed to create default config version:', versionError);
-        return false;
-      }
-
-      this.currentVersionId = configVersion.id;
-      this.versionCache.set('active', {
-        ...configVersion,
-        loadTime: Date.now(),
-      });
-
-      // Create basic ML configuration
-      const { error: mlConfigError } = await supabase
-        .from('ml_model_configs')
-        .insert({
-          restaurant_id: this.currentRestaurantId,
-          version_id: configVersion.id,
-          model_name: 'default_genetic_algorithm',
-          model_type: 'genetic_algorithm',
-          parameters: {
-            populationSize: 100,
-            generations: 300,
-            mutationRate: 0.1,
-            crossoverRate: 0.8,
-            elitismRate: 0.1,
-            convergenceThreshold: 0.001,
-            maxRuntime: 300,
-            enableAdaptiveMutation: true,
-            parallelProcessing: true,
-            constraintWeights: this.getDefaultConstraintWeights(),
-          },
-          confidence_threshold: 0.75,
-          is_default: true,
-        });
-
-      if (mlConfigError) {
-        console.warn('Failed to create default ML config:', mlConfigError);
-      }
-
-      // Create basic daily limits
-      const { error: dailyLimitsError } = await supabase
-        .from('daily_limits')
-        .insert([
-          {
-            restaurant_id: this.currentRestaurantId,
-            version_id: configVersion.id,
-            name: 'Max Off Per Day',
-            limit_config: {
-              shift_type: 'off',
-              max_count: 4,
-              applies_to: 'all_staff',
-              description: 'Maximum number of staff who can be off on any given day'
-            },
-            penalty_weight: 50.0,
-            is_hard_constraint: true,
-            is_active: true,
-          },
-          {
-            restaurant_id: this.currentRestaurantId,
-            version_id: configVersion.id,
-            name: 'Min Working Staff',
-            limit_config: {
-              shift_type: 'any_working',
-              min_count: 3,
-              applies_to: 'all_staff',
-              description: 'Minimum number of working staff required per day'
-            },
-            penalty_weight: 100.0,
-            is_hard_constraint: true,
-            is_active: true,
-          },
-        ]);
-
-      if (dailyLimitsError) {
-        console.warn('Failed to create default daily limits:', dailyLimitsError);
-      }
-
-      console.log(`✅ Created default configuration version: ${configVersion.id}`);
-      return true;
-
-    } catch (error) {
-      console.error('❌ Failed to create default configuration:', error);
-      return false;
-    }
-  }
-
-  /**
-   * Get default constraint weights
-   */
-  getDefaultConstraintWeights() {
+  getDefaultSettings() {
     return {
-      shift_distribution: 25,
-      off_day_distribution: 20,
-      weekend_fairness: 15,
-      shift_preferences: 20,
-      day_off_preferences: 15,
-      seniority_bonus: 10,
-      minimum_coverage: 40,
-      skill_requirements: 30,
-      conflict_avoidance: 35,
-      schedule_stability: 15,
-      cost_efficiency: 20,
-      pattern_consistency: 10,
-    };
-  }
-
-  /**
-   * Load all configuration types from database
-   */
-  async loadAllConfigurations() {
-    const configTypes = [
-      'staff_groups',
-      'conflict_rules', 
-      'daily_limits',
-      'monthly_limits',
-      'priority_rules',
-      'ml_model_configs'
-    ];
-
-    const loadPromises = configTypes.map(type => this.loadConfigurationType(type));
-    await Promise.all(loadPromises);
-  }
-
-  /**
-   * Load specific configuration type
-   * @param {string} configType - Configuration type to load
-   */
-  async loadConfigurationType(configType) {
-    try {
-      const startTime = Date.now();
-      const cacheKey = `${configType}_${this.currentVersionId || 'default'}`;
-
-      // Check cache first
-      if (this.isCacheValid(cacheKey)) {
-        this.performanceMetrics.cacheHits++;
-        return this.configCache.get(cacheKey);
-      }
-
-      // Query database with improved error handling
-      let query = supabase.from(configType).select('*');
-
-      // Add restaurant filter
-      query = query.eq('restaurant_id', this.currentRestaurantId);
-
-      // Add version filter if we have active version
-      if (this.currentVersionId && this.hasVersionColumn(configType)) {
-        query = query.eq('version_id', this.currentVersionId);
-      }
-
-      // Add active filter
-      query = query.eq('is_active', true);
-
-      const { data, error } = await query;
-      
-      if (error) {
-        // Handle specific error codes
-        if (error.code === 'PGRST116') {
-          // Table exists but no data - this is OK
-          console.log(`📋 No data found for ${configType}, using defaults`);
-        } else if (error.code === '42P01') {
-          // Table does not exist
-          console.warn(`⚠️ Table ${configType} does not exist, using fallback configuration`);
-          throw new Error(`Table ${configType} does not exist`);
-        } else {
-          // Other database errors
-          console.error(`❌ Database error loading ${configType}:`, error);
-          throw error;
-        }
-      }
-
-      // Process and cache the configuration
-      const processedConfig = this.processConfiguration(configType, data || []);
-      
-      this.configCache.set(cacheKey, {
-        data: processedConfig,
-        loadTime: Date.now(),
-        type: configType,
-        version: this.currentVersionId,
-      });
-
-      // Update metrics
-      this.performanceMetrics.dbQueries++;
-      this.performanceMetrics.avgLoadTime = (
-        (this.performanceMetrics.avgLoadTime + (Date.now() - startTime)) / 2
-      );
-
-      console.log(`✅ Loaded ${configType}: ${data?.length || 0} entries`);
-      return processedConfig;
-
-    } catch (error) {
-      console.error(`❌ Failed to load ${configType}:`, error);
-      
-      // Return default configuration for this type
-      const defaultConfig = this.getDefaultConfiguration(configType);
-      
-      this.configCache.set(`${configType}_fallback`, {
-        data: defaultConfig,
-        loadTime: Date.now(),
-        type: configType,
-        isFallback: true,
-      });
-
-      return defaultConfig;
-    }
-  }
-
-  /**
-   * Get configuration by type
-   * @param {string} configType - Configuration type
-   * @param {Object} options - Query options
-   */
-  async getConfiguration(configType, options = {}) {
-    try {
-      this.performanceMetrics.totalRequests++;
-      
-      const cacheKey = this.buildCacheKey(configType, options);
-      
-      // Check cache validity
-      if (this.isCacheValid(cacheKey)) {
-        this.performanceMetrics.cacheHits++;
-        const cached = this.configCache.get(cacheKey);
-        
-        // Check if cache needs refresh in background
-        if (this.shouldRefreshCache(cached)) {
-          this.refreshConfigurationInBackground(configType, options);
-        }
-        
-        return cached.data;
-      }
-
-      // Load from database
-      const config = await this.loadConfigurationType(configType);
-      return config;
-
-    } catch (error) {
-      console.error(`❌ Failed to get ${configType} configuration:`, error);
-      return this.getDefaultConfiguration(configType);
-    }
-  }
-
-  /**
-   * Get staff conflict groups from database
-   */
-  async getStaffGroups() {
-    const groups = await this.getConfiguration('staff_groups');
-    
-    // Convert to format expected by ML systems
-    return groups.map(group => ({
-      id: group.id,
-      name: group.name,
-      members: [], // Will be populated by joining with staff_group_members
-      color: group.color,
-      created_at: group.created_at,
-    }));
-  }
-
-  /**
-   * Get detailed staff groups with members
-   */
-  async getStaffGroupsWithMembers() {
-    try {
-      const cacheKey = `staff_groups_with_members_${this.currentVersionId || 'default'}`;
-      
-      if (this.isCacheValid(cacheKey)) {
-        this.performanceMetrics.cacheHits++;
-        return this.configCache.get(cacheKey).data;
-      }
-
-      // Complex query to get groups with members
-      const { data, error } = await supabase
-        .from('staff_groups')
-        .select(`
-          *,
-          staff_group_members (
-            staff:staff_id (
-              id,
-              name,
-              position,
-              is_active
-            )
-          )
-        `)
-        .eq('restaurant_id', this.currentRestaurantId)
-        .eq('is_active', true);
-
-      if (error) throw error;
-
-      // Transform data to expected format
-      const groupsWithMembers = data.map(group => ({
-        id: group.id,
-        name: group.name,
-        description: group.description,
-        color: group.color,
-        members: group.staff_group_members
-          .map(member => member.staff)
-          .filter(staff => staff && staff.is_active),
-      }));
-
-      // Cache result
-      this.configCache.set(cacheKey, {
-        data: groupsWithMembers,
-        loadTime: Date.now(),
-        type: 'staff_groups_with_members',
-        version: this.currentVersionId,
-      });
-
-      return groupsWithMembers;
-
-    } catch (error) {
-      console.error('❌ Failed to get staff groups with members:', error);
-      return this.getDefaultStaffGroups();
-    }
-  }
-
-  /**
-   * Get conflict rules from database
-   */
-  async getConflictRules() {
-    try {
-      const rules = await this.getConfiguration('conflict_rules');
-      
-      if (!Array.isArray(rules)) {
-        console.warn('⚠️ Conflict rules is not an array, using fallback:', rules);
-        return this.getDefaultConflictRules();
-      }
-
-      // Filter and transform valid rules
-      const validRules = rules.filter(rule => {
-        if (!rule || typeof rule !== 'object') {
-          console.warn('⚠️ Invalid conflict rule (not an object):', rule);
-          return false;
-        }
-        
-        if (!rule.conflict_definition || typeof rule.conflict_definition !== 'object') {
-          console.warn('⚠️ Invalid conflict rule structure (missing conflict_definition):', rule);
-          return false;
-        }
-        
-        return true;
-      });
-
-      return validRules.map(rule => {
-        try {
-          return {
-            id: rule.id,
-            name: rule.name,
-            rule_type: rule.rule_type,
-            conflict_definition: rule.conflict_definition,
-            penalty_weight: parseFloat(rule.penalty_weight) || 1.0,
-            is_hard_constraint: rule.is_hard_constraint,
-            effective_from: rule.effective_from,
-            effective_until: rule.effective_until,
-          };
-        } catch (error) {
-          console.warn('⚠️ Error processing conflict rule:', rule, error);
-          return null;
-        }
-      }).filter(rule => rule !== null);
-      
-    } catch (error) {
-      console.error('❌ Failed to get conflict rules:', error);
-      return this.getDefaultConflictRules();
-    }
-  }
-
-  /**
-   * Get daily limits from database
-   */
-  async getDailyLimits() {
-    try {
-      const limits = await this.getConfiguration('daily_limits');
-      
-      if (!Array.isArray(limits)) {
-        console.warn('⚠️ Daily limits is not an array, using fallback:', limits);
-        return this.getDefaultDailyLimits();
-      }
-
-      // Filter valid limits
-      const validLimits = limits.filter(limit => {
-        if (!limit || typeof limit !== 'object') {
-          console.warn('⚠️ Invalid daily limit (not an object):', limit);
-          return false;
-        }
-        
-        if (!limit.limit_config || typeof limit.limit_config !== 'object') {
-          console.warn('⚠️ Invalid daily limit structure (missing limit_config):', limit);
-          return false;
-        }
-        
-        if (!limit.name) {
-          console.warn('⚠️ Daily limit missing name:', limit);
-          return false;
-        }
-        
-        return true;
-      });
-
-      return validLimits.reduce((acc, limit) => {
-        try {
-          const config = limit.limit_config;
-          acc[limit.name] = {
-            ...config,
-            penalty_weight: parseFloat(limit.penalty_weight) || 1.0,
-            is_hard_constraint: limit.is_hard_constraint,
-            id: limit.id,
-          };
-          return acc;
-        } catch (error) {
-          console.warn('⚠️ Error processing daily limit:', limit, error);
-          return acc;
-        }
-      }, {});
-      
-    } catch (error) {
-      console.error('❌ Failed to get daily limits:', error);
-      return this.getDefaultDailyLimits();
-    }
-  }
-
-  /**
-   * Get monthly limits from database
-   */
-  async getMonthlyLimits() {
-    try {
-      const limits = await this.getConfiguration('monthly_limits');
-      
-      if (!Array.isArray(limits)) {
-        console.warn('⚠️ Monthly limits is not an array, using fallback:', limits);
-        return this.getDefaultMonthlyLimits();
-      }
-
-      // Filter valid limits
-      const validLimits = limits.filter(limit => {
-        if (!limit || typeof limit !== 'object') {
-          console.warn('⚠️ Invalid monthly limit (not an object):', limit);
-          return false;
-        }
-        
-        if (!limit.limit_config || typeof limit.limit_config !== 'object') {
-          console.warn('⚠️ Invalid monthly limit structure (missing limit_config):', limit);
-          return false;
-        }
-        
-        if (!limit.name) {
-          console.warn('⚠️ Monthly limit missing name:', limit);
-          return false;
-        }
-        
-        return true;
-      });
-
-      return validLimits.reduce((acc, limit) => {
-        try {
-          const config = limit.limit_config;
-          acc[limit.name] = {
-            ...config,
-            penalty_weight: parseFloat(limit.penalty_weight) || 1.0,
-            is_hard_constraint: limit.is_hard_constraint,
-            id: limit.id,
-          };
-          return acc;
-        } catch (error) {
-          console.warn('⚠️ Error processing monthly limit:', limit, error);
-          return acc;
-        }
-      }, {});
-      
-    } catch (error) {
-      console.error('❌ Failed to get monthly limits:', error);
-      return this.getDefaultMonthlyLimits();
-    }
-  }
-
-  /**
-   * Get priority rules from database
-   */
-  async getPriorityRules() {
-    try {
-      const rules = await this.getConfiguration('priority_rules');
-      
-      // Ensure rules is an array before using reduce
-      if (!Array.isArray(rules)) {
-        console.warn('⚠️ Priority rules is not an array, using fallback:', rules);
-        return this.getDefaultPriorityRules();
-      }
-
-      // Filter out invalid rules before processing
-      const validRules = rules.filter(rule => {
-        if (!rule || typeof rule !== 'object') {
-          console.warn('⚠️ Invalid priority rule (not an object):', rule);
-          return false;
-        }
-        
-        if (!rule.rule_definition || typeof rule.rule_definition !== 'object') {
-          console.warn('⚠️ Invalid priority rule structure (missing rule_definition):', rule);
-          return false;
-        }
-        
-        const definition = rule.rule_definition;
-        const staffId = definition.staff_id || definition.staff_name;
-        
-        if (!staffId) {
-          console.warn('⚠️ Priority rule missing staff identifier:', rule);
-          return false;
-        }
-        
-        return true;
-      });
-      
-      if (validRules.length === 0) {
-        console.warn('⚠️ No valid priority rules found, using defaults');
-        return this.getDefaultPriorityRules();
-      }
-      
-      return validRules.reduce((acc, rule) => {
-        try {
-          const definition = rule.rule_definition;
-          const staffId = definition.staff_id || definition.staff_name;
-          
-          if (!acc[staffId]) {
-            acc[staffId] = {
-              preferredShifts: [],
-            };
-          }
-          
-          acc[staffId].preferredShifts.push({
-            day: definition.conditions?.day_of_week,
-            shift: definition.conditions?.shift_type,
-            priority: rule.priority_level > 5 ? 'high' : 'medium',
-            preference_strength: definition.preference_strength || 0.5,
-            ruleName: rule.name,
-            ruleId: rule.id,
-          });
-          
-          return acc;
-        } catch (error) {
-          console.warn('⚠️ Error processing priority rule:', rule, error);
-          return acc;
-        }
-      }, {});
-      
-    } catch (error) {
-      console.error('❌ Failed to get priority rules:', error);
-      return this.getDefaultPriorityRules();
-    }
-  }
-
-  /**
-   * Get ML model configuration
-   * @param {string} modelName - Model name to get config for
-   */
-  async getMLModelConfig(modelName = null) {
-    const configs = await this.getConfiguration('ml_model_configs');
-    
-    if (modelName) {
-      const config = configs.find(c => c.model_name === modelName);
-      return config ? this.processMLConfig(config) : null;
-    }
-    
-    // Return default or first available config
-    const defaultConfig = configs.find(c => c.is_default) || configs[0];
-    return defaultConfig ? this.processMLConfig(defaultConfig) : this.getDefaultMLConfig();
-  }
-
-  /**
-   * Process ML model configuration
-   */
-  processMLConfig(config) {
-    return {
-      model_name: config.model_name,
-      model_type: config.model_type,
-      parameters: config.parameters,
-      confidence_threshold: parseFloat(config.confidence_threshold),
-      is_default: config.is_default,
-    };
-  }
-
-  /**
-   * Update configuration cache when changes occur
-   * @param {string} configType - Configuration type that changed
-   * @param {Object} changeData - Change data from subscription
-   */
-  async handleConfigurationChange(configType, changeData) {
-    try {
-      console.log(`🔄 Configuration change detected: ${configType}`);
-      
-      // Invalidate related cache entries
-      this.invalidateConfigCache(configType);
-      
-      // Reload configuration
-      await this.loadConfigurationType(configType);
-      
-      // Notify business rule engine of changes
-      await this.businessRuleEngine.handleConfigurationChange(configType, changeData);
-      
-      // Update performance metrics
-      this.performanceMetrics.lastRefreshTime = Date.now();
-      
-      console.log(`✅ Configuration cache refreshed for ${configType}`);
-
-    } catch (error) {
-      console.error(`❌ Failed to handle configuration change for ${configType}:`, error);
-    }
-  }
-
-  /**
-   * Setup real-time subscriptions for configuration changes
-   */
-  async setupRealtimeSubscriptions() {
-    try {
-      console.log('🔔 Setting up real-time configuration subscriptions...');
-
-      for (const [tableName, handler] of Object.entries(this.subscriptionHandlers)) {
-        const subscription = supabase
-          .channel(`config_${tableName}`)
-          .on('postgres_changes', {
-            event: '*',
-            schema: 'public',
-            table: tableName,
-            filter: `restaurant_id=eq.${this.currentRestaurantId}`,
-          }, (payload) => {
-            handler(payload, tableName);
-          })
-          .subscribe();
-
-        this.subscriptions.set(tableName, subscription);
-      }
-
-      console.log(`✅ Set up ${this.subscriptions.size} real-time subscriptions`);
-
-    } catch (error) {
-      console.error('❌ Failed to setup real-time subscriptions:', error);
-    }
-  }
-
-  /**
-   * Handle version change events
-   */
-  async handleVersionChange(payload, tableName) {
-    const { eventType, new: newRecord, old: oldRecord } = payload;
-    
-    if (eventType === 'UPDATE' && newRecord.is_active && !oldRecord.is_active) {
-      // New version activated
-      console.log(`🔄 New configuration version activated: ${newRecord.name}`);
-      
-      this.currentVersionId = newRecord.id;
-      this.versionCache.set('active', {
-        ...newRecord,
-        loadTime: Date.now(),
-      });
-      
-      // Reload all configurations
-      await this.loadAllConfigurations();
-    }
-  }
-
-  /**
-   * Handle rule change events
-   */
-  async handleRuleChange(payload, tableName) {
-    await this.handleConfigurationChange(tableName, payload);
-  }
-
-  /**
-   * Handle limit change events
-   */
-  async handleLimitChange(payload, tableName) {
-    await this.handleConfigurationChange(tableName, payload);
-  }
-
-  /**
-   * Handle priority rule change events
-   */
-  async handlePriorityChange(payload, tableName) {
-    await this.handleConfigurationChange(tableName, payload);
-  }
-
-  /**
-   * Handle ML config change events
-   */
-  async handleMLConfigChange(payload, tableName) {
-    await this.handleConfigurationChange(tableName, payload);
-    
-    // Additional ML-specific handling
-    console.log('🤖 ML configuration changed - models may need retraining');
-  }
-
-  /**
-   * Create new configuration version
-   * @param {string} name - Version name
-   * @param {string} description - Version description
-   */
-  async createConfigurationVersion(name, description = '') {
-    try {
-      const { data, error } = await supabase.rpc('create_config_version', {
-        p_restaurant_id: this.currentRestaurantId,
-        p_name: name,
-        p_description: description,
-      });
-
-      if (error) throw error;
-
-      const newVersionId = data;
-      
-      console.log(`✅ Created new configuration version: ${name} (${newVersionId})`);
-      return newVersionId;
-
-    } catch (error) {
-      console.error('❌ Failed to create configuration version:', error);
-      throw error;
-    }
-  }
-
-  /**
-   * Activate configuration version
-   * @param {string} versionId - Version ID to activate
-   */
-  async activateConfigurationVersion(versionId) {
-    try {
-      const { error } = await supabase.rpc('activate_config_version', {
-        p_version_id: versionId,
-      });
-
-      if (error) throw error;
-
-      // Update current version
-      this.currentVersionId = versionId;
-      
-      console.log(`✅ Activated configuration version: ${versionId}`);
-      
-      // Reload all configurations
-      await this.loadAllConfigurations();
-
-    } catch (error) {
-      console.error('❌ Failed to activate configuration version:', error);
-      throw error;
-    }
-  }
-
-  /**
-   * Validate configuration for conflicts
-   * @param {Object} configData - Configuration data to validate
-   */
-  async validateConfiguration(configData) {
-    try {
-      return await this.conflictDetector.detectConflicts(configData);
-    } catch (error) {
-      console.error('❌ Configuration validation failed:', error);
-      return {
-        valid: false,
-        conflicts: [{
-          type: 'validation_error',
-          message: `Validation failed: ${error.message}`,
-          severity: 'high',
-        }],
-      };
-    }
-  }
-
-  /**
-   * Get performance metrics
-   */
-  getPerformanceMetrics() {
-    const hitRate = this.performanceMetrics.totalRequests > 0 
-      ? (this.performanceMetrics.cacheHits / this.performanceMetrics.totalRequests) * 100 
-      : 0;
-
-    return {
-      ...this.performanceMetrics,
-      cacheHitRate: hitRate,
-      cacheSize: this.configCache.size,
-      activeSubscriptions: this.subscriptions.size,
-    };
-  }
-
-  // ========================================
-  // HELPER METHODS
-  // ========================================
-
-  /**
-   * Check if cache entry is valid
-   */
-  isCacheValid(cacheKey) {
-    const cached = this.configCache.get(cacheKey);
-    if (!cached) return false;
-    
-    const age = Date.now() - cached.loadTime;
-    return age < this.cacheSettings.maxAge;
-  }
-
-  /**
-   * Check if cache should be refreshed in background
-   */
-  shouldRefreshCache(cached) {
-    const age = Date.now() - cached.loadTime;
-    return age > this.cacheSettings.refreshThreshold;
-  }
-
-  /**
-   * Build cache key for configuration request
-   */
-  buildCacheKey(configType, options = {}) {
-    const parts = [configType, this.currentVersionId || 'default'];
-    
-    if (options.filter) {
-      parts.push(JSON.stringify(options.filter));
-    }
-    
-    return parts.join('_');
-  }
-
-  /**
-   * Process configuration data after loading
-   */
-  processConfiguration(configType, data) {
-    // Apply any type-specific processing
-    switch (configType) {
-      case 'conflict_rules':
-        return this.processConflictRules(data);
-      case 'daily_limits':
-      case 'monthly_limits':
-        return this.processLimits(data);
-      case 'priority_rules':
-        return this.processPriorityRules(data);
-      case 'ml_model_configs':
-        return this.processMLConfigs(data);
-      default:
-        return data;
-    }
-  }
-
-  processConflictRules(rules) {
-    return rules.filter(rule => {
-      // Validate rule structure
-      return rule.conflict_definition && 
-             typeof rule.conflict_definition === 'object' &&
-             rule.rule_type;
-    });
-  }
-
-  processLimits(limits) {
-    return limits.filter(limit => {
-      // Validate limit structure
-      return limit.limit_config &&
-             typeof limit.limit_config === 'object';
-    });
-  }
-
-  processPriorityRules(rules) {
-    return rules.filter(rule => {
-      // Validate rule structure
-      return rule.rule_definition &&
-             typeof rule.rule_definition === 'object';
-    });
-  }
-
-  processMLConfigs(configs) {
-    return configs.filter(config => {
-      // Validate config structure
-      return config.parameters &&
-             typeof config.parameters === 'object' &&
-             config.model_name;
-    });
-  }
-
-  /**
-   * Check if configuration type has version column
-   */
-  hasVersionColumn(configType) {
-    const versionedTypes = [
-      'staff_groups',
-      'conflict_rules',
-      'daily_limits', 
-      'monthly_limits',
-      'priority_rules',
-      'ml_model_configs'
-    ];
-    
-    return versionedTypes.includes(configType);
-  }
-
-  /**
-   * Invalidate cache entries for configuration type
-   */
-  invalidateConfigCache(configType) {
-    const keysToDelete = [];
-    
-    for (const [key, value] of this.configCache.entries()) {
-      if (value.type === configType) {
-        keysToDelete.push(key);
-      }
-    }
-    
-    keysToDelete.forEach(key => this.configCache.delete(key));
-    
-    console.log(`🗑️ Invalidated ${keysToDelete.length} cache entries for ${configType}`);
-  }
-
-  /**
-   * Refresh configuration in background
-   */
-  async refreshConfigurationInBackground(configType, options) {
-    // Don't block the current request
-    setTimeout(async () => {
-      try {
-        await this.loadConfigurationType(configType);
-        console.log(`🔄 Background refresh completed for ${configType}`);
-      } catch (error) {
-        console.warn(`⚠️ Background refresh failed for ${configType}:`, error);
-      }
-    }, 0);
-  }
-
-  /**
-   * Start cache maintenance background task
-   */
-  startCacheMaintenance() {
-    setInterval(() => {
-      this.performCacheMaintenance();
-    }, 60000); // Every minute
-  }
-
-  /**
-   * Perform cache maintenance tasks
-   */
-  performCacheMaintenance() {
-    const now = Date.now();
-    const expiredKeys = [];
-
-    // Find expired entries
-    for (const [key, value] of this.configCache.entries()) {
-      if (now - value.loadTime > this.cacheSettings.maxAge * 2) {
-        expiredKeys.push(key);
-      }
-    }
-
-    // Remove expired entries
-    expiredKeys.forEach(key => this.configCache.delete(key));
-
-    // Trim cache if too large
-    if (this.configCache.size > this.cacheSettings.maxSize) {
-      const entries = Array.from(this.configCache.entries());
-      entries.sort((a, b) => a[1].loadTime - b[1].loadTime);
-      
-      const toRemove = entries.slice(0, entries.length - this.cacheSettings.maxSize);
-      toRemove.forEach(([key]) => this.configCache.delete(key));
-    }
-
-    if (expiredKeys.length > 0) {
-      console.log(`🧹 Cache maintenance: removed ${expiredKeys.length} expired entries`);
-    }
-  }
-
-  /**
-   * Initialize fallback mode with default configurations
-   */
-  async initializeFallbackMode() {
-    console.log('🔧 Initializing fallback mode with default configurations');
-    
-    this.isInitialized = true;
-    this.currentVersionId = null;
-    
-    // Load default configurations into cache
-    const configTypes = [
-      'staff_groups',
-      'conflict_rules',
-      'daily_limits', 
-      'monthly_limits',
-      'priority_rules',
-      'ml_model_configs'
-    ];
-
-    for (const type of configTypes) {
-      const defaultConfig = this.getDefaultConfiguration(type);
-      this.configCache.set(`${type}_fallback`, {
-        data: defaultConfig,
-        loadTime: Date.now(),
-        type,
-        isFallback: true,
-      });
-    }
-
-    console.log('✅ Fallback mode initialized with default configurations');
-  }
-
-  /**
-   * Initialize default configurations
-   */
-  initializeDefaultConfigurations() {
-    return {
-      staff_groups: this.getDefaultStaffGroups(),
-      conflict_rules: this.getDefaultConflictRules(),
-      daily_limits: this.getDefaultDailyLimits(),
-      monthly_limits: this.getDefaultMonthlyLimits(),
-      priority_rules: this.getDefaultPriorityRules(),
-      ml_model_configs: this.getDefaultMLConfigs(),
-    };
-  }
-
-  /**
-   * Get default configuration for type
-   */
-  getDefaultConfiguration(configType) {
-    return this.defaultConfigs[configType] || [];
-  }
-
-  getDefaultStaffGroups() {
-    return [
-      { name: 'Group 1', members: ['料理長', '井関'] },
-      { 
-        name: 'Group 2', 
-        members: ['料理長', '古藤'],
-        coverageRule: {
-          backupStaff: '中田',
-          requiredShift: 'normal',
-          description: 'When Group 2 member has day off, 中田 must work normal shift'
-        }
-      },
-      { name: 'Group 3', members: ['井関', '小池'] },
-      { name: 'Group 4', members: ['田辺', '小池'] },
-      { name: 'Group 5', members: ['古藤', '岸'] },
-      { name: 'Group 6', members: ['与儀', 'カマル'] },
-      { name: 'Group 7', members: ['カマル', '高野'] },
-      { name: 'Group 8', members: ['高野', '派遣スタッフ'] }
-    ];
-  }
-
-  getDefaultConflictRules() {
-    return [
-      {
-        name: 'Group Conflict Prevention',
-        rule_type: 'group_conflict',
-        conflict_definition: {
-          type: 'group_conflict',
-          constraint: 'cannot_work_same_shift'
+      // Staff Groups
+      staffGroups: [
+        {
+          id: "group1",
+          name: "Group 1",
+          members: ["料理長", "井関"],
+          color: "#3B82F6",
         },
-        penalty_weight: 1.0,
-        is_hard_constraint: true
-      }
-    ];
-  }
+        {
+          id: "group2",
+          name: "Group 2",
+          members: ["料理長", "古藤"],
+          color: "#EF4444",
+          coverageRule: {
+            backupStaff: "中田",
+            requiredShift: "normal",
+            description:
+              "When Group 2 member has day off, 中田 must work normal shift",
+          },
+        },
+        {
+          id: "group3",
+          name: "Group 3",
+          members: ["井関", "小池"],
+          color: "#10B981",
+        },
+        {
+          id: "group4",
+          name: "Group 4",
+          members: ["田辺", "小池"],
+          color: "#F59E0B",
+        },
+        {
+          id: "group5",
+          name: "Group 5",
+          members: ["古藤", "岸"],
+          color: "#8B5CF6",
+        },
+        {
+          id: "group6",
+          name: "Group 6",
+          members: ["与儀", "カマル"],
+          color: "#EC4899",
+        },
+        {
+          id: "group7",
+          name: "Group 7",
+          members: ["カマル", "高野"],
+          color: "#06B6D4",
+        },
+        {
+          id: "group8",
+          name: "Group 8",
+          members: ["高野", "派遣スタッフ"],
+          color: "#84CC16",
+        },
+      ],
 
-  getDefaultDailyLimits() {
-    return {
-      maxOffPerDay: 4,
-      maxEarlyPerDay: 4,
-      maxLatePerDay: 3,
-      minWorkingStaffPerDay: 3
-    };
-  }
-
-  getDefaultMonthlyLimits() {
-    return {
-      maxOffDaysPerMonth: 8,
-      minWorkDaysPerMonth: 23
-    };
-  }
-
-  getDefaultPriorityRules() {
-    return {
-      '料理長': {
-        preferredShifts: [
-          { day: 'sunday', shift: 'early', priority: 'high' }
-        ]
+      // Daily Limits
+      dailyLimits: {
+        maxOffPerDay: { value: 4, weight: 50, isHard: true },
+        maxEarlyPerDay: { value: 4, weight: 30, isHard: false },
+        maxLatePerDay: { value: 3, weight: 30, isHard: false },
+        minWorkingStaffPerDay: { value: 3, weight: 100, isHard: true },
       },
-      '与儀': {
-        preferredShifts: [
-          { day: 'sunday', shift: 'off', priority: 'high' }
-        ]
-      }
-    };
-  }
 
-  getDefaultMLConfigs() {
-    return [
-      {
-        model_name: 'default_ensemble',
-        model_type: 'ensemble',
+      // Priority Rules
+      priorityRules: {
+        料理長: {
+          preferredShifts: [
+            { day: "sunday", shift: "early", priority: "high", strength: 0.8 },
+          ],
+        },
+        与儀: {
+          preferredShifts: [
+            { day: "sunday", shift: "off", priority: "high", strength: 0.9 },
+          ],
+        },
+      },
+
+      // ML Parameters
+      mlParameters: {
+        model_name: "genetic_algorithm",
+        model_type: "genetic_algorithm",
         parameters: {
-          numModels: 5,
-          votingStrategy: 'weighted',
-          confidenceThreshold: 0.85,
-          targetAccuracy: 0.90
+          populationSize: 100,
+          generations: 300,
+          mutationRate: 0.1,
+          crossoverRate: 0.8,
+          elitismRate: 0.1,
+          convergenceThreshold: 0.001,
+          maxRuntime: 300,
+          enableAdaptiveMutation: true,
+          parallelProcessing: true,
+          targetAccuracy: 0.85,
         },
-        confidence_threshold: 0.85,
-        is_default: true
-      }
-    ];
-  }
+        confidence_threshold: 0.75,
+      },
 
-  getDefaultMLConfig() {
-    const configs = this.getDefaultMLConfigs();
-    return configs.find(c => c.is_default) || configs[0];
-  }
+      // Constraint Weights
+      constraintWeights: {
+        shift_distribution: 25,
+        off_day_distribution: 20,
+        weekend_fairness: 15,
+        shift_preferences: 20,
+        day_off_preferences: 15,
+        seniority_bonus: 10,
+        minimum_coverage: 40,
+        skill_requirements: 30,
+        conflict_avoidance: 35,
+        schedule_stability: 15,
+        cost_efficiency: 20,
+        pattern_consistency: 10,
+      },
 
-  /**
-   * Cleanup resources
-   */
-  async cleanup() {
-    try {
-      // Unsubscribe from real-time subscriptions
-      for (const [tableName, subscription] of this.subscriptions.entries()) {
-        await supabase.removeChannel(subscription);
-      }
-      
-      // Clear caches
-      this.configCache.clear();
-      this.versionCache.clear();
-      this.subscriptions.clear();
-      
-      this.isInitialized = false;
-      
-      console.log('✅ Configuration Service cleanup completed');
-
-    } catch (error) {
-      console.error('❌ Configuration Service cleanup failed:', error);
-    }
-  }
-}
-
-/**
- * Business Rule Engine for dynamic rule processing
- */
-class BusinessRuleEngine {
-  constructor() {
-    this.rules = new Map();
-    this.ruleCache = new Map();
-    this.isInitialized = false;
-  }
-
-  async initialize(configService) {
-    this.configService = configService;
-    await this.loadRules();
-    this.isInitialized = true;
-    console.log('✅ Business Rule Engine initialized');
-  }
-
-  async loadRules() {
-    // Load business rules from configuration service
-    const conflictRules = await this.configService.getConflictRules();
-    const priorityRules = await this.configService.getPriorityRules();
-    
-    // Process and cache rules
-    this.processRules(conflictRules, 'conflict');
-    this.processRules(priorityRules, 'priority');
-  }
-
-  processRules(rules, type) {
-    // Ensure rules is an array before processing
-    if (!Array.isArray(rules)) {
-      console.warn(`⚠️ processRules received non-array rules for type ${type}:`, rules);
-      return;
-    }
-    
-    rules.forEach(rule => {
-      this.rules.set(`${type}_${rule.id || rule.name}`, {
-        type,
-        rule,
-        lastUpdated: Date.now(),
-      });
-    });
-  }
-
-  async handleConfigurationChange(configType, changeData) {
-    if (configType.includes('rules')) {
-      console.log(`🔄 Business rules updated for ${configType}`);
-      await this.loadRules();
-    }
-  }
-
-  /**
-   * Evaluate rule against schedule data
-   * @param {string} ruleId - Rule identifier
-   * @param {Object} scheduleData - Schedule data to evaluate
-   */
-  evaluateRule(ruleId, scheduleData) {
-    const rule = this.rules.get(ruleId);
-    if (!rule) return { valid: true, violations: [] };
-
-    // Rule evaluation logic would go here
-    // This is a simplified implementation
-    return { valid: true, violations: [] };
-  }
-}
-
-/**
- * Configuration Conflict Detector
- */
-class ConfigurationConflictDetector {
-  constructor() {
-    this.conflictCheckers = new Map();
-    this.initializeConflictCheckers();
-  }
-
-  initializeConflictCheckers() {
-    this.conflictCheckers.set('rule_overlap', this.checkRuleOverlap.bind(this));
-    this.conflictCheckers.set('constraint_contradiction', this.checkConstraintContradiction.bind(this));
-    this.conflictCheckers.set('resource_conflict', this.checkResourceConflict.bind(this));
-  }
-
-  async detectConflicts(configData) {
-    const conflicts = [];
-
-    for (const [checkType, checker] of this.conflictCheckers) {
-      try {
-        const checkResult = await checker(configData);
-        if (!checkResult.valid) {
-          conflicts.push(...checkResult.conflicts);
-        }
-      } catch (error) {
-        conflicts.push({
-          type: 'conflict_detection_error',
-          checkType,
-          message: `Conflict detection failed: ${error.message}`,
-          severity: 'medium',
-        });
-      }
-    }
-
-    return {
-      valid: conflicts.length === 0,
-      conflicts,
+      // Monthly Limits
+      monthlyLimits: {
+        maxOffDaysPerMonth: { value: 8, weight: 40, isHard: false },
+        minWorkDaysPerMonth: { value: 23, weight: 60, isHard: true },
+      },
     };
   }
 
-  checkRuleOverlap(configData) {
-    // Check for overlapping rules
-    return { valid: true, conflicts: [] };
+  /**
+   * Get staff groups
+   */
+  getStaffGroups() {
+    return this.settings.staffGroups || this.getDefaultSettings().staffGroups;
   }
 
-  checkConstraintContradiction(configData) {
-    // Check for contradictory constraints
-    return { valid: true, conflicts: [] };
+  /**
+   * Update staff groups
+   */
+  updateStaffGroups(staffGroups) {
+    return this.saveSettings({ staffGroups });
   }
 
-  checkResourceConflict(configData) {
-    // Check for resource allocation conflicts
-    return { valid: true, conflicts: [] };
-  }
-}
-
-/**
- * Configuration Performance Monitor
- */
-class ConfigurationPerformanceMonitor {
-  constructor() {
-    this.metrics = {
-      loadTimes: [],
-      cacheHits: 0,
-      cacheMisses: 0,
-      errorRate: 0,
-    };
+  /**
+   * Get daily limits
+   */
+  getDailyLimits() {
+    return this.settings.dailyLimits || this.getDefaultSettings().dailyLimits;
   }
 
-  async initialize() {
-    console.log('📊 Configuration Performance Monitor initialized');
+  /**
+   * Update daily limits
+   */
+  updateDailyLimits(dailyLimits) {
+    return this.saveSettings({ dailyLimits });
   }
 
-  recordLoadTime(configType, loadTime) {
-    this.metrics.loadTimes.push({
-      type: configType,
-      time: loadTime,
-      timestamp: Date.now(),
-    });
-
-    // Keep only recent metrics
-    const cutoff = Date.now() - (24 * 60 * 60 * 1000); // 24 hours
-    this.metrics.loadTimes = this.metrics.loadTimes.filter(
-      metric => metric.timestamp > cutoff
+  /**
+   * Get priority rules
+   */
+  getPriorityRules() {
+    return (
+      this.settings.priorityRules || this.getDefaultSettings().priorityRules
     );
   }
 
-  getPerformanceReport() {
-    const avgLoadTime = this.metrics.loadTimes.length > 0
-      ? this.metrics.loadTimes.reduce((sum, m) => sum + m.time, 0) / this.metrics.loadTimes.length
-      : 0;
+  /**
+   * Update priority rules
+   */
+  updatePriorityRules(priorityRules) {
+    return this.saveSettings({ priorityRules });
+  }
+
+  /**
+   * Get ML parameters
+   */
+  getMLParameters() {
+    return this.settings.mlParameters || this.getDefaultSettings().mlParameters;
+  }
+
+  /**
+   * Update ML parameters
+   */
+  updateMLParameters(mlParameters) {
+    return this.saveSettings({ mlParameters });
+  }
+
+  /**
+   * Get constraint weights
+   */
+  getConstraintWeights() {
+    return (
+      this.settings.constraintWeights ||
+      this.getDefaultSettings().constraintWeights
+    );
+  }
+
+  /**
+   * Update constraint weights
+   */
+  updateConstraintWeights(constraintWeights) {
+    return this.saveSettings({ constraintWeights });
+  }
+
+  /**
+   * Get monthly limits
+   */
+  getMonthlyLimits() {
+    return (
+      this.settings.monthlyLimits || this.getDefaultSettings().monthlyLimits
+    );
+  }
+
+  /**
+   * Update monthly limits
+   */
+  updateMonthlyLimits(monthlyLimits) {
+    return this.saveSettings({ monthlyLimits });
+  }
+
+  /**
+   * Validate settings structure
+   */
+  validateSettings(settings) {
+    const errors = {};
+
+    // Basic validation - can be expanded as needed
+    if (settings.mlParameters) {
+      const ml = settings.mlParameters;
+      if (ml.parameters) {
+        if (
+          ml.parameters.populationSize < 10 ||
+          ml.parameters.populationSize > 1000
+        ) {
+          errors.mlParameters = {
+            populationSize: "Population size must be between 10 and 1000",
+          };
+        }
+        if (
+          ml.parameters.generations < 50 ||
+          ml.parameters.generations > 2000
+        ) {
+          errors.mlParameters = {
+            ...errors.mlParameters,
+            generations: "Generations must be between 50 and 2000",
+          };
+        }
+      }
+    }
 
     return {
-      avgLoadTime,
-      totalRequests: this.metrics.cacheHits + this.metrics.cacheMisses,
-      cacheHitRate: (this.metrics.cacheHits / (this.metrics.cacheHits + this.metrics.cacheMisses)) * 100,
-      errorRate: this.metrics.errorRate,
+      isValid: Object.keys(errors).length === 0,
+      errors,
     };
   }
 }
 
-export { BusinessRuleEngine, ConfigurationConflictDetector, ConfigurationPerformanceMonitor };
+// Create a singleton instance
+export const configService = new ConfigurationService();
+
+export default configService;

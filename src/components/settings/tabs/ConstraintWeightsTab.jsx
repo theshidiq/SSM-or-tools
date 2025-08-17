@@ -1,5 +1,12 @@
 import React, { useState, useMemo } from "react";
-import { BarChart3, TrendingUp, RotateCcw, Download, AlertTriangle, Info } from "lucide-react";
+import {
+  BarChart3,
+  TrendingUp,
+  RotateCcw,
+  Download,
+  AlertTriangle,
+  Info,
+} from "lucide-react";
 import Slider from "../shared/Slider";
 import ToggleSwitch from "../shared/ToggleSwitch";
 
@@ -35,7 +42,7 @@ const CONSTRAINT_CATEGORIES = [
         min: 0,
         max: 30,
       },
-    ]
+    ],
   },
   {
     id: "preferences",
@@ -68,7 +75,7 @@ const CONSTRAINT_CATEGORIES = [
         min: 0,
         max: 25,
       },
-    ]
+    ],
   },
   {
     id: "constraints",
@@ -101,7 +108,7 @@ const CONSTRAINT_CATEGORIES = [
         min: 15,
         max: 50,
       },
-    ]
+    ],
   },
   {
     id: "optimization",
@@ -134,8 +141,8 @@ const CONSTRAINT_CATEGORIES = [
         min: 0,
         max: 25,
       },
-    ]
-  }
+    ],
+  },
 ];
 
 const PENALTY_MULTIPLIERS = [
@@ -207,7 +214,7 @@ const ConstraintWeightsTab = ({
   // Calculate total weights by category
   const categoryTotals = useMemo(() => {
     const totals = {};
-    CONSTRAINT_CATEGORIES.forEach(category => {
+    CONSTRAINT_CATEGORIES.forEach((category) => {
       totals[category.id] = category.weights.reduce((sum, weight) => {
         return sum + (weights[weight.id] || weight.defaultWeight);
       }, 0);
@@ -240,7 +247,7 @@ const ConstraintWeightsTab = ({
   };
 
   const applyPresetProfile = (profile) => {
-    const preset = PRESET_PROFILES.find(p => p.id === profile);
+    const preset = PRESET_PROFILES.find((p) => p.id === profile);
     if (!preset) return;
 
     const newPenaltyMultipliers = {
@@ -258,14 +265,14 @@ const ConstraintWeightsTab = ({
 
   const resetToDefaults = () => {
     const defaultWeights = {};
-    CONSTRAINT_CATEGORIES.forEach(category => {
-      category.weights.forEach(weight => {
+    CONSTRAINT_CATEGORIES.forEach((category) => {
+      category.weights.forEach((weight) => {
         defaultWeights[weight.id] = weight.defaultWeight;
       });
     });
 
     const defaultPenalties = {};
-    PENALTY_MULTIPLIERS.forEach(penalty => {
+    PENALTY_MULTIPLIERS.forEach((penalty) => {
       defaultPenalties[penalty.id] = penalty.defaultValue;
     });
 
@@ -309,16 +316,26 @@ const ConstraintWeightsTab = ({
         </h3>
 
         <div className="space-y-4">
-          {CONSTRAINT_CATEGORIES.map(category => {
-            const percentage = grandTotal > 0 ? (categoryTotals[category.id] / grandTotal * 100) : 0;
-            const barWidth = grandTotal > 0 ? (categoryTotals[category.id] / Math.max(...Object.values(categoryTotals)) * maxBarWidth) : 0;
+          {CONSTRAINT_CATEGORIES.map((category) => {
+            const percentage =
+              grandTotal > 0
+                ? (categoryTotals[category.id] / grandTotal) * 100
+                : 0;
+            const barWidth =
+              grandTotal > 0
+                ? (categoryTotals[category.id] /
+                    Math.max(...Object.values(categoryTotals))) *
+                  maxBarWidth
+                : 0;
 
             return (
               <div key={category.id} className="space-y-2">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
                     <span className="text-lg">{category.icon}</span>
-                    <span className="font-medium text-gray-800">{category.name}</span>
+                    <span className="font-medium text-gray-800">
+                      {category.name}
+                    </span>
                   </div>
                   <div className="flex items-center gap-2 text-sm text-gray-600">
                     <span>{categoryTotals[category.id]}</span>
@@ -356,8 +373,11 @@ const ConstraintWeightsTab = ({
   const renderWeightControls = () => {
     return (
       <div className="space-y-8">
-        {CONSTRAINT_CATEGORIES.map(category => (
-          <div key={category.id} className="bg-white rounded-xl border border-gray-200 p-6">
+        {CONSTRAINT_CATEGORIES.map((category) => (
+          <div
+            key={category.id}
+            className="bg-white rounded-xl border border-gray-200 p-6"
+          >
             <div className="flex items-center gap-3 mb-4">
               <div
                 className="w-10 h-10 rounded-lg flex items-center justify-center"
@@ -366,11 +386,16 @@ const ConstraintWeightsTab = ({
                 <span className="text-xl">{category.icon}</span>
               </div>
               <div>
-                <h3 className="text-lg font-semibold text-gray-800">{category.name}</h3>
+                <h3 className="text-lg font-semibold text-gray-800">
+                  {category.name}
+                </h3>
                 <p className="text-sm text-gray-600">{category.description}</p>
               </div>
               <div className="ml-auto text-right">
-                <div className="text-lg font-bold" style={{ color: category.color }}>
+                <div
+                  className="text-lg font-bold"
+                  style={{ color: category.color }}
+                >
                   {categoryTotals[category.id]}
                 </div>
                 <div className="text-xs text-gray-500">Total</div>
@@ -378,7 +403,7 @@ const ConstraintWeightsTab = ({
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {category.weights.map(weight => (
+              {category.weights.map((weight) => (
                 <div key={weight.id} className="space-y-2">
                   <Slider
                     label={weight.name}
@@ -387,9 +412,15 @@ const ConstraintWeightsTab = ({
                     min={weight.min}
                     max={weight.max}
                     onChange={(value) => updateWeight(weight.id, value)}
-                    colorScheme={category.id === "fairness" ? "green" : 
-                               category.id === "preferences" ? "purple" :
-                               category.id === "constraints" ? "red" : "orange"}
+                    colorScheme={
+                      category.id === "fairness"
+                        ? "green"
+                        : category.id === "preferences"
+                          ? "purple"
+                          : category.id === "constraints"
+                            ? "red"
+                            : "orange"
+                    }
                     error={validationErrors[weight.id]}
                   />
                 </div>
@@ -404,13 +435,16 @@ const ConstraintWeightsTab = ({
   const renderPenaltyMultipliers = () => {
     return (
       <div className="bg-white rounded-xl border border-gray-200 p-6">
-        <h3 className="text-lg font-semibold text-gray-800 mb-4">Penalty Multipliers</h3>
+        <h3 className="text-lg font-semibold text-gray-800 mb-4">
+          Penalty Multipliers
+        </h3>
         <p className="text-gray-600 text-sm mb-6">
-          Configure how severely different types of violations are penalized in the optimization process.
+          Configure how severely different types of violations are penalized in
+          the optimization process.
         </p>
 
         <div className="space-y-6">
-          {PENALTY_MULTIPLIERS.map(penalty => (
+          {PENALTY_MULTIPLIERS.map((penalty) => (
             <div key={penalty.id} className="space-y-2">
               <Slider
                 label={penalty.name}
@@ -419,8 +453,13 @@ const ConstraintWeightsTab = ({
                 min={penalty.min}
                 max={penalty.max}
                 onChange={(value) => updatePenaltyMultiplier(penalty.id, value)}
-                colorScheme={penalty.id === "hard_constraint_violation" ? "red" :
-                           penalty.id === "soft_constraint_violation" ? "orange" : "yellow"}
+                colorScheme={
+                  penalty.id === "hard_constraint_violation"
+                    ? "red"
+                    : penalty.id === "soft_constraint_violation"
+                      ? "orange"
+                      : "yellow"
+                }
                 error={validationErrors[penalty.id]}
               />
             </div>
@@ -433,9 +472,17 @@ const ConstraintWeightsTab = ({
             <div className="text-sm text-blue-800">
               <p className="font-medium mb-1">Penalty Guidelines:</p>
               <ul className="space-y-1 text-xs">
-                <li>• Hard constraints should have penalties 10-100x higher than soft constraints</li>
-                <li>• Soft constraints should be 2-10x higher than preferences</li>
-                <li>• Very high penalties may cause optimization to get stuck in local minima</li>
+                <li>
+                  • Hard constraints should have penalties 10-100x higher than
+                  soft constraints
+                </li>
+                <li>
+                  • Soft constraints should be 2-10x higher than preferences
+                </li>
+                <li>
+                  • Very high penalties may cause optimization to get stuck in
+                  local minima
+                </li>
               </ul>
             </div>
           </div>
@@ -449,12 +496,15 @@ const ConstraintWeightsTab = ({
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-2xl font-bold text-gray-800">Constraint Weights</h2>
+          <h2 className="text-2xl font-bold text-gray-800">
+            Constraint Weights
+          </h2>
           <p className="text-gray-600">
-            Fine-tune the importance of different constraints in the scheduling algorithm.
+            Fine-tune the importance of different constraints in the scheduling
+            algorithm.
           </p>
         </div>
-        
+
         <div className="flex items-center gap-3">
           <button
             onClick={() => setShowAdvanced(!showAdvanced)}
@@ -463,7 +513,7 @@ const ConstraintWeightsTab = ({
             <TrendingUp size={16} />
             {showAdvanced ? "Hide Advanced" : "Show Advanced"}
           </button>
-          
+
           <button
             onClick={exportConfiguration}
             className="flex items-center gap-2 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
@@ -471,7 +521,7 @@ const ConstraintWeightsTab = ({
             <Download size={16} />
             Export
           </button>
-          
+
           <button
             onClick={resetToDefaults}
             className="flex items-center gap-2 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
@@ -487,7 +537,9 @@ const ConstraintWeightsTab = ({
         <div className="bg-red-50 border border-red-200 rounded-lg p-4">
           <div className="flex items-center gap-2 mb-2">
             <AlertTriangle size={16} className="text-red-600" />
-            <span className="font-medium text-red-800">Configuration Errors</span>
+            <span className="font-medium text-red-800">
+              Configuration Errors
+            </span>
           </div>
           <ul className="list-disc list-inside text-red-700 text-sm space-y-1">
             {Object.entries(validationErrors).map(([field, error]) => (
@@ -499,13 +551,15 @@ const ConstraintWeightsTab = ({
 
       {/* Preset Profiles */}
       <div className="bg-white rounded-xl border border-gray-200 p-6">
-        <h3 className="text-lg font-semibold text-gray-800 mb-4">Optimization Profiles</h3>
+        <h3 className="text-lg font-semibold text-gray-800 mb-4">
+          Optimization Profiles
+        </h3>
         <p className="text-gray-600 text-sm mb-4">
           Quick presets for common scheduling priorities.
         </p>
-        
+
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          {PRESET_PROFILES.map(profile => (
+          {PRESET_PROFILES.map((profile) => (
             <button
               key={profile.id}
               onClick={() => applyPresetProfile(profile.id)}
@@ -515,9 +569,13 @@ const ConstraintWeightsTab = ({
                   : "border-gray-200 hover:border-gray-300"
               }`}
             >
-              <h4 className="font-semibold text-gray-800 mb-2">{profile.name}</h4>
-              <p className="text-sm text-gray-600 mb-3">{profile.description}</p>
-              
+              <h4 className="font-semibold text-gray-800 mb-2">
+                {profile.name}
+              </h4>
+              <p className="text-sm text-gray-600 mb-3">
+                {profile.description}
+              </p>
+
               <div className="space-y-1 text-xs text-gray-500">
                 <div>Hard: {profile.multiplier.hard}</div>
                 <div>Soft: {profile.multiplier.soft}</div>
@@ -538,33 +596,41 @@ const ConstraintWeightsTab = ({
       {showAdvanced && (
         <div className="space-y-8">
           <div className="border-t border-gray-200 pt-8">
-            <h3 className="text-xl font-semibold text-gray-800 mb-4">Advanced Settings</h3>
-            
+            <h3 className="text-xl font-semibold text-gray-800 mb-4">
+              Advanced Settings
+            </h3>
+
             {renderPenaltyMultipliers()}
-            
+
             {/* Normalization Settings */}
             <div className="bg-white rounded-xl border border-gray-200 p-6">
-              <h3 className="text-lg font-semibold text-gray-800 mb-4">Normalization</h3>
-              
+              <h3 className="text-lg font-semibold text-gray-800 mb-4">
+                Normalization
+              </h3>
+
               <div className="space-y-4">
                 <ToggleSwitch
                   label="Auto-normalize Weights"
                   description="Automatically scale weights to sum to 100"
                   checked={settings?.autoNormalizeWeights || false}
-                  onChange={(checked) => onSettingsChange({
-                    ...settings,
-                    autoNormalizeWeights: checked,
-                  })}
+                  onChange={(checked) =>
+                    onSettingsChange({
+                      ...settings,
+                      autoNormalizeWeights: checked,
+                    })
+                  }
                 />
-                
+
                 <ToggleSwitch
                   label="Dynamic Weight Adjustment"
                   description="Allow ML algorithm to fine-tune weights based on results"
                   checked={settings?.dynamicWeightAdjustment || false}
-                  onChange={(checked) => onSettingsChange({
-                    ...settings,
-                    dynamicWeightAdjustment: checked,
-                  })}
+                  onChange={(checked) =>
+                    onSettingsChange({
+                      ...settings,
+                      dynamicWeightAdjustment: checked,
+                    })
+                  }
                 />
               </div>
             </div>

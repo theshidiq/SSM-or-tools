@@ -1,5 +1,15 @@
-import React, { useState } from "react";
-import { Plus, Trash2, Star, AlertTriangle, Edit2, Save, User, Clock, Calendar, Target } from "lucide-react";
+import React, { useState, useEffect } from "react";
+import {
+  Plus,
+  Trash2,
+  Star,
+  AlertTriangle,
+  Edit2,
+  User,
+  Clock,
+  Calendar,
+  Target,
+} from "lucide-react";
 import FormField from "../shared/FormField";
 import Slider from "../shared/Slider";
 import ToggleSwitch from "../shared/ToggleSwitch";
@@ -21,29 +31,29 @@ const SHIFT_TYPES = [
 ];
 
 const RULE_TYPES = [
-  { 
+  {
     id: "preferred_shift",
     label: "Preferred Shift",
     icon: "⭐",
-    description: "Staff member prefers specific shifts on certain days"
+    description: "Staff member prefers specific shifts on certain days",
   },
-  { 
+  {
     id: "avoid_shift",
     label: "Avoid Shift",
     icon: "❌",
-    description: "Staff member wants to avoid specific shifts on certain days"
+    description: "Staff member wants to avoid specific shifts on certain days",
   },
-  { 
+  {
     id: "required_off",
     label: "Required Off",
     icon: "🏠",
-    description: "Staff member must be off on specific days"
+    description: "Staff member must be off on specific days",
   },
-  { 
+  {
     id: "seniority_priority",
     label: "Seniority Priority",
     icon: "👑",
-    description: "Give priority based on staff seniority level"
+    description: "Give priority based on staff seniority level",
   },
 ];
 
@@ -67,11 +77,23 @@ const PriorityRulesTab = ({
 
   const priorityRules = settings?.priorityRules || [];
 
+  // Add escape key listener to exit edit mode
+  useEffect(() => {
+    const handleKeyDown = (event) => {
+      if (event.key === "Escape" && editingRule) {
+        setEditingRule(null);
+      }
+    };
+
+    document.addEventListener("keydown", handleKeyDown);
+    return () => document.removeEventListener("keydown", handleKeyDown);
+  }, [editingRule]);
+
   const updatePriorityRules = (newRules) => {
     // Check for conflicts when updating rules
     const conflicts = detectRuleConflicts(newRules);
     setConflictingRules(conflicts);
-    
+
     onSettingsChange({
       ...settings,
       priorityRules: newRules,
@@ -80,32 +102,35 @@ const PriorityRulesTab = ({
 
   const detectRuleConflicts = (rules) => {
     const conflicts = [];
-    
+
     for (let i = 0; i < rules.length; i++) {
       for (let j = i + 1; j < rules.length; j++) {
         const rule1 = rules[i];
         const rule2 = rules[j];
-        
+
         // Check if rules apply to same staff and have conflicting requirements
         if (rule1.staffId === rule2.staffId) {
-          const daysOverlap = rule1.daysOfWeek.some(day => rule2.daysOfWeek.includes(day));
-          const shiftsConflict = (
-            (rule1.ruleType === "preferred_shift" && rule2.ruleType === "avoid_shift" && 
-             rule1.shiftType === rule2.shiftType) ||
-            (rule1.ruleType === "required_off" && rule2.ruleType === "preferred_shift" && 
-             rule2.shiftType !== "off")
+          const daysOverlap = rule1.daysOfWeek.some((day) =>
+            rule2.daysOfWeek.includes(day),
           );
-          
+          const shiftsConflict =
+            (rule1.ruleType === "preferred_shift" &&
+              rule2.ruleType === "avoid_shift" &&
+              rule1.shiftType === rule2.shiftType) ||
+            (rule1.ruleType === "required_off" &&
+              rule2.ruleType === "preferred_shift" &&
+              rule2.shiftType !== "off");
+
           if (daysOverlap && shiftsConflict) {
             conflicts.push({
               rules: [rule1.id, rule2.id],
-              description: `Conflicting rules for ${getStaffById(rule1.staffId)?.name}`
+              description: `Conflicting rules for ${getStaffById(rule1.staffId)?.name}`,
             });
           }
         }
       }
     }
-    
+
     return conflicts;
   };
 
@@ -131,32 +156,32 @@ const PriorityRulesTab = ({
   };
 
   const updateRule = (ruleId, updates) => {
-    const updatedRules = priorityRules.map(rule =>
-      rule.id === ruleId ? { ...rule, ...updates } : rule
+    const updatedRules = priorityRules.map((rule) =>
+      rule.id === ruleId ? { ...rule, ...updates } : rule,
     );
     updatePriorityRules(updatedRules);
   };
 
   const deleteRule = (ruleId) => {
     if (window.confirm("Are you sure you want to delete this priority rule?")) {
-      const updatedRules = priorityRules.filter(rule => rule.id !== ruleId);
+      const updatedRules = priorityRules.filter((rule) => rule.id !== ruleId);
       updatePriorityRules(updatedRules);
     }
   };
 
-  const getStaffById = (id) => staffMembers.find(staff => staff.id === id);
-  
+  const getStaffById = (id) => staffMembers.find((staff) => staff.id === id);
+
   const getRulesByStaff = (staffId) => {
     if (staffId === "all") return priorityRules;
-    return priorityRules.filter(rule => rule.staffId === staffId);
+    return priorityRules.filter((rule) => rule.staffId === staffId);
   };
 
   const toggleDayOfWeek = (ruleId, dayId) => {
-    const rule = priorityRules.find(r => r.id === ruleId);
+    const rule = priorityRules.find((r) => r.id === ruleId);
     if (!rule) return;
 
     const updatedDays = rule.daysOfWeek.includes(dayId)
-      ? rule.daysOfWeek.filter(d => d !== dayId)
+      ? rule.daysOfWeek.filter((d) => d !== dayId)
       : [...rule.daysOfWeek, dayId];
 
     updateRule(ruleId, { daysOfWeek: updatedDays });
@@ -167,7 +192,7 @@ const PriorityRulesTab = ({
       <div className="space-y-3">
         <label className="text-sm font-medium text-gray-700">Rule Type</label>
         <div className="grid grid-cols-2 gap-3">
-          {RULE_TYPES.map(type => (
+          {RULE_TYPES.map((type) => (
             <button
               key={type.id}
               onClick={() => updateRule(rule.id, { ruleType: type.id })}
@@ -192,9 +217,11 @@ const PriorityRulesTab = ({
   const renderDaySelector = (rule) => {
     return (
       <div className="space-y-2">
-        <label className="text-sm font-medium text-gray-700">Days of Week</label>
+        <label className="text-sm font-medium text-gray-700">
+          Days of Week
+        </label>
         <div className="flex flex-wrap gap-2">
-          {DAYS_OF_WEEK.map(day => (
+          {DAYS_OF_WEEK.map((day) => (
             <button
               key={day.id}
               onClick={() => toggleDayOfWeek(rule.id, day.id)}
@@ -209,7 +236,9 @@ const PriorityRulesTab = ({
           ))}
         </div>
         {rule.daysOfWeek.length === 0 && (
-          <p className="text-xs text-red-600">At least one day must be selected</p>
+          <p className="text-xs text-red-600">
+            At least one day must be selected
+          </p>
         )}
       </div>
     );
@@ -218,16 +247,20 @@ const PriorityRulesTab = ({
   const renderRuleCard = (rule) => {
     const isEditing = editingRule === rule.id;
     const staff = getStaffById(rule.staffId);
-    const ruleType = RULE_TYPES.find(rt => rt.id === rule.ruleType);
-    const priority = PRIORITY_LEVELS.find(p => p.value === rule.priorityLevel);
-    const isConflicted = conflictingRules.some(conflict => conflict.rules.includes(rule.id));
+    const ruleType = RULE_TYPES.find((rt) => rt.id === rule.ruleType);
+    const priority = PRIORITY_LEVELS.find(
+      (p) => p.value === rule.priorityLevel,
+    );
+    const isConflicted = conflictingRules.some((conflict) =>
+      conflict.rules.includes(rule.id),
+    );
 
     return (
       <div
         key={rule.id}
         className={`bg-white rounded-xl border-2 p-6 transition-all ${
-          isConflicted 
-            ? "border-red-300 bg-red-50" 
+          isConflicted
+            ? "border-red-300 bg-red-50"
             : "border-gray-200 hover:border-gray-300"
         }`}
       >
@@ -239,37 +272,53 @@ const PriorityRulesTab = ({
             </div>
             <div>
               {isEditing ? (
-                <input
-                  type="text"
-                  value={rule.name}
-                  onChange={(e) => updateRule(rule.id, { name: e.target.value })}
-                  className="text-lg font-semibold bg-transparent border-b-2 border-purple-500 focus:outline-none"
-                  autoFocus
-                />
+                <div>
+                  <input
+                    type="text"
+                    value={rule.name}
+                    onChange={(e) =>
+                      updateRule(rule.id, { name: e.target.value })
+                    }
+                    className="text-lg font-semibold bg-transparent border-b-2 border-purple-500 focus:outline-none w-full"
+                    autoFocus
+                  />
+                  <p className="text-xs text-gray-500 mt-1">
+                    Press Escape to finish editing
+                  </p>
+                </div>
               ) : (
                 <div className="flex items-center gap-2">
-                  <h3 className="text-lg font-semibold text-gray-800">{rule.name}</h3>
-                  {isConflicted && <AlertTriangle size={16} className="text-red-500" />}
+                  <h3 className="text-lg font-semibold text-gray-800">
+                    {rule.name}
+                  </h3>
+                  {isConflicted && (
+                    <AlertTriangle size={16} className="text-red-500" />
+                  )}
                 </div>
               )}
               <p className="text-sm text-gray-600">
                 {staff?.name} • {ruleType?.label}
-                {rule.daysOfWeek.length > 0 && ` • ${rule.daysOfWeek.length} days`}
+                {rule.daysOfWeek.length > 0 &&
+                  ` • ${rule.daysOfWeek.length} days`}
               </p>
             </div>
           </div>
-          
+
           <div className="flex items-center gap-2">
-            <span className={`px-2 py-1 rounded text-xs font-medium ${priority?.color} bg-opacity-10`}>
+            <span
+              className={`px-2 py-1 rounded text-xs font-medium ${priority?.color} bg-opacity-10`}
+            >
               {priority?.label}
             </span>
-            <button
-              onClick={() => setEditingRule(isEditing ? null : rule.id)}
-              className="p-2 text-gray-500 hover:text-purple-600 hover:bg-purple-50 rounded-lg transition-colors"
-              title={isEditing ? "Save" : "Edit"}
-            >
-              {isEditing ? <Save size={16} /> : <Edit2 size={16} />}
-            </button>
+            {!isEditing && (
+              <button
+                onClick={() => setEditingRule(rule.id)}
+                className="p-2 text-gray-500 hover:text-purple-600 hover:bg-purple-50 rounded-lg transition-colors"
+                title="Edit"
+              >
+                <Edit2 size={16} />
+              </button>
+            )}
             <button
               onClick={() => deleteRule(rule.id)}
               className="p-2 text-gray-500 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
@@ -285,7 +334,9 @@ const PriorityRulesTab = ({
           <div className="bg-red-100 border border-red-300 rounded-lg p-3 mb-4">
             <div className="flex items-center gap-2">
               <AlertTriangle size={16} className="text-red-600" />
-              <span className="text-sm font-medium text-red-800">Rule Conflict Detected</span>
+              <span className="text-sm font-medium text-red-800">
+                Rule Conflict Detected
+              </span>
             </div>
             <p className="text-sm text-red-700 mt-1">
               This rule conflicts with other rules for the same staff member.
@@ -299,7 +350,9 @@ const PriorityRulesTab = ({
             <FormField label="Description">
               <textarea
                 value={rule.description}
-                onChange={(e) => updateRule(rule.id, { description: e.target.value })}
+                onChange={(e) =>
+                  updateRule(rule.id, { description: e.target.value })
+                }
                 placeholder="Describe this priority rule..."
                 rows={2}
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 resize-none"
@@ -310,12 +363,14 @@ const PriorityRulesTab = ({
             <FormField label="Staff Member">
               <select
                 value={rule.staffId}
-                onChange={(e) => updateRule(rule.id, { staffId: e.target.value })}
+                onChange={(e) =>
+                  updateRule(rule.id, { staffId: e.target.value })
+                }
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
               >
-                {staffMembers.map(staff => (
+                {staffMembers.map((staff) => (
                   <option key={staff.id} value={staff.id}>
-                    {staff.name} - {staff.position || 'Staff'}
+                    {staff.name}
                   </option>
                 ))}
               </select>
@@ -328,10 +383,12 @@ const PriorityRulesTab = ({
             {rule.ruleType !== "seniority_priority" && (
               <FormField label="Shift Type">
                 <div className="flex gap-3">
-                  {SHIFT_TYPES.map(shift => (
+                  {SHIFT_TYPES.map((shift) => (
                     <button
                       key={shift.id}
-                      onClick={() => updateRule(rule.id, { shiftType: shift.id })}
+                      onClick={() =>
+                        updateRule(rule.id, { shiftType: shift.id })
+                      }
                       className={`flex-1 flex items-center justify-center gap-2 py-3 border-2 rounded-lg transition-all ${
                         rule.shiftType === shift.id
                           ? "border-purple-300 bg-purple-50"
@@ -354,10 +411,14 @@ const PriorityRulesTab = ({
               <div className="space-y-2">
                 <select
                   value={rule.priorityLevel}
-                  onChange={(e) => updateRule(rule.id, { priorityLevel: parseInt(e.target.value) })}
+                  onChange={(e) =>
+                    updateRule(rule.id, {
+                      priorityLevel: parseInt(e.target.value),
+                    })
+                  }
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
                 >
-                  {PRIORITY_LEVELS.map(level => (
+                  {PRIORITY_LEVELS.map((level) => (
                     <option key={level.value} value={level.value}>
                       {level.label}
                     </option>
@@ -376,7 +437,9 @@ const PriorityRulesTab = ({
               min={0.1}
               max={1.0}
               step={0.1}
-              onChange={(value) => updateRule(rule.id, { preferenceStrength: value })}
+              onChange={(value) =>
+                updateRule(rule.id, { preferenceStrength: value })
+              }
               description="How strongly this preference should be enforced (0.1 = weak, 1.0 = strong)"
               colorScheme="purple"
             />
@@ -386,7 +449,9 @@ const PriorityRulesTab = ({
               label="Hard Constraint"
               description="Must be satisfied vs. preferred when possible"
               checked={rule.isHardConstraint}
-              onChange={(checked) => updateRule(rule.id, { isHardConstraint: checked })}
+              onChange={(checked) =>
+                updateRule(rule.id, { isHardConstraint: checked })
+              }
             />
 
             {/* Penalty Weight */}
@@ -395,7 +460,9 @@ const PriorityRulesTab = ({
               value={rule.penaltyWeight}
               min={1}
               max={100}
-              onChange={(value) => updateRule(rule.id, { penaltyWeight: value })}
+              onChange={(value) =>
+                updateRule(rule.id, { penaltyWeight: value })
+              }
               description="Higher values make this rule more important in scheduling decisions"
               colorScheme={rule.isHardConstraint ? "red" : "orange"}
             />
@@ -406,16 +473,24 @@ const PriorityRulesTab = ({
                 <input
                   type="date"
                   value={rule.effectiveFrom || ""}
-                  onChange={(e) => updateRule(rule.id, { effectiveFrom: e.target.value || null })}
+                  onChange={(e) =>
+                    updateRule(rule.id, {
+                      effectiveFrom: e.target.value || null,
+                    })
+                  }
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
                 />
               </FormField>
-              
+
               <FormField label="Effective Until">
                 <input
                   type="date"
                   value={rule.effectiveUntil || ""}
-                  onChange={(e) => updateRule(rule.id, { effectiveUntil: e.target.value || null })}
+                  onChange={(e) =>
+                    updateRule(rule.id, {
+                      effectiveUntil: e.target.value || null,
+                    })
+                  }
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
                 />
               </FormField>
@@ -442,8 +517,8 @@ const PriorityRulesTab = ({
               <div className="flex items-center gap-2">
                 <Calendar size={16} className="text-gray-500" />
                 <div className="flex gap-1">
-                  {rule.daysOfWeek.map(dayId => {
-                    const day = DAYS_OF_WEEK.find(d => d.id === dayId);
+                  {rule.daysOfWeek.map((dayId) => {
+                    const day = DAYS_OF_WEEK.find((d) => d.id === dayId);
                     return (
                       <span
                         key={dayId}
@@ -463,11 +538,13 @@ const PriorityRulesTab = ({
                 <Clock size={14} />
                 Strength: {Math.round(rule.preferenceStrength * 100)}%
               </span>
-              <span className={`px-2 py-1 rounded text-xs ${
-                rule.isHardConstraint
-                  ? "bg-red-100 text-red-700"
-                  : "bg-yellow-100 text-yellow-700"
-              }`}>
+              <span
+                className={`px-2 py-1 rounded text-xs ${
+                  rule.isHardConstraint
+                    ? "bg-red-100 text-red-700"
+                    : "bg-yellow-100 text-yellow-700"
+                }`}
+              >
                 {rule.isHardConstraint ? "Hard" : "Soft"}
               </span>
               <span>Weight: {rule.penaltyWeight}</span>
@@ -492,10 +569,11 @@ const PriorityRulesTab = ({
         <div>
           <h2 className="text-2xl font-bold text-gray-800">Priority Rules</h2>
           <p className="text-gray-600">
-            Configure staff preferences and priority rules for intelligent scheduling.
+            Configure staff preferences and priority rules for intelligent
+            scheduling.
           </p>
         </div>
-        
+
         <button
           onClick={createNewRule}
           className="flex items-center gap-2 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors"
@@ -525,7 +603,9 @@ const PriorityRulesTab = ({
         <div className="bg-orange-50 border border-orange-200 rounded-lg p-4">
           <div className="flex items-center gap-2 mb-2">
             <AlertTriangle size={16} className="text-orange-600" />
-            <span className="font-medium text-orange-800">Rule Conflicts Detected</span>
+            <span className="font-medium text-orange-800">
+              Rule Conflicts Detected
+            </span>
           </div>
           <ul className="list-disc list-inside text-orange-700 text-sm space-y-1">
             {conflictingRules.map((conflict, index) => (
@@ -540,14 +620,16 @@ const PriorityRulesTab = ({
         <div className="flex items-center gap-4">
           <div className="flex items-center gap-2">
             <User size={16} className="text-gray-500" />
-            <label className="text-sm font-medium text-gray-700">Filter by Staff:</label>
+            <label className="text-sm font-medium text-gray-700">
+              Filter by Staff:
+            </label>
             <select
               value={selectedStaff}
               onChange={(e) => setSelectedStaff(e.target.value)}
               className="px-3 py-1 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-purple-500"
             >
               <option value="all">All Staff</option>
-              {staffMembers.map(staff => (
+              {staffMembers.map((staff) => (
                 <option key={staff.id} value={staff.id}>
                   {staff.name}
                 </option>
@@ -555,10 +637,10 @@ const PriorityRulesTab = ({
             </select>
           </div>
         </div>
-        
+
         <div className="flex items-center gap-4 text-sm text-gray-600">
           <span>Total Rules: {filteredRules.length}</span>
-          <span>Active: {filteredRules.filter(r => r.isActive).length}</span>
+          <span>Active: {filteredRules.filter((r) => r.isActive).length}</span>
           <span>Conflicts: {conflictingRules.length}</span>
         </div>
       </div>
@@ -572,10 +654,13 @@ const PriorityRulesTab = ({
         <div className="text-center py-12">
           <Star size={48} className="mx-auto text-gray-400 mb-4" />
           <h3 className="text-lg font-medium text-gray-800 mb-2">
-            {selectedStaff === "all" ? "No Priority Rules" : "No Rules for Selected Staff"}
+            {selectedStaff === "all"
+              ? "No Priority Rules"
+              : "No Rules for Selected Staff"}
           </h3>
           <p className="text-gray-600 mb-4">
-            Create priority rules to define staff preferences and scheduling constraints.
+            Create priority rules to define staff preferences and scheduling
+            constraints.
           </p>
           <button
             onClick={createNewRule}

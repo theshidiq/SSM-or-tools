@@ -51,10 +51,8 @@ const NumberInput = ({
           {label}
         </label>
       )}
-      
-      {description && (
-        <p className="text-xs text-gray-500">{description}</p>
-      )}
+
+      {description && <p className="text-xs text-gray-500">{description}</p>}
 
       <div className="relative">
         {showControls && (
@@ -88,8 +86,8 @@ const NumberInput = ({
             error
               ? "border-red-300 bg-red-50"
               : disabled
-              ? "bg-gray-100 text-gray-500"
-              : "bg-white"
+                ? "bg-gray-100 text-gray-500"
+                : "bg-white"
           }`}
         />
 
@@ -118,13 +116,17 @@ const NumberInput = ({
 
       {/* Min/Max Info */}
       <div className="flex justify-between text-xs text-gray-500">
-        <span>Min: {min}{unit}</span>
-        <span>Max: {max}{unit}</span>
+        <span>
+          Min: {min}
+          {unit}
+        </span>
+        <span>
+          Max: {max}
+          {unit}
+        </span>
       </div>
 
-      {error && (
-        <p className="text-xs text-red-600">{error}</p>
-      )}
+      {error && <p className="text-xs text-red-600">{error}</p>}
     </div>
   );
 };

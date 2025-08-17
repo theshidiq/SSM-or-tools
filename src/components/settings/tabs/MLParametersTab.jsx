@@ -1,5 +1,14 @@
 import React, { useState } from "react";
-import { Brain, Cpu, Zap, TrendingUp, AlertTriangle, RotateCcw, Play, Settings } from "lucide-react";
+import {
+  Brain,
+  Cpu,
+  Zap,
+  TrendingUp,
+  AlertTriangle,
+  RotateCcw,
+  Play,
+  Settings,
+} from "lucide-react";
 import FormField from "../shared/FormField";
 import Slider from "../shared/Slider";
 import NumberInput from "../shared/NumberInput";
@@ -10,7 +19,8 @@ const ALGORITHMS = [
     id: "genetic_algorithm",
     name: "Genetic Algorithm",
     icon: "🧬",
-    description: "Evolutionary approach that mimics natural selection for optimization",
+    description:
+      "Evolutionary approach that mimics natural selection for optimization",
     complexity: "Medium",
     speed: "Fast",
     accuracy: "High",
@@ -20,7 +30,8 @@ const ALGORITHMS = [
     id: "simulated_annealing",
     name: "Simulated Annealing",
     icon: "🔥",
-    description: "Physics-inspired algorithm that gradually cools to find optimal solutions",
+    description:
+      "Physics-inspired algorithm that gradually cools to find optimal solutions",
     complexity: "Low",
     speed: "Medium",
     accuracy: "High",
@@ -40,7 +51,8 @@ const ALGORITHMS = [
     id: "neural_network",
     name: "Neural Network",
     icon: "🧠",
-    description: "Deep learning approach that learns from historical data patterns",
+    description:
+      "Deep learning approach that learns from historical data patterns",
     complexity: "Very High",
     speed: "Slow",
     accuracy: "Very High",
@@ -63,7 +75,7 @@ const PRESET_CONFIGURATIONS = [
       convergenceThreshold: 0.001,
       confidenceThreshold: 0.75,
       maxRuntime: 300,
-    }
+    },
   },
   {
     id: "fast",
@@ -79,7 +91,7 @@ const PRESET_CONFIGURATIONS = [
       convergenceThreshold: 0.005,
       confidenceThreshold: 0.65,
       maxRuntime: 120,
-    }
+    },
   },
   {
     id: "accurate",
@@ -95,7 +107,7 @@ const PRESET_CONFIGURATIONS = [
       convergenceThreshold: 0.0001,
       confidenceThreshold: 0.85,
       maxRuntime: 600,
-    }
+    },
   },
 ];
 
@@ -136,7 +148,9 @@ const MLParametersTab = ({
   };
 
   const resetToDefault = () => {
-    const defaultConfig = PRESET_CONFIGURATIONS.find(p => p.id === "balanced");
+    const defaultConfig = PRESET_CONFIGURATIONS.find(
+      (p) => p.id === "balanced",
+    );
     if (defaultConfig) {
       applyPreset(defaultConfig);
     }
@@ -147,7 +161,7 @@ const MLParametersTab = ({
     // Simulate testing the configuration
     try {
       // In a real implementation, this would test the ML configuration
-      await new Promise(resolve => setTimeout(resolve, 2000));
+      await new Promise((resolve) => setTimeout(resolve, 2000));
       alert("Configuration test completed successfully!");
     } catch (error) {
       alert("Configuration test failed: " + error.message);
@@ -156,16 +170,18 @@ const MLParametersTab = ({
     }
   };
 
-  const getAlgorithmById = (id) => ALGORITHMS.find(algo => algo.id === id);
+  const getAlgorithmById = (id) => ALGORITHMS.find((algo) => algo.id === id);
   const selectedAlgorithm = getAlgorithmById(mlConfig.algorithm);
 
   const renderAlgorithmSelector = () => {
     return (
       <div className="space-y-4">
-        <h3 className="text-lg font-semibold text-gray-800">Algorithm Selection</h3>
-        
+        <h3 className="text-lg font-semibold text-gray-800">
+          Algorithm Selection
+        </h3>
+
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {ALGORITHMS.map(algorithm => (
+          {ALGORITHMS.map((algorithm) => (
             <button
               key={algorithm.id}
               onClick={() => updateMLConfig({ algorithm: algorithm.id })}
@@ -178,24 +194,32 @@ const MLParametersTab = ({
               <div className="flex items-center gap-3 mb-2">
                 <span className="text-2xl">{algorithm.icon}</span>
                 <div>
-                  <h4 className="font-semibold text-gray-800">{algorithm.name}</h4>
+                  <h4 className="font-semibold text-gray-800">
+                    {algorithm.name}
+                  </h4>
                   <p className="text-sm text-gray-600">
                     {algorithm.complexity} complexity • {algorithm.speed} speed
                   </p>
                 </div>
               </div>
-              
-              <p className="text-sm text-gray-600 mb-3">{algorithm.description}</p>
-              
+
+              <p className="text-sm text-gray-600 mb-3">
+                {algorithm.description}
+              </p>
+
               <div className="flex items-center justify-between text-xs">
-                <span className="text-green-600 font-medium">✓ {algorithm.bestFor}</span>
-                <span className={`px-2 py-1 rounded ${
-                  algorithm.accuracy === "Very High" 
-                    ? "bg-green-100 text-green-700"
-                    : algorithm.accuracy === "High"
-                    ? "bg-blue-100 text-blue-700"
-                    : "bg-gray-100 text-gray-700"
-                }`}>
+                <span className="text-green-600 font-medium">
+                  ✓ {algorithm.bestFor}
+                </span>
+                <span
+                  className={`px-2 py-1 rounded ${
+                    algorithm.accuracy === "Very High"
+                      ? "bg-green-100 text-green-700"
+                      : algorithm.accuracy === "High"
+                        ? "bg-blue-100 text-blue-700"
+                        : "bg-gray-100 text-gray-700"
+                  }`}
+                >
                   {algorithm.accuracy}
                 </span>
               </div>
@@ -209,10 +233,12 @@ const MLParametersTab = ({
   const renderPresetConfigurations = () => {
     return (
       <div className="space-y-4">
-        <h3 className="text-lg font-semibold text-gray-800">Preset Configurations</h3>
-        
+        <h3 className="text-lg font-semibold text-gray-800">
+          Preset Configurations
+        </h3>
+
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          {PRESET_CONFIGURATIONS.map(preset => (
+          {PRESET_CONFIGURATIONS.map((preset) => (
             <button
               key={preset.id}
               onClick={() => applyPreset(preset)}
@@ -222,9 +248,11 @@ const MLParametersTab = ({
                   : "border-gray-200 hover:border-gray-300"
               }`}
             >
-              <h4 className="font-semibold text-gray-800 mb-2">{preset.name}</h4>
+              <h4 className="font-semibold text-gray-800 mb-2">
+                {preset.name}
+              </h4>
               <p className="text-sm text-gray-600 mb-3">{preset.description}</p>
-              
+
               <div className="space-y-1 text-xs text-gray-500">
                 <div>Pop Size: {preset.config.populationSize}</div>
                 <div>Generations: {preset.config.generations}</div>
@@ -322,7 +350,9 @@ const MLParametersTab = ({
                 min={100}
                 max={5000}
                 step={100}
-                onChange={(value) => updateMLConfig({ initialTemperature: value })}
+                onChange={(value) =>
+                  updateMLConfig({ initialTemperature: value })
+                }
                 description="Starting temperature for annealing process"
                 colorScheme="orange"
               />
@@ -348,7 +378,9 @@ const MLParametersTab = ({
             min={0.0001}
             max={0.01}
             step={0.0001}
-            onChange={(value) => updateMLConfig({ convergenceThreshold: value })}
+            onChange={(value) =>
+              updateMLConfig({ convergenceThreshold: value })
+            }
             description="Minimum improvement required to continue optimization"
             unit=""
             colorScheme="gray"
@@ -371,27 +403,33 @@ const MLParametersTab = ({
         {/* Advanced Options */}
         <div className="space-y-4">
           <h4 className="font-medium text-gray-800">Advanced Options</h4>
-          
+
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <ToggleSwitch
               label="Adaptive Mutation"
               description="Automatically adjust mutation rate during optimization"
               checked={mlConfig.enableAdaptiveMutation}
-              onChange={(checked) => updateMLConfig({ enableAdaptiveMutation: checked })}
+              onChange={(checked) =>
+                updateMLConfig({ enableAdaptiveMutation: checked })
+              }
             />
 
             <ToggleSwitch
               label="Elitism Diversity"
               description="Maintain diversity among elite solutions"
               checked={mlConfig.enableElitismDiversity}
-              onChange={(checked) => updateMLConfig({ enableElitismDiversity: checked })}
+              onChange={(checked) =>
+                updateMLConfig({ enableElitismDiversity: checked })
+              }
             />
 
             <ToggleSwitch
               label="Parallel Processing"
               description="Use multiple CPU cores for faster computation"
               checked={mlConfig.parallelProcessing}
-              onChange={(checked) => updateMLConfig({ parallelProcessing: checked })}
+              onChange={(checked) =>
+                updateMLConfig({ parallelProcessing: checked })
+              }
             />
 
             <NumberInput
@@ -399,7 +437,9 @@ const MLParametersTab = ({
               value={mlConfig.randomSeed || 0}
               min={0}
               max={999999}
-              onChange={(value) => updateMLConfig({ randomSeed: value || null })}
+              onChange={(value) =>
+                updateMLConfig({ randomSeed: value || null })
+              }
               description="Seed for reproducible results (0 = random)"
               showControls={false}
             />
@@ -410,31 +450,38 @@ const MLParametersTab = ({
   };
 
   const renderPerformanceEstimator = () => {
-    const estimatedRuntime = Math.ceil((mlConfig.populationSize * mlConfig.generations) / 1000) * 
-                             (mlConfig.parallelProcessing ? 0.5 : 1);
-    const memoryUsage = Math.ceil((mlConfig.populationSize * 0.1));
-    
+    const estimatedRuntime =
+      Math.ceil((mlConfig.populationSize * mlConfig.generations) / 1000) *
+      (mlConfig.parallelProcessing ? 0.5 : 1);
+    const memoryUsage = Math.ceil(mlConfig.populationSize * 0.1);
+
     return (
       <div className="bg-gradient-to-r from-blue-50 to-purple-50 rounded-xl p-6 border border-blue-200">
-        <h3 className="text-lg font-semibold text-gray-800 mb-4">Performance Estimate</h3>
-        
+        <h3 className="text-lg font-semibold text-gray-800 mb-4">
+          Performance Estimate
+        </h3>
+
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
           <div className="text-center">
             <div className="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center mx-auto mb-2">
               <Zap size={24} className="text-blue-600" />
             </div>
-            <div className="text-2xl font-bold text-gray-800">{estimatedRuntime}s</div>
+            <div className="text-2xl font-bold text-gray-800">
+              {estimatedRuntime}s
+            </div>
             <div className="text-sm text-gray-600">Est. Runtime</div>
           </div>
-          
+
           <div className="text-center">
             <div className="w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center mx-auto mb-2">
               <Cpu size={24} className="text-green-600" />
             </div>
-            <div className="text-2xl font-bold text-gray-800">{memoryUsage}MB</div>
+            <div className="text-2xl font-bold text-gray-800">
+              {memoryUsage}MB
+            </div>
             <div className="text-sm text-gray-600">Memory</div>
           </div>
-          
+
           <div className="text-center">
             <div className="w-12 h-12 bg-purple-100 rounded-lg flex items-center justify-center mx-auto mb-2">
               <TrendingUp size={24} className="text-purple-600" />
@@ -444,7 +491,7 @@ const MLParametersTab = ({
             </div>
             <div className="text-sm text-gray-600">Confidence</div>
           </div>
-          
+
           <div className="text-center">
             <div className="w-12 h-12 bg-orange-100 rounded-lg flex items-center justify-center mx-auto mb-2">
               <Brain size={24} className="text-orange-600" />
@@ -455,14 +502,19 @@ const MLParametersTab = ({
             <div className="text-sm text-gray-600">Accuracy</div>
           </div>
         </div>
-        
+
         <div className="mt-4 p-3 bg-white bg-opacity-50 rounded-lg">
           <p className="text-sm text-gray-700">
-            💡 <strong>Optimization Tips:</strong> 
-            {estimatedRuntime > 300 && " Consider reducing population size or generations for faster results."}
-            {mlConfig.mutationRate > 0.3 && " High mutation rate may slow convergence."}
-            {mlConfig.populationSize < 50 && " Small population may limit solution diversity."}
-            {estimatedRuntime <= 120 && mlConfig.populationSize >= 100 && " Good balance of speed and accuracy."}
+            💡 <strong>Optimization Tips:</strong>
+            {estimatedRuntime > 300 &&
+              " Consider reducing population size or generations for faster results."}
+            {mlConfig.mutationRate > 0.3 &&
+              " High mutation rate may slow convergence."}
+            {mlConfig.populationSize < 50 &&
+              " Small population may limit solution diversity."}
+            {estimatedRuntime <= 120 &&
+              mlConfig.populationSize >= 100 &&
+              " Good balance of speed and accuracy."}
           </p>
         </div>
       </div>
@@ -476,10 +528,11 @@ const MLParametersTab = ({
         <div>
           <h2 className="text-2xl font-bold text-gray-800">ML Parameters</h2>
           <p className="text-gray-600">
-            Configure machine learning algorithms for intelligent schedule optimization.
+            Configure machine learning algorithms for intelligent schedule
+            optimization.
           </p>
         </div>
-        
+
         <div className="flex items-center gap-3">
           <button
             onClick={resetToDefault}
@@ -489,7 +542,7 @@ const MLParametersTab = ({
             <RotateCcw size={16} />
             Reset
           </button>
-          
+
           <button
             onClick={testConfiguration}
             disabled={testingConfiguration}
@@ -515,7 +568,9 @@ const MLParametersTab = ({
         <div className="bg-red-50 border border-red-200 rounded-lg p-4">
           <div className="flex items-center gap-2 mb-2">
             <AlertTriangle size={16} className="text-red-600" />
-            <span className="font-medium text-red-800">Configuration Errors</span>
+            <span className="font-medium text-red-800">
+              Configuration Errors
+            </span>
           </div>
           <ul className="list-disc list-inside text-red-700 text-sm space-y-1">
             {Object.entries(validationErrors).map(([field, error]) => (
@@ -527,8 +582,10 @@ const MLParametersTab = ({
 
       {/* Confidence Threshold */}
       <div className="bg-white rounded-xl border border-gray-200 p-6">
-        <h3 className="text-lg font-semibold text-gray-800 mb-4">Model Confidence</h3>
-        
+        <h3 className="text-lg font-semibold text-gray-800 mb-4">
+          Model Confidence
+        </h3>
+
         <Slider
           label="Confidence Threshold"
           value={mlConfig.confidenceThreshold}
@@ -542,22 +599,28 @@ const MLParametersTab = ({
           colorScheme="blue"
           className="mb-4"
         />
-        
+
         <div className="grid grid-cols-3 gap-4 text-center">
           <div className="p-3 bg-red-50 rounded-lg">
             <div className="font-semibold text-red-600">50-65%</div>
             <div className="text-sm text-red-700">Low Confidence</div>
-            <div className="text-xs text-red-600 mt-1">Manual review required</div>
+            <div className="text-xs text-red-600 mt-1">
+              Manual review required
+            </div>
           </div>
           <div className="p-3 bg-yellow-50 rounded-lg">
             <div className="font-semibold text-yellow-600">70-80%</div>
             <div className="text-sm text-yellow-700">Medium Confidence</div>
-            <div className="text-xs text-yellow-600 mt-1">Some suggestions auto-applied</div>
+            <div className="text-xs text-yellow-600 mt-1">
+              Some suggestions auto-applied
+            </div>
           </div>
           <div className="p-3 bg-green-50 rounded-lg">
             <div className="font-semibold text-green-600">85-95%</div>
             <div className="text-sm text-green-700">High Confidence</div>
-            <div className="text-xs text-green-600 mt-1">Most suggestions auto-applied</div>
+            <div className="text-xs text-green-600 mt-1">
+              Most suggestions auto-applied
+            </div>
           </div>
         </div>
       </div>
