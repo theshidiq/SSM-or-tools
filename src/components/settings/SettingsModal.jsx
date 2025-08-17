@@ -1,9 +1,7 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import {
   X,
   RotateCcw,
-  Download,
-  Upload,
   AlertTriangle,
   Check,
 } from "lucide-react";
@@ -37,8 +35,6 @@ const SettingsModal = ({
   // Staff data for reference
   staffMembers = [],
   // Configuration management
-  onExportConfig,
-  onImportConfig,
   onResetConfig,
   // Validation and preview
   validationErrors = {},
@@ -50,6 +46,7 @@ const SettingsModal = ({
 }) => {
   const [activeTab, setActiveTab] = useState("staff-groups");
   const [isVisible, setIsVisible] = useState(false);
+  const modalRef = useRef(null);
 
   useEffect(() => {
     if (isOpen) {
@@ -62,7 +59,14 @@ const SettingsModal = ({
     }
   }, [isOpen]);
 
-  // Keyboard shortcuts
+  // Handle click outside to close
+  const handleOutsideClick = (event) => {
+    if (modalRef.current && !modalRef.current.contains(event.target)) {
+      onClose();
+    }
+  };
+
+  // Keyboard shortcuts and click outside handling
   useEffect(() => {
     if (!isOpen) return;
 
@@ -89,7 +93,12 @@ const SettingsModal = ({
     };
 
     document.addEventListener("keydown", handleKeyDown);
-    return () => document.removeEventListener("keydown", handleKeyDown);
+    document.addEventListener("mousedown", handleOutsideClick);
+    
+    return () => {
+      document.removeEventListener("keydown", handleKeyDown);
+      document.removeEventListener("mousedown", handleOutsideClick);
+    };
   }, [isOpen, onClose]);
 
   const handleReset = () => {
@@ -135,6 +144,7 @@ const SettingsModal = ({
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[10000] p-4">
       <div
+        ref={modalRef}
         className={`bg-white rounded-xl w-full max-w-6xl h-[90vh] flex flex-col shadow-2xl transform transition-all duration-300 ${
           isOpen ? "scale-100 opacity-100" : "scale-95 opacity-0"
         }`}
@@ -157,27 +167,6 @@ const SettingsModal = ({
           </div>
 
           <div className="flex items-center gap-2">
-            {/* Configuration Actions */}
-            <button
-              onClick={onExportConfig}
-              className="flex items-center px-3 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors"
-              title="Export Configuration"
-            >
-              <Download size={16} className="mr-1.5" />
-              Export
-            </button>
-
-            <button
-              onClick={onImportConfig}
-              className="flex items-center px-3 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors"
-              title="Import Configuration"
-            >
-              <Upload size={16} className="mr-1.5" />
-              Import
-            </button>
-
-            <div className="h-6 w-px bg-gray-300"></div>
-
             <button
               onClick={onClose}
               className="p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"

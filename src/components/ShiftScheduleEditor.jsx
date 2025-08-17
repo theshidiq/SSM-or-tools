@@ -313,61 +313,6 @@ const ShiftScheduleEditor = ({
     }
   };
 
-  const handleExportSettings = () => {
-    try {
-      const config = exportConfiguration();
-      const blob = new Blob([config], { type: "application/json" });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = `settings-${new Date().toISOString().split("T")[0]}.json`;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
-    } catch (error) {
-      setDeleteModal({
-        isOpen: true,
-        type: "error",
-        title: "Export Failed",
-        message: `Failed to export settings: ${error.message}`,
-      });
-    }
-  };
-
-  const handleImportSettings = () => {
-    const input = document.createElement("input");
-    input.type = "file";
-    input.accept = ".json";
-    input.onchange = (e) => {
-      const file = e.target.files[0];
-      if (file) {
-        const reader = new FileReader();
-        reader.onload = (e) => {
-          try {
-            const result = importConfiguration(e.target.result);
-            if (result.success) {
-              setDeleteModal({
-                isOpen: true,
-                type: "success",
-                title: "Settings Imported",
-                message: "Configuration has been imported successfully.",
-              });
-            }
-          } catch (error) {
-            setDeleteModal({
-              isOpen: true,
-              type: "error",
-              title: "Import Failed",
-              message: `Failed to import settings: ${error.message}`,
-            });
-          }
-        };
-        reader.readAsText(file);
-      }
-    };
-    input.click();
-  };
 
   const handleAddTable = () => {
     // Add next period and switch to it
@@ -868,8 +813,6 @@ const ShiftScheduleEditor = ({
         settings={settings}
         onSettingsChange={updateSettings}
         staffMembers={staffMembers}
-        onExportConfig={handleExportSettings}
-        onImportConfig={handleImportSettings}
         onResetConfig={resetToDefaults}
         onShowHistory={() => {}} // TODO: Implement history modal
         connectionStatus={connectionStatus}
