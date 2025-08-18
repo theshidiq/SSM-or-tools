@@ -8,6 +8,8 @@ import {
   AlertTriangle,
   X,
   UserPlus,
+  Check,
+  XCircle,
 } from "lucide-react";
 import FormField from "../shared/FormField";
 import { isStaffActiveInCurrentPeriod } from "../../../utils/staffUtils";
@@ -52,6 +54,7 @@ const StaffGroupsTab = ({
   validationErrors = {},
 }) => {
   const [editingGroup, setEditingGroup] = useState(null);
+  const [originalGroupData, setOriginalGroupData] = useState(null);
   const [draggedStaff, setDraggedStaff] = useState(null);
   const [dragOverGroup, setDragOverGroup] = useState(null);
   const [showStaffModal, setShowStaffModal] = useState(null); // null or groupId
@@ -63,7 +66,7 @@ const StaffGroupsTab = ({
   useEffect(() => {
     const handleKeyDown = (event) => {
       if (event.key === "Escape" && editingGroup) {
-        setEditingGroup(null);
+        handleCancelEdit();
       }
     };
 
@@ -76,6 +79,33 @@ const StaffGroupsTab = ({
       ...settings,
       staffGroups: newGroups,
     });
+  };
+
+  // Start editing a group and save original data for cancel
+  const startEditingGroup = (groupId) => {
+    const group = staffGroups.find(g => g.id === groupId);
+    if (group) {
+      setOriginalGroupData({ ...group });
+      setEditingGroup(groupId);
+    }
+  };
+
+  // Save changes and exit edit mode
+  const handleSaveEdit = () => {
+    setEditingGroup(null);
+    setOriginalGroupData(null);
+  };
+
+  // Cancel changes and restore original data
+  const handleCancelEdit = () => {
+    if (originalGroupData && editingGroup) {
+      const updatedGroups = staffGroups.map(group => 
+        group.id === editingGroup ? originalGroupData : group
+      );
+      updateStaffGroups(updatedGroups);
+    }
+    setEditingGroup(null);
+    setOriginalGroupData(null);
   };
 
   const updateConflictRules = (newRules) => {
@@ -341,7 +371,7 @@ const StaffGroupsTab = ({
                   autoFocus
                 />
                 <p className="text-xs text-gray-500 mt-1">
-                  Press Escape to finish editing
+                  Press Escape to cancel or use save/cancel buttons
                 </p>
               </div>
             ) : (
@@ -352,9 +382,26 @@ const StaffGroupsTab = ({
           </div>
 
           <div className="flex items-center gap-2 flex-shrink-0">
-            {!isEditing && (
+            {isEditing ? (
+              <div className="flex items-center gap-1">
+                <button
+                  onClick={handleSaveEdit}
+                  className="p-1.5 text-gray-500 hover:text-green-600 hover:bg-green-50 rounded-lg transition-colors"
+                  title="Save changes"
+                >
+                  <Check size={16} />
+                </button>
+                <button
+                  onClick={handleCancelEdit}
+                  className="p-1.5 text-gray-500 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                  title="Cancel changes"
+                >
+                  <XCircle size={16} />
+                </button>
+              </div>
+            ) : (
               <button
-                onClick={() => setEditingGroup(group.id)}
+                onClick={() => startEditingGroup(group.id)}
                 className="p-1.5 text-gray-500 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
                 title="Edit"
               >
