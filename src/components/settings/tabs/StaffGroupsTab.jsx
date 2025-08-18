@@ -12,7 +12,6 @@ import {
   XCircle,
 } from "lucide-react";
 import FormField from "../shared/FormField";
-import { isStaffActiveInCurrentPeriod } from "../../../utils/staffUtils";
 
 const PRESET_COLORS = [
   "#3B82F6",
@@ -216,8 +215,21 @@ const StaffGroupsTab = ({
   // Get active staff members (filter out those with endPeriod)
   const getActiveStaffMembers = () => {
     return staffMembers.filter((staff) => {
-      // Use the utility function to check if staff is active
-      return isStaffActiveInCurrentPeriod(staff);
+      // Check if staff has an end period - if so, they are inactive
+      if (staff.endPeriod) {
+        // Create end date and check if it's in the past
+        const staffEndDate = new Date(
+          Date.UTC(
+            staff.endPeriod.year,
+            staff.endPeriod.month - 1, // month is 0-indexed
+            staff.endPeriod.day || 31,
+          ),
+        );
+        const today = new Date();
+        return staffEndDate >= today;
+      }
+      // Staff without endPeriod are considered active
+      return true;
     });
   };
 
@@ -241,7 +253,11 @@ const StaffGroupsTab = ({
   // Update drag start to only work on active staff
   const handleDragStart = (e, staffId) => {
     const staff = getStaffById(staffId);
-    if (staff && isStaffActiveInCurrentPeriod(staff)) {
+    // Check if staff is active using the same logic as getActiveStaffMembers
+    const isActive = staff && (!staff.endPeriod || 
+      new Date(Date.UTC(staff.endPeriod.year, staff.endPeriod.month - 1, staff.endPeriod.day || 31)) >= new Date());
+    
+    if (isActive) {
       setDraggedStaff(staffId);
       e.dataTransfer.effectAllowed = "move";
     } else {
