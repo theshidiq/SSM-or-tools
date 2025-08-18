@@ -99,12 +99,6 @@ export class ConfigurationService {
           name: "Group 2",
           members: ["料理長", "古藤"],
           color: "#EF4444",
-          coverageRule: {
-            backupStaff: "中田",
-            requiredShift: "normal",
-            description:
-              "When Group 2 member has day off, 中田 must work normal shift",
-          },
         },
         {
           id: "group3",

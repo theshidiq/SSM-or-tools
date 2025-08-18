@@ -10,7 +10,6 @@ import {
   UserPlus,
 } from "lucide-react";
 import FormField from "../shared/FormField";
-import ToggleSwitch from "../shared/ToggleSwitch";
 import { isStaffActiveInCurrentPeriod } from "../../../utils/staffUtils";
 
 const PRESET_COLORS = [
@@ -108,11 +107,6 @@ const StaffGroupsTab = ({
       description: "",
       color: getNextAvailableColor(),
       members: [],
-      coverageRules: {
-        minimumCoverage: 1,
-        backupRequired: false,
-        backupStaffIds: [],
-      },
     };
     setEditingGroup(newGroup.id);
     updateStaffGroups([...staffGroups, newGroup]);
@@ -396,52 +390,6 @@ const StaffGroupsTab = ({
           <p className="text-sm text-gray-600 mb-4">{group.description}</p>
         )}
 
-        {/* Coverage Rules */}
-        {isEditing && (
-          <div className="mb-3 p-2.5 bg-gray-50 rounded-lg">
-            <h4 className="text-sm font-medium text-gray-800 mb-2">
-              Coverage Rules
-            </h4>
-
-            <div className="flex items-center gap-4">
-              <div className="flex items-center gap-2">
-                <label className="text-xs text-gray-600 whitespace-nowrap">
-                  Min Coverage:
-                </label>
-                <input
-                  type="number"
-                  min="0"
-                  value={group.coverageRules?.minimumCoverage || 1}
-                  onChange={(e) =>
-                    updateGroup(group.id, {
-                      coverageRules: {
-                        ...group.coverageRules,
-                        minimumCoverage: parseInt(e.target.value),
-                      },
-                    })
-                  }
-                  className="w-16 px-2 py-1 border border-gray-300 rounded text-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
-                />
-              </div>
-
-              <div className="flex items-center">
-                <ToggleSwitch
-                  label="Backup Required"
-                  checked={group.coverageRules?.backupRequired || false}
-                  onChange={(checked) =>
-                    updateGroup(group.id, {
-                      coverageRules: {
-                        ...group.coverageRules,
-                        backupRequired: checked,
-                      },
-                    })
-                  }
-                  size="small"
-                />
-              </div>
-            </div>
-          </div>
-        )}
 
         {/* Staff Members */}
         <div className="space-y-2">
