@@ -45,8 +45,13 @@ const DailyLimitsTab = ({
   const [editingLimit, setEditingLimit] = useState(null);
   const [showAddForm, setShowAddForm] = useState(false);
 
-  const dailyLimits = settings?.dailyLimits || [];
-  const monthlyLimits = settings?.monthlyLimits || [];
+  // Ensure dailyLimits and monthlyLimits are arrays (defensive programming)
+  const dailyLimits = Array.isArray(settings?.dailyLimits) 
+    ? settings.dailyLimits 
+    : [];
+  const monthlyLimits = Array.isArray(settings?.monthlyLimits) 
+    ? settings.monthlyLimits 
+    : [];
   const staffGroups = settings?.staffGroups || [];
 
   // Add escape key listener to exit edit mode

@@ -19,7 +19,9 @@ export class ConfigurationService {
     try {
       const stored = localStorage.getItem(STORAGE_KEY);
       if (stored) {
-        return JSON.parse(stored);
+        const settings = JSON.parse(stored);
+        // Migrate old data format to new format if needed
+        return this.migrateSettings(settings);
       }
     } catch (error) {
       console.warn("Failed to load settings from localStorage:", error);
@@ -27,6 +29,139 @@ export class ConfigurationService {
 
     // Return default settings
     return this.getDefaultSettings();
+  }
+
+  /**
+   * Migrate old settings format to new format
+   */
+  migrateSettings(settings) {
+    let needsMigration = false;
+    const migratedSettings = { ...settings };
+
+    // Migrate dailyLimits from object to array format
+    if (settings.dailyLimits && !Array.isArray(settings.dailyLimits)) {
+      console.log("Migrating dailyLimits from object to array format");
+      const oldLimits = settings.dailyLimits;
+      migratedSettings.dailyLimits = [];
+
+      // Convert old object format to new array format
+      if (oldLimits.maxOffPerDay) {
+        migratedSettings.dailyLimits.push({
+          id: "daily-limit-off",
+          name: "Maximum Off Days",
+          shiftType: "off",
+          maxCount: oldLimits.maxOffPerDay.value || 4,
+          daysOfWeek: [0, 1, 2, 3, 4, 5, 6],
+          scope: "all",
+          targetIds: [],
+          isHardConstraint: oldLimits.maxOffPerDay.isHard || true,
+          penaltyWeight: oldLimits.maxOffPerDay.weight || 50,
+          description: "Maximum number of staff that can be off per day",
+        });
+      }
+
+      if (oldLimits.maxEarlyPerDay) {
+        migratedSettings.dailyLimits.push({
+          id: "daily-limit-early",
+          name: "Maximum Early Shifts",
+          shiftType: "early",
+          maxCount: oldLimits.maxEarlyPerDay.value || 4,
+          daysOfWeek: [0, 1, 2, 3, 4, 5, 6],
+          scope: "all",
+          targetIds: [],
+          isHardConstraint: oldLimits.maxEarlyPerDay.isHard || false,
+          penaltyWeight: oldLimits.maxEarlyPerDay.weight || 30,
+          description: "Maximum number of staff on early shifts per day",
+        });
+      }
+
+      if (oldLimits.maxLatePerDay) {
+        migratedSettings.dailyLimits.push({
+          id: "daily-limit-late",
+          name: "Maximum Late Shifts",
+          shiftType: "late",
+          maxCount: oldLimits.maxLatePerDay.value || 3,
+          daysOfWeek: [0, 1, 2, 3, 4, 5, 6],
+          scope: "all",
+          targetIds: [],
+          isHardConstraint: oldLimits.maxLatePerDay.isHard || false,
+          penaltyWeight: oldLimits.maxLatePerDay.weight || 30,
+          description: "Maximum number of staff on late shifts per day",
+        });
+      }
+
+      if (oldLimits.minWorkingStaffPerDay) {
+        migratedSettings.dailyLimits.push({
+          id: "daily-limit-min-working",
+          name: "Minimum Working Staff",
+          shiftType: "any",
+          maxCount: oldLimits.minWorkingStaffPerDay.value || 3,
+          daysOfWeek: [0, 1, 2, 3, 4, 5, 6],
+          scope: "all",
+          targetIds: [],
+          isHardConstraint: oldLimits.minWorkingStaffPerDay.isHard || true,
+          penaltyWeight: oldLimits.minWorkingStaffPerDay.weight || 100,
+          description: "Minimum number of staff required to work per day",
+        });
+      }
+
+      needsMigration = true;
+    }
+
+    // Migrate monthlyLimits from object to array format
+    if (settings.monthlyLimits && !Array.isArray(settings.monthlyLimits)) {
+      console.log("Migrating monthlyLimits from object to array format");
+      const oldLimits = settings.monthlyLimits;
+      migratedSettings.monthlyLimits = [];
+
+      if (oldLimits.maxOffDaysPerMonth) {
+        migratedSettings.monthlyLimits.push({
+          id: "monthly-limit-off-days",
+          name: "Maximum Off Days Per Month",
+          limitType: "max_off_days",
+          maxCount: oldLimits.maxOffDaysPerMonth.value || 8,
+          scope: "individual",
+          targetIds: [],
+          distributionRules: {
+            minDaysBetween: 1,
+            maxConsecutive: 2,
+            preferWeekends: false,
+          },
+          isHardConstraint: oldLimits.maxOffDaysPerMonth.isHard || false,
+          penaltyWeight: oldLimits.maxOffDaysPerMonth.weight || 40,
+          description: "Maximum number of days off allowed per staff member per month",
+        });
+      }
+
+      if (oldLimits.minWorkDaysPerMonth) {
+        migratedSettings.monthlyLimits.push({
+          id: "monthly-limit-work-days",
+          name: "Minimum Work Days Per Month",
+          limitType: "min_work_days",
+          maxCount: oldLimits.minWorkDaysPerMonth.value || 23,
+          scope: "individual",
+          targetIds: [],
+          distributionRules: {
+            minDaysBetween: 0,
+            maxConsecutive: 7,
+            preferWeekends: false,
+          },
+          isHardConstraint: oldLimits.minWorkDaysPerMonth.isHard || true,
+          penaltyWeight: oldLimits.minWorkDaysPerMonth.weight || 60,
+          description: "Minimum number of work days required per staff member per month",
+        });
+      }
+
+      needsMigration = true;
+    }
+
+    // If migration was needed, save the migrated settings
+    if (needsMigration) {
+      console.log("Settings migration completed, saving migrated data");
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(migratedSettings));
+    }
+
+    return migratedSettings;
   }
 
   /**
@@ -139,12 +274,56 @@ export class ConfigurationService {
       ],
 
       // Daily Limits
-      dailyLimits: {
-        maxOffPerDay: { value: 4, weight: 50, isHard: true },
-        maxEarlyPerDay: { value: 4, weight: 30, isHard: false },
-        maxLatePerDay: { value: 3, weight: 30, isHard: false },
-        minWorkingStaffPerDay: { value: 3, weight: 100, isHard: true },
-      },
+      dailyLimits: [
+        {
+          id: "daily-limit-off",
+          name: "Maximum Off Days",
+          shiftType: "off",
+          maxCount: 4,
+          daysOfWeek: [0, 1, 2, 3, 4, 5, 6], // All days
+          scope: "all",
+          targetIds: [],
+          isHardConstraint: true,
+          penaltyWeight: 50,
+          description: "Maximum number of staff that can be off per day",
+        },
+        {
+          id: "daily-limit-early",
+          name: "Maximum Early Shifts",
+          shiftType: "early",
+          maxCount: 4,
+          daysOfWeek: [0, 1, 2, 3, 4, 5, 6], // All days
+          scope: "all",
+          targetIds: [],
+          isHardConstraint: false,
+          penaltyWeight: 30,
+          description: "Maximum number of staff on early shifts per day",
+        },
+        {
+          id: "daily-limit-late",
+          name: "Maximum Late Shifts",
+          shiftType: "late",
+          maxCount: 3,
+          daysOfWeek: [0, 1, 2, 3, 4, 5, 6], // All days
+          scope: "all",
+          targetIds: [],
+          isHardConstraint: false,
+          penaltyWeight: 30,
+          description: "Maximum number of staff on late shifts per day",
+        },
+        {
+          id: "daily-limit-min-working",
+          name: "Minimum Working Staff",
+          shiftType: "any",
+          maxCount: 3,
+          daysOfWeek: [0, 1, 2, 3, 4, 5, 6], // All days
+          scope: "all",
+          targetIds: [],
+          isHardConstraint: true,
+          penaltyWeight: 100,
+          description: "Minimum number of staff required to work per day",
+        },
+      ],
 
       // Priority Rules
       priorityRules: {
@@ -196,10 +375,40 @@ export class ConfigurationService {
       },
 
       // Monthly Limits
-      monthlyLimits: {
-        maxOffDaysPerMonth: { value: 8, weight: 40, isHard: false },
-        minWorkDaysPerMonth: { value: 23, weight: 60, isHard: true },
-      },
+      monthlyLimits: [
+        {
+          id: "monthly-limit-off-days",
+          name: "Maximum Off Days Per Month",
+          limitType: "max_off_days",
+          maxCount: 8,
+          scope: "individual",
+          targetIds: [],
+          distributionRules: {
+            minDaysBetween: 1,
+            maxConsecutive: 2,
+            preferWeekends: false,
+          },
+          isHardConstraint: false,
+          penaltyWeight: 40,
+          description: "Maximum number of days off allowed per staff member per month",
+        },
+        {
+          id: "monthly-limit-work-days",
+          name: "Minimum Work Days Per Month",
+          limitType: "min_work_days",
+          maxCount: 23,
+          scope: "individual",
+          targetIds: [],
+          distributionRules: {
+            minDaysBetween: 0,
+            maxConsecutive: 7,
+            preferWeekends: false,
+          },
+          isHardConstraint: true,
+          penaltyWeight: 60,
+          description: "Minimum number of work days required per staff member per month",
+        },
+      ],
     };
   }
 
