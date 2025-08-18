@@ -61,6 +61,40 @@ const StaffGroupsTab = ({
   const staffGroups = settings?.staffGroups || [];
   const conflictRules = settings?.conflictRules || [];
 
+  // Automatically ensure all groups have intra-group conflict rules enabled
+  useEffect(() => {
+    const ensureIntraGroupRules = () => {
+      const updatedRules = [...conflictRules];
+      let hasChanges = false;
+
+      staffGroups.forEach(group => {
+        const ruleId = `intra-${group.id}`;
+        const existingRule = conflictRules.find(rule => rule.id === ruleId);
+        
+        if (!existingRule) {
+          const newRule = {
+            id: ruleId,
+            name: `${group.name} Intra-Group Conflict Prevention`,
+            type: "intra_group_conflict",
+            groupId: group.id,
+            constraint: "prevent_same_shift_same_day",
+            isHardConstraint: true,
+            penaltyWeight: 15,
+            description: "Prevents staff in the same group from having identical shifts on the same day"
+          };
+          updatedRules.push(newRule);
+          hasChanges = true;
+        }
+      });
+
+      if (hasChanges) {
+        updateConflictRules(updatedRules);
+      }
+    };
+
+    ensureIntraGroupRules();
+  }, [staffGroups, conflictRules, updateConflictRules]);
+
   // Add escape key listener to exit edit mode
   useEffect(() => {
     const handleKeyDown = (event) => {
@@ -72,6 +106,40 @@ const StaffGroupsTab = ({
     document.addEventListener("keydown", handleKeyDown);
     return () => document.removeEventListener("keydown", handleKeyDown);
   }, [editingGroup]);
+
+  // Ensure all groups have intra-group conflict rules enabled
+  useEffect(() => {
+    const ensureIntraGroupRules = () => {
+      const updatedRules = [...conflictRules];
+      let hasChanges = false;
+
+      staffGroups.forEach(group => {
+        const ruleId = `intra-${group.id}`;
+        const existingRule = conflictRules.find(rule => rule.id === ruleId);
+        
+        if (!existingRule) {
+          const newRule = {
+            id: ruleId,
+            name: `${group.name} Intra-Group Conflict Prevention`,
+            type: "intra_group_conflict",
+            groupId: group.id,
+            constraint: "prevent_same_shift_same_day",
+            isHardConstraint: true,
+            penaltyWeight: 15,
+            description: "Prevents staff in the same group from having identical shifts on the same day"
+          };
+          updatedRules.push(newRule);
+          hasChanges = true;
+        }
+      });
+
+      if (hasChanges) {
+        updateConflictRules(updatedRules);
+      }
+    };
+
+    ensureIntraGroupRules();
+  }, [staffGroups, conflictRules]);
 
   const updateStaffGroups = (newGroups) => {
     onSettingsChange({
@@ -139,6 +207,9 @@ const StaffGroupsTab = ({
     };
     setEditingGroup(newGroup.id);
     updateStaffGroups([...staffGroups, newGroup]);
+    
+    // Automatically enable intra-group conflict rule for the new group
+    // Note: The useEffect will handle adding the rule once the group is in state
   };
 
   const updateGroup = (groupId, updates) => {
@@ -157,9 +228,9 @@ const StaffGroupsTab = ({
       const updatedGroups = staffGroups.filter((group) => group.id !== groupId);
       updateStaffGroups(updatedGroups);
 
-      // Remove related conflict rules
+      // Remove related intra-group conflict rules
       const updatedRules = conflictRules.filter(
-        (rule) => !rule.involvedGroups?.includes(groupId),
+        (rule) => !(rule.type === 'intra_group_conflict' && rule.groupId === groupId),
       );
       updateConflictRules(updatedRules);
     }
@@ -186,28 +257,6 @@ const StaffGroupsTab = ({
     updateStaffGroups(updatedGroups);
   };
 
-  const toggleConflictRule = (group1Id, group2Id) => {
-    const ruleId = `${group1Id}-${group2Id}`;
-    const existingRule = conflictRules.find((rule) => rule.id === ruleId);
-
-    if (existingRule) {
-      // Remove rule
-      const updatedRules = conflictRules.filter((rule) => rule.id !== ruleId);
-      updateConflictRules(updatedRules);
-    } else {
-      // Add rule
-      const newRule = {
-        id: ruleId,
-        name: `${getGroupById(group1Id)?.name} vs ${getGroupById(group2Id)?.name} Conflict`,
-        type: "group_conflict",
-        involvedGroups: [group1Id, group2Id],
-        constraint: "cannot_work_same_shift",
-        isHardConstraint: true,
-        penaltyWeight: 10,
-      };
-      updateConflictRules([...conflictRules, newRule]);
-    }
-  };
 
   const getGroupById = (id) => staffGroups.find((group) => group.id === id);
   const getStaffById = (id) => staffMembers.find((staff) => staff.id === id);
@@ -242,13 +291,6 @@ const StaffGroupsTab = ({
     return activeStaff.filter((staff) => !groupMemberIds.has(staff.id));
   };
 
-  const hasConflictRule = (group1Id, group2Id) => {
-    return conflictRules.some(
-      (rule) =>
-        rule.involvedGroups?.includes(group1Id) &&
-        rule.involvedGroups?.includes(group2Id),
-    );
-  };
 
   // Update drag start to only work on active staff
   const handleDragStart = (e, staffId) => {
@@ -508,86 +550,73 @@ const StaffGroupsTab = ({
     );
   };
 
-  const renderConflictMatrix = () => {
-    if (staffGroups.length < 2) return null;
+  const renderGroupRules = () => {
+    if (staffGroups.length === 0) return null;
 
     return (
       <div className="bg-white rounded-xl border border-gray-200 p-6">
         <h3 className="text-lg font-semibold text-gray-800 mb-4">
-          Group Conflicts
+          Automatic Group Conflict Prevention
         </h3>
-        <p className="text-sm text-gray-600 mb-4">
-          Toggle conflicts between groups. Conflicting groups cannot be
-          scheduled for the same shifts.
+        <p className="text-sm text-gray-600 mb-6">
+          All groups automatically prevent staff from having identical shifts on the same day. 
+          This ensures better coverage and prevents everyone in a group from taking the same day off.
         </p>
 
-        <div className="overflow-x-auto">
-          <table className="w-full">
-            <thead>
-              <tr>
-                <td className="p-2"></td>
-                {staffGroups.map((group) => (
-                  <th
-                    key={group.id}
-                    className="p-2 text-center text-sm font-medium"
-                  >
-                    <div className="flex items-center justify-center gap-2">
-                      <div
-                        className="w-3 h-3 rounded-full"
-                        style={{ backgroundColor: group.color }}
-                      />
-                      <span>{group.name}</span>
+        <div className="space-y-4">
+          {staffGroups.map((group) => {
+            const groupMembers = group.members.map(getStaffById).filter(Boolean);
+            
+            return (
+              <div key={group.id} className="border border-gray-200 rounded-lg p-4">
+                <div className="flex items-center justify-between mb-3">
+                  <div className="flex items-center gap-3">
+                    <div
+                      className="w-4 h-4 rounded-full"
+                      style={{ backgroundColor: group.color }}
+                    />
+                    <h4 className="font-medium text-gray-800">{group.name}</h4>
+                    <span className="text-sm text-gray-500">
+                      ({groupMembers.length} members)
+                    </span>
+                  </div>
+                  
+                  <div className="flex items-center gap-2">
+                    <div className="w-5 h-5 bg-green-500 rounded-full flex items-center justify-center">
+                      <span className="text-white text-xs">✓</span>
                     </div>
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {staffGroups.map((group1, i) => (
-                <tr key={group1.id}>
-                  <th className="p-2 text-left text-sm font-medium">
-                    <div className="flex items-center gap-2">
-                      <div
-                        className="w-3 h-3 rounded-full"
-                        style={{ backgroundColor: group1.color }}
-                      />
-                      <span>{group1.name}</span>
-                    </div>
-                  </th>
-                  {staffGroups.map((group2, j) => (
-                    <td key={group2.id} className="p-2 text-center">
-                      {i === j ? (
-                        <div className="w-6 h-6 bg-gray-200 rounded-full mx-auto" />
-                      ) : (
-                        <button
-                          onClick={() =>
-                            toggleConflictRule(group1.id, group2.id)
-                          }
-                          className={`w-6 h-6 rounded-full mx-auto transition-colors ${
-                            hasConflictRule(group1.id, group2.id)
-                              ? "bg-red-500 hover:bg-red-600"
-                              : "bg-gray-200 hover:bg-gray-300"
-                          }`}
-                          title={`Toggle conflict between ${group1.name} and ${group2.name}`}
-                        />
-                      )}
-                    </td>
-                  ))}
-                </tr>
-              ))}
-            </tbody>
-          </table>
+                    <span className="text-sm font-medium text-green-700">
+                      Conflict prevention enabled
+                    </span>
+                  </div>
+                </div>
+
+                <div className="bg-green-50 border border-green-200 rounded-lg p-3">
+                  <p className="text-xs text-green-700">
+                    Staff in this group cannot have the same shift type (early/late/off) on the same day. 
+                    This ensures coverage and prevents scheduling conflicts.
+                  </p>
+                </div>
+
+                {groupMembers.length < 2 && (
+                  <div className="text-xs text-gray-500 italic mt-2">
+                    Add more staff members to fully benefit from conflict prevention
+                  </div>
+                )}
+              </div>
+            );
+          })}
         </div>
 
-        <div className="mt-4 flex items-center gap-4 text-sm text-gray-600">
-          <div className="flex items-center gap-2">
-            <div className="w-3 h-3 bg-red-500 rounded-full" />
-            <span>Conflict enabled</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <div className="w-3 h-3 bg-gray-200 rounded-full" />
-            <span>No conflict</span>
-          </div>
+        <div className="mt-6 p-4 bg-gray-50 rounded-lg">
+          <h5 className="text-sm font-medium text-gray-800 mb-2">How it works:</h5>
+          <ul className="text-xs text-gray-600 space-y-1">
+            <li>• Automatically enabled for all groups - no manual configuration needed</li>
+            <li>• Prevents multiple staff in the same group from taking the same day off</li>
+            <li>• Ensures not everyone in a group works early or late shifts on the same day</li>
+            <li>• Helps maintain coverage while allowing flexibility in scheduling</li>
+            <li>• Rules are enforced during schedule generation and validation</li>
+          </ul>
         </div>
       </div>
     );
@@ -661,8 +690,8 @@ const StaffGroupsTab = ({
         onClose={() => setShowStaffModal(null)}
       />
 
-      {/* Conflict Rules Matrix */}
-      {renderConflictMatrix()}
+      {/* Group Scheduling Rules */}
+      {renderGroupRules()}
     </div>
   );
 };
