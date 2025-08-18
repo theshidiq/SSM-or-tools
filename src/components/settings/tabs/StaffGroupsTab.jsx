@@ -370,9 +370,6 @@ const StaffGroupsTab = ({
                   className="font-semibold text-lg bg-transparent border-b-2 border-blue-500 focus:outline-none w-full mr-2"
                   autoFocus
                 />
-                <p className="text-xs text-gray-500 mt-1">
-                  Press Escape to cancel or use save/cancel buttons
-                </p>
               </div>
             ) : (
               <h3 className="font-semibold text-lg text-gray-800 truncate">
@@ -408,13 +405,15 @@ const StaffGroupsTab = ({
                 <Edit2 size={16} />
               </button>
             )}
-            <button
-              onClick={() => deleteGroup(group.id)}
-              className="p-1.5 text-gray-500 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-              title="Delete Group"
-            >
-              <Trash2 size={16} />
-            </button>
+            {!isEditing && (
+              <button
+                onClick={() => deleteGroup(group.id)}
+                className="p-1.5 text-gray-500 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                title="Delete Group"
+              >
+                <Trash2 size={16} />
+              </button>
+            )}
           </div>
         </div>
 
