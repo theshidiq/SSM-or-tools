@@ -6,6 +6,8 @@ import {
   AlertTriangle,
   Edit2,
   Clock,
+  Check,
+  XCircle,
 } from "lucide-react";
 import FormField from "../shared/FormField";
 import NumberInput from "../shared/NumberInput";
@@ -43,6 +45,9 @@ const DailyLimitsTab = ({
   validationErrors = {},
 }) => {
   const [editingLimit, setEditingLimit] = useState(null);
+  const [originalLimitData, setOriginalLimitData] = useState(null);
+  const [editingMonthlyLimit, setEditingMonthlyLimit] = useState(null);
+  const [originalMonthlyLimitData, setOriginalMonthlyLimitData] = useState(null);
   const [showAddForm, setShowAddForm] = useState(false);
 
   // Ensure dailyLimits and monthlyLimits are arrays (defensive programming)
@@ -57,14 +62,18 @@ const DailyLimitsTab = ({
   // Add escape key listener to exit edit mode
   useEffect(() => {
     const handleKeyDown = (event) => {
-      if (event.key === "Escape" && editingLimit) {
-        setEditingLimit(null);
+      if (event.key === "Escape") {
+        if (editingLimit) {
+          handleCancelDailyEdit();
+        } else if (editingMonthlyLimit) {
+          handleCancelMonthlyEdit();
+        }
       }
     };
 
     document.addEventListener("keydown", handleKeyDown);
     return () => document.removeEventListener("keydown", handleKeyDown);
-  }, [editingLimit]);
+  }, [editingLimit, editingMonthlyLimit]);
 
   const updateDailyLimits = (newLimits) => {
     onSettingsChange({
@@ -80,6 +89,56 @@ const DailyLimitsTab = ({
     });
   };
 
+  // Daily Limits Edit Management
+  const startEditingDailyLimit = (limitId) => {
+    const limit = dailyLimits.find(l => l.id === limitId);
+    if (limit) {
+      setOriginalLimitData({ ...limit });
+      setEditingLimit(limitId);
+    }
+  };
+
+  const handleSaveDailyEdit = () => {
+    setEditingLimit(null);
+    setOriginalLimitData(null);
+  };
+
+  const handleCancelDailyEdit = () => {
+    if (originalLimitData && editingLimit) {
+      const updatedLimits = dailyLimits.map(limit => 
+        limit.id === editingLimit ? originalLimitData : limit
+      );
+      updateDailyLimits(updatedLimits);
+    }
+    setEditingLimit(null);
+    setOriginalLimitData(null);
+  };
+
+  // Monthly Limits Edit Management
+  const startEditingMonthlyLimit = (limitId) => {
+    const limit = monthlyLimits.find(l => l.id === limitId);
+    if (limit) {
+      setOriginalMonthlyLimitData({ ...limit });
+      setEditingMonthlyLimit(limitId);
+    }
+  };
+
+  const handleSaveMonthlyEdit = () => {
+    setEditingMonthlyLimit(null);
+    setOriginalMonthlyLimitData(null);
+  };
+
+  const handleCancelMonthlyEdit = () => {
+    if (originalMonthlyLimitData && editingMonthlyLimit) {
+      const updatedLimits = monthlyLimits.map(limit => 
+        limit.id === editingMonthlyLimit ? originalMonthlyLimitData : limit
+      );
+      updateMonthlyLimits(updatedLimits);
+    }
+    setEditingMonthlyLimit(null);
+    setOriginalMonthlyLimitData(null);
+  };
+
   const createNewDailyLimit = () => {
     const newLimit = {
       id: `daily-limit-${Date.now()}`,
@@ -93,6 +152,7 @@ const DailyLimitsTab = ({
       penaltyWeight: 10,
       description: "",
     };
+    setOriginalLimitData({ ...newLimit });
     setEditingLimit(newLimit.id);
     updateDailyLimits([...dailyLimits, newLimit]);
     setShowAddForm(false);
@@ -107,7 +167,6 @@ const DailyLimitsTab = ({
       scope: "individual",
       targetIds: [],
       distributionRules: {
-        minDaysBetween: 1,
         maxConsecutive: 2,
         preferWeekends: false,
       },
@@ -115,6 +174,8 @@ const DailyLimitsTab = ({
       penaltyWeight: 5,
       description: "",
     };
+    setOriginalMonthlyLimitData({ ...newLimit });
+    setEditingMonthlyLimit(newLimit.id);
     const updatedLimits = [...monthlyLimits, newLimit];
     updateMonthlyLimits(updatedLimits);
   };
@@ -297,22 +358,41 @@ const DailyLimitsTab = ({
           </div>
 
           <div className="flex items-center gap-2">
-            {!isEditing && (
+            {isEditing ? (
+              <div className="flex items-center gap-1">
+                <button
+                  onClick={handleSaveDailyEdit}
+                  className="p-2 text-gray-500 hover:text-green-600 hover:bg-green-50 rounded-lg transition-colors"
+                  title="Save changes"
+                >
+                  <Check size={16} />
+                </button>
+                <button
+                  onClick={handleCancelDailyEdit}
+                  className="p-2 text-gray-500 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                  title="Cancel changes"
+                >
+                  <XCircle size={16} />
+                </button>
+              </div>
+            ) : (
               <button
-                onClick={() => setEditingLimit(limit.id)}
+                onClick={() => startEditingDailyLimit(limit.id)}
                 className="p-2 text-gray-500 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
                 title="Edit"
               >
                 <Edit2 size={16} />
               </button>
             )}
-            <button
-              onClick={() => deleteDailyLimit(limit.id)}
-              className="p-2 text-gray-500 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-              title="Delete"
-            >
-              <Trash2 size={16} />
-            </button>
+            {!isEditing && (
+              <button
+                onClick={() => deleteDailyLimit(limit.id)}
+                className="p-2 text-gray-500 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                title="Delete"
+              >
+                <Trash2 size={16} />
+              </button>
+            )}
           </div>
         </div>
 
@@ -442,6 +522,16 @@ const DailyLimitsTab = ({
   };
 
   const renderMonthlyLimitCard = (limit) => {
+    const isEditing = editingMonthlyLimit === limit.id;
+
+    const MONTHLY_LIMIT_TYPES = [
+      { id: "max_off_days", label: "Max Off Days" },
+      { id: "max_work_days", label: "Max Work Days" },
+      { id: "max_early_shifts", label: "Max Early Shifts" },
+      { id: "max_late_shifts", label: "Max Late Shifts" },
+      { id: "min_off_days", label: "Min Off Days" },
+    ];
+
     return (
       <div
         key={limit.id}
@@ -454,28 +544,162 @@ const DailyLimitsTab = ({
               <Calendar size={20} className="text-green-600" />
             </div>
             <div>
-              <h3 className="text-lg font-semibold text-gray-800">
-                {limit.name}
-              </h3>
+              {isEditing ? (
+                <input
+                  type="text"
+                  value={limit.name}
+                  onChange={(e) =>
+                    updateMonthlyLimit(limit.id, { name: e.target.value })
+                  }
+                  className="text-lg font-semibold bg-transparent border-b-2 border-green-500 focus:outline-none"
+                  autoFocus
+                />
+              ) : (
+                <h3 className="text-lg font-semibold text-gray-800">
+                  {limit.name}
+                </h3>
+              )}
               <p className="text-sm text-gray-600">
-                {limit.limitType.replace(/_/g, " ")} • Max {limit.maxCount} per
-                month
+                {limit.limitType.replace(/_/g, " ")} • Max {limit.maxCount} per month
+                {limit.scope !== "all" && ` • ${limit.scope}`}
               </p>
             </div>
           </div>
 
           <div className="flex items-center gap-2">
-            <button
-              onClick={() => deleteMonthlyLimit(limit.id)}
-              className="p-2 text-gray-500 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-              title="Delete"
-            >
-              <Trash2 size={16} />
-            </button>
+            {isEditing ? (
+              <div className="flex items-center gap-1">
+                <button
+                  onClick={handleSaveMonthlyEdit}
+                  className="p-2 text-gray-500 hover:text-green-600 hover:bg-green-50 rounded-lg transition-colors"
+                  title="Save changes"
+                >
+                  <Check size={16} />
+                </button>
+                <button
+                  onClick={handleCancelMonthlyEdit}
+                  className="p-2 text-gray-500 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                  title="Cancel changes"
+                >
+                  <XCircle size={16} />
+                </button>
+              </div>
+            ) : (
+              <button
+                onClick={() => startEditingMonthlyLimit(limit.id)}
+                className="p-2 text-gray-500 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                title="Edit"
+              >
+                <Edit2 size={16} />
+              </button>
+            )}
+            {!isEditing && (
+              <button
+                onClick={() => deleteMonthlyLimit(limit.id)}
+                className="p-2 text-gray-500 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                title="Delete"
+              >
+                <Trash2 size={16} />
+              </button>
+            )}
           </div>
         </div>
 
-        {limit.description && (
+        {isEditing && (
+          <div className="space-y-4 mb-4">
+            {/* Description */}
+            <FormField label="Description">
+              <textarea
+                value={limit.description}
+                onChange={(e) =>
+                  updateMonthlyLimit(limit.id, { description: e.target.value })
+                }
+                placeholder="Describe this monthly limit rule..."
+                rows={2}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 resize-none"
+              />
+            </FormField>
+
+            {/* Limit Type */}
+            <FormField label="Limit Type">
+              <select
+                value={limit.limitType}
+                onChange={(e) =>
+                  updateMonthlyLimit(limit.id, { limitType: e.target.value })
+                }
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
+              >
+                {MONTHLY_LIMIT_TYPES.map((type) => (
+                  <option key={type.id} value={type.id}>
+                    {type.label}
+                  </option>
+                ))}
+              </select>
+            </FormField>
+
+            {/* Max Count */}
+            <NumberInput
+              label="Count"
+              value={limit.maxCount}
+              min={0}
+              max={31}
+              onChange={(value) =>
+                updateMonthlyLimit(limit.id, { maxCount: value })
+              }
+              description="Maximum count for this limit type per month"
+            />
+
+            {/* Scope */}
+            <FormField label="Apply To">
+              <select
+                value={limit.scope}
+                onChange={(e) =>
+                  updateMonthlyLimit(limit.id, {
+                    scope: e.target.value,
+                    targetIds: [], // Reset targets when scope changes
+                  })
+                }
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
+              >
+                {LIMIT_SCOPES.map((scope) => (
+                  <option key={scope.id} value={scope.id}>
+                    {scope.label}
+                  </option>
+                ))}
+              </select>
+            </FormField>
+
+            {/* Target Selector */}
+            {renderTargetSelector(limit, true)}
+
+            {/* Constraint Settings */}
+            <div className="flex items-center justify-between">
+              <ToggleSwitch
+                label="Hard Constraint"
+                description="Cannot be violated vs. soft preference"
+                checked={limit.isHardConstraint}
+                onChange={(checked) =>
+                  updateMonthlyLimit(limit.id, { isHardConstraint: checked })
+                }
+              />
+            </div>
+
+            {/* Penalty Weight */}
+            <Slider
+              label="Penalty Weight"
+              value={limit.penaltyWeight}
+              min={1}
+              max={100}
+              onChange={(value) =>
+                updateMonthlyLimit(limit.id, { penaltyWeight: value })
+              }
+              description="Higher values make this constraint more important"
+              colorScheme={limit.isHardConstraint ? "red" : "orange"}
+            />
+          </div>
+        )}
+
+        {!isEditing && limit.description && (
           <p className="text-sm text-gray-600 mb-4">{limit.description}</p>
         )}
 
@@ -483,42 +707,24 @@ const DailyLimitsTab = ({
         <div className="space-y-3">
           <h4 className="font-medium text-gray-800">Distribution Rules</h4>
 
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <NumberInput
-                label="Min Days Between"
-                value={limit.distributionRules?.minDaysBetween || 1}
-                min={0}
-                max={7}
-                onChange={(value) =>
-                  updateMonthlyLimit(limit.id, {
-                    distributionRules: {
-                      ...limit.distributionRules,
-                      minDaysBetween: value,
-                    },
-                  })
-                }
-                size="small"
-              />
-            </div>
-
-            <div>
-              <NumberInput
-                label="Max Consecutive"
-                value={limit.distributionRules?.maxConsecutive || 2}
-                min={1}
-                max={7}
-                onChange={(value) =>
-                  updateMonthlyLimit(limit.id, {
-                    distributionRules: {
-                      ...limit.distributionRules,
-                      maxConsecutive: value,
-                    },
-                  })
-                }
-                size="small"
-              />
-            </div>
+          <div className="mb-4">
+            <NumberInput
+              label="Max Consecutive"
+              value={limit.distributionRules?.maxConsecutive || 2}
+              min={1}
+              max={7}
+              onChange={(value) =>
+                updateMonthlyLimit(limit.id, {
+                  distributionRules: {
+                    ...limit.distributionRules,
+                    maxConsecutive: value,
+                  },
+                })
+              }
+              size="small"
+              disabled={!isEditing}
+              description="Maximum consecutive days for this limit type"
+            />
           </div>
 
           <ToggleSwitch
@@ -533,21 +739,24 @@ const DailyLimitsTab = ({
               })
             }
             size="small"
+            disabled={!isEditing}
           />
         </div>
 
-        <div className="mt-4 flex items-center gap-4 text-sm text-gray-600">
-          <span
-            className={`px-2 py-1 rounded text-xs ${
-              limit.isHardConstraint
-                ? "bg-red-100 text-red-700"
-                : "bg-yellow-100 text-yellow-700"
-            }`}
-          >
-            {limit.isHardConstraint ? "Hard" : "Soft"}
-          </span>
-          <span>Weight: {limit.penaltyWeight}</span>
-        </div>
+        {!isEditing && (
+          <div className="mt-4 flex items-center gap-4 text-sm text-gray-600">
+            <span
+              className={`px-2 py-1 rounded text-xs ${
+                limit.isHardConstraint
+                  ? "bg-red-100 text-red-700"
+                  : "bg-yellow-100 text-yellow-700"
+              }`}
+            >
+              {limit.isHardConstraint ? "Hard" : "Soft"}
+            </span>
+            <span>Weight: {limit.penaltyWeight}</span>
+          </div>
+        )}
       </div>
     );
   };

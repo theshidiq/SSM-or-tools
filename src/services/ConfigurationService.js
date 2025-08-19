@@ -123,7 +123,6 @@ export class ConfigurationService {
           scope: "individual",
           targetIds: [],
           distributionRules: {
-            minDaysBetween: 1,
             maxConsecutive: 2,
             preferWeekends: false,
           },
@@ -133,24 +132,8 @@ export class ConfigurationService {
         });
       }
 
-      if (oldLimits.minWorkDaysPerMonth) {
-        migratedSettings.monthlyLimits.push({
-          id: "monthly-limit-work-days",
-          name: "Minimum Work Days Per Month",
-          limitType: "min_work_days",
-          maxCount: oldLimits.minWorkDaysPerMonth.value || 23,
-          scope: "individual",
-          targetIds: [],
-          distributionRules: {
-            minDaysBetween: 0,
-            maxConsecutive: 7,
-            preferWeekends: false,
-          },
-          isHardConstraint: oldLimits.minWorkDaysPerMonth.isHard || true,
-          penaltyWeight: oldLimits.minWorkDaysPerMonth.weight || 60,
-          description: "Minimum number of work days required per staff member per month",
-        });
-      }
+      // Migration for minWorkDaysPerMonth removed - this option is no longer supported
+      // as minimum work days can be calculated as (total days in month - max off days)
 
       needsMigration = true;
     }
@@ -384,7 +367,6 @@ export class ConfigurationService {
           scope: "individual",
           targetIds: [],
           distributionRules: {
-            minDaysBetween: 1,
             maxConsecutive: 2,
             preferWeekends: false,
           },
@@ -392,22 +374,11 @@ export class ConfigurationService {
           penaltyWeight: 40,
           description: "Maximum number of days off allowed per staff member per month",
         },
-        {
-          id: "monthly-limit-work-days",
-          name: "Minimum Work Days Per Month",
-          limitType: "min_work_days",
-          maxCount: 23,
-          scope: "individual",
-          targetIds: [],
-          distributionRules: {
-            minDaysBetween: 0,
-            maxConsecutive: 7,
-            preferWeekends: false,
-          },
-          isHardConstraint: true,
-          penaltyWeight: 60,
-          description: "Minimum number of work days required per staff member per month",
-        },
+      ],
+
+      // Backup Assignments
+      backupAssignments: [
+        // Example: { id: "backup-1", staffId: "中田", groupId: "group-2", createdAt: "2024-01-01T00:00:00.000Z" }
       ],
     };
   }
@@ -501,6 +472,23 @@ export class ConfigurationService {
    */
   updateMonthlyLimits(monthlyLimits) {
     return this.saveSettings({ monthlyLimits });
+  }
+
+  /**
+   * Get backup assignments
+   */
+  getBackupAssignments() {
+    return (
+      this.settings.backupAssignments ||
+      this.getDefaultSettings().backupAssignments
+    );
+  }
+
+  /**
+   * Update backup assignments
+   */
+  updateBackupAssignments(backupAssignments) {
+    return this.saveSettings({ backupAssignments });
   }
 
   /**
