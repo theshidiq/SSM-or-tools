@@ -33,10 +33,8 @@ const SHIFT_TYPES = [
 
 const LIMIT_SCOPES = [
   { id: "all", label: "All Staff" },
-  { id: "position", label: "By Position" },
-  { id: "group", label: "By Group" },
-  { id: "staff_status", label: "By Staff Status" },
-  { id: "individual", label: "Individual Staff" },
+  { id: "staff_status", label: "Staff Status" },
+  { id: "individual", label: "Individual" },
 ];
 
 const DailyLimitsTab = ({
@@ -58,7 +56,6 @@ const DailyLimitsTab = ({
   const monthlyLimits = Array.isArray(settings?.monthlyLimits) 
     ? settings.monthlyLimits 
     : [];
-  const staffGroups = settings?.staffGroups || [];
 
   // Add escape key listener to exit edit mode
   useEffect(() => {
@@ -245,17 +242,6 @@ const DailyLimitsTab = ({
 
   const getTargetOptions = (scope) => {
     switch (scope) {
-      case "position":
-        const activeStaff = getActiveStaffMembers();
-        const positions = [
-          ...new Set(activeStaff.map((s) => s.position).filter(Boolean)),
-        ];
-        return positions.map((pos) => ({ id: pos, label: pos }));
-      case "group":
-        return staffGroups.map((group) => ({
-          id: group.id,
-          label: group.name,
-        }));
       case "staff_status":
         const activeStaffForStatus = getActiveStaffMembers();
         const statuses = [
@@ -313,13 +299,9 @@ const DailyLimitsTab = ({
     return (
       <div className="space-y-2">
         <label className="text-sm font-medium text-gray-700">
-          {limit.scope === "position"
-            ? "Positions"
-            : limit.scope === "group"
-              ? "Groups"
-              : limit.scope === "staff_status"
-                ? "Staff Status"
-                : "Staff Members"}
+          {limit.scope === "staff_status"
+            ? "Staff Status"
+            : "Staff Members"}
         </label>
         <div className="space-y-2 max-h-32 overflow-y-auto border border-gray-200 rounded-lg p-2">
           {options.map((option) => (
@@ -592,7 +574,7 @@ const DailyLimitsTab = ({
                 </h3>
               )}
               <p className="text-sm text-gray-600">
-                {limit.limitType.replace(/_/g, " ")} • Max {limit.maxCount} per month
+                {limit.limitType.replace(/_/g, " ")} • Max {limit.maxCount % 1 === 0 ? Math.floor(limit.maxCount) : limit.maxCount} per month
                 {limit.scope !== "all" && ` • ${limit.scope}`}
               </p>
             </div>
@@ -675,10 +657,15 @@ const DailyLimitsTab = ({
               value={limit.maxCount}
               min={0}
               max={31}
+              step={limit.limitType === "max_off_days" ? 0.5 : 1}
               onChange={(value) =>
                 updateMonthlyLimit(limit.id, { maxCount: value })
               }
-              description="Maximum count for this limit type per month"
+              description={
+                limit.limitType === "max_off_days"
+                  ? "Maximum count for this limit type per month (supports half-days: 6.5, 7, 7.5, etc.)"
+                  : "Maximum count for this limit type per month"
+              }
             />
 
             {/* Scope */}
