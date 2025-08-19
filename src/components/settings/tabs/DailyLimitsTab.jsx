@@ -35,6 +35,7 @@ const LIMIT_SCOPES = [
   { id: "all", label: "All Staff" },
   { id: "position", label: "By Position" },
   { id: "group", label: "By Group" },
+  { id: "staff_status", label: "By Staff Status" },
   { id: "individual", label: "Individual Staff" },
 ];
 
@@ -221,11 +222,33 @@ const DailyLimitsTab = ({
     updateDailyLimit(limitId, { daysOfWeek: updatedDays });
   };
 
+  // Get active staff members (filter out those with endPeriod in the past)
+  const getActiveStaffMembers = () => {
+    return staffMembers.filter((staff) => {
+      // Check if staff has an end period - if so, they are inactive
+      if (staff.endPeriod) {
+        // Create end date and check if it's in the past
+        const staffEndDate = new Date(
+          Date.UTC(
+            staff.endPeriod.year,
+            staff.endPeriod.month - 1, // month is 0-indexed
+            staff.endPeriod.day || 31,
+          ),
+        );
+        const today = new Date();
+        return staffEndDate >= today;
+      }
+      // Staff without endPeriod are considered active
+      return true;
+    });
+  };
+
   const getTargetOptions = (scope) => {
     switch (scope) {
       case "position":
+        const activeStaff = getActiveStaffMembers();
         const positions = [
-          ...new Set(staffMembers.map((s) => s.position).filter(Boolean)),
+          ...new Set(activeStaff.map((s) => s.position).filter(Boolean)),
         ];
         return positions.map((pos) => ({ id: pos, label: pos }));
       case "group":
@@ -233,8 +256,15 @@ const DailyLimitsTab = ({
           id: group.id,
           label: group.name,
         }));
+      case "staff_status":
+        const activeStaffForStatus = getActiveStaffMembers();
+        const statuses = [
+          ...new Set(activeStaffForStatus.map((s) => s.status).filter(Boolean)),
+        ];
+        return statuses.map((status) => ({ id: status, label: status }));
       case "individual":
-        return staffMembers.map((staff) => ({
+        const activeStaffForIndividual = getActiveStaffMembers();
+        return activeStaffForIndividual.map((staff) => ({
           id: staff.id,
           label: staff.name,
         }));
@@ -287,7 +317,9 @@ const DailyLimitsTab = ({
             ? "Positions"
             : limit.scope === "group"
               ? "Groups"
-              : "Staff Members"}
+              : limit.scope === "staff_status"
+                ? "Staff Status"
+                : "Staff Members"}
         </label>
         <div className="space-y-2 max-h-32 overflow-y-auto border border-gray-200 rounded-lg p-2">
           {options.map((option) => (
