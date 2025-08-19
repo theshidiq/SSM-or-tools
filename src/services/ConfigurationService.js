@@ -38,6 +38,10 @@ export class ConfigurationService {
     let needsMigration = false;
     const migratedSettings = { ...settings };
 
+    // Current migration version - increment this when adding new migrations
+    const CURRENT_MIGRATION_VERSION = 2;
+    const currentVersion = settings.migrationVersion || 0;
+
     // Migrate dailyLimits from object to array format
     if (settings.dailyLimits && !Array.isArray(settings.dailyLimits)) {
       console.log("Migrating dailyLimits from object to array format");
@@ -128,13 +132,57 @@ export class ConfigurationService {
           },
           isHardConstraint: oldLimits.maxOffDaysPerMonth.isHard || false,
           penaltyWeight: oldLimits.maxOffDaysPerMonth.weight || 40,
-          description: "Maximum number of days off allowed per staff member per month",
+          description:
+            "Maximum number of days off allowed per staff member per month",
         });
       }
 
       // Migration for minWorkDaysPerMonth removed - this option is no longer supported
       // as minimum work days can be calculated as (total days in month - max off days)
 
+      needsMigration = true;
+    }
+
+    // Migration v2: Clean up existing array-format monthlyLimits to remove deprecated "min_work_days" entries
+    if (
+      currentVersion < 2 &&
+      settings.monthlyLimits &&
+      Array.isArray(settings.monthlyLimits)
+    ) {
+      console.log(
+        "Running migration v2: Removing deprecated minimum work days limits",
+      );
+      const originalLength = settings.monthlyLimits.length;
+      migratedSettings.monthlyLimits = settings.monthlyLimits.filter(
+        (limit) => {
+          // Remove any limits with limitType "min_work_days" or containing "Minimum Work Days"
+          const isMinWorkDaysLimit =
+            limit.limitType === "min_work_days" ||
+            (limit.name && limit.name.includes("Minimum Work Days")) ||
+            (limit.id && limit.id.includes("min-work-days"));
+
+          if (isMinWorkDaysLimit) {
+            console.log(
+              `Removing deprecated monthly limit: ${limit.name || limit.id}`,
+            );
+            return false;
+          }
+          return true;
+        },
+      );
+
+      // Mark as needing migration if we removed any entries
+      if (migratedSettings.monthlyLimits.length !== originalLength) {
+        console.log(
+          `Cleaned up ${originalLength - migratedSettings.monthlyLimits.length} deprecated monthly limit(s)`,
+        );
+        needsMigration = true;
+      }
+    }
+
+    // Update migration version if any migration ran or if version is outdated
+    if (needsMigration || currentVersion < CURRENT_MIGRATION_VERSION) {
+      migratedSettings.migrationVersion = CURRENT_MIGRATION_VERSION;
       needsMigration = true;
     }
 
@@ -204,6 +252,9 @@ export class ConfigurationService {
    */
   getDefaultSettings() {
     return {
+      // Migration version
+      migrationVersion: 2,
+
       // Staff Groups
       staffGroups: [
         {
@@ -372,7 +423,8 @@ export class ConfigurationService {
           },
           isHardConstraint: false,
           penaltyWeight: 40,
-          description: "Maximum number of days off allowed per staff member per month",
+          description:
+            "Maximum number of days off allowed per staff member per month",
         },
       ],
 
@@ -489,6 +541,71 @@ export class ConfigurationService {
    */
   updateBackupAssignments(backupAssignments) {
     return this.saveSettings({ backupAssignments });
+  }
+
+  /**
+   * Force migration of existing data (useful for testing or manual cleanup)
+   */
+  forceMigration() {
+    try {
+      const stored = localStorage.getItem(STORAGE_KEY);
+      if (stored) {
+        const settings = JSON.parse(stored);
+        // Set migration version to 0 to force re-migration
+        settings.migrationVersion = 0;
+        const migrated = this.migrateSettings(settings);
+        this.settings = migrated;
+        console.log("Forced migration completed successfully");
+        return { success: true };
+      }
+      return { success: false, error: "No settings found to migrate" };
+    } catch (error) {
+      console.error("Failed to force migration:", error);
+      return { success: false, error: error.message };
+    }
+  }
+
+  /**
+   * Check if data has deprecated entries that need cleanup
+   */
+  hasDeprecatedEntries() {
+    const monthlyLimits = this.getMonthlyLimits();
+    return monthlyLimits.some(
+      (limit) =>
+        limit.limitType === "min_work_days" ||
+        (limit.name && limit.name.includes("Minimum Work Days")) ||
+        (limit.id && limit.id.includes("min-work-days")),
+    );
+  }
+
+  /**
+   * Debug method to check current storage state (for browser console)
+   */
+  debugStorageState() {
+    console.log("🔍 Current storage state:");
+    console.log("Migration version:", this.settings.migrationVersion || "none");
+    console.log("Monthly limits:", this.getMonthlyLimits().length);
+
+    const deprecatedLimits = this.getMonthlyLimits().filter(
+      (limit) =>
+        limit.limitType === "min_work_days" ||
+        (limit.name && limit.name.includes("Minimum Work Days")) ||
+        (limit.id && limit.id.includes("min-work-days")),
+    );
+
+    if (deprecatedLimits.length > 0) {
+      console.warn("⚠️ Found deprecated limits:", deprecatedLimits);
+      console.log("To fix: Call configService.forceMigration()");
+    } else {
+      console.log("✅ No deprecated limits found");
+    }
+
+    return {
+      migrationVersion: this.settings.migrationVersion,
+      totalMonthlyLimits: this.getMonthlyLimits().length,
+      deprecatedLimits: deprecatedLimits.length,
+      hasDeprecatedEntries: deprecatedLimits.length > 0,
+    };
   }
 
   /**
