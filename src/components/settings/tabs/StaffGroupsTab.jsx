@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useMemo } from "react";
 import {
   Plus,
   Trash2,
@@ -14,6 +14,7 @@ import {
   ChevronDown,
 } from "lucide-react";
 import FormField from "../shared/FormField";
+import ConfirmationModal from "../shared/ConfirmationModal";
 
 const PRESET_COLORS = [
   "#3B82F6",
@@ -59,24 +60,43 @@ const StaffGroupsTab = ({
   const [draggedStaff, setDraggedStaff] = useState(null);
   const [dragOverGroup, setDragOverGroup] = useState(null);
   const [showStaffModal, setShowStaffModal] = useState(null); // null or groupId
+  const [deleteConfirmation, setDeleteConfirmation] = useState(null); // null or { groupId, groupName }
+  const [isDeleting, setIsDeleting] = useState(false);
 
-  const staffGroups = settings?.staffGroups || [];
-  const conflictRules = settings?.conflictRules || [];
-  const backupAssignments = settings?.backupAssignments || [];
+  // Debug logging for props and re-renders
+  useEffect(() => {
+    console.log('[DEBUG] StaffGroupsTab - Component rendered/re-rendered');
+    console.log('[DEBUG] StaffGroupsTab - Current settings.staffGroups:', settings?.staffGroups?.map(g => ({ id: g.id, name: g.name })) || 'No staffGroups');
+  });
 
-  const updateConflictRules = useCallback((newRules) => {
-    onSettingsChange({
-      ...settings,
-      conflictRules: newRules,
-    });
-  }, [settings, onSettingsChange]);
+  useEffect(() => {
+    console.log('[DEBUG] StaffGroupsTab - settings prop changed:', settings?.staffGroups?.map(g => ({ id: g.id, name: g.name })) || 'No staffGroups');
+  }, [settings]);
 
-  const updateBackupAssignments = useCallback((newAssignments) => {
-    onSettingsChange({
-      ...settings,
-      backupAssignments: newAssignments,
-    });
-  }, [settings, onSettingsChange]);
+  // Fix: Memoize derived arrays to prevent unnecessary re-renders
+  const staffGroups = useMemo(() => settings?.staffGroups || [], [settings?.staffGroups]);
+  const conflictRules = useMemo(() => settings?.conflictRules || [], [settings?.conflictRules]);
+  const backupAssignments = useMemo(() => settings?.backupAssignments || [], [settings?.backupAssignments]);
+
+  const updateConflictRules = useCallback(
+    (newRules) => {
+      onSettingsChange({
+        ...settings,
+        conflictRules: newRules,
+      });
+    },
+    [settings, onSettingsChange],
+  );
+
+  const updateBackupAssignments = useCallback(
+    (newAssignments) => {
+      onSettingsChange({
+        ...settings,
+        backupAssignments: newAssignments,
+      });
+    },
+    [settings, onSettingsChange],
+  );
 
   // Automatically ensure all groups have intra-group conflict rules enabled
   useEffect(() => {
@@ -84,10 +104,10 @@ const StaffGroupsTab = ({
       const updatedRules = [...conflictRules];
       let hasChanges = false;
 
-      staffGroups.forEach(group => {
+      staffGroups.forEach((group) => {
         const ruleId = `intra-${group.id}`;
-        const existingRule = conflictRules.find(rule => rule.id === ruleId);
-        
+        const existingRule = conflictRules.find((rule) => rule.id === ruleId);
+
         if (!existingRule) {
           const newRule = {
             id: ruleId,
@@ -97,7 +117,8 @@ const StaffGroupsTab = ({
             constraint: "prevent_same_shift_same_day",
             isHardConstraint: true,
             penaltyWeight: 15,
-            description: "Prevents staff in the same group from having identical shifts on the same day"
+            description:
+              "Prevents staff in the same group from having identical shifts on the same day",
           };
           updatedRules.push(newRule);
           hasChanges = true;
@@ -112,6 +133,18 @@ const StaffGroupsTab = ({
     ensureIntraGroupRules();
   }, [staffGroups, conflictRules, updateConflictRules]);
 
+  // Cancel changes and restore original data - MOVED UP to resolve hoisting issue
+  const handleCancelEdit = useCallback(() => {
+    if (originalGroupData && editingGroup) {
+      const updatedGroups = staffGroups.map((group) =>
+        group.id === editingGroup ? originalGroupData : group,
+      );
+      updateStaffGroups(updatedGroups);
+    }
+    setEditingGroup(null);
+    setOriginalGroupData(null);
+  }, [originalGroupData, editingGroup, staffGroups, updateStaffGroups]);
+
   // Add escape key listener to exit edit mode
   useEffect(() => {
     const handleKeyDown = (event) => {
@@ -122,18 +155,30 @@ const StaffGroupsTab = ({
 
     document.addEventListener("keydown", handleKeyDown);
     return () => document.removeEventListener("keydown", handleKeyDown);
-  }, [editingGroup]);
+  }, [editingGroup, handleCancelEdit]);
 
-  const updateStaffGroups = (newGroups) => {
-    onSettingsChange({
-      ...settings,
-      staffGroups: newGroups,
-    });
-  };
+  const updateStaffGroups = useCallback(async (newGroups) => {
+    try {
+      console.log('[DEBUG] updateStaffGroups called with:', newGroups.map(g => ({ id: g.id, name: g.name })));
+      console.log('[DEBUG] Current settings before update:', settings?.staffGroups?.map(g => ({ id: g.id, name: g.name })) || 'No staffGroups');
+      
+      const updatedSettings = {
+        ...settings,
+        staffGroups: newGroups,
+      };
+      
+      console.log('[DEBUG] Calling onSettingsChange with updated settings');
+      onSettingsChange(updatedSettings);
+      console.log('[DEBUG] onSettingsChange completed successfully');
+    } catch (error) {
+      console.error('[DEBUG] Error updating staff groups:', error);
+      throw error;
+    }
+  }, [settings, onSettingsChange]);
 
   // Start editing a group and save original data for cancel
   const startEditingGroup = (groupId) => {
-    const group = staffGroups.find(g => g.id === groupId);
+    const group = staffGroups.find((g) => g.id === groupId);
     if (group) {
       setOriginalGroupData({ ...group });
       setEditingGroup(groupId);
@@ -145,19 +190,6 @@ const StaffGroupsTab = ({
     setEditingGroup(null);
     setOriginalGroupData(null);
   };
-
-  // Cancel changes and restore original data
-  const handleCancelEdit = () => {
-    if (originalGroupData && editingGroup) {
-      const updatedGroups = staffGroups.map(group => 
-        group.id === editingGroup ? originalGroupData : group
-      );
-      updateStaffGroups(updatedGroups);
-    }
-    setEditingGroup(null);
-    setOriginalGroupData(null);
-  };
-
 
   // Get the next available color, avoiding recently used ones
   const getNextAvailableColor = () => {
@@ -184,7 +216,7 @@ const StaffGroupsTab = ({
     };
     setEditingGroup(newGroup.id);
     updateStaffGroups([...staffGroups, newGroup]);
-    
+
     // Automatically enable intra-group conflict rule for the new group
     // Note: The useEffect will handle adding the rule once the group is in state
   };
@@ -197,20 +229,56 @@ const StaffGroupsTab = ({
   };
 
   const deleteGroup = (groupId) => {
-    if (
-      window.confirm(
-        "Are you sure you want to delete this group? This action cannot be undone.",
-      )
-    ) {
+    console.log('[DEBUG] deleteGroup called with:', { groupId });
+    const group = staffGroups.find((g) => g.id === groupId);
+    console.log('[DEBUG] Found group:', { group });
+    if (group) {
+      console.log('[DEBUG] Setting delete confirmation state');
+      setDeleteConfirmation({ groupId, groupName: group.name });
+    } else {
+      console.error('[DEBUG] Group not found for deletion');
+    }
+  };
+
+  const handleDeleteConfirm = async () => {
+    console.log('[DEBUG] handleDeleteConfirm called with deleteConfirmation:', deleteConfirmation);
+    if (!deleteConfirmation) {
+      console.error('[DEBUG] No deleteConfirmation state found');
+      return;
+    }
+    
+    setIsDeleting(true);
+    try {
+      const { groupId } = deleteConfirmation;
+      console.log('[DEBUG] Deleting group with ID:', groupId);
+      console.log('[DEBUG] Current staffGroups before deletion:', staffGroups.map(g => ({ id: g.id, name: g.name })));
+      
       const updatedGroups = staffGroups.filter((group) => group.id !== groupId);
-      updateStaffGroups(updatedGroups);
+      console.log('[DEBUG] Updated groups after filtering:', updatedGroups.map(g => ({ id: g.id, name: g.name })));
+      
+      await updateStaffGroups(updatedGroups);
+      console.log('[DEBUG] updateStaffGroups completed successfully');
 
       // Remove related intra-group conflict rules
       const updatedRules = conflictRules.filter(
-        (rule) => !(rule.type === 'intra_group_conflict' && rule.groupId === groupId),
+        (rule) =>
+          !(rule.type === "intra_group_conflict" && rule.groupId === groupId),
       );
+      console.log('[DEBUG] Updating conflict rules:', updatedRules.length, 'rules remain');
       updateConflictRules(updatedRules);
+      
+      console.log('[DEBUG] Clearing delete confirmation state');
+      setDeleteConfirmation(null);
+    } catch (error) {
+      console.error('[DEBUG] Error deleting group:', error);
+    } finally {
+      console.log('[DEBUG] Setting isDeleting to false');
+      setIsDeleting(false);
     }
+  };
+
+  const handleDeleteCancel = () => {
+    setDeleteConfirmation(null);
   };
 
   const addStaffToGroup = (groupId, staffId) => {
@@ -248,7 +316,7 @@ const StaffGroupsTab = ({
 
   const removeBackupAssignment = (assignmentId) => {
     const updatedAssignments = backupAssignments.filter(
-      (assignment) => assignment.id !== assignmentId
+      (assignment) => assignment.id !== assignmentId,
     );
     updateBackupAssignments(updatedAssignments);
   };
@@ -266,21 +334,24 @@ const StaffGroupsTab = ({
   const canStaffBackupGroup = (staffId, groupId) => {
     const group = staffGroups.find((g) => g.id === groupId);
     if (!group) return false;
-    
+
     // Staff cannot backup a group they are already a member of
     return !group.members.includes(staffId);
   };
 
   // Get backup assignments for a specific group
   const getBackupAssignmentsForGroup = (groupId) => {
-    return backupAssignments.filter((assignment) => assignment.groupId === groupId);
+    return backupAssignments.filter(
+      (assignment) => assignment.groupId === groupId,
+    );
   };
 
   // Get backup assignments for a specific staff member
   const getBackupAssignmentsForStaff = (staffId) => {
-    return backupAssignments.filter((assignment) => assignment.staffId === staffId);
+    return backupAssignments.filter(
+      (assignment) => assignment.staffId === staffId,
+    );
   };
-
 
   const getGroupById = (id) => staffGroups.find((group) => group.id === id);
   const getStaffById = (id) => staffMembers.find((staff) => staff.id === id);
@@ -315,14 +386,21 @@ const StaffGroupsTab = ({
     return activeStaff.filter((staff) => !groupMemberIds.has(staff.id));
   };
 
-
   // Update drag start to only work on active staff
   const handleDragStart = (e, staffId) => {
     const staff = getStaffById(staffId);
     // Check if staff is active using the same logic as getActiveStaffMembers
-    const isActive = staff && (!staff.endPeriod || 
-      new Date(Date.UTC(staff.endPeriod.year, staff.endPeriod.month - 1, staff.endPeriod.day || 31)) >= new Date());
-    
+    const isActive =
+      staff &&
+      (!staff.endPeriod ||
+        new Date(
+          Date.UTC(
+            staff.endPeriod.year,
+            staff.endPeriod.month - 1,
+            staff.endPeriod.day || 31,
+          ),
+        ) >= new Date());
+
     if (isActive) {
       setDraggedStaff(staffId);
       e.dataTransfer.effectAllowed = "move";
@@ -356,8 +434,9 @@ const StaffGroupsTab = ({
     const [selectedGroupId, setSelectedGroupId] = useState("");
 
     const activeStaff = getActiveStaffMembers();
-    const availableStaffForSelectedGroup = selectedGroupId ? 
-      getAvailableBackupStaffForGroup(selectedGroupId) : activeStaff;
+    const availableStaffForSelectedGroup = selectedGroupId
+      ? getAvailableBackupStaffForGroup(selectedGroupId)
+      : activeStaff;
 
     const handleAddBackup = () => {
       if (selectedStaffId && selectedGroupId) {
@@ -369,7 +448,9 @@ const StaffGroupsTab = ({
       }
     };
 
-    const isAddButtonDisabled = !selectedStaffId || !selectedGroupId || 
+    const isAddButtonDisabled =
+      !selectedStaffId ||
+      !selectedGroupId ||
       !canStaffBackupGroup(selectedStaffId, selectedGroupId);
 
     return (
@@ -379,15 +460,21 @@ const StaffGroupsTab = ({
             <Shield size={24} className="text-orange-600" />
           </div>
           <div>
-            <h3 className="text-xl font-semibold text-gray-800">Backup Group Management</h3>
-            <p className="text-gray-600">Assign staff members as backups for specific groups</p>
+            <h3 className="text-xl font-semibold text-gray-800">
+              Backup Group Management
+            </h3>
+            <p className="text-gray-600">
+              Assign staff members as backups for specific groups
+            </p>
           </div>
         </div>
 
         {/* Add New Backup Assignment */}
         <div className="bg-gray-50 rounded-lg p-4 mb-6">
-          <h4 className="text-lg font-medium text-gray-800 mb-4">Add New Backup Assignment</h4>
-          
+          <h4 className="text-lg font-medium text-gray-800 mb-4">
+            Add New Backup Assignment
+          </h4>
+
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-end">
             {/* Staff Selection */}
             <div>
@@ -407,7 +494,10 @@ const StaffGroupsTab = ({
                     </option>
                   ))}
                 </select>
-                <ChevronDown size={16} className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 pointer-events-none" />
+                <ChevronDown
+                  size={16}
+                  className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 pointer-events-none"
+                />
               </div>
             </div>
 
@@ -429,7 +519,10 @@ const StaffGroupsTab = ({
                     </option>
                   ))}
                 </select>
-                <ChevronDown size={16} className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 pointer-events-none" />
+                <ChevronDown
+                  size={16}
+                  className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 pointer-events-none"
+                />
               </div>
             </div>
 
@@ -450,22 +543,27 @@ const StaffGroupsTab = ({
             </div>
           </div>
 
-          {selectedStaffId && selectedGroupId && !canStaffBackupGroup(selectedStaffId, selectedGroupId) && (
-            <div className="mt-3 p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
-              <div className="flex items-center gap-2">
-                <AlertTriangle size={16} className="text-yellow-600" />
-                <span className="text-sm text-yellow-800">
-                  This staff member is already in the selected group and cannot be assigned as a backup.
-                </span>
+          {selectedStaffId &&
+            selectedGroupId &&
+            !canStaffBackupGroup(selectedStaffId, selectedGroupId) && (
+              <div className="mt-3 p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
+                <div className="flex items-center gap-2">
+                  <AlertTriangle size={16} className="text-yellow-600" />
+                  <span className="text-sm text-yellow-800">
+                    This staff member is already in the selected group and
+                    cannot be assigned as a backup.
+                  </span>
+                </div>
               </div>
-            </div>
-          )}
+            )}
         </div>
 
         {/* Current Backup Assignments */}
         <div>
-          <h4 className="text-lg font-medium text-gray-800 mb-4">Current Backup Assignments</h4>
-          
+          <h4 className="text-lg font-medium text-gray-800 mb-4">
+            Current Backup Assignments
+          </h4>
+
           {backupAssignments.length === 0 ? (
             <div className="text-center py-8">
               <Shield size={48} className="mx-auto text-gray-400 mb-3" />
@@ -479,7 +577,7 @@ const StaffGroupsTab = ({
               {backupAssignments.map((assignment) => {
                 const staff = getStaffById(assignment.staffId);
                 const group = getGroupById(assignment.groupId);
-                
+
                 if (!staff || !group) return null;
 
                 return (
@@ -493,20 +591,24 @@ const StaffGroupsTab = ({
                           {staff.name?.charAt(0)}
                         </div>
                         <div>
-                          <p className="font-medium text-gray-800">{staff.name}</p>
+                          <p className="font-medium text-gray-800">
+                            {staff.name}
+                          </p>
                           <p className="text-sm text-gray-600">Staff Member</p>
                         </div>
                       </div>
-                      
+
                       <div className="text-gray-400">→</div>
-                      
+
                       <div className="flex items-center gap-3">
                         <div
                           className="w-4 h-4 rounded-full border-2 border-white shadow-sm"
                           style={{ backgroundColor: group.color }}
                         />
                         <div>
-                          <p className="font-medium text-gray-800">{group.name}</p>
+                          <p className="font-medium text-gray-800">
+                            {group.name}
+                          </p>
                           <p className="text-sm text-gray-600">Backup Group</p>
                         </div>
                       </div>
@@ -542,7 +644,7 @@ const StaffGroupsTab = ({
     };
 
     return (
-      <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+      <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[40000]">
         <div className="bg-white rounded-xl w-full max-w-md p-6 shadow-2xl">
           <div className="flex items-center justify-between mb-4">
             <h3 className="text-lg font-semibold text-gray-800">
@@ -598,6 +700,7 @@ const StaffGroupsTab = ({
   };
 
   const renderGroupCard = (group) => {
+    console.log('[DEBUG] renderGroupCard called for group:', { id: group.id, name: group.name });
     const isEditing = editingGroup === group.id;
     const groupMembers = group.members.map(getStaffById).filter(Boolean);
 
@@ -697,7 +800,6 @@ const StaffGroupsTab = ({
           <p className="text-sm text-gray-600 mb-4">{group.description}</p>
         )}
 
-
         {/* Staff Members */}
         <div className="space-y-2">
           <div className="flex items-center justify-between">
@@ -753,7 +855,6 @@ const StaffGroupsTab = ({
     );
   };
 
-
   return (
     <div className="p-6 space-y-8">
       {/* Header */}
@@ -793,7 +894,10 @@ const StaffGroupsTab = ({
       {/* Staff Groups */}
       {staffGroups.length > 0 ? (
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6">
-          {staffGroups.map(renderGroupCard)}
+          {(() => {
+            console.log('[DEBUG] Rendering grid with staffGroups:', staffGroups.map(g => ({ id: g.id, name: g.name })));
+            return staffGroups.map(renderGroupCard);
+          })()}
         </div>
       ) : (
         <div className="text-center py-12">
@@ -824,7 +928,25 @@ const StaffGroupsTab = ({
         isOpen={showStaffModal !== null}
         onClose={() => setShowStaffModal(null)}
       />
-
+      
+      {/* Delete Confirmation Modal */}
+      <ConfirmationModal
+        isOpen={deleteConfirmation !== null}
+        onClose={() => {
+          console.log('[DEBUG] ConfirmationModal onClose called');
+          handleDeleteCancel();
+        }}
+        onConfirm={() => {
+          console.log('[DEBUG] ConfirmationModal onConfirm called');
+          handleDeleteConfirm();
+        }}
+        title="Delete Staff Group"
+        message={`Are you sure you want to delete the group "${deleteConfirmation?.groupName}"? This action cannot be undone and will also remove any related conflict rules.`}
+        confirmText="Delete Group"
+        cancelText="Cancel"
+        variant="danger"
+        isLoading={isDeleting}
+      />
     </div>
   );
 };

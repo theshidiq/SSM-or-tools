@@ -700,7 +700,7 @@ export const validateCoverageCompensation = async (
       scheduleData,
       dateKey,
       staffMembers,
-      group2
+      group2,
     );
     violations.push(...legacyResult.violations);
   }
@@ -711,7 +711,7 @@ export const validateCoverageCompensation = async (
     dateKey,
     staffMembers,
     staffGroups,
-    backupAssignments
+    backupAssignments,
   );
   violations.push(...generalResult.violations);
 
@@ -729,9 +729,14 @@ export const validateCoverageCompensation = async (
  * @param {Object} group2 - Group 2 configuration
  * @returns {Object} Validation result
  */
-const validateLegacyCoverageRule = async (scheduleData, dateKey, staffMembers, group2) => {
+const validateLegacyCoverageRule = async (
+  scheduleData,
+  dateKey,
+  staffMembers,
+  group2,
+) => {
   const violations = [];
-  
+
   if (!group2.coverageRule) {
     return { valid: true, violations: [] };
   }
@@ -782,7 +787,7 @@ const validateLegacyCoverageRule = async (scheduleData, dateKey, staffMembers, g
           backupShift,
           requiredShift: "working",
           coverageRule: group2.coverageRule,
-          validationType: "legacy"
+          validationType: "legacy",
         },
       });
     }
@@ -805,13 +810,13 @@ const validateGeneralBackupAssignments = async (
   dateKey,
   staffMembers,
   staffGroups,
-  backupAssignments
+  backupAssignments,
 ) => {
   const violations = [];
-  
+
   // Group backup assignments by group ID
   const backupsByGroup = new Map();
-  backupAssignments.forEach(assignment => {
+  backupAssignments.forEach((assignment) => {
     if (!backupsByGroup.has(assignment.groupId)) {
       backupsByGroup.set(assignment.groupId, []);
     }
@@ -819,21 +824,25 @@ const validateGeneralBackupAssignments = async (
   });
 
   // Check each group
-  staffGroups.forEach(group => {
+  staffGroups.forEach((group) => {
     const groupBackups = backupsByGroup.get(group.id) || [];
     if (groupBackups.length === 0) return; // No backup staff for this group
 
     // Find group members with day off
     const membersOff = [];
-    group.members.forEach(memberId => {
-      const staff = staffMembers.find(s => s.id === memberId);
-      if (staff && scheduleData[memberId] && scheduleData[memberId][dateKey] !== undefined) {
+    group.members.forEach((memberId) => {
+      const staff = staffMembers.find((s) => s.id === memberId);
+      if (
+        staff &&
+        scheduleData[memberId] &&
+        scheduleData[memberId][dateKey] !== undefined
+      ) {
         const shift = scheduleData[memberId][dateKey];
         if (isOffDay(shift)) {
           membersOff.push({
             staffId: memberId,
             staffName: staff.name,
-            shift
+            shift,
           });
         }
       }
@@ -843,23 +852,23 @@ const validateGeneralBackupAssignments = async (
     if (membersOff.length > 0) {
       const workingBackups = [];
       const availableBackups = [];
-      
-      groupBackups.forEach(backupStaffId => {
-        const backupStaff = staffMembers.find(s => s.id === backupStaffId);
+
+      groupBackups.forEach((backupStaffId) => {
+        const backupStaff = staffMembers.find((s) => s.id === backupStaffId);
         if (backupStaff && scheduleData[backupStaffId]) {
           const backupShift = scheduleData[backupStaffId][dateKey];
-          
+
           if (isWorkingShift(backupShift)) {
             workingBackups.push({
               staffId: backupStaffId,
               staffName: backupStaff.name,
-              shift: backupShift
+              shift: backupShift,
             });
           } else {
             availableBackups.push({
               staffId: backupStaffId,
               staffName: backupStaff.name,
-              shift: backupShift
+              shift: backupShift,
             });
           }
         }
@@ -870,15 +879,15 @@ const validateGeneralBackupAssignments = async (
         violations.push({
           type: VIOLATION_TYPES.COVERAGE_COMPENSATION_VIOLATION,
           date: dateKey,
-          message: `Backup staff not assigned for ${group.name} on ${dateKey}: ${membersOff.map(m => m.staffName).join(", ")} off but backup staff not working`,
+          message: `Backup staff not assigned for ${group.name} on ${dateKey}: ${membersOff.map((m) => m.staffName).join(", ")} off but backup staff not working`,
           severity: "medium",
           details: {
             groupId: group.id,
             groupName: group.name,
-            groupMembersOff: membersOff.map(m => m.staffName),
-            backupStaffAvailable: availableBackups.map(b => b.staffName),
-            backupStaffWorking: workingBackups.map(b => b.staffName),
-            validationType: "general_backup"
+            groupMembersOff: membersOff.map((m) => m.staffName),
+            backupStaffAvailable: availableBackups.map((b) => b.staffName),
+            backupStaffWorking: workingBackups.map((b) => b.staffName),
+            validationType: "general_backup",
           },
         });
       }

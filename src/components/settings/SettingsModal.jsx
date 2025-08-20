@@ -1,27 +1,21 @@
 import React, { useState, useEffect, useRef } from "react";
-import {
-  X,
-  RotateCcw,
-  AlertTriangle,
-  Check,
-} from "lucide-react";
+import { X, RotateCcw, AlertTriangle, Check } from "lucide-react";
 
 // Import tab components
 import StaffGroupsTab from "./tabs/StaffGroupsTab";
 import DailyLimitsTab from "./tabs/DailyLimitsTab";
 import PriorityRulesTab from "./tabs/PriorityRulesTab";
 import MLParametersTab from "./tabs/MLParametersTab";
-import ConstraintWeightsTab from "./tabs/ConstraintWeightsTab";
 
 // Import shared components
 import TabButton from "./shared/TabButton";
+import ConfirmationModal from "./shared/ConfirmationModal";
 
 const TABS = [
   { id: "staff-groups", label: "Staff Groups", icon: "👥" },
   { id: "daily-limits", label: "Daily Limits", icon: "📅" },
   { id: "priority-rules", label: "Priority Rules", icon: "⭐" },
   { id: "ml-parameters", label: "ML Parameters", icon: "🤖" },
-  { id: "constraint-weights", label: "Weights", icon: "⚖️" },
 ];
 
 const SettingsModal = ({
@@ -46,6 +40,8 @@ const SettingsModal = ({
 }) => {
   const [activeTab, setActiveTab] = useState("staff-groups");
   const [isVisible, setIsVisible] = useState(false);
+  const [resetConfirmation, setResetConfirmation] = useState(false);
+  const [isResetting, setIsResetting] = useState(false);
   const modalRef = useRef(null);
 
   useEffect(() => {
@@ -78,11 +74,11 @@ const SettingsModal = ({
         return;
       }
 
-      // Tab navigation with Ctrl/Cmd + 1-5
+      // Tab navigation with Ctrl/Cmd + 1-4
       if (
         (event.ctrlKey || event.metaKey) &&
         event.key >= "1" &&
-        event.key <= "5"
+        event.key <= "4"
       ) {
         event.preventDefault();
         const tabIndex = parseInt(event.key) - 1;
@@ -94,7 +90,7 @@ const SettingsModal = ({
 
     document.addEventListener("keydown", handleKeyDown);
     document.addEventListener("mousedown", handleOutsideClick);
-    
+
     return () => {
       document.removeEventListener("keydown", handleKeyDown);
       document.removeEventListener("mousedown", handleOutsideClick);
@@ -102,13 +98,23 @@ const SettingsModal = ({
   }, [isOpen, onClose]);
 
   const handleReset = () => {
-    if (
-      window.confirm(
-        "Are you sure you want to reset all settings to default values? This action cannot be undone.",
-      )
-    ) {
+    setResetConfirmation(true);
+  };
+
+  const handleResetConfirm = async () => {
+    setIsResetting(true);
+    try {
       onResetConfig();
+      setResetConfirmation(false);
+    } catch (error) {
+      console.error('Error resetting configuration:', error);
+    } finally {
+      setIsResetting(false);
     }
+  };
+
+  const handleResetCancel = () => {
+    setResetConfirmation(false);
   };
 
   const renderTabContent = () => {
@@ -128,8 +134,6 @@ const SettingsModal = ({
         return <PriorityRulesTab {...commonProps} />;
       case "ml-parameters":
         return <MLParametersTab {...commonProps} />;
-      case "constraint-weights":
-        return <ConstraintWeightsTab {...commonProps} />;
       default:
         return (
           <div className="p-8 text-center text-gray-500">
@@ -229,18 +233,22 @@ const SettingsModal = ({
                 <span className="text-sm font-medium">Auto-saving...</span>
               </div>
             )}
-            
+
             {autosaveError && (
               <div className="flex items-center gap-2 text-red-600">
                 <AlertTriangle size={16} />
-                <span className="text-sm font-medium">Auto-save failed: {autosaveError}</span>
+                <span className="text-sm font-medium">
+                  Auto-save failed: {autosaveError}
+                </span>
               </div>
             )}
-            
+
             {!isAutoSaving && !autosaveError && lastSaveTime && (
               <div className="flex items-center gap-2 text-green-600">
                 <Check size={16} />
-                <span className="text-sm">Saved at {new Date(lastSaveTime).toLocaleTimeString()}</span>
+                <span className="text-sm">
+                  Saved at {new Date(lastSaveTime).toLocaleTimeString()}
+                </span>
               </div>
             )}
 
@@ -277,6 +285,21 @@ const SettingsModal = ({
           </div>
         </div>
       </div>
+      
+      {/* Reset Confirmation Modal - Moved outside to prevent z-index issues */}
+      {resetConfirmation && (
+        <ConfirmationModal
+          isOpen={resetConfirmation}
+          onClose={handleResetCancel}
+          onConfirm={handleResetConfirm}
+          title="Reset All Settings"
+          message="Are you sure you want to reset all settings to default values? This action cannot be undone and will remove all your custom configurations."
+          confirmText="Reset Settings"
+          cancelText="Cancel"
+          variant="warning"
+          isLoading={isResetting}
+        />
+      )}
     </div>
   );
 };

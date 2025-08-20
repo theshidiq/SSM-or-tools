@@ -13,6 +13,7 @@ import FormField from "../shared/FormField";
 import NumberInput from "../shared/NumberInput";
 import ToggleSwitch from "../shared/ToggleSwitch";
 import Slider from "../shared/Slider";
+import ConfirmationModal from "../shared/ConfirmationModal";
 
 const DAYS_OF_WEEK = [
   { id: 0, label: "Sunday", short: "Sun" },
@@ -46,15 +47,18 @@ const DailyLimitsTab = ({
   const [editingLimit, setEditingLimit] = useState(null);
   const [originalLimitData, setOriginalLimitData] = useState(null);
   const [editingMonthlyLimit, setEditingMonthlyLimit] = useState(null);
-  const [originalMonthlyLimitData, setOriginalMonthlyLimitData] = useState(null);
+  const [originalMonthlyLimitData, setOriginalMonthlyLimitData] =
+    useState(null);
+  const [deleteConfirmation, setDeleteConfirmation] = useState(null); // { type: 'daily'|'monthly', id, name }
+  const [isDeleting, setIsDeleting] = useState(false);
   const [showAddForm, setShowAddForm] = useState(false);
 
   // Ensure dailyLimits and monthlyLimits are arrays (defensive programming)
-  const dailyLimits = Array.isArray(settings?.dailyLimits) 
-    ? settings.dailyLimits 
+  const dailyLimits = Array.isArray(settings?.dailyLimits)
+    ? settings.dailyLimits
     : [];
-  const monthlyLimits = Array.isArray(settings?.monthlyLimits) 
-    ? settings.monthlyLimits 
+  const monthlyLimits = Array.isArray(settings?.monthlyLimits)
+    ? settings.monthlyLimits
     : [];
 
   // Add escape key listener to exit edit mode
@@ -89,7 +93,7 @@ const DailyLimitsTab = ({
 
   // Daily Limits Edit Management
   const startEditingDailyLimit = (limitId) => {
-    const limit = dailyLimits.find(l => l.id === limitId);
+    const limit = dailyLimits.find((l) => l.id === limitId);
     if (limit) {
       setOriginalLimitData({ ...limit });
       setEditingLimit(limitId);
@@ -103,8 +107,8 @@ const DailyLimitsTab = ({
 
   const handleCancelDailyEdit = () => {
     if (originalLimitData && editingLimit) {
-      const updatedLimits = dailyLimits.map(limit => 
-        limit.id === editingLimit ? originalLimitData : limit
+      const updatedLimits = dailyLimits.map((limit) =>
+        limit.id === editingLimit ? originalLimitData : limit,
       );
       updateDailyLimits(updatedLimits);
     }
@@ -114,7 +118,7 @@ const DailyLimitsTab = ({
 
   // Monthly Limits Edit Management
   const startEditingMonthlyLimit = (limitId) => {
-    const limit = monthlyLimits.find(l => l.id === limitId);
+    const limit = monthlyLimits.find((l) => l.id === limitId);
     if (limit) {
       setOriginalMonthlyLimitData({ ...limit });
       setEditingMonthlyLimit(limitId);
@@ -128,8 +132,8 @@ const DailyLimitsTab = ({
 
   const handleCancelMonthlyEdit = () => {
     if (originalMonthlyLimitData && editingMonthlyLimit) {
-      const updatedLimits = monthlyLimits.map(limit => 
-        limit.id === editingMonthlyLimit ? originalMonthlyLimitData : limit
+      const updatedLimits = monthlyLimits.map((limit) =>
+        limit.id === editingMonthlyLimit ? originalMonthlyLimitData : limit,
       );
       updateMonthlyLimits(updatedLimits);
     }
@@ -193,19 +197,44 @@ const DailyLimitsTab = ({
   };
 
   const deleteDailyLimit = (limitId) => {
-    if (window.confirm("Are you sure you want to delete this daily limit?")) {
-      const updatedLimits = dailyLimits.filter((limit) => limit.id !== limitId);
-      updateDailyLimits(updatedLimits);
+    const limit = dailyLimits.find((l) => l.id === limitId);
+    if (limit) {
+      setDeleteConfirmation({ type: 'daily', id: limitId, name: limit.name });
     }
   };
 
   const deleteMonthlyLimit = (limitId) => {
-    if (window.confirm("Are you sure you want to delete this monthly limit?")) {
-      const updatedLimits = monthlyLimits.filter(
-        (limit) => limit.id !== limitId,
-      );
-      updateMonthlyLimits(updatedLimits);
+    const limit = monthlyLimits.find((l) => l.id === limitId);
+    if (limit) {
+      setDeleteConfirmation({ type: 'monthly', id: limitId, name: limit.name });
     }
+  };
+
+  const handleDeleteConfirm = async () => {
+    if (!deleteConfirmation) return;
+    
+    setIsDeleting(true);
+    try {
+      const { type, id } = deleteConfirmation;
+      
+      if (type === 'daily') {
+        const updatedLimits = dailyLimits.filter((limit) => limit.id !== id);
+        updateDailyLimits(updatedLimits);
+      } else if (type === 'monthly') {
+        const updatedLimits = monthlyLimits.filter((limit) => limit.id !== id);
+        updateMonthlyLimits(updatedLimits);
+      }
+      
+      setDeleteConfirmation(null);
+    } catch (error) {
+      console.error('Error deleting limit:', error);
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
+  const handleDeleteCancel = () => {
+    setDeleteConfirmation(null);
   };
 
   const toggleDayOfWeek = (limitId, dayId) => {
@@ -299,9 +328,7 @@ const DailyLimitsTab = ({
     return (
       <div className="space-y-2">
         <label className="text-sm font-medium text-gray-700">
-          {limit.scope === "staff_status"
-            ? "Staff Status"
-            : "Staff Members"}
+          {limit.scope === "staff_status" ? "Staff Status" : "Staff Members"}
         </label>
         <div className="space-y-2 max-h-32 overflow-y-auto border border-gray-200 rounded-lg p-2">
           {options.map((option) => (
@@ -337,15 +364,15 @@ const DailyLimitsTab = ({
   const getTargetDisplayText = (limit) => {
     if (limit.scope === "all") return "";
     if (limit.scope === "individual") {
-      const selectedStaff = staffMembers.filter(staff => 
-        limit.targetIds.includes(staff.id)
+      const selectedStaff = staffMembers.filter((staff) =>
+        limit.targetIds.includes(staff.id),
       );
-      return selectedStaff.length > 0 
-        ? selectedStaff.map(staff => staff.name).join(", ")
+      return selectedStaff.length > 0
+        ? selectedStaff.map((staff) => staff.name).join(", ")
         : "No staff selected";
     }
     if (limit.scope === "staff_status") {
-      return limit.targetIds.length > 0 
+      return limit.targetIds.length > 0
         ? limit.targetIds.join(", ")
         : "No status selected";
     }
@@ -386,7 +413,9 @@ const DailyLimitsTab = ({
               )}
               <p className="text-sm text-gray-600">
                 {shiftType?.label} • Max {limit.maxCount} per day
-                {limit.scope !== "all" && targetDisplayText && ` • ${targetDisplayText}`}
+                {limit.scope !== "all" &&
+                  targetDisplayText &&
+                  ` • ${targetDisplayText}`}
               </p>
             </div>
           </div>
@@ -595,8 +624,14 @@ const DailyLimitsTab = ({
                 </h3>
               )}
               <p className="text-sm text-gray-600">
-                {limit.limitType.replace(/_/g, " ")} • Max {limit.maxCount % 1 === 0 ? Math.floor(limit.maxCount) : limit.maxCount} per month
-                {limit.scope !== "all" && targetDisplayText && ` • ${targetDisplayText}`}
+                {limit.limitType.replace(/_/g, " ")} • Max{" "}
+                {limit.maxCount % 1 === 0
+                  ? Math.floor(limit.maxCount)
+                  : limit.maxCount}{" "}
+                per month
+                {limit.scope !== "all" &&
+                  targetDisplayText &&
+                  ` • ${targetDisplayText}`}
               </p>
             </div>
           </div>
@@ -922,6 +957,19 @@ const DailyLimitsTab = ({
           </div>
         )}
       </div>
+      
+      {/* Delete Confirmation Modal */}
+      <ConfirmationModal
+        isOpen={deleteConfirmation !== null}
+        onClose={handleDeleteCancel}
+        onConfirm={handleDeleteConfirm}
+        title={`Delete ${deleteConfirmation?.type === 'daily' ? 'Daily' : 'Monthly'} Limit`}
+        message={`Are you sure you want to delete the ${deleteConfirmation?.type} limit "${deleteConfirmation?.name}"? This action cannot be undone.`}
+        confirmText={`Delete ${deleteConfirmation?.type === 'daily' ? 'Daily' : 'Monthly'} Limit`}
+        cancelText="Cancel"
+        variant="danger"
+        isLoading={isDeleting}
+      />
     </div>
   );
 };

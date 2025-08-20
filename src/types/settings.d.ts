@@ -101,33 +101,8 @@ export interface MLParameters {
   randomSeed: number | null;
 }
 
-export interface ConstraintWeights {
-  // Fairness weights
-  shift_distribution: number;
-  off_day_distribution: number;
-  weekend_fairness: number;
-  
-  // Preference weights
-  shift_preferences: number;
-  day_off_preferences: number;
-  seniority_bonus: number;
-  
-  // Business constraint weights
-  minimum_coverage: number;
-  skill_requirements: number;
-  conflict_avoidance: number;
-  
-  // Optimization weights
-  schedule_stability: number;
-  cost_efficiency: number;
-  pattern_consistency: number;
-}
-
-export interface PenaltyMultipliers {
-  hard_constraint_violation: number;
-  soft_constraint_violation: number;
-  preference_violation: number;
-}
+// Note: Constraint weights are now auto-detected from actual settings
+// No need for manual constraint weight configuration
 
 export interface SettingsConfiguration {
   staffGroups: StaffGroup[];
@@ -136,10 +111,7 @@ export interface SettingsConfiguration {
   priorityRules: PriorityRule[];
   conflictRules: ConflictRule[];
   mlParameters: MLParameters;
-  constraintWeights: ConstraintWeights;
-  penaltyMultipliers: PenaltyMultipliers;
-  autoNormalizeWeights: boolean;
-  dynamicWeightAdjustment: boolean;
+  // Note: Constraint weights and penalties are now auto-detected
   createdAt: string;
   updatedAt: string;
   version: number;

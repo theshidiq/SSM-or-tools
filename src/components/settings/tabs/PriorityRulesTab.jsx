@@ -11,6 +11,7 @@ import {
   XCircle,
 } from "lucide-react";
 import FormField from "../shared/FormField";
+import ConfirmationModal from "../shared/ConfirmationModal";
 
 const DAYS_OF_WEEK = [
   { id: 0, label: "Sunday", short: "Sun" },
@@ -65,14 +66,14 @@ const PriorityRulesTab = ({
 }) => {
   const [editingRule, setEditingRule] = useState(null);
   const [originalRuleData, setOriginalRuleData] = useState(null);
+  const [deleteConfirmation, setDeleteConfirmation] = useState(null); // { id, name }
+  const [isDeleting, setIsDeleting] = useState(false);
   const [selectedStaff, setSelectedStaff] = useState("all");
   const [conflictingRules, setConflictingRules] = useState([]);
 
   // Ensure priorityRules is always an array - handle legacy object format
   const rawPriorityRules = settings?.priorityRules || [];
-  const priorityRules = Array.isArray(rawPriorityRules) 
-    ? rawPriorityRules 
-    : []; // For now, treat legacy object format as empty array until migration is complete
+  const priorityRules = Array.isArray(rawPriorityRules) ? rawPriorityRules : []; // For now, treat legacy object format as empty array until migration is complete
 
   // Add escape key listener to exit edit mode
   useEffect(() => {
@@ -165,12 +166,35 @@ const PriorityRulesTab = ({
   };
 
   const deleteRule = (ruleId) => {
-    if (window.confirm("Are you sure you want to delete this priority rule?")) {
+    // Ensure we always work with an array
+    const rulesArray = Array.isArray(priorityRules) ? priorityRules : [];
+    const rule = rulesArray.find((r) => r.id === ruleId);
+    if (rule) {
+      setDeleteConfirmation({ id: ruleId, name: rule.name });
+    }
+  };
+
+  const handleDeleteConfirm = async () => {
+    if (!deleteConfirmation) return;
+    
+    setIsDeleting(true);
+    try {
+      const { id } = deleteConfirmation;
       // Ensure we always work with an array
       const rulesArray = Array.isArray(priorityRules) ? priorityRules : [];
-      const updatedRules = rulesArray.filter((rule) => rule.id !== ruleId);
+      const updatedRules = rulesArray.filter((rule) => rule.id !== id);
       updatePriorityRules(updatedRules);
+      
+      setDeleteConfirmation(null);
+    } catch (error) {
+      console.error('Error deleting priority rule:', error);
+    } finally {
+      setIsDeleting(false);
     }
+  };
+
+  const handleDeleteCancel = () => {
+    setDeleteConfirmation(null);
   };
 
   const getStaffById = (id) => staffMembers.find((staff) => staff.id === id);
@@ -184,7 +208,7 @@ const PriorityRulesTab = ({
 
   // Start editing a rule and save original data for cancel
   const startEditingRule = (ruleId, ruleData = null) => {
-    const rule = ruleData || priorityRules.find(r => r.id === ruleId);
+    const rule = ruleData || priorityRules.find((r) => r.id === ruleId);
     if (rule) {
       setOriginalRuleData({ ...rule });
       setEditingRule(ruleId);
@@ -201,8 +225,8 @@ const PriorityRulesTab = ({
   const handleCancelEdit = useCallback(() => {
     if (originalRuleData && editingRule) {
       const rulesArray = Array.isArray(priorityRules) ? priorityRules : [];
-      const updatedRules = rulesArray.map(rule => 
-        rule.id === editingRule ? originalRuleData : rule
+      const updatedRules = rulesArray.map((rule) =>
+        rule.id === editingRule ? originalRuleData : rule,
       );
       updatePriorityRules(updatedRules);
     }
@@ -440,9 +464,7 @@ const PriorityRulesTab = ({
                 {SHIFT_TYPES.map((shift) => (
                   <button
                     key={shift.id}
-                    onClick={() =>
-                      updateRule(rule.id, { shiftType: shift.id })
-                    }
+                    onClick={() => updateRule(rule.id, { shiftType: shift.id })}
                     className={`flex-1 flex items-center justify-center gap-2 py-3 border-2 rounded-lg transition-all ${
                       rule.shiftType === shift.id
                         ? "border-purple-300 bg-purple-50"
@@ -613,6 +635,19 @@ const PriorityRulesTab = ({
           </button>
         </div>
       )}
+      
+      {/* Delete Confirmation Modal */}
+      <ConfirmationModal
+        isOpen={deleteConfirmation !== null}
+        onClose={handleDeleteCancel}
+        onConfirm={handleDeleteConfirm}
+        title="Delete Priority Rule"
+        message={`Are you sure you want to delete the priority rule "${deleteConfirmation?.name}"? This action cannot be undone.`}
+        confirmText="Delete Rule"
+        cancelText="Cancel"
+        variant="danger"
+        isLoading={isDeleting}
+      />
     </div>
   );
 };

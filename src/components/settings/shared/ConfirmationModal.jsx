@@ -1,0 +1,145 @@
+import React, { useEffect, useRef } from 'react';
+import { createPortal } from 'react-dom';
+import { AlertTriangle, X } from 'lucide-react';
+
+const ConfirmationModal = ({
+  isOpen,
+  onClose,
+  onConfirm,
+  title = "Confirm Action",
+  message = "Are you sure you want to proceed?",
+  confirmText = "Confirm",
+  cancelText = "Cancel",
+  variant = "danger", // "danger" or "warning" or "info"
+  isLoading = false,
+}) => {
+  const modalRef = useRef(null);
+
+  // Focus management and escape key handling
+  useEffect(() => {
+    if (isOpen && modalRef.current) {
+      modalRef.current.focus();
+      console.log('[DEBUG] ConfirmationModal focused');
+    }
+  }, [isOpen]);
+
+  if (!isOpen) return null;
+
+  const variantStyles = {
+    danger: {
+      icon: "text-red-600",
+      iconBg: "bg-red-100",
+      button: "bg-red-600 hover:bg-red-700 focus:ring-red-500",
+    },
+    warning: {
+      icon: "text-yellow-600", 
+      iconBg: "bg-yellow-100",
+      button: "bg-yellow-600 hover:bg-yellow-700 focus:ring-yellow-500",
+    },
+    info: {
+      icon: "text-blue-600",
+      iconBg: "bg-blue-100", 
+      button: "bg-blue-600 hover:bg-blue-700 focus:ring-blue-500",
+    },
+  };
+
+  const styles = variantStyles[variant] || variantStyles.danger;
+
+  const handleBackdropClick = (e) => {
+    if (e.target === e.currentTarget) {
+      console.log('[DEBUG] ConfirmationModal backdrop clicked');
+      onClose();
+    }
+  };
+
+  const handleKeyDown = (e) => {
+    if (e.key === 'Escape') {
+      console.log('[DEBUG] ConfirmationModal escape key pressed');
+      onClose();
+    } else if (e.key === 'Enter' && !isLoading) {
+      console.log('[DEBUG] ConfirmationModal enter key pressed');
+      onConfirm();
+    }
+  };
+
+  const handleConfirmClick = () => {
+    console.log('[DEBUG] ConfirmationModal confirm button clicked');
+    onConfirm();
+  };
+
+  const handleCancelClick = () => {
+    console.log('[DEBUG] ConfirmationModal cancel button clicked');
+    onClose();
+  };
+
+  // Use React Portal to render outside parent DOM hierarchy
+  const modal = (
+    // eslint-disable-next-line jsx-a11y/no-noninteractive-element-interactions
+    <div 
+      ref={modalRef}
+      className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[50000] p-4"
+      onClick={handleBackdropClick}
+      onKeyDown={handleKeyDown}
+      tabIndex={-1}
+      role="dialog"
+      aria-modal="true"
+      style={{ zIndex: 50000 }} // Inline style as backup
+    >
+      <div className="bg-white rounded-xl w-full max-w-md shadow-2xl transform transition-all" role="document">
+        <div className="p-6">
+          {/* Header */}
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-3">
+              <div className={`p-2 rounded-lg ${styles.iconBg}`}>
+                <AlertTriangle size={24} className={styles.icon} />
+              </div>
+              <h3 className="text-lg font-semibold text-gray-800">{title}</h3>
+            </div>
+            <button
+              onClick={handleCancelClick}
+              disabled={isLoading}
+              className="p-1 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded transition-colors disabled:opacity-50"
+            >
+              <X size={20} />
+            </button>
+          </div>
+
+          {/* Message */}
+          <div className="mb-6">
+            <p className="text-gray-600">{message}</p>
+          </div>
+
+          {/* Actions */}
+          <div className="flex items-center justify-end gap-3">
+            <button
+              onClick={handleCancelClick}
+              disabled={isLoading}
+              className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors disabled:opacity-50"
+            >
+              {cancelText}
+            </button>
+            <button
+              onClick={handleConfirmClick}
+              disabled={isLoading}
+              className={`px-4 py-2 text-sm font-medium text-white rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed ${styles.button}`}
+            >
+              {isLoading ? (
+                <div className="flex items-center gap-2">
+                  <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                  Processing...
+                </div>
+              ) : (
+                confirmText
+              )}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+
+  // Render using React Portal to bypass parent stacking context
+  return createPortal(modal, document.body);
+};
+
+export default ConfirmationModal;

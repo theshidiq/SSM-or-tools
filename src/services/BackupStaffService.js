@@ -225,7 +225,7 @@ export class BackupStaffService {
    * @returns {Object} Result with updated schedule and assignment count
    */
   processGroupBackups(schedule, staffMembers, group, dateKey) {
-    let updatedSchedule = JSON.parse(JSON.stringify(schedule));
+    const updatedSchedule = JSON.parse(JSON.stringify(schedule));
     let assignmentsApplied = 0;
 
     // Find group members who have day off
@@ -355,7 +355,7 @@ export class BackupStaffService {
     const startTime = Date.now();
 
     let updatedSchedule = JSON.parse(JSON.stringify(schedule));
-    let totalAssignments = 0;
+    const totalAssignments = 0;
 
     // Process each date
     dateRange.forEach((date) => {

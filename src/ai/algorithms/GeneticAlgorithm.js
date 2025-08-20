@@ -5,7 +5,11 @@
  * Uses evolutionary computation to find optimal scheduling solutions.
  */
 
-import { validateAllConstraints } from "../constraints/ConstraintEngine";
+import {
+  validateAllConstraints,
+  isOffDay,
+  isWorkingShift,
+} from "../constraints/ConstraintEngine";
 
 /**
  * Genetic Algorithm for schedule optimization
@@ -37,21 +41,45 @@ export class GeneticAlgorithm {
    * Initialize the genetic algorithm
    * @param {Object} options - Initialization options
    */
-  initialize(options = {}) {
-    console.log("🧬 Initializing Genetic Algorithm...");
+  async initialize(options = {}) {
+    console.log("🧬 Initializing Enhanced Genetic Algorithm...");
 
     try {
-      // Update parameters if provided
-      if (options.parameters) {
-        this.parameters = { ...this.parameters, ...options.parameters };
-      }
+      // Update parameters with ML-optimized defaults
+      const mlOptimizedDefaults = {
+        populationSize: options.populationSize || 100,
+        maxGenerations: options.generations || 300,
+        crossoverRate: options.crossoverRate || 0.8,
+        mutationRate: options.mutationRate || 0.1,
+        elitismRate: options.elitismRate || 0.1,
+        tournamentSize: 3,
+        convergenceThreshold: options.convergenceThreshold || 0.01,
+        maxStagnantGenerations: 50,
+        enableAdaptiveMutation: options.enableAdaptiveMutation || true,
+        parallelProcessing: options.parallelProcessing || true,
+        diversityThreshold: 0.1,
+        nichingEnabled: true,
+      };
+
+      this.parameters = { ...this.parameters, ...mlOptimizedDefaults };
 
       // Set fitness function
       this.fitnessFunction =
         options.fitnessFunction || this.defaultFitnessFunction;
 
+      // Initialize adaptive components
+      this.adaptiveComponents = {
+        mutationHistory: [],
+        diversityHistory: [],
+        performanceHistory: [],
+        adaptationEnabled: this.parameters.enableAdaptiveMutation,
+      };
+
       this.initialized = true;
-      console.log("✅ Genetic Algorithm initialized successfully");
+      console.log("✅ Enhanced Genetic Algorithm initialized successfully");
+      console.log(
+        `📊 Parameters: Population=${this.parameters.populationSize}, Generations=${this.parameters.maxGenerations}, Mutation=${this.parameters.mutationRate}`,
+      );
     } catch (error) {
       console.error("❌ Genetic Algorithm initialization failed:", error);
       throw error;
@@ -59,11 +87,150 @@ export class GeneticAlgorithm {
   }
 
   /**
-   * Evolve a population to find optimal schedule
+   * Enhanced evolve method compatible with ScheduleGenerator
+   * @param {Object} workingSchedule - Initial schedule
+   * @param {Array} staffMembers - Staff members
+   * @param {Array} dateRange - Date range
+   * @param {Object} options - Evolution options
+   * @returns {Object} Generated schedule
+   */
+  async evolve(workingSchedule, staffMembers, dateRange, options = {}) {
+    if (!this.initialized) {
+      throw new Error("Genetic Algorithm not initialized");
+    }
+
+    console.log(
+      `🧬 Starting enhanced genetic evolution for ${staffMembers.length} staff over ${dateRange.length} days...`,
+    );
+
+    try {
+      const startTime = Date.now();
+      const preserveFixed = options.preserveFixed !== false;
+
+      // Initialize population with working schedule as seed
+      let population = this.initializePopulation(
+        staffMembers,
+        dateRange,
+        workingSchedule,
+        preserveFixed,
+      );
+
+      // Enhanced evolution statistics
+      const stats = {
+        generation: 0,
+        bestFitness: -Infinity,
+        averageFitness: 0,
+        diversity: 0,
+        stagnantGenerations: 0,
+        fitnessHistory: [],
+        diversityHistory: [],
+        adaptationHistory: [],
+        bestIndividualHistory: [],
+      };
+
+      // Evolution loop with enhanced termination conditions
+      while (
+        stats.generation < this.parameters.maxGenerations &&
+        stats.stagnantGenerations < this.parameters.maxStagnantGenerations
+      ) {
+        stats.generation++;
+
+        // Evaluate population fitness
+        await this.evaluatePopulation(
+          population,
+          this.fitnessFunction,
+          staffMembers,
+          dateRange,
+        );
+
+        // Calculate generation statistics
+        const generationStats = this.calculateGenerationStats(population);
+        const previousBestFitness = stats.bestFitness;
+
+        stats.bestFitness = generationStats.bestFitness;
+        stats.averageFitness = generationStats.averageFitness;
+        stats.diversity = generationStats.diversity;
+
+        stats.fitnessHistory.push(stats.bestFitness);
+        stats.diversityHistory.push(stats.diversity);
+
+        // Store best individual for tracking
+        const currentBest = population.reduce((best, current) =>
+          current.fitness > best.fitness ? current : best,
+        );
+        stats.bestIndividualHistory.push({
+          generation: stats.generation,
+          fitness: currentBest.fitness,
+          schedule: JSON.parse(JSON.stringify(currentBest.schedule)),
+        });
+
+        // Adaptive mutation rate adjustment
+        if (this.parameters.enableAdaptiveMutation) {
+          this.adaptMutationRate(stats);
+        }
+
+        // Check for stagnation with enhanced criteria
+        const improvementThreshold = this.parameters.convergenceThreshold;
+        if (
+          Math.abs(stats.bestFitness - previousBestFitness) <
+          improvementThreshold
+        ) {
+          stats.stagnantGenerations++;
+        } else {
+          stats.stagnantGenerations = 0;
+        }
+
+        // Progress reporting
+        if (stats.generation % 25 === 0 || stats.generation <= 5) {
+          console.log(
+            `🧬 Gen ${stats.generation}: Best=${stats.bestFitness.toFixed(2)}%, Avg=${stats.averageFitness.toFixed(2)}%, Diversity=${stats.diversity.toFixed(2)}, MutRate=${this.parameters.mutationRate.toFixed(3)}`,
+          );
+        }
+
+        // Early termination for excellent fitness
+        if (stats.bestFitness >= 98) {
+          console.log("🎯 Excellent fitness achieved, terminating evolution");
+          break;
+        }
+
+        // Create next generation with enhanced operators
+        population = await this.createNextGeneration(
+          population,
+          this.fitnessFunction,
+          staffMembers,
+          dateRange,
+          stats,
+        );
+      }
+
+      const evolutionTime = Date.now() - startTime;
+
+      // Get best solution
+      const bestIndividual = population.reduce((best, current) =>
+        current.fitness > best.fitness ? current : best,
+      );
+
+      // Update evolution statistics
+      this.updateEvolutionStats(stats, evolutionTime);
+
+      console.log(
+        `✅ Evolution completed: ${stats.bestFitness.toFixed(2)}% fitness in ${evolutionTime}ms`,
+      );
+
+      // Return in format expected by ScheduleGenerator
+      return bestIndividual.schedule;
+    } catch (error) {
+      console.error("❌ Genetic algorithm evolution failed:", error);
+      throw error;
+    }
+  }
+
+  /**
+   * Legacy evolve method for backwards compatibility
    * @param {Object} params - Evolution parameters
    * @returns {Object} Evolution result
    */
-  async evolve(params = {}) {
+  async evolveLegacy(params = {}) {
     if (!this.initialized) {
       throw new Error("Genetic Algorithm not initialized");
     }
@@ -465,20 +632,48 @@ export class GeneticAlgorithm {
   }
 
   /**
-   * Create next generation using selection, crossover, and mutation
+   * Create next generation with enhanced genetic operators
    * @param {Array} population - Current population
    * @param {Function} fitnessFunc - Fitness function
    * @param {Array} staffMembers - Staff members
    * @param {Array} dateRange - Date range
+   * @param {Object} stats - Evolution statistics
    * @returns {Array} Next generation population
    */
-  async createNextGeneration(population, fitnessFunc, staffMembers, dateRange) {
+  async createNextGeneration(
+    population,
+    fitnessFunc,
+    staffMembers,
+    dateRange,
+    stats = {},
+  ) {
     const nextGeneration = [];
 
-    // Elitism - keep best individuals
+    // Enhanced elitism with diversity preservation
     const sorted = [...population].sort((a, b) => b.fitness - a.fitness);
-    const elite = sorted.slice(0, this.parameters.elitismSize);
-    nextGeneration.push(...elite.map((ind) => ({ ...ind, age: ind.age + 1 })));
+    const elitismSize = Math.floor(
+      this.parameters.populationSize * this.parameters.elitismRate,
+    );
+    const elite = sorted.slice(0, elitismSize);
+
+    // Add elite individuals
+    nextGeneration.push(
+      ...elite.map((ind) => ({
+        ...ind,
+        age: ind.age + 1,
+        id: `${ind.id}_elite_gen${stats.generation || 0}`,
+      })),
+    );
+
+    // Add diversity if population becomes too similar
+    if (stats.diversity < this.parameters.diversityThreshold) {
+      const diverseIndividuals = this.generateDiverseIndividuals(
+        staffMembers,
+        dateRange,
+        Math.min(5, Math.floor(this.parameters.populationSize * 0.1)),
+      );
+      nextGeneration.push(...diverseIndividuals);
+    }
 
     // Generate offspring to fill remaining population
     while (nextGeneration.length < this.parameters.populationSize) {
@@ -486,33 +681,40 @@ export class GeneticAlgorithm {
       const parent1 = this.tournamentSelection(population);
       const parent2 = this.tournamentSelection(population);
 
-      // Crossover
+      // Enhanced crossover with multiple strategies
       let offspring1, offspring2;
       if (Math.random() < this.parameters.crossoverRate) {
-        [offspring1, offspring2] = this.crossover(
+        // Use different crossover strategies based on generation
+        const crossoverStrategy = this.selectCrossoverStrategy(
+          stats.generation,
+        );
+        [offspring1, offspring2] = this.enhancedCrossover(
           parent1,
           parent2,
           staffMembers,
           dateRange,
+          crossoverStrategy,
         );
       } else {
         offspring1 = this.clone(parent1);
         offspring2 = this.clone(parent2);
       }
 
-      // Mutation
+      // Enhanced mutation with adaptive strategies
       if (Math.random() < this.parameters.mutationRate) {
-        this.mutate(offspring1, staffMembers, dateRange);
+        this.enhancedMutate(offspring1, staffMembers, dateRange, stats);
       }
       if (Math.random() < this.parameters.mutationRate) {
-        this.mutate(offspring2, staffMembers, dateRange);
+        this.enhancedMutate(offspring2, staffMembers, dateRange, stats);
       }
 
-      // Add offspring to next generation
+      // Add offspring to next generation with proper tracking
       offspring1.age = 0;
       offspring2.age = 0;
-      offspring1.id = `gen${population[0]?.generation || 0}_off${nextGeneration.length}`;
-      offspring2.id = `gen${population[0]?.generation || 0}_off${nextGeneration.length + 1}`;
+      offspring1.id = `gen${stats.generation || 0}_off${nextGeneration.length}`;
+      offspring2.id = `gen${stats.generation || 0}_off${nextGeneration.length + 1}`;
+      offspring1.parentIds = [parent1.id, parent2.id];
+      offspring2.parentIds = [parent1.id, parent2.id];
 
       nextGeneration.push(offspring1);
       if (nextGeneration.length < this.parameters.populationSize) {
@@ -627,7 +829,7 @@ export class GeneticAlgorithm {
   }
 
   /**
-   * Get algorithm status
+   * Get enhanced algorithm status
    * @returns {Object} Status information
    */
   getStatus() {
@@ -635,12 +837,335 @@ export class GeneticAlgorithm {
       initialized: this.initialized,
       parameters: { ...this.parameters },
       statistics: { ...this.evolutionStats },
+      adaptiveComponents: {
+        enabled: this.adaptiveComponents?.adaptationEnabled || false,
+        currentMutationRate: this.parameters.mutationRate,
+        adaptationHistory:
+          this.adaptiveComponents?.mutationHistory?.slice(-10) || [],
+      },
       successRate:
         this.evolutionStats.totalRuns > 0
           ? (this.evolutionStats.successfulRuns /
               this.evolutionStats.totalRuns) *
             100
           : 0,
+      averageQuality: this.evolutionStats.bestFitnessAchieved,
+      algorithmType: "enhanced_genetic_algorithm",
     };
+  }
+
+  // Enhanced genetic operators and helper methods
+
+  /**
+   * Adapt mutation rate based on population diversity and performance
+   * @param {Object} stats - Current evolution statistics
+   */
+  adaptMutationRate(stats) {
+    if (!this.adaptiveComponents.adaptationEnabled) return;
+
+    const baseRate = 0.1;
+    const minRate = 0.01;
+    const maxRate = 0.3;
+
+    // Increase mutation if diversity is low or fitness is stagnating
+    let adaptedRate = baseRate;
+
+    if (stats.diversity < this.parameters.diversityThreshold) {
+      adaptedRate = Math.min(maxRate, baseRate * 1.5); // Increase for diversity
+    }
+
+    if (stats.stagnantGenerations > 10) {
+      adaptedRate = Math.min(
+        maxRate,
+        baseRate * (1 + stats.stagnantGenerations * 0.1),
+      );
+    }
+
+    if (stats.bestFitness > 90) {
+      adaptedRate = Math.max(minRate, baseRate * 0.5); // Reduce for fine-tuning
+    }
+
+    this.parameters.mutationRate = adaptedRate;
+
+    // Track adaptation history
+    this.adaptiveComponents.mutationHistory.push({
+      generation: stats.generation,
+      rate: adaptedRate,
+      diversity: stats.diversity,
+      fitness: stats.bestFitness,
+    });
+
+    // Keep only recent history
+    if (this.adaptiveComponents.mutationHistory.length > 50) {
+      this.adaptiveComponents.mutationHistory =
+        this.adaptiveComponents.mutationHistory.slice(-50);
+    }
+  }
+
+  /**
+   * Select crossover strategy based on evolution progress
+   * @param {number} generation - Current generation
+   * @returns {string} Crossover strategy
+   */
+  selectCrossoverStrategy(generation) {
+    if (generation < 50) {
+      return "uniform"; // Exploration phase
+    } else if (generation < 150) {
+      return "single_point"; // Balanced phase
+    } else {
+      return "two_point"; // Exploitation phase
+    }
+  }
+
+  /**
+   * Enhanced crossover with multiple strategies
+   * @param {Object} parent1 - First parent
+   * @param {Object} parent2 - Second parent
+   * @param {Array} staffMembers - Staff members
+   * @param {Array} dateRange - Date range
+   * @param {string} strategy - Crossover strategy
+   * @returns {Array} Two offspring
+   */
+  enhancedCrossover(
+    parent1,
+    parent2,
+    staffMembers,
+    dateRange,
+    strategy = "single_point",
+  ) {
+    switch (strategy) {
+      case "uniform":
+        return this.uniformCrossover(parent1, parent2, staffMembers, dateRange);
+      case "two_point":
+        return this.twoPointCrossover(
+          parent1,
+          parent2,
+          staffMembers,
+          dateRange,
+        );
+      default:
+        return this.crossover(parent1, parent2, staffMembers, dateRange);
+    }
+  }
+
+  /**
+   * Uniform crossover operator
+   */
+  uniformCrossover(parent1, parent2, staffMembers, dateRange) {
+    const offspring1 = { schedule: {}, fitness: 0, age: 0 };
+    const offspring2 = { schedule: {}, fitness: 0, age: 0 };
+
+    staffMembers.forEach((staff) => {
+      offspring1.schedule[staff.id] = {};
+      offspring2.schedule[staff.id] = {};
+
+      dateRange.forEach((date) => {
+        const dateKey = date.toISOString().split("T")[0];
+
+        if (Math.random() < 0.5) {
+          offspring1.schedule[staff.id][dateKey] =
+            parent1.schedule[staff.id][dateKey];
+          offspring2.schedule[staff.id][dateKey] =
+            parent2.schedule[staff.id][dateKey];
+        } else {
+          offspring1.schedule[staff.id][dateKey] =
+            parent2.schedule[staff.id][dateKey];
+          offspring2.schedule[staff.id][dateKey] =
+            parent1.schedule[staff.id][dateKey];
+        }
+      });
+    });
+
+    return [offspring1, offspring2];
+  }
+
+  /**
+   * Two-point crossover operator
+   */
+  twoPointCrossover(parent1, parent2, staffMembers, dateRange) {
+    const offspring1 = { schedule: {}, fitness: 0, age: 0 };
+    const offspring2 = { schedule: {}, fitness: 0, age: 0 };
+
+    staffMembers.forEach((staff) => {
+      offspring1.schedule[staff.id] = {};
+      offspring2.schedule[staff.id] = {};
+
+      const point1 = Math.floor(Math.random() * dateRange.length);
+      const point2 = Math.floor(Math.random() * dateRange.length);
+      const [start, end] = [Math.min(point1, point2), Math.max(point1, point2)];
+
+      dateRange.forEach((date, index) => {
+        const dateKey = date.toISOString().split("T")[0];
+
+        if (index >= start && index < end) {
+          offspring1.schedule[staff.id][dateKey] =
+            parent2.schedule[staff.id][dateKey];
+          offspring2.schedule[staff.id][dateKey] =
+            parent1.schedule[staff.id][dateKey];
+        } else {
+          offspring1.schedule[staff.id][dateKey] =
+            parent1.schedule[staff.id][dateKey];
+          offspring2.schedule[staff.id][dateKey] =
+            parent2.schedule[staff.id][dateKey];
+        }
+      });
+    });
+
+    return [offspring1, offspring2];
+  }
+
+  /**
+   * Enhanced mutation with adaptive strategies
+   * @param {Object} individual - Individual to mutate
+   * @param {Array} staffMembers - Staff members
+   * @param {Array} dateRange - Date range
+   * @param {Object} stats - Evolution statistics
+   */
+  enhancedMutate(individual, staffMembers, dateRange, stats) {
+    const possibleShifts = ["", "△", "◇", "×"];
+
+    // Adaptive mutation intensity based on fitness and diversity
+    let mutationIntensity = 0.02; // Base 2%
+
+    if (stats.diversity < this.parameters.diversityThreshold) {
+      mutationIntensity *= 2; // Increase for low diversity
+    }
+
+    if (individual.fitness < stats.averageFitness) {
+      mutationIntensity *= 1.5; // More mutation for poor individuals
+    }
+
+    const mutationCount = Math.max(
+      1,
+      Math.floor(staffMembers.length * dateRange.length * mutationIntensity),
+    );
+
+    for (let i = 0; i < mutationCount; i++) {
+      const randomStaff =
+        staffMembers[Math.floor(Math.random() * staffMembers.length)];
+      const randomDate =
+        dateRange[Math.floor(Math.random() * dateRange.length)];
+      const dateKey = randomDate.toISOString().split("T")[0];
+
+      const currentShift = individual.schedule[randomStaff.id][dateKey];
+
+      // Smart mutation - prefer shifts that improve balance
+      const newShift = this.selectSmartMutation(
+        currentShift,
+        possibleShifts,
+        individual,
+        randomStaff.id,
+        dateKey,
+        dateRange,
+      );
+      individual.schedule[randomStaff.id][dateKey] = newShift;
+    }
+  }
+
+  /**
+   * Smart mutation that considers schedule balance
+   */
+  selectSmartMutation(
+    currentShift,
+    possibleShifts,
+    individual,
+    staffId,
+    dateKey,
+    dateRange,
+  ) {
+    // Calculate current workload for this staff member
+    let currentWorkload = 0;
+    dateRange.forEach((date) => {
+      const dk = date.toISOString().split("T")[0];
+      const shift = individual.schedule[staffId][dk];
+      if (shift !== "×" && shift !== "off") {
+        currentWorkload++;
+      }
+    });
+
+    const workloadRatio = currentWorkload / dateRange.length;
+
+    // Bias mutation based on workload
+    if (workloadRatio > 0.8) {
+      // High workload - prefer off days
+      return Math.random() < 0.7
+        ? "×"
+        : possibleShifts[Math.floor(Math.random() * possibleShifts.length)];
+    } else if (workloadRatio < 0.5) {
+      // Low workload - avoid off days
+      const workingShifts = possibleShifts.filter((s) => s !== "×");
+      return workingShifts[Math.floor(Math.random() * workingShifts.length)];
+    }
+
+    // Balanced workload - random mutation
+    let newShift;
+    do {
+      newShift =
+        possibleShifts[Math.floor(Math.random() * possibleShifts.length)];
+    } while (newShift === currentShift);
+
+    return newShift;
+  }
+
+  /**
+   * Generate diverse individuals to maintain population diversity
+   */
+  generateDiverseIndividuals(staffMembers, dateRange, count) {
+    const diverse = [];
+    const possibleShifts = ["", "△", "◇", "×"];
+
+    for (let i = 0; i < count; i++) {
+      const individual = {
+        schedule: {},
+        fitness: 0,
+        age: 0,
+        id: `diverse_${i}`,
+      };
+
+      staffMembers.forEach((staff) => {
+        individual.schedule[staff.id] = {};
+
+        dateRange.forEach((date) => {
+          const dateKey = date.toISOString().split("T")[0];
+          // Random assignment with different bias than initial population
+          const random = Math.random();
+          if (random < 0.4) {
+            individual.schedule[staff.id][dateKey] = ""; // Normal
+          } else if (random < 0.6) {
+            individual.schedule[staff.id][dateKey] = "×"; // Off
+          } else if (random < 0.8) {
+            individual.schedule[staff.id][dateKey] = "△"; // Early
+          } else {
+            individual.schedule[staff.id][dateKey] = "◇"; // Late
+          }
+        });
+      });
+
+      diverse.push(individual);
+    }
+
+    return diverse;
+  }
+
+  /**
+   * Update evolution statistics
+   */
+  updateEvolutionStats(stats, evolutionTime) {
+    this.evolutionStats.totalRuns++;
+    this.evolutionStats.averageGenerations =
+      (this.evolutionStats.averageGenerations + stats.generation) /
+      this.evolutionStats.totalRuns;
+
+    if (stats.bestFitness > this.evolutionStats.bestFitnessAchieved) {
+      this.evolutionStats.bestFitnessAchieved = stats.bestFitness;
+    }
+
+    if (stats.bestFitness >= 80) {
+      this.evolutionStats.successfulRuns++;
+    }
+
+    this.evolutionStats.averageConvergenceTime =
+      (this.evolutionStats.averageConvergenceTime + evolutionTime) /
+      this.evolutionStats.totalRuns;
   }
 }
