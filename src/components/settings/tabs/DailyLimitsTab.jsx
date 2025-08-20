@@ -333,9 +333,29 @@ const DailyLimitsTab = ({
     );
   };
 
+  // Helper function to get target display text
+  const getTargetDisplayText = (limit) => {
+    if (limit.scope === "all") return "";
+    if (limit.scope === "individual") {
+      const selectedStaff = staffMembers.filter(staff => 
+        limit.targetIds.includes(staff.id)
+      );
+      return selectedStaff.length > 0 
+        ? selectedStaff.map(staff => staff.name).join(", ")
+        : "No staff selected";
+    }
+    if (limit.scope === "staff_status") {
+      return limit.targetIds.length > 0 
+        ? limit.targetIds.join(", ")
+        : "No status selected";
+    }
+    return limit.scope;
+  };
+
   const renderDailyLimitCard = (limit) => {
     const isEditing = editingLimit === limit.id;
     const shiftType = SHIFT_TYPES.find((st) => st.id === limit.shiftType);
+    const targetDisplayText = getTargetDisplayText(limit);
 
     return (
       <div
@@ -366,7 +386,7 @@ const DailyLimitsTab = ({
               )}
               <p className="text-sm text-gray-600">
                 {shiftType?.label} • Max {limit.maxCount} per day
-                {limit.scope !== "all" && ` • ${limit.scope}`}
+                {limit.scope !== "all" && targetDisplayText && ` • ${targetDisplayText}`}
               </p>
             </div>
           </div>
@@ -537,6 +557,7 @@ const DailyLimitsTab = ({
 
   const renderMonthlyLimitCard = (limit) => {
     const isEditing = editingMonthlyLimit === limit.id;
+    const targetDisplayText = getTargetDisplayText(limit);
 
     const MONTHLY_LIMIT_TYPES = [
       { id: "max_off_days", label: "Max Off Days" },
@@ -575,7 +596,7 @@ const DailyLimitsTab = ({
               )}
               <p className="text-sm text-gray-600">
                 {limit.limitType.replace(/_/g, " ")} • Max {limit.maxCount % 1 === 0 ? Math.floor(limit.maxCount) : limit.maxCount} per month
-                {limit.scope !== "all" && ` • ${limit.scope}`}
+                {limit.scope !== "all" && targetDisplayText && ` • ${targetDisplayText}`}
               </p>
             </div>
           </div>

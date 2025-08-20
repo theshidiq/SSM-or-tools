@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import {
   Plus,
   Trash2,
@@ -10,6 +10,8 @@ import {
   UserPlus,
   Check,
   XCircle,
+  Shield,
+  ChevronDown,
 } from "lucide-react";
 import FormField from "../shared/FormField";
 
@@ -60,6 +62,21 @@ const StaffGroupsTab = ({
 
   const staffGroups = settings?.staffGroups || [];
   const conflictRules = settings?.conflictRules || [];
+  const backupAssignments = settings?.backupAssignments || [];
+
+  const updateConflictRules = useCallback((newRules) => {
+    onSettingsChange({
+      ...settings,
+      conflictRules: newRules,
+    });
+  }, [settings, onSettingsChange]);
+
+  const updateBackupAssignments = useCallback((newAssignments) => {
+    onSettingsChange({
+      ...settings,
+      backupAssignments: newAssignments,
+    });
+  }, [settings, onSettingsChange]);
 
   // Automatically ensure all groups have intra-group conflict rules enabled
   useEffect(() => {
@@ -107,40 +124,6 @@ const StaffGroupsTab = ({
     return () => document.removeEventListener("keydown", handleKeyDown);
   }, [editingGroup]);
 
-  // Ensure all groups have intra-group conflict rules enabled
-  useEffect(() => {
-    const ensureIntraGroupRules = () => {
-      const updatedRules = [...conflictRules];
-      let hasChanges = false;
-
-      staffGroups.forEach(group => {
-        const ruleId = `intra-${group.id}`;
-        const existingRule = conflictRules.find(rule => rule.id === ruleId);
-        
-        if (!existingRule) {
-          const newRule = {
-            id: ruleId,
-            name: `${group.name} Intra-Group Conflict Prevention`,
-            type: "intra_group_conflict",
-            groupId: group.id,
-            constraint: "prevent_same_shift_same_day",
-            isHardConstraint: true,
-            penaltyWeight: 15,
-            description: "Prevents staff in the same group from having identical shifts on the same day"
-          };
-          updatedRules.push(newRule);
-          hasChanges = true;
-        }
-      });
-
-      if (hasChanges) {
-        updateConflictRules(updatedRules);
-      }
-    };
-
-    ensureIntraGroupRules();
-  }, [staffGroups, conflictRules]);
-
   const updateStaffGroups = (newGroups) => {
     onSettingsChange({
       ...settings,
@@ -175,12 +158,6 @@ const StaffGroupsTab = ({
     setOriginalGroupData(null);
   };
 
-  const updateConflictRules = (newRules) => {
-    onSettingsChange({
-      ...settings,
-      conflictRules: newRules,
-    });
-  };
 
   // Get the next available color, avoiding recently used ones
   const getNextAvailableColor = () => {
@@ -257,6 +234,53 @@ const StaffGroupsTab = ({
     updateStaffGroups(updatedGroups);
   };
 
+  // Backup Assignment Management Functions
+  const addBackupAssignment = (staffId, groupId) => {
+    const newAssignment = {
+      id: `backup-${Date.now()}`,
+      staffId,
+      groupId,
+      createdAt: new Date().toISOString(),
+    };
+    const updatedAssignments = [...backupAssignments, newAssignment];
+    updateBackupAssignments(updatedAssignments);
+  };
+
+  const removeBackupAssignment = (assignmentId) => {
+    const updatedAssignments = backupAssignments.filter(
+      (assignment) => assignment.id !== assignmentId
+    );
+    updateBackupAssignments(updatedAssignments);
+  };
+
+  // Get available staff for backup assignments (active staff not already in the target group)
+  const getAvailableBackupStaffForGroup = (groupId) => {
+    const activeStaff = getActiveStaffMembers();
+    const group = staffGroups.find((g) => g.id === groupId);
+    const groupMemberIds = new Set(group?.members || []);
+
+    return activeStaff.filter((staff) => !groupMemberIds.has(staff.id));
+  };
+
+  // Check if a staff member can backup a specific group
+  const canStaffBackupGroup = (staffId, groupId) => {
+    const group = staffGroups.find((g) => g.id === groupId);
+    if (!group) return false;
+    
+    // Staff cannot backup a group they are already a member of
+    return !group.members.includes(staffId);
+  };
+
+  // Get backup assignments for a specific group
+  const getBackupAssignmentsForGroup = (groupId) => {
+    return backupAssignments.filter((assignment) => assignment.groupId === groupId);
+  };
+
+  // Get backup assignments for a specific staff member
+  const getBackupAssignmentsForStaff = (staffId) => {
+    return backupAssignments.filter((assignment) => assignment.staffId === staffId);
+  };
+
 
   const getGroupById = (id) => staffGroups.find((group) => group.id === id);
   const getStaffById = (id) => staffMembers.find((staff) => staff.id === id);
@@ -324,6 +348,185 @@ const StaffGroupsTab = ({
     }
     setDraggedStaff(null);
     setDragOverGroup(null);
+  };
+
+  // Backup Management Component
+  const BackupManagementSection = () => {
+    const [selectedStaffId, setSelectedStaffId] = useState("");
+    const [selectedGroupId, setSelectedGroupId] = useState("");
+
+    const activeStaff = getActiveStaffMembers();
+    const availableStaffForSelectedGroup = selectedGroupId ? 
+      getAvailableBackupStaffForGroup(selectedGroupId) : activeStaff;
+
+    const handleAddBackup = () => {
+      if (selectedStaffId && selectedGroupId) {
+        if (canStaffBackupGroup(selectedStaffId, selectedGroupId)) {
+          addBackupAssignment(selectedStaffId, selectedGroupId);
+          setSelectedStaffId("");
+          setSelectedGroupId("");
+        }
+      }
+    };
+
+    const isAddButtonDisabled = !selectedStaffId || !selectedGroupId || 
+      !canStaffBackupGroup(selectedStaffId, selectedGroupId);
+
+    return (
+      <div className="bg-white rounded-xl border-2 border-gray-200 p-6">
+        <div className="flex items-center gap-3 mb-6">
+          <div className="p-2 bg-orange-100 rounded-lg">
+            <Shield size={24} className="text-orange-600" />
+          </div>
+          <div>
+            <h3 className="text-xl font-semibold text-gray-800">Backup Group Management</h3>
+            <p className="text-gray-600">Assign staff members as backups for specific groups</p>
+          </div>
+        </div>
+
+        {/* Add New Backup Assignment */}
+        <div className="bg-gray-50 rounded-lg p-4 mb-6">
+          <h4 className="text-lg font-medium text-gray-800 mb-4">Add New Backup Assignment</h4>
+          
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-end">
+            {/* Staff Selection */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Select Staff Member
+              </label>
+              <div className="relative">
+                <select
+                  value={selectedStaffId}
+                  onChange={(e) => setSelectedStaffId(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 appearance-none bg-white"
+                >
+                  <option value="">Choose staff member...</option>
+                  {availableStaffForSelectedGroup.map((staff) => (
+                    <option key={staff.id} value={staff.id}>
+                      {staff.name}
+                    </option>
+                  ))}
+                </select>
+                <ChevronDown size={16} className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 pointer-events-none" />
+              </div>
+            </div>
+
+            {/* Group Selection */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Backup for Group
+              </label>
+              <div className="relative">
+                <select
+                  value={selectedGroupId}
+                  onChange={(e) => setSelectedGroupId(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 appearance-none bg-white"
+                >
+                  <option value="">Choose group...</option>
+                  {staffGroups.map((group) => (
+                    <option key={group.id} value={group.id}>
+                      {group.name}
+                    </option>
+                  ))}
+                </select>
+                <ChevronDown size={16} className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 pointer-events-none" />
+              </div>
+            </div>
+
+            {/* Add Button */}
+            <div>
+              <button
+                onClick={handleAddBackup}
+                disabled={isAddButtonDisabled}
+                className={`w-full flex items-center justify-center gap-2 px-4 py-2 rounded-lg font-medium transition-colors ${
+                  isAddButtonDisabled
+                    ? "bg-gray-100 text-gray-400 cursor-not-allowed"
+                    : "bg-blue-600 text-white hover:bg-blue-700"
+                }`}
+              >
+                <Plus size={16} />
+                Add Backup
+              </button>
+            </div>
+          </div>
+
+          {selectedStaffId && selectedGroupId && !canStaffBackupGroup(selectedStaffId, selectedGroupId) && (
+            <div className="mt-3 p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
+              <div className="flex items-center gap-2">
+                <AlertTriangle size={16} className="text-yellow-600" />
+                <span className="text-sm text-yellow-800">
+                  This staff member is already in the selected group and cannot be assigned as a backup.
+                </span>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Current Backup Assignments */}
+        <div>
+          <h4 className="text-lg font-medium text-gray-800 mb-4">Current Backup Assignments</h4>
+          
+          {backupAssignments.length === 0 ? (
+            <div className="text-center py-8">
+              <Shield size={48} className="mx-auto text-gray-400 mb-3" />
+              <p className="text-gray-600 mb-2">No backup assignments</p>
+              <p className="text-sm text-gray-500">
+                Create backup assignments to ensure group coverage when needed
+              </p>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {backupAssignments.map((assignment) => {
+                const staff = getStaffById(assignment.staffId);
+                const group = getGroupById(assignment.groupId);
+                
+                if (!staff || !group) return null;
+
+                return (
+                  <div
+                    key={assignment.id}
+                    className="flex items-center justify-between p-4 bg-gray-50 rounded-lg border border-gray-200"
+                  >
+                    <div className="flex items-center gap-4">
+                      <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 bg-gray-300 rounded-full flex items-center justify-center text-sm font-medium">
+                          {staff.name?.charAt(0)}
+                        </div>
+                        <div>
+                          <p className="font-medium text-gray-800">{staff.name}</p>
+                          <p className="text-sm text-gray-600">Staff Member</p>
+                        </div>
+                      </div>
+                      
+                      <div className="text-gray-400">→</div>
+                      
+                      <div className="flex items-center gap-3">
+                        <div
+                          className="w-4 h-4 rounded-full border-2 border-white shadow-sm"
+                          style={{ backgroundColor: group.color }}
+                        />
+                        <div>
+                          <p className="font-medium text-gray-800">{group.name}</p>
+                          <p className="text-sm text-gray-600">Backup Group</p>
+                        </div>
+                      </div>
+                    </div>
+
+                    <button
+                      onClick={() => removeBackupAssignment(assignment.id)}
+                      className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                      title="Remove backup assignment"
+                    >
+                      <Trash2 size={16} />
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      </div>
+    );
   };
 
   // Staff Selection Modal Component
@@ -550,77 +753,6 @@ const StaffGroupsTab = ({
     );
   };
 
-  const renderGroupRules = () => {
-    if (staffGroups.length === 0) return null;
-
-    return (
-      <div className="bg-white rounded-xl border border-gray-200 p-6">
-        <h3 className="text-lg font-semibold text-gray-800 mb-4">
-          Automatic Group Conflict Prevention
-        </h3>
-        <p className="text-sm text-gray-600 mb-6">
-          All groups automatically prevent staff from having identical shifts on the same day. 
-          This ensures better coverage and prevents everyone in a group from taking the same day off.
-        </p>
-
-        <div className="space-y-4">
-          {staffGroups.map((group) => {
-            const groupMembers = group.members.map(getStaffById).filter(Boolean);
-            
-            return (
-              <div key={group.id} className="border border-gray-200 rounded-lg p-4">
-                <div className="flex items-center justify-between mb-3">
-                  <div className="flex items-center gap-3">
-                    <div
-                      className="w-4 h-4 rounded-full"
-                      style={{ backgroundColor: group.color }}
-                    />
-                    <h4 className="font-medium text-gray-800">{group.name}</h4>
-                    <span className="text-sm text-gray-500">
-                      ({groupMembers.length} members)
-                    </span>
-                  </div>
-                  
-                  <div className="flex items-center gap-2">
-                    <div className="w-5 h-5 bg-green-500 rounded-full flex items-center justify-center">
-                      <span className="text-white text-xs">✓</span>
-                    </div>
-                    <span className="text-sm font-medium text-green-700">
-                      Conflict prevention enabled
-                    </span>
-                  </div>
-                </div>
-
-                <div className="bg-green-50 border border-green-200 rounded-lg p-3">
-                  <p className="text-xs text-green-700">
-                    Staff in this group cannot have the same shift type (early/late/off) on the same day. 
-                    This ensures coverage and prevents scheduling conflicts.
-                  </p>
-                </div>
-
-                {groupMembers.length < 2 && (
-                  <div className="text-xs text-gray-500 italic mt-2">
-                    Add more staff members to fully benefit from conflict prevention
-                  </div>
-                )}
-              </div>
-            );
-          })}
-        </div>
-
-        <div className="mt-6 p-4 bg-gray-50 rounded-lg">
-          <h5 className="text-sm font-medium text-gray-800 mb-2">How it works:</h5>
-          <ul className="text-xs text-gray-600 space-y-1">
-            <li>• Automatically enabled for all groups - no manual configuration needed</li>
-            <li>• Prevents multiple staff in the same group from taking the same day off</li>
-            <li>• Ensures not everyone in a group works early or late shifts on the same day</li>
-            <li>• Helps maintain coverage while allowing flexibility in scheduling</li>
-            <li>• Rules are enforced during schedule generation and validation</li>
-          </ul>
-        </div>
-      </div>
-    );
-  };
 
   return (
     <div className="p-6 space-y-8">
@@ -683,6 +815,9 @@ const StaffGroupsTab = ({
         </div>
       )}
 
+      {/* Backup Management Section */}
+      <BackupManagementSection />
+
       {/* Staff Selection Modal */}
       <StaffSelectionModal
         groupId={showStaffModal}
@@ -690,8 +825,6 @@ const StaffGroupsTab = ({
         onClose={() => setShowStaffModal(null)}
       />
 
-      {/* Group Scheduling Rules */}
-      {renderGroupRules()}
     </div>
   );
 };

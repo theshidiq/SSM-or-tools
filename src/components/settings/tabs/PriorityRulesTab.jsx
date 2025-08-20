@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import {
   Plus,
   Trash2,
@@ -6,13 +6,11 @@ import {
   AlertTriangle,
   Edit2,
   User,
-  Clock,
   Calendar,
-  Target,
+  Check,
+  XCircle,
 } from "lucide-react";
 import FormField from "../shared/FormField";
-import Slider from "../shared/Slider";
-import ToggleSwitch from "../shared/ToggleSwitch";
 
 const DAYS_OF_WEEK = [
   { id: 0, label: "Sunday", short: "Sun" },
@@ -49,12 +47,6 @@ const RULE_TYPES = [
     icon: "🏠",
     description: "Staff member must be off on specific days",
   },
-  {
-    id: "seniority_priority",
-    label: "Seniority Priority",
-    icon: "👑",
-    description: "Give priority based on staff seniority level",
-  },
 ];
 
 const PRIORITY_LEVELS = [
@@ -72,16 +64,21 @@ const PriorityRulesTab = ({
   validationErrors = {},
 }) => {
   const [editingRule, setEditingRule] = useState(null);
+  const [originalRuleData, setOriginalRuleData] = useState(null);
   const [selectedStaff, setSelectedStaff] = useState("all");
   const [conflictingRules, setConflictingRules] = useState([]);
 
-  const priorityRules = settings?.priorityRules || [];
+  // Ensure priorityRules is always an array - handle legacy object format
+  const rawPriorityRules = settings?.priorityRules || [];
+  const priorityRules = Array.isArray(rawPriorityRules) 
+    ? rawPriorityRules 
+    : []; // For now, treat legacy object format as empty array until migration is complete
 
   // Add escape key listener to exit edit mode
   useEffect(() => {
     const handleKeyDown = (event) => {
       if (event.key === "Escape" && editingRule) {
-        setEditingRule(null);
+        handleCancelEdit();
       }
     };
 
@@ -143,20 +140,25 @@ const PriorityRulesTab = ({
       staffId: staffMembers[0]?.id || "",
       shiftType: "early",
       daysOfWeek: [],
-      priorityLevel: 3,
-      preferenceStrength: 0.8,
-      isHardConstraint: false,
-      penaltyWeight: 5,
-      effectiveFrom: null,
-      effectiveUntil: null,
+      // Set high priority defaults (hidden from UI)
+      priorityLevel: 4, // High Priority
+      preferenceStrength: 1.0, // Strong
+      isHardConstraint: true, // Hard constraint
+      penaltyWeight: 100, // High penalty weight
+      effectiveFrom: null, // Always active
+      effectiveUntil: null, // Always active
       isActive: true,
     };
-    setEditingRule(newRule.id);
-    updatePriorityRules([...priorityRules, newRule]);
+    startEditingRule(newRule.id, newRule);
+    // Ensure we always work with an array
+    const rulesArray = Array.isArray(priorityRules) ? priorityRules : [];
+    updatePriorityRules([...rulesArray, newRule]);
   };
 
   const updateRule = (ruleId, updates) => {
-    const updatedRules = priorityRules.map((rule) =>
+    // Ensure we always work with an array
+    const rulesArray = Array.isArray(priorityRules) ? priorityRules : [];
+    const updatedRules = rulesArray.map((rule) =>
       rule.id === ruleId ? { ...rule, ...updates } : rule,
     );
     updatePriorityRules(updatedRules);
@@ -164,7 +166,9 @@ const PriorityRulesTab = ({
 
   const deleteRule = (ruleId) => {
     if (window.confirm("Are you sure you want to delete this priority rule?")) {
-      const updatedRules = priorityRules.filter((rule) => rule.id !== ruleId);
+      // Ensure we always work with an array
+      const rulesArray = Array.isArray(priorityRules) ? priorityRules : [];
+      const updatedRules = rulesArray.filter((rule) => rule.id !== ruleId);
       updatePriorityRules(updatedRules);
     }
   };
@@ -172,12 +176,44 @@ const PriorityRulesTab = ({
   const getStaffById = (id) => staffMembers.find((staff) => staff.id === id);
 
   const getRulesByStaff = (staffId) => {
-    if (staffId === "all") return priorityRules;
-    return priorityRules.filter((rule) => rule.staffId === staffId);
+    // Ensure we always work with an array
+    const rulesArray = Array.isArray(priorityRules) ? priorityRules : [];
+    if (staffId === "all") return rulesArray;
+    return rulesArray.filter((rule) => rule.staffId === staffId);
   };
 
+  // Start editing a rule and save original data for cancel
+  const startEditingRule = (ruleId, ruleData = null) => {
+    const rule = ruleData || priorityRules.find(r => r.id === ruleId);
+    if (rule) {
+      setOriginalRuleData({ ...rule });
+      setEditingRule(ruleId);
+    }
+  };
+
+  // Save changes and exit edit mode
+  const handleSaveEdit = () => {
+    setEditingRule(null);
+    setOriginalRuleData(null);
+  };
+
+  // Cancel changes and restore original data
+  const handleCancelEdit = useCallback(() => {
+    if (originalRuleData && editingRule) {
+      const rulesArray = Array.isArray(priorityRules) ? priorityRules : [];
+      const updatedRules = rulesArray.map(rule => 
+        rule.id === editingRule ? originalRuleData : rule
+      );
+      updatePriorityRules(updatedRules);
+    }
+    setEditingRule(null);
+    setOriginalRuleData(null);
+  }, [originalRuleData, editingRule, priorityRules, updatePriorityRules]);
+
   const toggleDayOfWeek = (ruleId, dayId) => {
-    const rule = priorityRules.find((r) => r.id === ruleId);
+    // Ensure we always work with an array
+    const rulesArray = Array.isArray(priorityRules) ? priorityRules : [];
+    const rule = rulesArray.find((r) => r.id === ruleId);
     if (!rule) return;
 
     const updatedDays = rule.daysOfWeek.includes(dayId)
@@ -308,24 +344,43 @@ const PriorityRulesTab = ({
             <span
               className={`px-2 py-1 rounded text-xs font-medium ${priority?.color} bg-opacity-10`}
             >
-              {priority?.label}
+              High Priority
             </span>
-            {!isEditing && (
+            {isEditing ? (
+              <div className="flex items-center gap-1">
+                <button
+                  onClick={handleSaveEdit}
+                  className="p-1.5 text-gray-500 hover:text-green-600 hover:bg-green-50 rounded-lg transition-colors"
+                  title="Save changes"
+                >
+                  <Check size={16} />
+                </button>
+                <button
+                  onClick={handleCancelEdit}
+                  className="p-1.5 text-gray-500 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                  title="Cancel changes"
+                >
+                  <XCircle size={16} />
+                </button>
+              </div>
+            ) : (
               <button
-                onClick={() => setEditingRule(rule.id)}
+                onClick={() => startEditingRule(rule.id)}
                 className="p-2 text-gray-500 hover:text-purple-600 hover:bg-purple-50 rounded-lg transition-colors"
                 title="Edit"
               >
                 <Edit2 size={16} />
               </button>
             )}
-            <button
-              onClick={() => deleteRule(rule.id)}
-              className="p-2 text-gray-500 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-              title="Delete"
-            >
-              <Trash2 size={16} />
-            </button>
+            {!isEditing && (
+              <button
+                onClick={() => deleteRule(rule.id)}
+                className="p-2 text-gray-500 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                title="Delete"
+              >
+                <Trash2 size={16} />
+              </button>
+            )}
           </div>
         </div>
 
@@ -379,130 +434,30 @@ const PriorityRulesTab = ({
             {/* Rule Type */}
             {renderRuleTypeSelector(rule)}
 
-            {/* Shift Type (if applicable) */}
-            {rule.ruleType !== "seniority_priority" && (
-              <FormField label="Shift Type">
-                <div className="flex gap-3">
-                  {SHIFT_TYPES.map((shift) => (
-                    <button
-                      key={shift.id}
-                      onClick={() =>
-                        updateRule(rule.id, { shiftType: shift.id })
-                      }
-                      className={`flex-1 flex items-center justify-center gap-2 py-3 border-2 rounded-lg transition-all ${
-                        rule.shiftType === shift.id
-                          ? "border-purple-300 bg-purple-50"
-                          : "border-gray-200 hover:border-gray-300"
-                      }`}
-                    >
-                      <span className="text-lg">{shift.icon}</span>
-                      <span className="text-sm font-medium">{shift.label}</span>
-                    </button>
-                  ))}
-                </div>
-              </FormField>
-            )}
-
-            {/* Days of Week */}
-            {renderDaySelector(rule)}
-
-            {/* Priority Level */}
-            <FormField label="Priority Level">
-              <div className="space-y-2">
-                <select
-                  value={rule.priorityLevel}
-                  onChange={(e) =>
-                    updateRule(rule.id, {
-                      priorityLevel: parseInt(e.target.value),
-                    })
-                  }
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
-                >
-                  {PRIORITY_LEVELS.map((level) => (
-                    <option key={level.value} value={level.value}>
-                      {level.label}
-                    </option>
-                  ))}
-                </select>
-                <p className="text-xs text-gray-500">
-                  Higher priority rules are more likely to be satisfied
-                </p>
+            {/* Shift Type */}
+            <FormField label="Shift Type">
+              <div className="flex gap-3">
+                {SHIFT_TYPES.map((shift) => (
+                  <button
+                    key={shift.id}
+                    onClick={() =>
+                      updateRule(rule.id, { shiftType: shift.id })
+                    }
+                    className={`flex-1 flex items-center justify-center gap-2 py-3 border-2 rounded-lg transition-all ${
+                      rule.shiftType === shift.id
+                        ? "border-purple-300 bg-purple-50"
+                        : "border-gray-200 hover:border-gray-300"
+                    }`}
+                  >
+                    <span className="text-lg">{shift.icon}</span>
+                    <span className="text-sm font-medium">{shift.label}</span>
+                  </button>
+                ))}
               </div>
             </FormField>
 
-            {/* Preference Strength */}
-            <Slider
-              label="Preference Strength"
-              value={rule.preferenceStrength}
-              min={0.1}
-              max={1.0}
-              step={0.1}
-              onChange={(value) =>
-                updateRule(rule.id, { preferenceStrength: value })
-              }
-              description="How strongly this preference should be enforced (0.1 = weak, 1.0 = strong)"
-              colorScheme="purple"
-            />
-
-            {/* Hard Constraint Toggle */}
-            <ToggleSwitch
-              label="Hard Constraint"
-              description="Must be satisfied vs. preferred when possible"
-              checked={rule.isHardConstraint}
-              onChange={(checked) =>
-                updateRule(rule.id, { isHardConstraint: checked })
-              }
-            />
-
-            {/* Penalty Weight */}
-            <Slider
-              label="Penalty Weight"
-              value={rule.penaltyWeight}
-              min={1}
-              max={100}
-              onChange={(value) =>
-                updateRule(rule.id, { penaltyWeight: value })
-              }
-              description="Higher values make this rule more important in scheduling decisions"
-              colorScheme={rule.isHardConstraint ? "red" : "orange"}
-            />
-
-            {/* Effective Date Range */}
-            <div className="grid grid-cols-2 gap-4">
-              <FormField label="Effective From">
-                <input
-                  type="date"
-                  value={rule.effectiveFrom || ""}
-                  onChange={(e) =>
-                    updateRule(rule.id, {
-                      effectiveFrom: e.target.value || null,
-                    })
-                  }
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
-                />
-              </FormField>
-
-              <FormField label="Effective Until">
-                <input
-                  type="date"
-                  value={rule.effectiveUntil || ""}
-                  onChange={(e) =>
-                    updateRule(rule.id, {
-                      effectiveUntil: e.target.value || null,
-                    })
-                  }
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
-                />
-              </FormField>
-            </div>
-
-            {/* Active Toggle */}
-            <ToggleSwitch
-              label="Active"
-              description="Whether this rule is currently active"
-              checked={rule.isActive}
-              onChange={(checked) => updateRule(rule.id, { isActive: checked })}
-            />
+            {/* Days of Week */}
+            {renderDaySelector(rule)}
           </div>
         )}
 
@@ -534,25 +489,12 @@ const PriorityRulesTab = ({
 
             {/* Rule Details */}
             <div className="flex items-center gap-4 text-sm text-gray-600">
-              <span className="flex items-center gap-1">
-                <Clock size={14} />
-                Strength: {Math.round(rule.preferenceStrength * 100)}%
+              <span className="px-2 py-1 bg-green-100 text-green-700 text-xs rounded">
+                High Priority Rule
               </span>
-              <span
-                className={`px-2 py-1 rounded text-xs ${
-                  rule.isHardConstraint
-                    ? "bg-red-100 text-red-700"
-                    : "bg-yellow-100 text-yellow-700"
-                }`}
-              >
-                {rule.isHardConstraint ? "Hard" : "Soft"}
+              <span className="px-2 py-1 bg-red-100 text-red-700 text-xs rounded">
+                Hard Constraint
               </span>
-              <span>Weight: {rule.penaltyWeight}</span>
-              {!rule.isActive && (
-                <span className="px-2 py-1 bg-gray-100 text-gray-600 text-xs rounded">
-                  Inactive
-                </span>
-              )}
             </div>
           </div>
         )}

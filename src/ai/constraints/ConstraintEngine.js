@@ -676,24 +676,63 @@ export const validateConsecutiveOffDays = (
 };
 
 /**
- * Validate coverage compensation rules
- * When Group 2 member (料理長 or 古藤) has day off, 中田 must work normal shift
+ * Validate coverage compensation rules and backup staff assignments
+ * Enhanced to support general backup staff assignments for all groups
  * @param {Object} scheduleData - Complete schedule data for all staff
  * @param {string} dateKey - Date in YYYY-MM-DD format
  * @param {Array} staffMembers - Array of staff member objects
+ * @param {Array} backupAssignments - Backup assignments configuration
  * @returns {Object} Validation result
  */
 export const validateCoverageCompensation = async (
   scheduleData,
   dateKey,
   staffMembers,
+  backupAssignments = [],
 ) => {
   const violations = [];
   const staffGroups = await getStaffConflictGroups();
 
-  // Find Group 2 (料理長, 古藤) and 中田
+  // Legacy validation: Group 2 specific coverage rule
   const group2 = staffGroups.find((g) => g.name === "Group 2");
-  if (!group2 || !group2.coverageRule) {
+  if (group2 && group2.coverageRule) {
+    const legacyResult = await validateLegacyCoverageRule(
+      scheduleData,
+      dateKey,
+      staffMembers,
+      group2
+    );
+    violations.push(...legacyResult.violations);
+  }
+
+  // Enhanced validation: General backup staff assignments
+  const generalResult = await validateGeneralBackupAssignments(
+    scheduleData,
+    dateKey,
+    staffMembers,
+    staffGroups,
+    backupAssignments
+  );
+  violations.push(...generalResult.violations);
+
+  return {
+    valid: violations.length === 0,
+    violations,
+  };
+};
+
+/**
+ * Validate legacy Group 2 coverage rule for backward compatibility
+ * @param {Object} scheduleData - Schedule data
+ * @param {string} dateKey - Date key
+ * @param {Array} staffMembers - Staff members
+ * @param {Object} group2 - Group 2 configuration
+ * @returns {Object} Validation result
+ */
+const validateLegacyCoverageRule = async (scheduleData, dateKey, staffMembers, group2) => {
+  const violations = [];
+  
+  if (!group2.coverageRule) {
     return { valid: true, violations: [] };
   }
 
@@ -728,30 +767,125 @@ export const validateCoverageCompensation = async (
     }
   });
 
-  // If Group 2 member is off, check if 中田 has normal shift
+  // If Group 2 member is off, check if backup staff has normal shift
   if (group2MemberOff) {
     const backupShift = scheduleData[backupStaff.id][dateKey];
-    if (!isNormalShift(backupShift)) {
+    if (!isNormalShift(backupShift) && !isWorkingShift(backupShift)) {
       violations.push({
         type: VIOLATION_TYPES.COVERAGE_COMPENSATION_VIOLATION,
         date: dateKey,
-        message: `Coverage compensation violated on ${dateKey}: ${offMembers.join(", ")} off but ${backupStaffName} not on normal shift (${backupShift})`,
+        message: `Coverage compensation violated on ${dateKey}: ${offMembers.join(", ")} off but ${backupStaffName} not working (${backupShift})`,
         severity: "high",
         details: {
           groupMembersOff: offMembers,
           backupStaff: backupStaffName,
           backupShift,
-          requiredShift: "normal",
+          requiredShift: "working",
           coverageRule: group2.coverageRule,
+          validationType: "legacy"
         },
       });
     }
   }
 
-  return {
-    valid: violations.length === 0,
-    violations,
-  };
+  return { valid: violations.length === 0, violations };
+};
+
+/**
+ * Validate general backup staff assignments for all groups
+ * @param {Object} scheduleData - Schedule data
+ * @param {string} dateKey - Date key
+ * @param {Array} staffMembers - Staff members
+ * @param {Array} staffGroups - Staff groups
+ * @param {Array} backupAssignments - Backup assignments
+ * @returns {Object} Validation result
+ */
+const validateGeneralBackupAssignments = async (
+  scheduleData,
+  dateKey,
+  staffMembers,
+  staffGroups,
+  backupAssignments
+) => {
+  const violations = [];
+  
+  // Group backup assignments by group ID
+  const backupsByGroup = new Map();
+  backupAssignments.forEach(assignment => {
+    if (!backupsByGroup.has(assignment.groupId)) {
+      backupsByGroup.set(assignment.groupId, []);
+    }
+    backupsByGroup.get(assignment.groupId).push(assignment.staffId);
+  });
+
+  // Check each group
+  staffGroups.forEach(group => {
+    const groupBackups = backupsByGroup.get(group.id) || [];
+    if (groupBackups.length === 0) return; // No backup staff for this group
+
+    // Find group members with day off
+    const membersOff = [];
+    group.members.forEach(memberId => {
+      const staff = staffMembers.find(s => s.id === memberId);
+      if (staff && scheduleData[memberId] && scheduleData[memberId][dateKey] !== undefined) {
+        const shift = scheduleData[memberId][dateKey];
+        if (isOffDay(shift)) {
+          membersOff.push({
+            staffId: memberId,
+            staffName: staff.name,
+            shift
+          });
+        }
+      }
+    });
+
+    // If group members are off, check backup coverage
+    if (membersOff.length > 0) {
+      const workingBackups = [];
+      const availableBackups = [];
+      
+      groupBackups.forEach(backupStaffId => {
+        const backupStaff = staffMembers.find(s => s.id === backupStaffId);
+        if (backupStaff && scheduleData[backupStaffId]) {
+          const backupShift = scheduleData[backupStaffId][dateKey];
+          
+          if (isWorkingShift(backupShift)) {
+            workingBackups.push({
+              staffId: backupStaffId,
+              staffName: backupStaff.name,
+              shift: backupShift
+            });
+          } else {
+            availableBackups.push({
+              staffId: backupStaffId,
+              staffName: backupStaff.name,
+              shift: backupShift
+            });
+          }
+        }
+      });
+
+      // Check if there's adequate backup coverage
+      if (workingBackups.length === 0 && availableBackups.length > 0) {
+        violations.push({
+          type: VIOLATION_TYPES.COVERAGE_COMPENSATION_VIOLATION,
+          date: dateKey,
+          message: `Backup staff not assigned for ${group.name} on ${dateKey}: ${membersOff.map(m => m.staffName).join(", ")} off but backup staff not working`,
+          severity: "medium",
+          details: {
+            groupId: group.id,
+            groupName: group.name,
+            groupMembersOff: membersOff.map(m => m.staffName),
+            backupStaffAvailable: availableBackups.map(b => b.staffName),
+            backupStaffWorking: workingBackups.map(b => b.staffName),
+            validationType: "general_backup"
+          },
+        });
+      }
+    }
+  });
+
+  return { valid: violations.length === 0, violations };
 };
 
 /**
@@ -855,12 +989,14 @@ export const validateProximityPatterns = async (
  * @param {Object} scheduleData - Complete schedule data
  * @param {Array} staffMembers - Array of staff member objects
  * @param {Array} dateRange - Array of dates for the period
+ * @param {Array} backupAssignments - Backup assignments configuration (optional)
  * @returns {Object} Complete validation result
  */
 export const validateAllConstraints = async (
   scheduleData,
   staffMembers,
   dateRange,
+  backupAssignments = [],
 ) => {
   console.log("🔍 Running comprehensive constraint validation...");
 
@@ -937,6 +1073,7 @@ export const validateAllConstraints = async (
       scheduleData,
       dateKey,
       staffMembers,
+      backupAssignments,
     );
     if (!coverageCompensationResult.valid) {
       allViolations.push(...coverageCompensationResult.violations);

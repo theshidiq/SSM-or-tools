@@ -7,24 +7,28 @@ Phase 2 implements the Core Prediction Engine, a comprehensive AI-powered system
 ## 🎯 Key Features
 
 ### Intelligent Schedule Generation
+
 - **AI-Powered Generation**: Creates complete schedules using hybrid CSP and genetic algorithms
 - **Constraint Satisfaction**: Ensures all business rules and constraints are met
 - **Pattern Recognition**: Learns from historical data to predict optimal assignments
 - **Smart Filling**: Preserves existing data while intelligently filling empty cells
 
 ### Automatic Conflict Resolution
+
 - **Priority-Based Resolution**: Resolves conflicts following the constraint priority order
 - **Multiple Strategies**: Supports different resolution approaches (priority-based, balance-focused)
 - **Real-Time Processing**: Quickly identifies and resolves constraint violations
 - **Comprehensive Coverage**: Handles all constraint types from the specification
 
 ### Multi-Objective Optimization
+
 - **Fairness**: Ensures equitable workload distribution across staff
 - **Preferences**: Maximizes staff preference satisfaction
 - **Efficiency**: Optimizes coverage and resource utilization
 - **Constraint Compliance**: Maintains strict adherence to business rules
 
 ### Advanced Algorithms
+
 - **CSP Solver**: Constraint Satisfaction Problem solving with backtracking
 - **Genetic Algorithm**: Evolutionary optimization for complex scenarios
 - **Pattern Recognition**: Machine learning from historical scheduling patterns
@@ -55,26 +59,30 @@ src/ai/
 ### Basic Usage
 
 ```javascript
-import { predictionEngine } from './src/ai/PredictionEngine';
+import { predictionEngine } from "./src/ai/PredictionEngine";
 
 // Initialize the prediction engine
 const initResult = await predictionEngine.initialize();
 
 if (initResult.success) {
-  console.log('🤖 Prediction Engine ready!');
-  
+  console.log("🤖 Prediction Engine ready!");
+
   // Generate a complete schedule
   const scheduleResult = await predictionEngine.generateSchedule({
     monthIndex: 0,
     staffMembers: yourStaffMembers,
     dateRange: yourDateRange,
     existingSchedule: {},
-    optimizationGoals: ['constraint_satisfaction', 'fairness', 'preferences']
+    optimizationGoals: ["constraint_satisfaction", "fairness", "preferences"],
   });
-  
+
   if (scheduleResult.success) {
-    console.log(`✅ Schedule generated with ${scheduleResult.analysis.optimizationScore}% score`);
-    console.log(`🎯 Constraint satisfaction: ${scheduleResult.analysis.constraintSatisfaction}`);
+    console.log(
+      `✅ Schedule generated with ${scheduleResult.analysis.optimizationScore}% score`,
+    );
+    console.log(
+      `🎯 Constraint satisfaction: ${scheduleResult.analysis.constraintSatisfaction}`,
+    );
   }
 }
 ```
@@ -87,8 +95,8 @@ const resolutionResult = await predictionEngine.resolveConflicts({
   scheduleData: conflictedSchedule,
   staffMembers: staffMembers,
   dateRange: dateRange,
-  resolutionStrategy: 'priority_based',
-  maxAttempts: 5
+  resolutionStrategy: "priority_based",
+  maxAttempts: 5,
 });
 
 console.log(`🔧 ${resolutionResult.conflictsResolved} conflicts resolved`);
@@ -103,8 +111,8 @@ const optimizationResult = await predictionEngine.optimizeSchedule({
   scheduleData: currentSchedule,
   staffMembers: staffMembers,
   dateRange: dateRange,
-  goals: ['fairness', 'preferences', 'efficiency'],
-  maxIterations: 100
+  goals: ["fairness", "preferences", "efficiency"],
+  maxIterations: 100,
 });
 
 console.log(`📈 Score improved by ${optimizationResult.improvementScore}%`);
@@ -115,15 +123,17 @@ console.log(`📈 Score improved by ${optimizationResult.improvementScore}%`);
 ```javascript
 // Get prediction for specific staff and date
 const prediction = await predictionEngine.predictShift({
-  staffId: 'staff_001',
-  staffName: '料理長',
-  dateKey: '2025-01-28',
+  staffId: "staff_001",
+  staffName: "料理長",
+  dateKey: "2025-01-28",
   currentSchedule: schedule,
   staffMembers: staffMembers,
-  contextDates: dateRange
+  contextDates: dateRange,
 });
 
-console.log(`🔮 Recommended: ${prediction.recommendedShift} (${prediction.confidence * 100}% confidence)`);
+console.log(
+  `🔮 Recommended: ${prediction.recommendedShift} (${prediction.confidence * 100}% confidence)`,
+);
 console.log(`💭 Reasoning: ${prediction.reasoning}`);
 ```
 
@@ -132,29 +142,29 @@ console.log(`💭 Reasoning: ${prediction.reasoning}`);
 ### Custom CSP Solving
 
 ```javascript
-import { CSPSolver } from './src/ai/algorithms/CSPSolver';
+import { CSPSolver } from "./src/ai/algorithms/CSPSolver";
 
 const cspSolver = new CSPSolver();
 cspSolver.initialize({
   heuristics: {
-    variableOrdering: 'most_constrained_first',
-    valueOrdering: 'least_constraining_first',
-    constraintPropagation: true
-  }
+    variableOrdering: "most_constrained_first",
+    valueOrdering: "least_constraining_first",
+    constraintPropagation: true,
+  },
 });
 
 const result = await cspSolver.generateSchedule({
   staffMembers: staffMembers,
   dateRange: dateRange,
   existingSchedule: {},
-  timeLimit: 30000 // 30 seconds
+  timeLimit: 30000, // 30 seconds
 });
 ```
 
 ### Genetic Algorithm Optimization
 
 ```javascript
-import { GeneticAlgorithm } from './src/ai/algorithms/GeneticAlgorithm';
+import { GeneticAlgorithm } from "./src/ai/algorithms/GeneticAlgorithm";
 
 const ga = new GeneticAlgorithm();
 ga.initialize({
@@ -162,21 +172,21 @@ ga.initialize({
     populationSize: 50,
     maxGenerations: 100,
     crossoverRate: 0.8,
-    mutationRate: 0.1
-  }
+    mutationRate: 0.1,
+  },
 });
 
 const result = await ga.evolve({
   staffMembers: staffMembers,
   dateRange: dateRange,
-  initialSchedule: baseSchedule
+  initialSchedule: baseSchedule,
 });
 ```
 
 ### Pattern-Based Predictions
 
 ```javascript
-import { PredictionModel } from './src/ai/models/PredictionModel';
+import { PredictionModel } from "./src/ai/models/PredictionModel";
 
 const predictionModel = new PredictionModel();
 await predictionModel.initialize();
@@ -186,11 +196,11 @@ await predictionModel.trainFromHistoricalData(historicalData);
 
 // Get predictions
 const prediction = await predictionModel.predictShift({
-  staffId: 'staff_001',
-  staffName: '料理長',
-  dateKey: '2025-01-28',
+  staffId: "staff_001",
+  staffName: "料理長",
+  dateKey: "2025-01-28",
   currentSchedule: schedule,
-  staffMembers: staffMembers
+  staffMembers: staffMembers,
 });
 ```
 
@@ -234,6 +244,7 @@ const prediction = await predictionModel.predictShift({
 ### Constraint Satisfaction Problem (CSP) Solver
 
 **Features:**
+
 - Backtracking with constraint propagation
 - Forward checking and arc consistency
 - Variable ordering heuristics (Most Constrained First)
@@ -241,6 +252,7 @@ const prediction = await predictionModel.predictShift({
 - Timeout handling and partial solutions
 
 **Performance:**
+
 - Handles up to 200+ variables efficiently
 - Average solution time: < 5 seconds for typical problems
 - Constraint check optimization with early termination
@@ -248,6 +260,7 @@ const prediction = await predictionModel.predictShift({
 ### Genetic Algorithm
 
 **Features:**
+
 - Tournament selection with elitism
 - Single-point crossover for schedule structures
 - Adaptive mutation rates
@@ -255,6 +268,7 @@ const prediction = await predictionModel.predictShift({
 - Population diversity maintenance
 
 **Parameters:**
+
 - Population Size: 50 (configurable)
 - Max Generations: 100 (configurable)
 - Crossover Rate: 80%
@@ -264,16 +278,19 @@ const prediction = await predictionModel.predictShift({
 ### Schedule Generation Strategies
 
 **Priority-First Strategy:**
+
 1. Apply priority rules (Sunday preferences, etc.)
 2. Fill remaining positions with balanced approach
 3. Ensure group constraint compliance
 
 **Balance-First Strategy:**
+
 1. Calculate monthly limits for each staff
 2. Sort dates by difficulty (weekends first)
 3. Distribute workload evenly across staff
 
 **Pattern-Based Strategy:**
+
 1. Use learned patterns for predictions
 2. Apply contextual scoring
 3. Fill remaining slots with balanced approach
@@ -281,18 +298,21 @@ const prediction = await predictionModel.predictShift({
 ## 📈 Performance Metrics
 
 ### Generation Performance
+
 - **Average Generation Time**: < 3 seconds for 10 staff × 31 days
 - **Success Rate**: 95%+ for feasible problems
 - **Constraint Satisfaction**: 98%+ compliance rate
 - **Optimization Score**: Average 85%+ quality
 
 ### Memory Usage
+
 - **Base System**: ~8MB (including Phase 1)
 - **Per Staff Member**: ~75KB including patterns
 - **Per Month**: ~300KB schedule data
 - **Prediction Cache**: Configurable, default 1000 entries
 
 ### Scalability
+
 - **Staff Limit**: 200+ staff members
 - **Time Range**: 12+ months of history
 - **Concurrent Operations**: Multiple optimizations simultaneously
@@ -305,11 +325,11 @@ const prediction = await predictionModel.predictShift({
 ```javascript
 const status = predictionEngine.getSystemStatus();
 
-console.log('System Health:', {
+console.log("System Health:", {
   initialized: status.initialized,
   components: status.components,
   performance: status.performance,
-  successRate: status.performance.successRate
+  successRate: status.performance.successRate,
 });
 ```
 
@@ -321,8 +341,8 @@ const cspStatus = predictionEngine.cspSolver.getStatus();
 const gaStatus = predictionEngine.geneticAlgorithm.getStatus();
 const optimizerStatus = predictionEngine.optimizationEngine.getStatus();
 
-console.log('CSP Success Rate:', cspStatus.successRate);
-console.log('GA Success Rate:', gaStatus.successRate);
+console.log("CSP Success Rate:", cspStatus.successRate);
+console.log("GA Success Rate:", gaStatus.successRate);
 ```
 
 ### Performance Analysis
@@ -331,10 +351,10 @@ console.log('GA Success Rate:', gaStatus.successRate);
 // Detailed performance metrics
 const metrics = predictionEngine.performanceMetrics;
 
-console.log('Performance:', {
+console.log("Performance:", {
   totalPredictions: metrics.totalPredictions,
   averageGenerationTime: metrics.generationTime,
-  cacheHitRate: metrics.cacheSize / metrics.totalPredictions
+  cacheHitRate: metrics.cacheSize / metrics.totalPredictions,
 });
 ```
 
@@ -351,6 +371,7 @@ npm run test:coverage -- --testPathPattern=Phase2
 ```
 
 ### Test Coverage
+
 - **Integration Tests**: Complete workflow testing
 - **Component Tests**: Individual component functionality
 - **Algorithm Tests**: CSP solver and genetic algorithm
@@ -360,13 +381,13 @@ npm run test:coverage -- --testPathPattern=Phase2
 ### Demo Scripts
 
 ```javascript
-import { runPhase2Demo } from './src/ai/demo/Phase2Demo';
+import { runPhase2Demo } from "./src/ai/demo/Phase2Demo";
 
 // Run comprehensive demonstration
 const demoResult = await runPhase2Demo();
 
 if (demoResult.success) {
-  console.log('All demos completed successfully!');
+  console.log("All demos completed successfully!");
   console.log(demoResult.summary);
 }
 ```
@@ -376,6 +397,7 @@ if (demoResult.success) {
 Phase 2 builds seamlessly on Phase 1 components:
 
 ### Enhanced Foundation Integration
+
 ```javascript
 // Phase 2 automatically initializes Phase 1
 const initResult = await predictionEngine.initialize();
@@ -387,23 +409,25 @@ const generation = await predictionEngine.generateSchedule({...});
 ```
 
 ### Constraint Engine Integration
+
 ```javascript
 // Phase 2 uses enhanced constraint validation
-import { validateAllConstraints } from './src/ai/ConstraintEngine';
+import { validateAllConstraints } from "./src/ai/ConstraintEngine";
 
 // Validation includes all Phase 1 + Phase 2 constraints
 const validation = validateAllConstraints(schedule, staffMembers, dateRange);
 ```
 
 ### Data Analysis Integration
+
 ```javascript
 // Combined analysis capabilities
 const recommendations = await predictionEngine.getRecommendations({
   scheduleData: schedule,
   staffMembers: staffMembers,
   dateRange: dateRange,
-  includeOptimization: true,  // Phase 2 feature
-  includePredictions: true    // Phase 2 feature
+  includeOptimization: true, // Phase 2 feature
+  includePredictions: true, // Phase 2 feature
 });
 ```
 
@@ -422,14 +446,14 @@ const newSchedule = await predictionEngine.generateSchedule({
   dateRange: getMonthDateRange(),
   existingSchedule: getPartialSchedule(), // Any pre-filled data
   preserveExisting: true,
-  optimizationGoals: ['constraint_satisfaction', 'fairness', 'preferences']
+  optimizationGoals: ["constraint_satisfaction", "fairness", "preferences"],
 });
 
 // 3. Review and get recommendations
 const recommendations = await predictionEngine.getRecommendations({
   scheduleData: newSchedule.schedule,
   staffMembers: getAllStaffMembers(),
-  dateRange: getMonthDateRange()
+  dateRange: getMonthDateRange(),
 });
 
 // 4. Apply any critical recommendations
@@ -437,9 +461,9 @@ if (recommendations.recommendations.critical.length > 0) {
   const resolved = await predictionEngine.resolveConflicts({
     scheduleData: newSchedule.schedule,
     staffMembers: getAllStaffMembers(),
-    dateRange: getMonthDateRange()
+    dateRange: getMonthDateRange(),
   });
-  
+
   if (resolved.success) {
     console.log(`✅ Resolved ${resolved.conflictsResolved} critical issues`);
   }
@@ -450,7 +474,7 @@ const optimized = await predictionEngine.optimizeSchedule({
   scheduleData: newSchedule.schedule,
   staffMembers: getAllStaffMembers(),
   dateRange: getMonthDateRange(),
-  goals: ['fairness', 'preferences', 'efficiency']
+  goals: ["fairness", "preferences", "efficiency"],
 });
 
 console.log(`🎯 Final schedule score: ${optimized.optimizationScore}%`);
@@ -461,9 +485,9 @@ console.log(`🎯 Final schedule score: ${optimized.optimizationScore}%`);
 ```javascript
 // Predict optimal shift for specific scenarios
 const scenarios = [
-  { staff: '料理長', date: '2025-01-28', context: 'Sunday' },
-  { staff: '与儀', date: '2025-01-28', context: 'Sunday' },
-  { staff: '中田', date: '2025-01-29', context: '料理長 day off' }
+  { staff: "料理長", date: "2025-01-28", context: "Sunday" },
+  { staff: "与儀", date: "2025-01-28", context: "Sunday" },
+  { staff: "中田", date: "2025-01-29", context: "料理長 day off" },
 ];
 
 for (const scenario of scenarios) {
@@ -473,10 +497,12 @@ for (const scenario of scenarios) {
     dateKey: scenario.date,
     currentSchedule: getCurrentSchedule(),
     staffMembers: getAllStaffMembers(),
-    contextDates: getContextDates(scenario.date)
+    contextDates: getContextDates(scenario.date),
   });
-  
-  console.log(`${scenario.staff} on ${scenario.date}: ${prediction.recommendedShift} (${Math.round(prediction.confidence * 100)}%)`);
+
+  console.log(
+    `${scenario.staff} on ${scenario.date}: ${prediction.recommendedShift} (${Math.round(prediction.confidence * 100)}%)`,
+  );
   console.log(`Reasoning: ${prediction.reasoning}`);
 }
 ```
@@ -486,59 +512,65 @@ for (const scenario of scenarios) {
 ### Common Issues
 
 #### "Prediction Engine not initialized"
+
 ```javascript
 // Always initialize before using
 await predictionEngine.initialize();
 ```
 
 #### "No feasible solution found"
+
 ```javascript
 // Check constraints are not over-constrained
 const validation = await aiFoundation.validateConstraints(
-  existingSchedule, 
-  staffMembers, 
-  dateRange
+  existingSchedule,
+  staffMembers,
+  dateRange,
 );
 
 if (!validation.overallValid) {
-  console.log('Initial constraints violated:', validation.totalViolations);
+  console.log("Initial constraints violated:", validation.totalViolations);
 }
 ```
 
 #### "Generation timeout"
+
 ```javascript
 // Increase timeout or reduce problem complexity
 const result = await predictionEngine.generateSchedule({
   // ... other params
-  maxIterations: 50,  // Reduce iterations
-  optimizationGoals: ['constraint_satisfaction'] // Focus on constraints only
+  maxIterations: 50, // Reduce iterations
+  optimizationGoals: ["constraint_satisfaction"], // Focus on constraints only
 });
 ```
 
 #### "Low optimization scores"
+
 ```javascript
 // Check individual objective scores
 const result = await predictionEngine.optimizeSchedule({
   // ... params
 });
 
-console.log('Objective breakdown:', result.objectives.final);
+console.log("Objective breakdown:", result.objectives.final);
 // Focus on improving lowest-scoring objectives
 ```
 
 ### Performance Issues
 
 #### Slow generation
+
 ```javascript
 // Use CSP solver directly for faster constraint-focused generation
 const cspResult = await predictionEngine.cspSolver.generateSchedule({
   staffMembers: staffMembers.slice(0, 10), // Limit staff for testing
-  dateRange: dateRange.slice(0, 14),       // Limit date range
-  timeLimit: 10000                         // 10 second limit
+  dateRange: dateRange.slice(0, 14), // Limit date range
+  timeLimit: 10000, // 10 second limit
 });
 ```
 
 #### Memory usage
+
 ```javascript
 // Clear prediction cache periodically
 predictionEngine.predictionCache.clear();
@@ -549,30 +581,34 @@ await predictionEngine.initialize();
 ```
 
 ### Debug Mode
+
 ```javascript
 // Enable detailed logging
-localStorage.setItem('ai_debug_phase2', 'true');
+localStorage.setItem("ai_debug_phase2", "true");
 
 // Monitor system performance
 const status = predictionEngine.getSystemStatus();
-console.log('System Performance:', status.performance);
+console.log("System Performance:", status.performance);
 ```
 
 ## 📞 Support & Contributing
 
 ### Getting Help
+
 1. Check this documentation
 2. Review the test files for usage examples
 3. Run the demo scripts to understand functionality
 4. Examine the constraint definitions in `ConstraintEngine.js`
 
 ### Development
+
 - Follow existing code patterns and architecture
 - Add tests for new features
 - Update documentation
 - Use JSDoc comments for all functions
 
 ### Performance Guidelines
+
 - Monitor generation times and optimize bottlenecks
 - Use appropriate algorithms for problem size
 - Cache predictions when possible

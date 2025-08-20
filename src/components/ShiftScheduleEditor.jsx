@@ -313,7 +313,6 @@ const ShiftScheduleEditor = ({
     }
   };
 
-
   const handleAddTable = () => {
     // Add next period and switch to it
     const newPeriodIndex = addNextPeriod();

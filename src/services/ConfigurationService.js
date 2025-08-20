@@ -39,7 +39,7 @@ export class ConfigurationService {
     const migratedSettings = { ...settings };
 
     // Current migration version - increment this when adding new migrations
-    const CURRENT_MIGRATION_VERSION = 2;
+    const CURRENT_MIGRATION_VERSION = 3;
     const currentVersion = settings.migrationVersion || 0;
 
     // Migrate dailyLimits from object to array format
@@ -180,6 +180,58 @@ export class ConfigurationService {
       }
     }
 
+    // Migration v3: Convert priorityRules from object format to array format
+    if (
+      currentVersion < 3 &&
+      settings.priorityRules &&
+      !Array.isArray(settings.priorityRules)
+    ) {
+      console.log(
+        "Running migration v3: Converting priorityRules from object to array format",
+      );
+      const oldPriorityRules = settings.priorityRules;
+      migratedSettings.priorityRules = [];
+
+      // Convert old object format to new array format
+      Object.entries(oldPriorityRules).forEach(([staffName, staffRules]) => {
+        if (
+          staffRules.preferredShifts &&
+          Array.isArray(staffRules.preferredShifts)
+        ) {
+          staffRules.preferredShifts.forEach((pref, index) => {
+            const newRule = {
+              id: `migrated-priority-rule-${staffName}-${index}-${Date.now()}`,
+              name: `${staffName} - ${pref.shift} preference`,
+              description: `Migrated rule: ${staffName} prefers ${pref.shift} shifts`,
+              ruleType:
+                pref.shift === "off" ? "required_off" : "preferred_shift",
+              staffId: staffName, // Using staff name as ID - may need adjustment based on actual staff data structure
+              shiftType: pref.shift,
+              daysOfWeek: pref.day === "sunday" ? [0] : [], // Convert day names to day IDs (0=Sunday)
+              priorityLevel:
+                pref.priority === "high"
+                  ? 4
+                  : pref.priority === "medium"
+                    ? 3
+                    : 2,
+              preferenceStrength: pref.strength || 0.8,
+              isHardConstraint: pref.priority === "high",
+              penaltyWeight: pref.priority === "high" ? 80 : 50,
+              effectiveFrom: null,
+              effectiveUntil: null,
+              isActive: true,
+            };
+            migratedSettings.priorityRules.push(newRule);
+          });
+        }
+      });
+
+      console.log(
+        `Migrated ${migratedSettings.priorityRules.length} priority rules from object to array format`,
+      );
+      needsMigration = true;
+    }
+
     // Update migration version if any migration ran or if version is outdated
     if (needsMigration || currentVersion < CURRENT_MIGRATION_VERSION) {
       migratedSettings.migrationVersion = CURRENT_MIGRATION_VERSION;
@@ -253,7 +305,7 @@ export class ConfigurationService {
   getDefaultSettings() {
     return {
       // Migration version
-      migrationVersion: 2,
+      migrationVersion: 3,
 
       // Staff Groups
       staffGroups: [
@@ -359,19 +411,10 @@ export class ConfigurationService {
         },
       ],
 
-      // Priority Rules
-      priorityRules: {
-        料理長: {
-          preferredShifts: [
-            { day: "sunday", shift: "early", priority: "high", strength: 0.8 },
-          ],
-        },
-        与儀: {
-          preferredShifts: [
-            { day: "sunday", shift: "off", priority: "high", strength: 0.9 },
-          ],
-        },
-      },
+      // Priority Rules - using array format for consistency with UI components
+      priorityRules: [
+        // Example rules - in production, users will create their own rules through the UI
+      ],
 
       // ML Parameters
       mlParameters: {

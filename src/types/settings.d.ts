@@ -62,7 +62,7 @@ export interface PriorityRule {
   id: string;
   name: string;
   description: string;
-  ruleType: 'preferred_shift' | 'avoid_shift' | 'required_off' | 'seniority_priority';
+  ruleType: 'preferred_shift' | 'avoid_shift' | 'required_off';
   staffId: string;
   shiftType?: 'early' | 'late' | 'off';
   daysOfWeek: number[];

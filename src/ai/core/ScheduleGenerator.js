@@ -17,6 +17,7 @@ import {
   PRIORITY_RULES,
   getMonthlyLimits,
 } from "../constraints/ConstraintEngine";
+import BackupStaffService from "../../services/BackupStaffService";
 
 /**
  * Main ScheduleGenerator class
@@ -27,6 +28,7 @@ export class ScheduleGenerator {
     this.generationStrategies = new Map();
     this.shiftPriorities = new Map();
     this.staffPatterns = new Map();
+    this.backupStaffService = new BackupStaffService();
     this.generationStats = {
       totalGenerations: 0,
       successfulGenerations: 0,
@@ -51,6 +53,19 @@ export class ScheduleGenerator {
 
       // Load historical patterns if available
       await this.loadHistoricalPatterns(options);
+
+      // Initialize backup staff service
+      const {
+        staffMembers = [],
+        staffGroups = [],
+        backupAssignments = []
+      } = options;
+      
+      await this.backupStaffService.initialize(
+        staffMembers,
+        staffGroups,
+        backupAssignments
+      );
 
       this.initialized = true;
       console.log("✅ Schedule Generator initialized successfully");
@@ -404,18 +419,25 @@ export class ScheduleGenerator {
       });
     });
 
+    // Apply backup staff assignments after main generation
+    const finalSchedule = await this.applyBackupStaffAssignments(
+      workingSchedule,
+      staffMembers,
+      dateRange
+    );
+
     return {
-      schedule: workingSchedule,
+      schedule: finalSchedule,
       changesApplied,
       strategy: "priority_first",
       analysis: {
         priorityRulesApplied: this.countPriorityRulesApplied(
-          workingSchedule,
+          finalSchedule,
           dateRange,
           staffMembers,
         ),
         balanceScore: this.calculateBalanceScore(
-          workingSchedule,
+          finalSchedule,
           staffMembers,
           dateRange,
         ),
@@ -531,23 +553,30 @@ export class ScheduleGenerator {
       });
     });
 
+    // Apply backup staff assignments after main generation
+    const finalSchedule = await this.applyBackupStaffAssignments(
+      workingSchedule,
+      staffMembers,
+      dateRange
+    );
+
     return {
-      schedule: workingSchedule,
+      schedule: finalSchedule,
       changesApplied,
       strategy: "balance_first",
       analysis: {
         balanceScore: this.calculateBalanceScore(
-          workingSchedule,
+          finalSchedule,
           staffMembers,
           dateRange,
         ),
         workloadVariance: this.calculateWorkloadVariance(
-          workingSchedule,
+          finalSchedule,
           staffMembers,
           dateRange,
         ),
         offDayDistribution: this.calculateOffDayDistribution(
-          workingSchedule,
+          finalSchedule,
           staffMembers,
           dateRange,
         ),
@@ -614,8 +643,15 @@ export class ScheduleGenerator {
     );
     changesApplied += remaining.changesApplied;
 
+    // Apply backup staff assignments after main generation
+    const finalSchedule = await this.applyBackupStaffAssignments(
+      workingSchedule,
+      staffMembers,
+      dateRange
+    );
+
     return {
-      schedule: workingSchedule,
+      schedule: finalSchedule,
       changesApplied,
       strategy: "pattern_based",
       analysis: {
@@ -625,7 +661,7 @@ export class ScheduleGenerator {
             ? patternMatches / (staffMembers.length * dateRange.length)
             : 0,
         balanceScore: this.calculateBalanceScore(
-          workingSchedule,
+          finalSchedule,
           staffMembers,
           dateRange,
         ),
@@ -738,10 +774,15 @@ export class ScheduleGenerator {
     const { validateAllConstraints } = await import(
       "../constraints/ConstraintEngine"
     );
+    
+    // Get backup assignments from settings (would be passed from actual implementation)
+    const backupAssignments = []; // TODO: Get from actual settings
+    
     const validation = validateAllConstraints(
       schedule,
       staffMembers,
       dateRange,
+      backupAssignments,
     );
 
     // Major penalty for constraint violations
@@ -1021,6 +1062,45 @@ export class ScheduleGenerator {
   }
 
   /**
+   * Apply backup staff assignments to a schedule
+   * @param {Object} schedule - Schedule to process
+   * @param {Array} staffMembers - Staff members
+   * @param {Array} dateRange - Date range
+   * @returns {Object} Updated schedule with backup assignments
+   */
+  async applyBackupStaffAssignments(schedule, staffMembers, dateRange) {
+    if (!this.backupStaffService.initialized) {
+      console.warn("⚠️ Backup staff service not initialized, skipping backup assignments");
+      return schedule;
+    }
+
+    console.log("🔄 Applying backup staff assignments...");
+    const startTime = Date.now();
+
+    try {
+      // Load current staff groups and backup assignments
+      const { getStaffConflictGroups } = await import("../constraints/ConstraintEngine");
+      const staffGroups = await getStaffConflictGroups();
+      
+      // Process backup assignments for the full schedule
+      const updatedSchedule = this.backupStaffService.processFullScheduleBackups(
+        schedule,
+        staffMembers,
+        staffGroups,
+        dateRange
+      );
+
+      const processingTime = Date.now() - startTime;
+      console.log(`✅ Backup staff assignments completed in ${processingTime}ms`);
+
+      return updatedSchedule;
+    } catch (error) {
+      console.error("❌ Failed to apply backup staff assignments:", error);
+      return schedule; // Return original schedule if backup processing fails
+    }
+  }
+
+  /**
    * Get generator status
    * @returns {Object} Status information
    */
@@ -1031,6 +1111,7 @@ export class ScheduleGenerator {
       priorityRules: Array.from(this.shiftPriorities.keys()),
       statistics: { ...this.generationStats },
       patternsLoaded: this.staffPatterns.size,
+      backupService: this.backupStaffService.getStatus(),
     };
   }
 }
