@@ -16,8 +16,9 @@ export class ConfigurationService {
     this.currentVersionId = null;
     this.isSupabaseEnabled = false;
     this.syncInProgress = false;
+    this.supabaseInitialized = false;
     
-    // Check Supabase availability
+    // Check Supabase availability (async, doesn't block constructor)
     this.checkSupabaseConnection();
   }
 
@@ -265,14 +266,22 @@ export class ConfigurationService {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(this.settings));
       console.log("Settings saved to localStorage");
       
+      // Ensure Supabase connection is initialized before syncing
+      if (!this.isSupabaseEnabled && !this.supabaseInitialized) {
+        console.log("🔄 Initializing Supabase connection for autosave...");
+        await this.checkSupabaseConnection();
+      }
+      
       // Auto-sync to database if enabled
       if (this.isSupabaseEnabled) {
         const syncResult = await this.syncToDatabase();
         if (syncResult.success) {
-          console.log("Settings auto-synced to database");
+          console.log("✅ Settings auto-synced to database");
         } else {
-          console.warn("Auto-sync failed:", syncResult.error);
+          console.warn("⚠️ Auto-sync failed:", syncResult.error);
         }
+      } else {
+        console.log("📱 Supabase not available, using localStorage only");
       }
       
       return true;
@@ -704,9 +713,12 @@ export class ConfigurationService {
       // Load settings from database if available
       await this.loadFromDatabase();
       
+      this.supabaseInitialized = true;
+      
     } catch (error) {
       console.log("⚠️ Supabase not available, using localStorage only:", error.message);
       this.isSupabaseEnabled = false;
+      this.supabaseInitialized = true; // Mark as initialized even if failed
     }
   }
 
