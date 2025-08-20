@@ -45,7 +45,7 @@ export const useSettingsData = (autosaveEnabled = true) => {
         }
 
         // Save settings
-        const success = configService.saveSettings(settingsToSave);
+        const success = await configService.saveSettings(settingsToSave);
         if (!success) {
           throw new Error("Failed to save settings");
         }
@@ -78,11 +78,20 @@ export const useSettingsData = (autosaveEnabled = true) => {
   }, []);
 
   // Reset to defaults
-  const resetToDefaults = useCallback(() => {
-    const defaultSettings = configService.getDefaultSettings();
-    setSettings(defaultSettings);
-    setHasUnsavedChanges(true);
-    setValidationErrors({});
+  const resetToDefaults = useCallback(async () => {
+    try {
+      setIsLoading(true);
+      await configService.resetToDefaults();
+      const defaultSettings = configService.getSettings();
+      setSettings(defaultSettings);
+      setHasUnsavedChanges(false); // Reset syncs automatically
+      setValidationErrors({});
+    } catch (err) {
+      console.error("Failed to reset to defaults:", err);
+      setError(err.message);
+    } finally {
+      setIsLoading(false);
+    }
   }, []);
 
   // Export configuration
