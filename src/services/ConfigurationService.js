@@ -782,12 +782,14 @@ export class ConfigurationService {
         monthlyLimits,
         priorityRules,
         mlConfigs,
+        backupAssignments,
       ] = await Promise.all([
         this.loadStaffGroupsFromDB(),
         this.loadDailyLimitsFromDB(),
         this.loadMonthlyLimitsFromDB(),
         this.loadPriorityRulesFromDB(),
         this.loadMLConfigFromDB(),
+        this.loadBackupAssignmentsFromDB(),
       ]);
 
       // Merge with localStorage settings, preferring database data
@@ -798,6 +800,7 @@ export class ConfigurationService {
         monthlyLimits: monthlyLimits || this.settings.monthlyLimits,
         priorityRules: priorityRules || this.settings.priorityRules,
         mlParameters: mlConfigs || this.settings.mlParameters,
+        backupAssignments: backupAssignments || this.settings.backupAssignments,
         lastSyncedAt: new Date().toISOString(),
       };
 
@@ -838,6 +841,7 @@ export class ConfigurationService {
         this.saveMonthlyLimitsToDB(),
         this.savePriorityRulesToDB(),
         this.saveMLConfigToDB(),
+        this.saveBackupAssignmentsToDB(),
       ]);
 
       // Update sync timestamp
@@ -996,6 +1000,36 @@ export class ConfigurationService {
         : null;
     } catch (error) {
       console.warn("Failed to load ML config from database:", error);
+      return null;
+    }
+  }
+
+  async loadBackupAssignmentsFromDB() {
+    try {
+      const { data, error } = await supabase
+        .from("staff_backup_assignments")
+        .select("*")
+        .eq("version_id", this.currentVersionId)
+        .eq("is_active", true)
+        .order("priority_order", { ascending: true });
+
+      if (error) throw error;
+
+      return (
+        data?.map((item) => ({
+          id: item.id,
+          staffId: item.staff_id,
+          groupId: item.group_id,
+          assignmentType: item.assignment_type || "regular",
+          priorityOrder: item.priority_order || 1,
+          effectiveFrom: item.effective_from,
+          effectiveUntil: item.effective_until,
+          notes: item.notes,
+          createdAt: item.created_at,
+        })) || null
+      );
+    } catch (error) {
+      console.warn("Failed to load backup assignments from database:", error);
       return null;
     }
   }
@@ -1192,6 +1226,46 @@ export class ConfigurationService {
       if (error) throw error;
     } catch (error) {
       console.error("Failed to save ML config to database:", error);
+      throw error;
+    }
+  }
+
+  async saveBackupAssignmentsToDB() {
+    if (!this.settings.backupAssignments) return;
+
+    try {
+      // Delete existing backup assignments for this version
+      await supabase
+        .from("staff_backup_assignments")
+        .delete()
+        .eq("version_id", this.currentVersionId);
+
+      // Insert new backup assignments
+      if (this.settings.backupAssignments.length > 0) {
+        const assignmentsData = this.settings.backupAssignments.map(
+          (assignment) => ({
+            restaurant_id: this.restaurantId,
+            version_id: this.currentVersionId,
+            staff_id: assignment.staffId,
+            group_id: assignment.groupId,
+            assignment_type: assignment.assignmentType || "regular",
+            priority_order: assignment.priorityOrder || 1,
+            effective_from: assignment.effectiveFrom,
+            effective_until: assignment.effectiveUntil,
+            notes: assignment.notes,
+            is_active: true,
+            created_at: assignment.createdAt || new Date().toISOString(),
+          }),
+        );
+
+        const { error } = await supabase
+          .from("staff_backup_assignments")
+          .insert(assignmentsData);
+
+        if (error) throw error;
+      }
+    } catch (error) {
+      console.error("Failed to save backup assignments to database:", error);
       throw error;
     }
   }

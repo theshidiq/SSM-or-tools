@@ -17,6 +17,7 @@ import {
   isNormalShift,
   isWorkingShift,
 } from "../ai/constraints/ConstraintEngine";
+import { configService } from "./ConfigurationService";
 
 export class BackupStaffService {
   constructor() {
@@ -657,6 +658,285 @@ export class BackupStaffService {
       cacheSize: this.assignmentCache.size,
       performanceMetrics: { ...this.performanceMetrics },
     };
+  }
+
+  /**
+   * Load backup assignments from ConfigurationService
+   * @returns {Array} Array of backup assignments
+   */
+  async loadBackupAssignments() {
+    try {
+      // First try to load from ConfigurationService (database or localStorage)
+      const assignments = configService.getBackupAssignments();
+
+      // If no assignments in ConfigurationService, check for localStorage migration
+      if (!assignments || assignments.length === 0) {
+        console.log(
+          "🔄 No backup assignments found, checking for legacy data...",
+        );
+        return await this.migrateFromLocalStorage();
+      }
+
+      console.log(
+        `📋 Loaded ${assignments.length} backup assignments from configuration`,
+      );
+      return assignments;
+    } catch (error) {
+      console.error("❌ Failed to load backup assignments:", error);
+      return [];
+    }
+  }
+
+  /**
+   * Save backup assignments using ConfigurationService
+   * @param {Array} assignments - Backup assignments to save
+   * @returns {Promise<boolean>} Success status
+   */
+  async saveBackupAssignments(assignments = []) {
+    try {
+      const success = await configService.updateBackupAssignments(assignments);
+      if (success) {
+        console.log(
+          `💾 Saved ${assignments.length} backup assignments to configuration`,
+        );
+      }
+      return success;
+    } catch (error) {
+      console.error("❌ Failed to save backup assignments:", error);
+      return false;
+    }
+  }
+
+  /**
+   * Migrate legacy backup assignment data from localStorage
+   * @returns {Array} Migrated backup assignments
+   */
+  async migrateFromLocalStorage() {
+    try {
+      const LEGACY_BACKUP_KEY = "backup-staff-assignments";
+      const legacyData = localStorage.getItem(LEGACY_BACKUP_KEY);
+
+      if (!legacyData) {
+        console.log("📝 No legacy backup assignment data found");
+        return [];
+      }
+
+      const parsedData = JSON.parse(legacyData);
+      let migratedAssignments = [];
+
+      // Handle different legacy data formats
+      if (Array.isArray(parsedData)) {
+        migratedAssignments = parsedData.map((assignment, index) => ({
+          id: assignment.id || `migrated-backup-${index}-${Date.now()}`,
+          staffId: assignment.staffId,
+          groupId: assignment.groupId,
+          assignmentType: assignment.assignmentType || "regular",
+          priorityOrder: assignment.priorityOrder || 1,
+          effectiveFrom: assignment.effectiveFrom || null,
+          effectiveUntil: assignment.effectiveUntil || null,
+          notes: assignment.notes || "",
+          createdAt: assignment.createdAt || new Date().toISOString(),
+        }));
+      }
+
+      if (migratedAssignments.length > 0) {
+        console.log(
+          `🔄 Migrating ${migratedAssignments.length} backup assignments from localStorage`,
+        );
+
+        // Save to ConfigurationService
+        const saveSuccess =
+          await this.saveBackupAssignments(migratedAssignments);
+
+        if (saveSuccess) {
+          // Remove legacy data after successful migration
+          localStorage.removeItem(LEGACY_BACKUP_KEY);
+          console.log(
+            "✅ Legacy backup assignment data migrated and cleaned up",
+          );
+        } else {
+          console.warn(
+            "⚠️ Migration completed but save failed - keeping legacy data as backup",
+          );
+        }
+      }
+
+      return migratedAssignments;
+    } catch (error) {
+      console.error(
+        "❌ Failed to migrate legacy backup assignment data:",
+        error,
+      );
+      return [];
+    }
+  }
+
+  /**
+   * Initialize backup assignments from configuration with auto-loading
+   * @param {Array} staffMembers - All staff members
+   * @param {Array} staffGroups - Staff groups configuration
+   * @param {Array} providedBackupAssignments - Optional backup assignments (if not provided, will auto-load)
+   */
+  async initializeWithConfiguration(
+    staffMembers = [],
+    staffGroups = [],
+    providedBackupAssignments = null,
+  ) {
+    console.log("🔧 Initializing Backup Staff Service with configuration...");
+
+    try {
+      const startTime = Date.now();
+
+      // Load backup assignments if not provided
+      const backupAssignments =
+        providedBackupAssignments !== null
+          ? providedBackupAssignments
+          : await this.loadBackupAssignments();
+
+      // Use the existing initialize method
+      const success = await this.initialize(
+        staffMembers,
+        staffGroups,
+        backupAssignments,
+      );
+
+      const initTime = Date.now() - startTime;
+      if (success) {
+        console.log(
+          `✅ Backup Staff Service initialized with configuration in ${initTime}ms`,
+        );
+        console.log(
+          `📊 Loaded ${backupAssignments.length} backup assignments with auto-persistence`,
+        );
+      }
+
+      return success;
+    } catch (error) {
+      console.error(
+        "❌ Backup Staff Service configuration initialization failed:",
+        error,
+      );
+      this.initialized = false;
+      return false;
+    }
+  }
+
+  /**
+   * Add a new backup assignment
+   * @param {string} staffId - Staff member ID
+   * @param {string} groupId - Group ID
+   * @param {Object} options - Assignment options
+   * @returns {Promise<boolean>} Success status
+   */
+  async addBackupAssignment(staffId, groupId, options = {}) {
+    try {
+      const currentAssignments = await this.loadBackupAssignments();
+
+      // Check if assignment already exists
+      const existingAssignment = currentAssignments.find(
+        (a) => a.staffId === staffId && a.groupId === groupId,
+      );
+
+      if (existingAssignment) {
+        console.warn(
+          `⚠️ Backup assignment already exists: ${staffId} -> ${groupId}`,
+        );
+        return false;
+      }
+
+      const newAssignment = {
+        id:
+          options.id ||
+          `backup-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+        staffId,
+        groupId,
+        assignmentType: options.assignmentType || "regular",
+        priorityOrder: options.priorityOrder || 1,
+        effectiveFrom: options.effectiveFrom || null,
+        effectiveUntil: options.effectiveUntil || null,
+        notes: options.notes || "",
+        createdAt: new Date().toISOString(),
+      };
+
+      const updatedAssignments = [...currentAssignments, newAssignment];
+      const success = await this.saveBackupAssignments(updatedAssignments);
+
+      if (success) {
+        console.log(`➕ Added backup assignment: ${staffId} -> ${groupId}`);
+        // Update internal maps
+        if (!this.backupAssignments.has(staffId)) {
+          this.backupAssignments.set(staffId, []);
+        }
+        this.backupAssignments.get(staffId).push(groupId);
+
+        if (!this.groupBackups.has(groupId)) {
+          this.groupBackups.set(groupId, []);
+        }
+        this.groupBackups.get(groupId).push(staffId);
+      }
+
+      return success;
+    } catch (error) {
+      console.error("❌ Failed to add backup assignment:", error);
+      return false;
+    }
+  }
+
+  /**
+   * Remove a backup assignment
+   * @param {string} staffId - Staff member ID
+   * @param {string} groupId - Group ID
+   * @returns {Promise<boolean>} Success status
+   */
+  async removeBackupAssignment(staffId, groupId) {
+    try {
+      const currentAssignments = await this.loadBackupAssignments();
+      const updatedAssignments = currentAssignments.filter(
+        (a) => !(a.staffId === staffId && a.groupId === groupId),
+      );
+
+      if (updatedAssignments.length === currentAssignments.length) {
+        console.warn(
+          `⚠️ Backup assignment not found: ${staffId} -> ${groupId}`,
+        );
+        return false;
+      }
+
+      const success = await this.saveBackupAssignments(updatedAssignments);
+
+      if (success) {
+        console.log(`➖ Removed backup assignment: ${staffId} -> ${groupId}`);
+        // Update internal maps
+        const staffBackups = this.backupAssignments.get(staffId);
+        if (staffBackups) {
+          const index = staffBackups.indexOf(groupId);
+          if (index !== -1) {
+            staffBackups.splice(index, 1);
+          }
+        }
+
+        const groupBackups = this.groupBackups.get(groupId);
+        if (groupBackups) {
+          const index = groupBackups.indexOf(staffId);
+          if (index !== -1) {
+            groupBackups.splice(index, 1);
+          }
+        }
+      }
+
+      return success;
+    } catch (error) {
+      console.error("❌ Failed to remove backup assignment:", error);
+      return false;
+    }
+  }
+
+  /**
+   * Get all current backup assignments
+   * @returns {Promise<Array>} Current backup assignments
+   */
+  async getCurrentBackupAssignments() {
+    return await this.loadBackupAssignments();
   }
 
   /**

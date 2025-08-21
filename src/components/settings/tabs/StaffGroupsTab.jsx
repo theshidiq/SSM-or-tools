@@ -19,6 +19,7 @@ import {
   ChevronDown,
 } from "lucide-react";
 import ConfirmationModal from "../shared/ConfirmationModal";
+import { useBackupStaffService } from "../../../hooks/useBackupStaffService";
 
 const PRESET_COLORS = [
   "#3B82F6",
@@ -68,6 +69,18 @@ const StaffGroupsTab = ({
   const [isDeleting, setIsDeleting] = useState(false);
   const [deleteSuccess, setDeleteSuccess] = useState(false); // Track if delete was successful
   
+  // Backup staff service hook for database integration
+  const {
+    backupAssignments: hookBackupAssignments,
+    loading: backupLoading,
+    error: backupError,
+    syncStatus: backupSyncStatus,
+    addBackupAssignment: hookAddBackupAssignment,
+    removeBackupAssignment: hookRemoveBackupAssignment,
+    refreshBackupAssignments,
+    getAvailableBackupStaff: hookGetAvailableBackupStaff,
+  } = useBackupStaffService();
+
   // Use ref to persist modal state across parent re-renders
   const modalStateRef = useRef({ 
     deleteConfirmation: null, 
@@ -93,10 +106,21 @@ const StaffGroupsTab = ({
     () => settings?.conflictRules || [],
     [settings?.conflictRules],
   );
+  // Prefer hook backup assignments (from database) over settings
   const backupAssignments = useMemo(
-    () => settings?.backupAssignments || [],
-    [settings?.backupAssignments],
+    () => hookBackupAssignments.length > 0 ? hookBackupAssignments : (settings?.backupAssignments || []),
+    [hookBackupAssignments, settings?.backupAssignments],
   );
+
+  // Keep settings in sync with hook backup assignments
+  useEffect(() => {
+    if (hookBackupAssignments.length > 0 && JSON.stringify(hookBackupAssignments) !== JSON.stringify(settings?.backupAssignments)) {
+      onSettingsChange({
+        ...settings,
+        backupAssignments: hookBackupAssignments,
+      });
+    }
+  }, [hookBackupAssignments, settings, onSettingsChange]);
 
   const updateConflictRules = useCallback(
     (newRules) => {
@@ -108,15 +132,6 @@ const StaffGroupsTab = ({
     [settings, onSettingsChange],
   );
 
-  const updateBackupAssignments = useCallback(
-    (newAssignments) => {
-      onSettingsChange({
-        ...settings,
-        backupAssignments: [...newAssignments], // Create new array reference
-      });
-    },
-    [settings, onSettingsChange],
-  );
 
   // Automatically ensure all groups have intra-group conflict rules enabled
   // Use a ref to prevent interference with delete operations
@@ -294,17 +309,21 @@ const StaffGroupsTab = ({
           !(rule.type === "intra_group_conflict" && rule.groupId === groupId),
       );
 
-      // Remove related backup assignments
-      const updatedBackupAssignments = backupAssignments.filter(
-        (assignment) => assignment.groupId !== groupId,
+      // Remove related backup assignments using hook
+      const relatedBackupAssignments = backupAssignments.filter(
+        (assignment) => assignment.groupId === groupId,
       );
+      
+      // Remove each backup assignment through the hook for proper database sync
+      for (const assignment of relatedBackupAssignments) {
+        await hookRemoveBackupAssignment(assignment.id);
+      }
 
-      // Update settings in a single atomic operation
+      // Update settings in a single atomic operation (backup assignments handled by hook)
       const updatedSettings = {
         ...settings,
         staffGroups: [...updatedGroups],
         conflictRules: [...updatedRules],
-        backupAssignments: [...updatedBackupAssignments],
       };
 
       // Show success state first (before updating settings to prevent parent modal from closing)
@@ -368,31 +387,35 @@ const StaffGroupsTab = ({
   };
 
   // Backup Assignment Management Functions
-  const addBackupAssignment = (staffId, groupId) => {
-    const newAssignment = {
-      id: `backup-${Date.now()}`,
-      staffId,
-      groupId,
-      createdAt: new Date().toISOString(),
-    };
-    const updatedAssignments = [...backupAssignments, newAssignment];
-    updateBackupAssignments(updatedAssignments);
+  // Use hook-based backup assignment functions with database persistence
+  const addBackupAssignment = async (staffId, groupId) => {
+    const success = await hookAddBackupAssignment(staffId, groupId, {
+      assignmentType: 'regular',
+      priorityOrder: 1,
+      notes: '',
+    });
+    
+    if (!success && backupError) {
+      console.error('Failed to add backup assignment:', backupError);
+    }
+    
+    return success;
   };
 
-  const removeBackupAssignment = (assignmentId) => {
-    const updatedAssignments = backupAssignments.filter(
-      (assignment) => assignment.id !== assignmentId,
-    );
-    updateBackupAssignments(updatedAssignments);
+  const removeBackupAssignment = async (assignmentId) => {
+    const success = await hookRemoveBackupAssignment(assignmentId);
+    
+    if (!success && backupError) {
+      console.error('Failed to remove backup assignment:', backupError);
+    }
+    
+    return success;
   };
 
-  // Get available staff for backup assignments (active staff not already in the target group)
+  // Get available staff for backup assignments using hook function
   const getAvailableBackupStaffForGroup = (groupId) => {
     const activeStaff = getActiveStaffMembers();
-    const group = staffGroups.find((g) => g.id === groupId);
-    const groupMemberIds = new Set(group?.members || []);
-
-    return activeStaff.filter((staff) => !groupMemberIds.has(staff.id));
+    return hookGetAvailableBackupStaff(groupId, activeStaff, staffGroups);
   };
 
   // Check if a staff member can backup a specific group

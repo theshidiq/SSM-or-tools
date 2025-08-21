@@ -140,10 +140,11 @@ export class ScheduleGenerator {
         backupAssignments = [],
       } = options;
 
-      await this.backupStaffService.initialize(
+      // Use configuration-aware initialization for backup staff service
+      await this.backupStaffService.initializeWithConfiguration(
         staffMembers,
         staffGroups,
-        backupAssignments,
+        backupAssignments, // Will auto-load from config if null/undefined
       );
 
       this.initialized = true;
