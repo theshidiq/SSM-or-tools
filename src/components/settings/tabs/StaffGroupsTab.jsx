@@ -1,10 +1,15 @@
-import React, { useState, useEffect, useCallback, useMemo } from "react";
+import React, {
+  useState,
+  useEffect,
+  useCallback,
+  useMemo,
+  useRef,
+} from "react";
 import {
   Plus,
   Trash2,
   Users,
   Edit2,
-  Move,
   AlertTriangle,
   X,
   UserPlus,
@@ -13,7 +18,6 @@ import {
   Shield,
   ChevronDown,
 } from "lucide-react";
-import FormField from "../shared/FormField";
 import ConfirmationModal from "../shared/ConfirmationModal";
 
 const PRESET_COLORS = [
@@ -62,27 +66,43 @@ const StaffGroupsTab = ({
   const [showStaffModal, setShowStaffModal] = useState(null); // null or groupId
   const [deleteConfirmation, setDeleteConfirmation] = useState(null); // null or { groupId, groupName }
   const [isDeleting, setIsDeleting] = useState(false);
-
-  // Debug logging for props and re-renders
-  useEffect(() => {
-    console.log('[DEBUG] StaffGroupsTab - Component rendered/re-rendered');
-    console.log('[DEBUG] StaffGroupsTab - Current settings.staffGroups:', settings?.staffGroups?.map(g => ({ id: g.id, name: g.name })) || 'No staffGroups');
+  const [deleteSuccess, setDeleteSuccess] = useState(false); // Track if delete was successful
+  
+  // Use ref to persist modal state across parent re-renders
+  const modalStateRef = useRef({ 
+    deleteConfirmation: null, 
+    deleteSuccess: false 
   });
 
+  // Synchronize local state with ref to handle parent re-renders
   useEffect(() => {
-    console.log('[DEBUG] StaffGroupsTab - settings prop changed:', settings?.staffGroups?.map(g => ({ id: g.id, name: g.name })) || 'No staffGroups');
-  }, [settings]);
+    if (modalStateRef.current.deleteConfirmation && !deleteConfirmation) {
+      setDeleteConfirmation(modalStateRef.current.deleteConfirmation);
+    }
+    if (modalStateRef.current.deleteSuccess && !deleteSuccess) {
+      setDeleteSuccess(modalStateRef.current.deleteSuccess);
+    }
+  }, [deleteConfirmation, deleteSuccess]);
 
   // Fix: Memoize derived arrays to prevent unnecessary re-renders
-  const staffGroups = useMemo(() => settings?.staffGroups || [], [settings?.staffGroups]);
-  const conflictRules = useMemo(() => settings?.conflictRules || [], [settings?.conflictRules]);
-  const backupAssignments = useMemo(() => settings?.backupAssignments || [], [settings?.backupAssignments]);
+  const staffGroups = useMemo(
+    () => settings?.staffGroups || [],
+    [settings?.staffGroups],
+  );
+  const conflictRules = useMemo(
+    () => settings?.conflictRules || [],
+    [settings?.conflictRules],
+  );
+  const backupAssignments = useMemo(
+    () => settings?.backupAssignments || [],
+    [settings?.backupAssignments],
+  );
 
   const updateConflictRules = useCallback(
     (newRules) => {
       onSettingsChange({
         ...settings,
-        conflictRules: newRules,
+        conflictRules: [...newRules], // Create new array reference
       });
     },
     [settings, onSettingsChange],
@@ -92,48 +112,79 @@ const StaffGroupsTab = ({
     (newAssignments) => {
       onSettingsChange({
         ...settings,
-        backupAssignments: newAssignments,
+        backupAssignments: [...newAssignments], // Create new array reference
       });
     },
     [settings, onSettingsChange],
   );
 
   // Automatically ensure all groups have intra-group conflict rules enabled
+  // Use a ref to prevent interference with delete operations
+  const lastProcessedGroupIdsRef = useRef(new Set());
+
   useEffect(() => {
-    const ensureIntraGroupRules = () => {
-      const updatedRules = [...conflictRules];
-      let hasChanges = false;
+    const currentGroupIds = new Set(staffGroups.map((g) => g.id));
+    const lastProcessedIds = lastProcessedGroupIdsRef.current;
 
-      staffGroups.forEach((group) => {
-        const ruleId = `intra-${group.id}`;
-        const existingRule = conflictRules.find((rule) => rule.id === ruleId);
+    // Only process if the group IDs actually changed (not just a re-render)
+    if (
+      JSON.stringify([...currentGroupIds].sort()) ===
+      JSON.stringify([...lastProcessedIds].sort())
+    ) {
+      return;
+    }
 
-        if (!existingRule) {
-          const newRule = {
-            id: ruleId,
-            name: `${group.name} Intra-Group Conflict Prevention`,
-            type: "intra_group_conflict",
-            groupId: group.id,
-            constraint: "prevent_same_shift_same_day",
-            isHardConstraint: true,
-            penaltyWeight: 15,
-            description:
-              "Prevents staff in the same group from having identical shifts on the same day",
-          };
-          updatedRules.push(newRule);
-          hasChanges = true;
-        }
-      });
+    const updatedRules = [...conflictRules];
+    let hasChanges = false;
 
-      if (hasChanges) {
-        updateConflictRules(updatedRules);
+    staffGroups.forEach((group) => {
+      const ruleId = `intra-${group.id}`;
+      const existingRule = conflictRules.find((rule) => rule.id === ruleId);
+
+      if (!existingRule) {
+        const newRule = {
+          id: ruleId,
+          name: `${group.name} Intra-Group Conflict Prevention`,
+          type: "intra_group_conflict",
+          groupId: group.id,
+          constraint: "prevent_same_shift_same_day",
+          isHardConstraint: true,
+          penaltyWeight: 15,
+          description:
+            "Prevents staff in the same group from having identical shifts on the same day",
+        };
+        updatedRules.push(newRule);
+        hasChanges = true;
       }
-    };
+    });
 
-    ensureIntraGroupRules();
+    if (hasChanges) {
+      updateConflictRules(updatedRules);
+    }
+
+    // Update the ref with current group IDs
+    lastProcessedGroupIdsRef.current = currentGroupIds;
   }, [staffGroups, conflictRules, updateConflictRules]);
 
-  // Cancel changes and restore original data - MOVED UP to resolve hoisting issue
+  const updateStaffGroups = useCallback(
+    async (newGroups) => {
+      try {
+        // Create a completely new settings object to ensure proper state update
+        const updatedSettings = {
+          ...settings,
+          staffGroups: [...newGroups], // Create a new array reference
+        };
+
+        onSettingsChange(updatedSettings);
+      } catch (error) {
+        console.error("Error updating staff groups:", error);
+        throw error;
+      }
+    },
+    [settings, onSettingsChange],
+  );
+
+  // Cancel changes and restore original data
   const handleCancelEdit = useCallback(() => {
     if (originalGroupData && editingGroup) {
       const updatedGroups = staffGroups.map((group) =>
@@ -156,25 +207,6 @@ const StaffGroupsTab = ({
     document.addEventListener("keydown", handleKeyDown);
     return () => document.removeEventListener("keydown", handleKeyDown);
   }, [editingGroup, handleCancelEdit]);
-
-  const updateStaffGroups = useCallback(async (newGroups) => {
-    try {
-      console.log('[DEBUG] updateStaffGroups called with:', newGroups.map(g => ({ id: g.id, name: g.name })));
-      console.log('[DEBUG] Current settings before update:', settings?.staffGroups?.map(g => ({ id: g.id, name: g.name })) || 'No staffGroups');
-      
-      const updatedSettings = {
-        ...settings,
-        staffGroups: newGroups,
-      };
-      
-      console.log('[DEBUG] Calling onSettingsChange with updated settings');
-      onSettingsChange(updatedSettings);
-      console.log('[DEBUG] onSettingsChange completed successfully');
-    } catch (error) {
-      console.error('[DEBUG] Error updating staff groups:', error);
-      throw error;
-    }
-  }, [settings, onSettingsChange]);
 
   // Start editing a group and save original data for cancel
   const startEditingGroup = (groupId) => {
@@ -229,56 +261,89 @@ const StaffGroupsTab = ({
   };
 
   const deleteGroup = (groupId) => {
-    console.log('[DEBUG] deleteGroup called with:', { groupId });
     const group = staffGroups.find((g) => g.id === groupId);
-    console.log('[DEBUG] Found group:', { group });
     if (group) {
-      console.log('[DEBUG] Setting delete confirmation state');
-      setDeleteConfirmation({ groupId, groupName: group.name });
-    } else {
-      console.error('[DEBUG] Group not found for deletion');
+      const confirmationData = { groupId, groupName: group.name };
+      setDeleteConfirmation(confirmationData);
+      setDeleteSuccess(false); // Reset success state
+      
+      // Update ref to persist across re-renders
+      modalStateRef.current = { 
+        deleteConfirmation: confirmationData, 
+        deleteSuccess: false 
+      };
     }
   };
 
   const handleDeleteConfirm = async () => {
-    console.log('[DEBUG] handleDeleteConfirm called with deleteConfirmation:', deleteConfirmation);
     if (!deleteConfirmation) {
-      console.error('[DEBUG] No deleteConfirmation state found');
       return;
     }
-    
+
     setIsDeleting(true);
+
     try {
       const { groupId } = deleteConfirmation;
-      console.log('[DEBUG] Deleting group with ID:', groupId);
-      console.log('[DEBUG] Current staffGroups before deletion:', staffGroups.map(g => ({ id: g.id, name: g.name })));
-      
+
+      // Filter out the group to delete
       const updatedGroups = staffGroups.filter((group) => group.id !== groupId);
-      console.log('[DEBUG] Updated groups after filtering:', updatedGroups.map(g => ({ id: g.id, name: g.name })));
-      
-      await updateStaffGroups(updatedGroups);
-      console.log('[DEBUG] updateStaffGroups completed successfully');
 
       // Remove related intra-group conflict rules
       const updatedRules = conflictRules.filter(
         (rule) =>
           !(rule.type === "intra_group_conflict" && rule.groupId === groupId),
       );
-      console.log('[DEBUG] Updating conflict rules:', updatedRules.length, 'rules remain');
-      updateConflictRules(updatedRules);
-      
-      console.log('[DEBUG] Clearing delete confirmation state');
-      setDeleteConfirmation(null);
-    } catch (error) {
-      console.error('[DEBUG] Error deleting group:', error);
-    } finally {
-      console.log('[DEBUG] Setting isDeleting to false');
+
+      // Remove related backup assignments
+      const updatedBackupAssignments = backupAssignments.filter(
+        (assignment) => assignment.groupId !== groupId,
+      );
+
+      // Update settings in a single atomic operation
+      const updatedSettings = {
+        ...settings,
+        staffGroups: [...updatedGroups],
+        conflictRules: [...updatedRules],
+        backupAssignments: [...updatedBackupAssignments],
+      };
+
+      // Show success state first (before updating settings to prevent parent modal from closing)
+      setDeleteSuccess(true);
       setIsDeleting(false);
+      
+      // Auto-close the confirmation modal after showing success message
+      setTimeout(() => {
+        // Update settings AFTER the success message is shown and modal is closing
+        onSettingsChange(updatedSettings);
+        
+        // Clean up modal state
+        setDeleteConfirmation(null);
+        setDeleteSuccess(false);
+        modalStateRef.current = { 
+          deleteConfirmation: null, 
+          deleteSuccess: false 
+        };
+      }, 1500); // Show success message for 1.5 seconds
+      
+    } catch (error) {
+      console.error("Error deleting group:", error);
+    } finally {
+      // Only set if not already set above for success case
+      if (!deleteSuccess) {
+        setIsDeleting(false);
+      }
     }
   };
 
   const handleDeleteCancel = () => {
     setDeleteConfirmation(null);
+    setDeleteSuccess(false);
+    
+    // Reset ref state
+    modalStateRef.current = { 
+      deleteConfirmation: null, 
+      deleteSuccess: false 
+    };
   };
 
   const addStaffToGroup = (groupId, staffId) => {
@@ -700,7 +765,6 @@ const StaffGroupsTab = ({
   };
 
   const renderGroupCard = (group) => {
-    console.log('[DEBUG] renderGroupCard called for group:', { id: group.id, name: group.name });
     const isEditing = editingGroup === group.id;
     const groupMembers = group.members.map(getStaffById).filter(Boolean);
 
@@ -894,10 +958,7 @@ const StaffGroupsTab = ({
       {/* Staff Groups */}
       {staffGroups.length > 0 ? (
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6">
-          {(() => {
-            console.log('[DEBUG] Rendering grid with staffGroups:', staffGroups.map(g => ({ id: g.id, name: g.name })));
-            return staffGroups.map(renderGroupCard);
-          })()}
+          {staffGroups.map(renderGroupCard)}
         </div>
       ) : (
         <div className="text-center py-12">
@@ -928,23 +989,21 @@ const StaffGroupsTab = ({
         isOpen={showStaffModal !== null}
         onClose={() => setShowStaffModal(null)}
       />
-      
+
       {/* Delete Confirmation Modal */}
       <ConfirmationModal
         isOpen={deleteConfirmation !== null}
-        onClose={() => {
-          console.log('[DEBUG] ConfirmationModal onClose called');
-          handleDeleteCancel();
-        }}
-        onConfirm={() => {
-          console.log('[DEBUG] ConfirmationModal onConfirm called');
-          handleDeleteConfirm();
-        }}
-        title="Delete Staff Group"
-        message={`Are you sure you want to delete the group "${deleteConfirmation?.groupName}"? This action cannot be undone and will also remove any related conflict rules.`}
-        confirmText="Delete Group"
-        cancelText="Cancel"
-        variant="danger"
+        onClose={handleDeleteCancel}
+        onConfirm={deleteSuccess ? null : handleDeleteConfirm}
+        title={deleteSuccess ? "Group Deleted Successfully" : "Delete Staff Group"}
+        message={
+          deleteSuccess
+            ? `The group "${deleteConfirmation?.groupName}" has been successfully deleted along with any related conflict rules and backup assignments.`
+            : `Are you sure you want to delete the group "${deleteConfirmation?.groupName}"? This action cannot be undone and will also remove any related conflict rules and backup assignments.`
+        }
+        confirmText={deleteSuccess ? null : "Delete Group"}
+        cancelText={deleteSuccess ? null : "Cancel"}
+        variant={deleteSuccess ? "info" : "danger"}
         isLoading={isDeleting}
       />
     </div>

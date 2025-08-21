@@ -19,7 +19,6 @@ const ConfirmationModal = ({
   useEffect(() => {
     if (isOpen && modalRef.current) {
       modalRef.current.focus();
-      console.log('[DEBUG] ConfirmationModal focused');
     }
   }, [isOpen]);
 
@@ -47,28 +46,30 @@ const ConfirmationModal = ({
 
   const handleBackdropClick = (e) => {
     if (e.target === e.currentTarget) {
-      console.log('[DEBUG] ConfirmationModal backdrop clicked');
+      e.stopPropagation(); // Prevent event from bubbling to parent modals
       onClose();
     }
   };
 
   const handleKeyDown = (e) => {
     if (e.key === 'Escape') {
-      console.log('[DEBUG] ConfirmationModal escape key pressed');
+      e.stopPropagation(); // Prevent event from bubbling to parent modals
       onClose();
-    } else if (e.key === 'Enter' && !isLoading) {
-      console.log('[DEBUG] ConfirmationModal enter key pressed');
+    } else if (e.key === 'Enter' && !isLoading && onConfirm) {
+      e.stopPropagation(); // Prevent event from bubbling to parent modals
       onConfirm();
     }
   };
 
-  const handleConfirmClick = () => {
-    console.log('[DEBUG] ConfirmationModal confirm button clicked');
-    onConfirm();
+  const handleConfirmClick = (e) => {
+    e.stopPropagation(); // Prevent event from bubbling to parent modals
+    if (onConfirm) {
+      onConfirm();
+    }
   };
 
-  const handleCancelClick = () => {
-    console.log('[DEBUG] ConfirmationModal cancel button clicked');
+  const handleCancelClick = (e) => {
+    e.stopPropagation(); // Prevent event from bubbling to parent modals
     onClose();
   };
 
@@ -85,8 +86,14 @@ const ConfirmationModal = ({
       aria-modal="true"
       style={{ zIndex: 50000 }} // Inline style as backup
     >
-      <div className="bg-white rounded-xl w-full max-w-md shadow-2xl transform transition-all" role="document">
-        <div className="p-6">
+      <div 
+        className="bg-white rounded-xl w-full max-w-md shadow-2xl transform transition-all" 
+        role="document"
+      >
+        <div 
+          className="p-6"
+          onClick={(e) => e.stopPropagation()} // Prevent clicks inside modal from bubbling
+        >
           {/* Header */}
           <div className="flex items-center justify-between mb-4">
             <div className="flex items-center gap-3">
@@ -118,20 +125,22 @@ const ConfirmationModal = ({
             >
               {cancelText}
             </button>
-            <button
-              onClick={handleConfirmClick}
-              disabled={isLoading}
-              className={`px-4 py-2 text-sm font-medium text-white rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed ${styles.button}`}
-            >
-              {isLoading ? (
-                <div className="flex items-center gap-2">
-                  <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                  Processing...
-                </div>
-              ) : (
-                confirmText
-              )}
-            </button>
+            {confirmText && (
+              <button
+                onClick={handleConfirmClick}
+                disabled={isLoading}
+                className={`px-4 py-2 text-sm font-medium text-white rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed ${styles.button}`}
+              >
+                {isLoading ? (
+                  <div className="flex items-center gap-2">
+                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                    Processing...
+                  </div>
+                ) : (
+                  confirmText
+                )}
+              </button>
+            )}
           </div>
         </div>
       </div>

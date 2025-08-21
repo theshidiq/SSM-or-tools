@@ -1,7 +1,7 @@
 /**
  * Hybrid Configuration Service
  *
- * Manages application settings using localStorage as primary storage with 
+ * Manages application settings using localStorage as primary storage with
  * optional Supabase sync for cloud persistence and collaboration.
  */
 
@@ -17,7 +17,7 @@ export class ConfigurationService {
     this.isSupabaseEnabled = false;
     this.syncInProgress = false;
     this.supabaseInitialized = false;
-    
+
     // Check Supabase availability (async, doesn't block constructor)
     this.checkSupabaseConnection();
   }
@@ -265,13 +265,13 @@ export class ConfigurationService {
       this.settings = { ...this.settings, ...settings };
       localStorage.setItem(STORAGE_KEY, JSON.stringify(this.settings));
       console.log("Settings saved to localStorage");
-      
+
       // Ensure Supabase connection is initialized before syncing
       if (!this.isSupabaseEnabled && !this.supabaseInitialized) {
         console.log("🔄 Initializing Supabase connection for autosave...");
         await this.checkSupabaseConnection();
       }
-      
+
       // Auto-sync to database if enabled
       if (this.isSupabaseEnabled) {
         const syncResult = await this.syncToDatabase();
@@ -283,7 +283,7 @@ export class ConfigurationService {
       } else {
         console.log("📱 Supabase not available, using localStorage only");
       }
-      
+
       return true;
     } catch (error) {
       console.error("Failed to save settings:", error);
@@ -305,7 +305,7 @@ export class ConfigurationService {
     this.settings = this.getDefaultSettings();
     localStorage.setItem(STORAGE_KEY, JSON.stringify(this.settings));
     console.log("Settings reset to defaults");
-    
+
     // Sync with Supabase if enabled
     if (this.isSupabaseEnabled) {
       await this.syncToDatabase();
@@ -557,8 +557,6 @@ export class ConfigurationService {
     return await this.saveSettings({ mlParameters });
   }
 
-
-
   /**
    * Get monthly limits
    */
@@ -696,27 +694,29 @@ export class ConfigurationService {
         .from("restaurants")
         .select("id")
         .limit(1);
-      
+
       if (error) throw error;
-      
+
       this.isSupabaseEnabled = true;
-      
+
       // Get or create restaurant entry
       if (data && data.length > 0) {
         this.restaurantId = data[0].id;
       } else {
         await this.createRestaurantEntry();
       }
-      
+
       console.log("✅ Supabase configuration sync enabled");
-      
+
       // Load settings from database if available
       await this.loadFromDatabase();
-      
+
       this.supabaseInitialized = true;
-      
     } catch (error) {
-      console.log("⚠️ Supabase not available, using localStorage only:", error.message);
+      console.log(
+        "⚠️ Supabase not available, using localStorage only:",
+        error.message,
+      );
       this.isSupabaseEnabled = false;
       this.supabaseInitialized = true; // Mark as initialized even if failed
     }
@@ -729,15 +729,17 @@ export class ConfigurationService {
     try {
       const { data, error } = await supabase
         .from("restaurants")
-        .insert([{
-          name: "Default Restaurant",
-          timezone: "Asia/Tokyo",
-          created_at: new Date().toISOString(),
-        }])
+        .insert([
+          {
+            name: "Default Restaurant",
+            timezone: "Asia/Tokyo",
+            created_at: new Date().toISOString(),
+          },
+        ])
         .select();
-        
+
       if (error) throw error;
-      
+
       this.restaurantId = data[0].id;
       console.log("Created restaurant entry:", this.restaurantId);
     } catch (error) {
@@ -751,7 +753,7 @@ export class ConfigurationService {
    */
   async loadFromDatabase() {
     if (!this.isSupabaseEnabled || !this.restaurantId) return;
-    
+
     try {
       // Get the active configuration version
       const { data: configVersions, error: versionError } = await supabase
@@ -761,25 +763,33 @@ export class ConfigurationService {
         .eq("is_active", true)
         .order("version_number", { ascending: false })
         .limit(1);
-        
+
       if (versionError) throw versionError;
-      
+
       if (!configVersions || configVersions.length === 0) {
-        console.log("No active configuration version found, will create one on first save");
+        console.log(
+          "No active configuration version found, will create one on first save",
+        );
         return;
       }
-      
+
       this.currentVersionId = configVersions[0].id;
-      
+
       // Load all configuration data
-      const [staffGroups, dailyLimits, monthlyLimits, priorityRules, mlConfigs] = await Promise.all([
+      const [
+        staffGroups,
+        dailyLimits,
+        monthlyLimits,
+        priorityRules,
+        mlConfigs,
+      ] = await Promise.all([
         this.loadStaffGroupsFromDB(),
         this.loadDailyLimitsFromDB(),
         this.loadMonthlyLimitsFromDB(),
         this.loadPriorityRulesFromDB(),
-        this.loadMLConfigFromDB()
+        this.loadMLConfigFromDB(),
       ]);
-      
+
       // Merge with localStorage settings, preferring database data
       const databaseSettings = {
         ...this.settings,
@@ -788,16 +798,15 @@ export class ConfigurationService {
         monthlyLimits: monthlyLimits || this.settings.monthlyLimits,
         priorityRules: priorityRules || this.settings.priorityRules,
         mlParameters: mlConfigs || this.settings.mlParameters,
-        lastSyncedAt: new Date().toISOString()
+        lastSyncedAt: new Date().toISOString(),
       };
-      
+
       this.settings = databaseSettings;
-      
+
       // Update localStorage with synced data
       localStorage.setItem(STORAGE_KEY, JSON.stringify(this.settings));
-      
+
       console.log("✅ Settings loaded from database");
-      
     } catch (error) {
       console.warn("Failed to load settings from database:", error);
     }
@@ -808,33 +817,35 @@ export class ConfigurationService {
    */
   async syncToDatabase() {
     if (!this.isSupabaseEnabled || !this.restaurantId || this.syncInProgress) {
-      return { success: false, error: "Supabase not available or sync in progress" };
+      return {
+        success: false,
+        error: "Supabase not available or sync in progress",
+      };
     }
-    
+
     this.syncInProgress = true;
-    
+
     try {
       // Create or get configuration version
       if (!this.currentVersionId) {
         await this.createConfigVersion();
       }
-      
+
       // Save all configuration components
       await Promise.all([
         this.saveStaffGroupsToDB(),
         this.saveDailyLimitsToDB(),
         this.saveMonthlyLimitsToDB(),
         this.savePriorityRulesToDB(),
-        this.saveMLConfigToDB()
+        this.saveMLConfigToDB(),
       ]);
-      
+
       // Update sync timestamp
       this.settings.lastSyncedAt = new Date().toISOString();
       localStorage.setItem(STORAGE_KEY, JSON.stringify(this.settings));
-      
+
       console.log("✅ Settings synced to database");
       return { success: true };
-      
     } catch (error) {
       console.error("Failed to sync settings to database:", error);
       return { success: false, error: error.message };
@@ -850,22 +861,23 @@ export class ConfigurationService {
     try {
       const { data, error } = await supabase
         .from("config_versions")
-        .insert([{
-          restaurant_id: this.restaurantId,
-          version_number: 1,
-          name: "Auto-generated Configuration",
-          description: "Automatically created configuration version",
-          is_active: true,
-          is_locked: false,
-          created_at: new Date().toISOString()
-        }])
+        .insert([
+          {
+            restaurant_id: this.restaurantId,
+            version_number: 1,
+            name: "Auto-generated Configuration",
+            description: "Automatically created configuration version",
+            is_active: true,
+            is_locked: false,
+            created_at: new Date().toISOString(),
+          },
+        ])
         .select();
-        
+
       if (error) throw error;
-      
+
       this.currentVersionId = data[0].id;
       console.log("Created configuration version:", this.currentVersionId);
-      
     } catch (error) {
       console.error("Failed to create configuration version:", error);
       throw error;
@@ -879,16 +891,18 @@ export class ConfigurationService {
         .from("staff_groups")
         .select("*")
         .eq("version_id", this.currentVersionId);
-        
+
       if (error) throw error;
-      
-      return data?.map(item => ({
-        id: item.id,
-        name: item.name,
-        description: item.description || "",
-        color: item.group_config?.color || "#3B82F6",
-        members: item.group_config?.members || []
-      })) || null;
+
+      return (
+        data?.map((item) => ({
+          id: item.id,
+          name: item.name,
+          description: item.description || "",
+          color: item.group_config?.color || "#3B82F6",
+          members: item.group_config?.members || [],
+        })) || null
+      );
     } catch (error) {
       console.warn("Failed to load staff groups from database:", error);
       return null;
@@ -901,14 +915,16 @@ export class ConfigurationService {
         .from("daily_limits")
         .select("*")
         .eq("version_id", this.currentVersionId);
-        
+
       if (error) throw error;
-      
-      return data?.map(item => ({
-        id: item.id,
-        name: item.name,
-        ...item.limit_config
-      })) || null;
+
+      return (
+        data?.map((item) => ({
+          id: item.id,
+          name: item.name,
+          ...item.limit_config,
+        })) || null
+      );
     } catch (error) {
       console.warn("Failed to load daily limits from database:", error);
       return null;
@@ -921,14 +937,16 @@ export class ConfigurationService {
         .from("monthly_limits")
         .select("*")
         .eq("version_id", this.currentVersionId);
-        
+
       if (error) throw error;
-      
-      return data?.map(item => ({
-        id: item.id,
-        name: item.name,
-        ...item.limit_config
-      })) || null;
+
+      return (
+        data?.map((item) => ({
+          id: item.id,
+          name: item.name,
+          ...item.limit_config,
+        })) || null
+      );
     } catch (error) {
       console.warn("Failed to load monthly limits from database:", error);
       return null;
@@ -941,15 +959,17 @@ export class ConfigurationService {
         .from("priority_rules")
         .select("*")
         .eq("version_id", this.currentVersionId);
-        
+
       if (error) throw error;
-      
-      return data?.map(item => ({
-        id: item.id,
-        name: item.name,
-        description: item.description || "",
-        ...item.rule_config
-      })) || null;
+
+      return (
+        data?.map((item) => ({
+          id: item.id,
+          name: item.name,
+          description: item.description || "",
+          ...item.rule_config,
+        })) || null
+      );
     } catch (error) {
       console.warn("Failed to load priority rules from database:", error);
       return null;
@@ -964,14 +984,16 @@ export class ConfigurationService {
         .eq("version_id", this.currentVersionId)
         .eq("model_type", "optimization")
         .limit(1);
-        
+
       if (error) throw error;
-      
-      return data && data.length > 0 ? {
-        model_name: data[0].model_name,
-        model_type: data[0].model_type,
-        ...data[0].model_config
-      } : null;
+
+      return data && data.length > 0
+        ? {
+            model_name: data[0].model_name,
+            model_type: data[0].model_type,
+            ...data[0].model_config,
+          }
+        : null;
     } catch (error) {
       console.warn("Failed to load ML config from database:", error);
       return null;
@@ -981,32 +1003,32 @@ export class ConfigurationService {
   // Database-specific save methods
   async saveStaffGroupsToDB() {
     if (!this.settings.staffGroups) return;
-    
+
     try {
       // Delete existing staff groups for this version
       await supabase
         .from("staff_groups")
         .delete()
         .eq("version_id", this.currentVersionId);
-      
+
       // Insert new staff groups
       if (this.settings.staffGroups.length > 0) {
-        const groupsData = this.settings.staffGroups.map(group => ({
+        const groupsData = this.settings.staffGroups.map((group) => ({
           restaurant_id: this.restaurantId,
           version_id: this.currentVersionId,
           name: group.name,
           description: group.description || "",
           group_config: {
             color: group.color,
-            members: group.members
+            members: group.members,
           },
-          created_at: new Date().toISOString()
+          created_at: new Date().toISOString(),
         }));
-        
+
         const { error } = await supabase
           .from("staff_groups")
           .insert(groupsData);
-          
+
         if (error) throw error;
       }
     } catch (error) {
@@ -1017,17 +1039,17 @@ export class ConfigurationService {
 
   async saveDailyLimitsToDB() {
     if (!this.settings.dailyLimits) return;
-    
+
     try {
       // Delete existing daily limits for this version
       await supabase
         .from("daily_limits")
         .delete()
         .eq("version_id", this.currentVersionId);
-      
+
       // Insert new daily limits
       if (this.settings.dailyLimits.length > 0) {
-        const limitsData = this.settings.dailyLimits.map(limit => ({
+        const limitsData = this.settings.dailyLimits.map((limit) => ({
           restaurant_id: this.restaurantId,
           version_id: this.currentVersionId,
           name: limit.name,
@@ -1039,15 +1061,15 @@ export class ConfigurationService {
             targetIds: limit.targetIds,
             isHardConstraint: limit.isHardConstraint,
             penaltyWeight: limit.penaltyWeight,
-            description: limit.description
+            description: limit.description,
           },
-          created_at: new Date().toISOString()
+          created_at: new Date().toISOString(),
         }));
-        
+
         const { error } = await supabase
           .from("daily_limits")
           .insert(limitsData);
-          
+
         if (error) throw error;
       }
     } catch (error) {
@@ -1058,17 +1080,17 @@ export class ConfigurationService {
 
   async saveMonthlyLimitsToDB() {
     if (!this.settings.monthlyLimits) return;
-    
+
     try {
       // Delete existing monthly limits for this version
       await supabase
         .from("monthly_limits")
         .delete()
         .eq("version_id", this.currentVersionId);
-      
+
       // Insert new monthly limits
       if (this.settings.monthlyLimits.length > 0) {
-        const limitsData = this.settings.monthlyLimits.map(limit => ({
+        const limitsData = this.settings.monthlyLimits.map((limit) => ({
           restaurant_id: this.restaurantId,
           version_id: this.currentVersionId,
           name: limit.name,
@@ -1080,15 +1102,15 @@ export class ConfigurationService {
             distributionRules: limit.distributionRules,
             isHardConstraint: limit.isHardConstraint,
             penaltyWeight: limit.penaltyWeight,
-            description: limit.description
+            description: limit.description,
           },
-          created_at: new Date().toISOString()
+          created_at: new Date().toISOString(),
         }));
-        
+
         const { error } = await supabase
           .from("monthly_limits")
           .insert(limitsData);
-          
+
         if (error) throw error;
       }
     } catch (error) {
@@ -1099,17 +1121,17 @@ export class ConfigurationService {
 
   async savePriorityRulesToDB() {
     if (!this.settings.priorityRules) return;
-    
+
     try {
       // Delete existing priority rules for this version
       await supabase
         .from("priority_rules")
         .delete()
         .eq("version_id", this.currentVersionId);
-      
+
       // Insert new priority rules
       if (this.settings.priorityRules.length > 0) {
-        const rulesData = this.settings.priorityRules.map(rule => ({
+        const rulesData = this.settings.priorityRules.map((rule) => ({
           restaurant_id: this.restaurantId,
           version_id: this.currentVersionId,
           name: rule.name,
@@ -1125,15 +1147,15 @@ export class ConfigurationService {
             penaltyWeight: rule.penaltyWeight,
             effectiveFrom: rule.effectiveFrom,
             effectiveUntil: rule.effectiveUntil,
-            isActive: rule.isActive
+            isActive: rule.isActive,
           },
-          created_at: new Date().toISOString()
+          created_at: new Date().toISOString(),
         }));
-        
+
         const { error } = await supabase
           .from("priority_rules")
           .insert(rulesData);
-          
+
         if (error) throw error;
       }
     } catch (error) {
@@ -1144,7 +1166,7 @@ export class ConfigurationService {
 
   async saveMLConfigToDB() {
     if (!this.settings.mlParameters) return;
-    
+
     try {
       // Delete existing ML config for this version
       await supabase
@@ -1152,20 +1174,21 @@ export class ConfigurationService {
         .delete()
         .eq("version_id", this.currentVersionId)
         .eq("model_type", "optimization");
-      
+
       // Insert new ML config
-      const { error } = await supabase
-        .from("ml_model_configs")
-        .insert([{
+      const { error } = await supabase.from("ml_model_configs").insert([
+        {
           restaurant_id: this.restaurantId,
           version_id: this.currentVersionId,
-          model_name: this.settings.mlParameters.algorithm || "genetic_algorithm",
+          model_name:
+            this.settings.mlParameters.algorithm || "genetic_algorithm",
           model_type: "optimization",
           model_config: this.settings.mlParameters,
           is_active: true,
-          created_at: new Date().toISOString()
-        }]);
-        
+          created_at: new Date().toISOString(),
+        },
+      ]);
+
       if (error) throw error;
     } catch (error) {
       console.error("Failed to save ML config to database:", error);
@@ -1182,7 +1205,7 @@ export class ConfigurationService {
       restaurantId: this.restaurantId,
       currentVersionId: this.currentVersionId,
       syncInProgress: this.syncInProgress,
-      lastSyncedAt: this.settings.lastSyncedAt
+      lastSyncedAt: this.settings.lastSyncedAt,
     };
   }
 
