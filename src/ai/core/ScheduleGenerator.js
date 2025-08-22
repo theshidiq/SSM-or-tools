@@ -1057,11 +1057,15 @@ export class ScheduleGenerator {
     const currentOffDays = this.countStaffOffDays(schedule[staff.id], [
       new Date(dateKey),
     ]);
+    // Get configured daily limits
+    const dailyLimits = await getDailyLimits();
+    const maxOffPerDay = dailyLimits.find(l => l.shiftType === "off")?.maxCount || 2;
+    
     const canTakeOffDay =
-      currentOffDays < monthlyLimits.maxOffDaysPerMonth && dayCounts.off < 4;
+      currentOffDays < monthlyLimits.maxOffDaysPerMonth && dayCounts.off < maxOffPerDay;
 
     // Check group constraints
-    const hasGroupConflict = this.checkGroupConflicts(
+    const hasGroupConflict = await this.checkGroupConflicts(
       staff,
       dateKey,
       "×",
@@ -1075,19 +1079,45 @@ export class ScheduleGenerator {
     }
 
     // Assign working shift based on day and needs
+    // Get early shift limit from configuration
+    const maxEarlyPerDay = dailyLimits.find(l => l.shiftType === "early")?.maxCount || 2;
+    
     if (
       dayOfWeek === "sunday" &&
       staff.name === "料理長" &&
-      dayCounts.early < 2
+      dayCounts.early < maxEarlyPerDay
     ) {
-      return "△"; // Early shift for head chef on Sunday
+      // Check group conflict for early shift
+      const hasEarlyGroupConflict = await this.checkGroupConflicts(
+        staff,
+        dateKey,
+        "△",
+        schedule,
+        staffMembers,
+      );
+      if (!hasEarlyGroupConflict) {
+        return "△"; // Early shift for head chef on Sunday
+      }
     }
 
-    if (dayCounts.early < 3 && Math.random() < 0.3) {
-      return "△"; // Early shift
+    if (dayCounts.early < maxEarlyPerDay && Math.random() < 0.3) {
+      // Check group conflict for early shift
+      const hasEarlyGroupConflict = await this.checkGroupConflicts(
+        staff,
+        dateKey,
+        "△",
+        schedule,
+        staffMembers,
+      );
+      if (!hasEarlyGroupConflict) {
+        return "△"; // Early shift
+      }
     }
 
-    if (dayCounts.late < 2 && Math.random() < 0.2) {
+    // Get late shift limit from configuration
+    const maxLatePerDay = dailyLimits.find(l => l.shiftType === "late")?.maxCount || 3;
+    
+    if (dayCounts.late < maxLatePerDay && Math.random() < 0.2) {
       return "◇"; // Late shift
     }
 
@@ -1616,9 +1646,56 @@ export class ScheduleGenerator {
     }
   }
 
-  checkGroupConflicts(staff, dateKey, proposedShift, schedule, staffMembers) {
-    // Check if proposed shift would create group conflicts
-    return false;
+  async checkGroupConflicts(staff, dateKey, proposedShift, schedule, staffMembers) {
+    try {
+      // Get staff groups from configuration
+      const staffGroups = await getStaffConflictGroups();
+      
+      // Check if proposed shift is off day or early shift (these create conflicts)
+      const isConflictShift = proposedShift === "×" || proposedShift === "△";
+      if (!isConflictShift) {
+        return false; // Normal/late shifts don't cause group conflicts
+      }
+
+      // Find groups containing this staff member
+      const staffGroups_containing = staffGroups.filter(group => 
+        group.members && group.members.includes(staff.name)
+      );
+
+      if (staffGroups_containing.length === 0) {
+        return false; // Staff not in any group
+      }
+
+      // Check each group for conflicts
+      for (const group of staffGroups_containing) {
+        let conflictCount = 0;
+        
+        // Count existing conflicts in this group for this date
+        for (const memberName of group.members) {
+          if (memberName === staff.name) continue; // Skip current staff
+          
+          const memberSchedule = schedule[memberName];
+          if (memberSchedule && memberSchedule[dateKey]) {
+            const memberShift = memberSchedule[dateKey];
+            // Check if group member already has conflicting shift
+            if (memberShift === "×" || memberShift === "△") {
+              conflictCount++;
+            }
+          }
+        }
+        
+        // If any group member already has conflict shift, proposing another would create violation
+        if (conflictCount > 0) {
+          console.log(`🚫 Group conflict detected: ${staff.name} in ${group.name} - ${conflictCount} member(s) already off/early on ${dateKey}`);
+          return true;
+        }
+      }
+      
+      return false; // No conflicts found
+    } catch (error) {
+      console.warn("⚠️ Error checking group conflicts:", error);
+      return false; // Default to allowing shift if check fails
+    }
   }
 
   /**
