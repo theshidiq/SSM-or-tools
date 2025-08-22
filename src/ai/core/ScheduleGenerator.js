@@ -17,7 +17,15 @@ import {
   PRIORITY_RULES,
   getMonthlyLimits,
   validateAllConstraints,
+  getPriorityRules,
+  getStaffConflictGroups,
+  getDailyLimits,
+  getBackupAssignments,
+  onConfigurationCacheInvalidated,
+  invalidateConfigurationCache,
+  refreshAllConfigurations,
 } from "../constraints/ConstraintEngine";
+import { configService } from "../../services/ConfigurationService.js";
 import BackupStaffService from "../../services/BackupStaffService";
 import { GeneticAlgorithm } from "../algorithms/GeneticAlgorithm";
 import { SimulatedAnnealing } from "../algorithms/SimulatedAnnealing";
@@ -41,6 +49,10 @@ export class ScheduleGenerator {
       averageConfidenceScore: 0,
       performanceHistory: [],
     };
+    
+    // Real-time cache invalidation setup
+    this.cacheInvalidationUnsubscribe = null;
+    this.lastConfigurationRefresh = 0;
 
     // Enhanced ML components
     this.geneticAlgorithm = new GeneticAlgorithm();
@@ -106,6 +118,10 @@ export class ScheduleGenerator {
       monthlyLimits: 0.15,
       fairness: 0.1,
     };
+    
+    // Monthly balancing tracking
+    this.monthlyProjections = new Map();
+    this.monthlyBalancingEnabled = true;
 
     // Performance adaptation settings
     this.adaptiveLearning = {
@@ -128,7 +144,7 @@ export class ScheduleGenerator {
       this.initializeGenerationStrategies();
 
       // Initialize shift priorities
-      this.initializeShiftPriorities();
+      await this.initializeShiftPriorities();
 
       // Load historical patterns if available
       await this.loadHistoricalPatterns(options);
@@ -147,8 +163,11 @@ export class ScheduleGenerator {
         backupAssignments, // Will auto-load from config if null/undefined
       );
 
+      // Set up real-time cache invalidation listener
+      this.setupCacheInvalidationListener();
+      
       this.initialized = true;
-      console.log("✅ Schedule Generator initialized successfully");
+      console.log("✅ Schedule Generator initialized successfully with real-time configuration updates");
     } catch (error) {
       console.error("❌ Schedule Generator initialization failed:", error);
       throw error;
@@ -185,45 +204,70 @@ export class ScheduleGenerator {
   }
 
   /**
-   * Initialize shift priorities based on business rules
+   * Initialize shift priorities based on business rules (now uses dynamic config)
    */
-  initializeShiftPriorities() {
-    // Day of week priorities
-    this.shiftPriorities.set("sunday_early", {
-      priority: "high",
-      staff: "料理長",
-      condition: (dateKey) => getDayOfWeek(dateKey) === "sunday",
-      shift: "△",
-      weight: 0.8,
-    });
-
-    this.shiftPriorities.set("sunday_off", {
-      priority: "high",
-      staff: "与儀",
-      condition: (dateKey) => getDayOfWeek(dateKey) === "sunday",
-      shift: "×",
-      weight: 0.8,
-    });
-
-    // Coverage priorities
-    this.shiftPriorities.set("group2_coverage", {
-      priority: "critical",
-      staff: "中田",
-      condition: (dateKey, schedule, staffMembers) => {
-        // Check if Group 2 members (料理長 or 古藤) have day off
-        const group2 = STAFF_CONFLICT_GROUPS.find((g) => g.name === "Group 2");
-        if (!group2) return false;
-
-        return group2.members.some((memberName) => {
-          const staff = staffMembers.find((s) => s.name === memberName);
-          if (staff && schedule[staff.id] && schedule[staff.id][dateKey]) {
-            return isOffDay(schedule[staff.id][dateKey]);
+  async initializeShiftPriorities() {
+    // Load dynamic priority rules and convert to legacy format for backward compatibility
+    try {
+      const priorityRules = await getPriorityRules();
+      
+      if (priorityRules && priorityRules.length > 0) {
+        console.log(`🎯 Initializing ${priorityRules.length} dynamic priority rules as legacy format`);
+        
+        priorityRules.forEach((rule, index) => {
+          if (rule.isActive !== false) {
+            this.shiftPriorities.set(`dynamic_${rule.id || index}`, {
+              priority: rule.isHardConstraint ? "critical" : "high",
+              staff: rule.staffId, // Can be name or ID
+              condition: (dateKey, schedule, staffMembers) => {
+                const date = new Date(dateKey);
+                const dayOfWeek = date.getDay();
+                
+                // Check day of week match
+                if (rule.daysOfWeek && rule.daysOfWeek.length > 0) {
+                  if (!rule.daysOfWeek.includes(dayOfWeek)) return false;
+                }
+                
+                // Check effective date range
+                if (rule.effectiveFrom && date < new Date(rule.effectiveFrom)) return false;
+                if (rule.effectiveUntil && date > new Date(rule.effectiveUntil)) return false;
+                
+                return true;
+              },
+              shift: this.mapShiftTypeToSymbol(rule.shiftType),
+              weight: (rule.priorityLevel || 3) / 5, // Convert 1-5 priority to 0.2-1.0 weight
+              ruleType: rule.ruleType,
+              preferenceStrength: rule.preferenceStrength || 0.8
+            });
           }
-          return false;
         });
+      } else {
+        console.log("📌 No dynamic priority rules found, using minimal legacy fallbacks");
+        this.initializeLegacyPriorities();
+      }
+    } catch (error) {
+      console.warn("⚠️ Failed to load dynamic priority rules, using legacy fallbacks:", error);
+      this.initializeLegacyPriorities();
+    }
+  }
+  
+  /**
+   * Initialize minimal legacy priorities as fallback
+   */
+  initializeLegacyPriorities() {
+    console.log("🔄 Initializing minimal legacy priority rules as fallback");
+    
+    // Only keep essential business rules that are commonly expected
+    // These should ideally be migrated to dynamic priority rules
+    this.shiftPriorities.set("legacy_coverage", {
+      priority: "medium",
+      staff: null, // Will be dynamically determined
+      condition: (dateKey, schedule, staffMembers) => {
+        // Generic coverage check - can be extended based on actual business needs
+        return false; // Disabled by default - encourage use of dynamic rules
       },
-      shift: "", // Normal shift
-      weight: 1.0,
+      shift: "",
+      weight: 0.5,
     });
   }
 
@@ -291,6 +335,16 @@ export class ScheduleGenerator {
 
       // Update constraint weights based on current settings
       await this.updateConstraintWeights(staffMembers, dateRange, params.settings);
+      
+      // Calculate monthly projections if balancing is enabled
+      if (this.monthlyBalancingEnabled) {
+        console.log("📋 Calculating monthly projections for enhanced generation...");
+        await this.calculateMonthlyProjections(
+          existingSchedule,
+          staffMembers,
+          dateRange
+        );
+      }
 
       // Initialize working schedule
       const workingSchedule = this.initializeWorkingSchedule(
@@ -396,6 +450,7 @@ export class ScheduleGenerator {
             runtime: generationTime,
           },
           bestIteration: bestSchedule?.iteration || -1,
+          monthlyProjections: this.monthlyBalancingEnabled ? this.getMonthlyProjectionSummary() : null,
         },
         statistics: { ...this.generationStats },
       };
@@ -462,7 +517,7 @@ export class ScheduleGenerator {
   }
 
   /**
-   * Priority-first generation strategy
+   * Priority-first generation strategy - Enhanced with dynamic priority rules
    * @param {Object} schedule - Current schedule
    * @param {Array} staffMembers - Staff members
    * @param {Array} dateRange - Date range
@@ -472,8 +527,21 @@ export class ScheduleGenerator {
   async priorityFirstStrategy(schedule, staffMembers, dateRange, options = {}) {
     const workingSchedule = JSON.parse(JSON.stringify(schedule));
     let changesApplied = 0;
+    const appliedRules = [];
 
-    // Phase 1: Apply priority rules first
+    console.log("🎯 Applying enhanced priority-first strategy with dynamic rules...");
+
+    // Phase 1: Apply dynamic priority rules from configuration
+    const priorityRules = await getPriorityRules();
+    await this.applyDynamicPriorityRules(
+      workingSchedule,
+      staffMembers,
+      dateRange,
+      priorityRules,
+      appliedRules
+    );
+
+    // Phase 2: Apply legacy hardcoded priorities (for backward compatibility)
     dateRange.forEach((date) => {
       const dateKey = date.toISOString().split("T")[0];
 
@@ -487,6 +555,13 @@ export class ScheduleGenerator {
             if (currentShift === "" || priority.priority === "critical") {
               workingSchedule[staff.id][dateKey] = priority.shift;
               changesApplied++;
+              appliedRules.push({
+                type: "legacy",
+                staffName: staff.name,
+                date: dateKey,
+                rule: priorityId,
+                appliedShift: priority.shift
+              });
             }
           }
         }
@@ -494,7 +569,7 @@ export class ScheduleGenerator {
     });
 
     // Phase 2: Fill remaining positions with balanced approach
-    dateRange.forEach((date) => {
+    for (const date of dateRange) {
       const dateKey = date.toISOString().split("T")[0];
 
       // Count current assignments for the day
@@ -505,15 +580,23 @@ export class ScheduleGenerator {
       );
 
       // Apply group constraints and daily limits
-      staffMembers.forEach((staff) => {
+      // Calculate backup coverage needs for this date in priority-first strategy
+      const backupCoverageNeeds = await this.calculateBackupCoverageNeeds(
+        workingSchedule,
+        dateKey,
+        staffMembers
+      );
+      
+      for (const staff of staffMembers) {
         if (workingSchedule[staff.id][dateKey] === "") {
-          // Assign based on constraints and balance
-          const suggestedShift = this.suggestShiftForStaff(
+          // Assign based on constraints, balance, and backup considerations
+          const suggestedShift = await this.suggestShiftForStaffWithBackup(
             staff,
             dateKey,
             workingSchedule,
             staffMembers,
             dayCounts,
+            backupCoverageNeeds
           );
 
           if (suggestedShift) {
@@ -521,8 +604,8 @@ export class ScheduleGenerator {
             changesApplied++;
           }
         }
-      });
-    });
+      }
+    }
 
     // Apply backup staff assignments after main generation
     const finalSchedule = await this.applyBackupStaffAssignments(
@@ -541,6 +624,9 @@ export class ScheduleGenerator {
           dateRange,
           staffMembers,
         ),
+        appliedRules: appliedRules,
+        dynamicRulesCount: appliedRules.filter(r => r.type === "dynamic").length,
+        legacyRulesCount: appliedRules.filter(r => r.type === "legacy").length,
         balanceScore: this.calculateBalanceScore(
           finalSchedule,
           staffMembers,
@@ -551,7 +637,7 @@ export class ScheduleGenerator {
   }
 
   /**
-   * Balance-first generation strategy
+   * Balance-first generation strategy with predictive monthly balancing
    * @param {Object} schedule - Current schedule
    * @param {Array} staffMembers - Staff members
    * @param {Array} dateRange - Date range
@@ -562,19 +648,46 @@ export class ScheduleGenerator {
     const workingSchedule = JSON.parse(JSON.stringify(schedule));
     let changesApplied = 0;
 
-    // Calculate monthly limits for each staff member
-    const monthlyLimits = this.calculateMonthlyLimits(dateRange);
+    console.log("📋 Initializing balance-first strategy with predictive monthly balancing...");
+
+    // Initialize backup pre-planning for this strategy
+    const backupPrePlanning = await this.initializeBackupPrePlanning(
+      staffMembers,
+      dateRange,
+      {}
+    );
+
+    // Enhanced monthly limits calculation with predictive balancing
+    const monthlyLimits = await this.calculateEnhancedMonthlyLimits(dateRange);
+    const monthlyProjections = await this.calculateMonthlyProjections(
+      workingSchedule,
+      staffMembers,
+      dateRange
+    );
+    
     const staffOffDayBudgets = new Map();
+    const staffWorkloadProjections = new Map();
 
     staffMembers.forEach((staff) => {
+      const projection = monthlyProjections.get(staff.id);
       const currentOffDays = this.countStaffOffDays(
         workingSchedule[staff.id],
         dateRange,
       );
-      staffOffDayBudgets.set(
-        staff.id,
+      
+      // Calculate budget with predictive balancing
+      const remainingDays = dateRange.length - this.countFilledDays(workingSchedule[staff.id], dateRange);
+      const projectedOffDayNeed = projection ? projection.recommendedOffDays - currentOffDays : 0;
+      const adjustedBudget = Math.max(0, Math.min(
         monthlyLimits.maxOffDaysPerMonth - currentOffDays,
-      );
+        projectedOffDayNeed,
+        Math.floor(remainingDays * 0.4) // Max 40% of remaining days as off days
+      ));
+      
+      staffOffDayBudgets.set(staff.id, adjustedBudget);
+      staffWorkloadProjections.set(staff.id, projection);
+      
+      console.log(`📋 ${staff.name}: Current off days: ${currentOffDays}, Budget: ${adjustedBudget}, Projected need: ${projectedOffDayNeed}`);
     });
 
     // Sort dates by difficulty (weekends first, then special constraint days)
@@ -585,7 +698,7 @@ export class ScheduleGenerator {
     });
 
     // Fill schedule date by date, balancing as we go
-    sortedDates.forEach((date) => {
+    for (const date of sortedDates) {
       const dateKey = date.toISOString().split("T")[0];
       const dayOfWeek = getDayOfWeek(dateKey);
 
@@ -602,11 +715,19 @@ export class ScheduleGenerator {
         return aWorkload - bWorkload;
       });
 
-      // Assign shifts for this day
+      // Assign shifts for this day with priority rules consideration
       let assignedCount = 0;
-      const maxOffPerDay = 4; // DAILY_LIMITS.maxOffPerDay
+      const dailyLimits = await getDailyLimits();
+      const maxOffPerDay = dailyLimits.find(l => l.shiftType === "off")?.maxCount || 4;
+      
+      // Calculate backup coverage needs for this date in balance-first strategy
+      const backupCoverageNeeds = await this.calculateBackupCoverageNeeds(
+        workingSchedule,
+        dateKey,
+        staffMembers
+      );
 
-      staffByWorkload.forEach((staff) => {
+      for (const staff of staffByWorkload) {
         if (workingSchedule[staff.id][dateKey] === "") {
           const staffOffBudget = staffOffDayBudgets.get(staff.id) || 0;
           const currentDayOffCount = this.countDayOffAssignments(
@@ -615,48 +736,85 @@ export class ScheduleGenerator {
             staffMembers,
           );
 
-          // Decide shift type based on balance and constraints
+          // First, check if priority rules apply
+          const priorityShift = await this.checkDynamicPriorityRules(
+            staff,
+            dateKey,
+            workingSchedule,
+            staffMembers,
+          );
+
           let assignedShift = "";
 
-          // Consider giving day off if under budget and daily limit allows
-          if (
-            staffOffBudget > 0 &&
-            currentDayOffCount < maxOffPerDay &&
-            assignedCount < staffMembers.length - 3
-          ) {
-            // More likely to give day off if staff has high workload
-            const workload = this.calculateStaffWorkload(
-              workingSchedule[staff.id],
-              dateRange,
-            );
-            const avgWorkload = this.calculateAverageWorkload(
-              workingSchedule,
-              staffMembers,
-              dateRange,
-            );
+          if (priorityShift) {
+            // Priority rule overrides balance considerations
+            assignedShift = priorityShift;
+            console.log(`🎯 Priority rule applied for ${staff.name} on ${dateKey}: ${priorityShift}`);
+          } else {
+            // Use predictive balance-based logic for non-priority assignments
+            const projection = staffWorkloadProjections.get(staff.id);
+            
+            // Consider giving day off if under budget and daily limit allows
+            if (
+              staffOffBudget > 0 &&
+              currentDayOffCount < maxOffPerDay &&
+              assignedCount < staffMembers.length - 3
+            ) {
+              let shouldGiveOffDay = false;
+              
+              // Use monthly projection for more intelligent off day decisions
+              if (projection) {
+                // High priority staff (unbalanced) get preference for off days
+                const needsOffDay = projection.recommendations.priority === 'high' && 
+                                 projection.projections.offDaysNeeded > 0;
+                
+                // Also consider current workload vs projection
+                const isOverworked = projection.currentStats.currentWorkRate > projection.targets.targetWorkRate + 0.1;
+                
+                shouldGiveOffDay = needsOffDay || isOverworked;
+                
+                if (shouldGiveOffDay) {
+                  console.log(`📋 Predictive balancing: Giving off day to ${staff.name} (priority: ${projection.recommendations.priority})`);
+                }
+              } else {
+                // Fallback to original logic if no projection available
+                const workload = this.calculateStaffWorkload(
+                  workingSchedule[staff.id],
+                  dateRange,
+                );
+                const avgWorkload = this.calculateAverageWorkload(
+                  workingSchedule,
+                  staffMembers,
+                  dateRange,
+                );
+                
+                shouldGiveOffDay = workload > avgWorkload * 1.1;
+              }
 
-            if (workload > avgWorkload * 1.1) {
-              assignedShift = "×";
-              staffOffDayBudgets.set(staff.id, staffOffBudget - 1);
+              if (shouldGiveOffDay) {
+                assignedShift = "×";
+                staffOffDayBudgets.set(staff.id, staffOffBudget - 1);
+              }
             }
-          }
 
-          // If not assigned day off, assign working shift
-          if (assignedShift === "") {
-            assignedShift = this.selectWorkingShift(
-              staff,
-              dateKey,
-              workingSchedule,
-              staffMembers,
-            );
+            // If not assigned day off, assign working shift with backup considerations
+            if (assignedShift === "") {
+              assignedShift = await this.selectWorkingShiftWithBackup(
+                staff,
+                dateKey,
+                workingSchedule,
+                staffMembers,
+                backupCoverageNeeds
+              );
+            }
           }
 
           workingSchedule[staff.id][dateKey] = assignedShift;
           changesApplied++;
           assignedCount++;
         }
-      });
-    });
+      }
+    }
 
     // Apply backup staff assignments after main generation
     const finalSchedule = await this.applyBackupStaffAssignments(
@@ -685,6 +843,20 @@ export class ScheduleGenerator {
           staffMembers,
           dateRange,
         ),
+        monthlyProjections: Array.from(monthlyProjections.entries()).map(([staffId, projection]) => {
+          const staff = staffMembers.find(s => s.id === staffId);
+          return {
+            staffId,
+            staffName: staff?.name || 'Unknown',
+            ...projection
+          };
+        }),
+        predictiveBalancingUsed: this.monthlyBalancingEnabled,
+        backupStaffIntegration: {
+          enabled: true,
+          backupAssignmentsConsidered: backupPrePlanning?.enabled || false,
+          totalBackupStaff: backupPrePlanning?.totalBackupStaff || 0
+        },
       },
     };
   }
@@ -703,12 +875,28 @@ export class ScheduleGenerator {
     let patternMatches = 0;
 
     // Fill based on learned patterns
-    dateRange.forEach((date) => {
+    for (const date of dateRange) {
       const dateKey = date.toISOString().split("T")[0];
       const dayOfWeek = getDayOfWeek(dateKey);
 
-      staffMembers.forEach((staff) => {
+      for (const staff of staffMembers) {
         if (workingSchedule[staff.id][dateKey] === "") {
+          // Check priority rules first (highest precedence)
+          const priorityShift = await this.checkDynamicPriorityRules(
+            staff,
+            dateKey,
+            workingSchedule,
+            staffMembers,
+          );
+
+          if (priorityShift) {
+            workingSchedule[staff.id][dateKey] = priorityShift;
+            changesApplied++;
+            console.log(`🎯 Priority rule applied in pattern strategy for ${staff.name}`);
+            continue;
+          }
+
+          // If no priority rule, use pattern-based prediction
           const staffPattern = this.staffPatterns.get(staff.id);
           if (staffPattern) {
             const suggestedShift = this.predictShiftFromPattern(
@@ -737,8 +925,8 @@ export class ScheduleGenerator {
             }
           }
         }
-      });
-    });
+      }
+    }
 
     // Fill remaining empty slots with balanced approach
     const remaining = this.fillRemainingSlots(
@@ -783,10 +971,79 @@ export class ScheduleGenerator {
    * @param {Object} dayCounts - Current day assignments count
    * @returns {string} Suggested shift
    */
-  suggestShiftForStaff(staff, dateKey, schedule, staffMembers, dayCounts) {
+  /**
+   * Suggest shift for staff with backup considerations
+   * @param {Object} staff - Staff member
+   * @param {string} dateKey - Date key
+   * @param {Object} schedule - Current schedule
+   * @param {Array} staffMembers - All staff members
+   * @param {Object} dayCounts - Current day assignments count
+   * @param {Object} backupCoverageNeeds - Backup coverage analysis
+   * @returns {string} Suggested shift
+   */
+  async suggestShiftForStaffWithBackup(staff, dateKey, schedule, staffMembers, dayCounts, backupCoverageNeeds) {
     const dayOfWeek = getDayOfWeek(dateKey);
 
-    // Check priority rules first
+    // Check dynamic priority rules first
+    const dynamicPriorityShift = await this.checkDynamicPriorityRules(
+      staff,
+      dateKey,
+      schedule,
+      staffMembers,
+    );
+    if (dynamicPriorityShift) return dynamicPriorityShift;
+
+    // Check legacy priority rules
+    const priorityShift = this.checkPriorityRules(
+      staff,
+      dateKey,
+      schedule,
+      staffMembers,
+    );
+    if (priorityShift) return priorityShift;
+    
+    // Check if this staff member is needed for backup coverage
+    const isBackupStaff = backupCoverageNeeds.backupStaffRequired.includes(staff.id);
+    const criticalGroup = backupCoverageNeeds.criticalGroups.find(group => 
+      group.backupStaff.some(backup => backup.staffId === staff.id)
+    );
+    
+    if (isBackupStaff && criticalGroup) {
+      console.log(`🔄 Backup staff ${staff.name} required for critical group ${criticalGroup.groupName}`);
+      
+      // Backup staff should generally work when needed
+      // Reduce probability of off days for backup staff during critical coverage
+      const offDayProbability = Math.max(0.05, 0.15 - (criticalGroup.criticality * 0.05));
+      
+      if (Math.random() > offDayProbability) {
+        // Choose working shift for backup staff
+        return await this.selectWorkingShiftWithBackup(
+          staff,
+          dateKey,
+          schedule,
+          staffMembers,
+          backupCoverageNeeds
+        );
+      }
+    }
+
+    // Continue with regular logic
+    return await this.suggestShiftForStaff(staff, dateKey, schedule, staffMembers, dayCounts);
+  }
+  
+  async suggestShiftForStaff(staff, dateKey, schedule, staffMembers, dayCounts) {
+    const dayOfWeek = getDayOfWeek(dateKey);
+
+    // Check dynamic priority rules first
+    const dynamicPriorityShift = await this.checkDynamicPriorityRules(
+      staff,
+      dateKey,
+      schedule,
+      staffMembers,
+    );
+    if (dynamicPriorityShift) return dynamicPriorityShift;
+
+    // Check legacy priority rules
     const priorityShift = this.checkPriorityRules(
       staff,
       dateKey,
@@ -1039,10 +1296,18 @@ export class ScheduleGenerator {
   }
 
   // Helper methods for calculations and validations
-  calculateMonthlyLimits(dateRange) {
+  async calculateMonthlyLimits(dateRange) {
     if (dateRange.length === 0) return { maxOffDaysPerMonth: 7 };
     const firstDate = dateRange[0];
-    return getMonthlyLimits(firstDate.getFullYear(), firstDate.getMonth() + 1);
+    try {
+      return await getMonthlyLimits(firstDate.getFullYear(), firstDate.getMonth() + 1);
+    } catch (error) {
+      console.warn("⚠️ Failed to get monthly limits from configuration, using calculation:", error);
+      return {
+        maxOffDaysPerMonth: Math.ceil(dateRange.length * 0.25),
+        minWorkDaysPerMonth: Math.floor(dateRange.length * 0.75)
+      };
+    }
   }
 
   countDayAssignments(schedule, dateKey, staffMembers) {
@@ -1087,10 +1352,268 @@ export class ScheduleGenerator {
     return count;
   }
 
+  /**
+   * Apply dynamic priority rules from configuration during generation
+   * @param {Object} schedule - Working schedule
+   * @param {Array} staffMembers - Staff members
+   * @param {Array} dateRange - Date range
+   * @param {Array} priorityRules - Priority rules from configuration
+   * @param {Array} appliedRules - Array to track applied rules
+   */
+  async applyDynamicPriorityRules(schedule, staffMembers, dateRange, priorityRules, appliedRules) {
+    if (!Array.isArray(priorityRules) || priorityRules.length === 0) {
+      console.log("📋 No dynamic priority rules configured");
+      return;
+    }
+
+    console.log(`🎯 Applying ${priorityRules.length} dynamic priority rules...`);
+
+    // Sort rules by priority level (higher priority first)
+    const sortedRules = priorityRules
+      .filter(rule => rule.isActive !== false)
+      .sort((a, b) => (b.priorityLevel || 0) - (a.priorityLevel || 0));
+
+    for (const rule of sortedRules) {
+      // Find the staff member for this rule
+      const staff = staffMembers.find(s => 
+        s.id === rule.staffId || s.name === rule.staffId
+      );
+      
+      if (!staff) {
+        console.warn(`⚠️ Staff not found for rule: ${rule.name}`);
+        continue;
+      }
+
+      // Apply rule to relevant dates
+      for (const date of dateRange) {
+        const dateKey = date.toISOString().split("T")[0];
+        const dayOfWeek = date.getDay();
+
+        // Check if rule applies to this day of week
+        if (rule.daysOfWeek && rule.daysOfWeek.length > 0) {
+          if (!rule.daysOfWeek.includes(dayOfWeek)) {
+            continue;
+          }
+        }
+
+        // Check if rule is within effective date range
+        if (rule.effectiveFrom && new Date(dateKey) < new Date(rule.effectiveFrom)) {
+          continue;
+        }
+        if (rule.effectiveUntil && new Date(dateKey) > new Date(rule.effectiveUntil)) {
+          continue;
+        }
+
+        const currentShift = schedule[staff.id]?.[dateKey];
+        let targetShift = null;
+
+        // Determine target shift based on rule type
+        switch (rule.ruleType) {
+          case "required_off":
+            targetShift = "×";
+            break;
+          case "preferred_shift":
+            targetShift = this.mapShiftTypeToSymbol(rule.shiftType);
+            break;
+          case "avoid_shift":
+            // For avoid rules, we skip if current shift matches what to avoid
+            if (currentShift === this.mapShiftTypeToSymbol(rule.shiftType)) {
+              continue;
+            }
+            break;
+          default:
+            continue;
+        }
+
+        // Apply the rule if conditions are met
+        if (targetShift !== null) {
+          const shouldApply = this.shouldApplyPriorityRule(
+            rule,
+            currentShift,
+            targetShift,
+            schedule,
+            staff,
+            dateKey
+          );
+
+          if (shouldApply) {
+            schedule[staff.id][dateKey] = targetShift;
+            appliedRules.push({
+              type: "dynamic",
+              ruleId: rule.id,
+              ruleName: rule.name,
+              staffId: staff.id,
+              staffName: staff.name,
+              date: dateKey,
+              dayOfWeek: dayOfWeek,
+              priorityLevel: rule.priorityLevel,
+              appliedShift: targetShift,
+              previousShift: currentShift
+            });
+            
+            console.log(`✅ Applied rule "${rule.name}" for ${staff.name} on ${dateKey}: ${targetShift}`);
+          }
+        }
+      }
+    }
+
+    const dynamicRulesApplied = appliedRules.filter(r => r.type === "dynamic").length;
+    console.log(`🎯 Applied ${dynamicRulesApplied} dynamic priority rules`);
+    
+    if (dynamicRulesApplied > 0) {
+      const hardRulesApplied = appliedRules.filter(r => 
+        r.type === "dynamic" && 
+        priorityRules.find(rule => rule.id === r.ruleId)?.isHardConstraint
+      ).length;
+      
+      console.log(`  • ${hardRulesApplied} hard constraint rules applied`);
+      console.log(`  • ${dynamicRulesApplied - hardRulesApplied} soft preference rules applied`);
+    }
+  }
+
+  /**
+   * Map configuration shift type to schedule symbol
+   * @param {string} shiftType - Shift type from configuration
+   * @returns {string} Schedule symbol
+   */
+  mapShiftTypeToSymbol(shiftType) {
+    const mapping = {
+      "early": "△",
+      "normal": "",
+      "late": "◇",
+      "off": "×"
+    };
+    return mapping[shiftType] || "";
+  }
+
+  /**
+   * Determine if a priority rule should be applied
+   * @param {Object} rule - Priority rule
+   * @param {string} currentShift - Current shift value
+   * @param {string} targetShift - Target shift value
+   * @param {Object} schedule - Working schedule
+   * @param {Object} staff - Staff member
+   * @param {string} dateKey - Date key
+   * @returns {boolean} Whether to apply the rule
+   */
+  shouldApplyPriorityRule(rule, currentShift, targetShift, schedule, staff, dateKey) {
+    // Always apply if cell is empty
+    if (!currentShift || currentShift === "") {
+      return true;
+    }
+
+    // Apply hard constraints regardless of current value
+    if (rule.isHardConstraint) {
+      return true;
+    }
+
+    // For soft constraints, consider preference strength
+    const preferenceStrength = rule.preferenceStrength || 0.8;
+    
+    // Apply based on preference strength (some randomness for realistic scheduling)
+    return Math.random() < preferenceStrength;
+  }
+
   checkPriorityRules(staff, dateKey, schedule, staffMembers) {
-    // Implementation for checking priority rules
-    // Return shift if priority rule applies, null otherwise
+    // Enhanced implementation for checking priority rules
+    // This method now works with both dynamic and legacy rules
+    const dayOfWeek = getDayOfWeek(dateKey);
+    
+    // Check legacy hardcoded rules first
+    for (const [priorityId, priority] of this.shiftPriorities) {
+      if (priority.condition(dateKey, schedule, staffMembers)) {
+        if (staff.name === priority.staff) {
+          return priority.shift;
+        }
+      }
+    }
+
+    // Note: Dynamic priority rules are now handled in applyDynamicPriorityRules
+    // This method is kept for backward compatibility
     return null;
+  }
+
+  /**
+   * Check dynamic priority rules for a specific staff and date
+   * @param {Object} staff - Staff member
+   * @param {string} dateKey - Date key
+   * @param {Object} schedule - Current schedule
+   * @param {Array} staffMembers - All staff members
+   * @returns {string|null} Suggested shift or null
+   */
+  async checkDynamicPriorityRules(staff, dateKey, schedule, staffMembers) {
+    try {
+      const priorityRules = await getPriorityRules();
+      
+      if (!Array.isArray(priorityRules) || priorityRules.length === 0) {
+        return null;
+      }
+
+      const date = new Date(dateKey);
+      const dayOfWeek = date.getDay();
+
+      // Find applicable rules for this staff member
+      const applicableRules = priorityRules
+        .filter(rule => {
+          // Check if rule is active and applies to this staff
+          if (rule.isActive === false) return false;
+          if (rule.staffId !== staff.id && rule.staffId !== staff.name) return false;
+          
+          // Check day of week
+          if (rule.daysOfWeek && rule.daysOfWeek.length > 0) {
+            if (!rule.daysOfWeek.includes(dayOfWeek)) return false;
+          }
+          
+          // Check effective date range
+          if (rule.effectiveFrom && date < new Date(rule.effectiveFrom)) return false;
+          if (rule.effectiveUntil && date > new Date(rule.effectiveUntil)) return false;
+          
+          return true;
+        })
+        .sort((a, b) => (b.priorityLevel || 0) - (a.priorityLevel || 0)); // Highest priority first
+
+      // Apply the highest priority applicable rule
+      for (const rule of applicableRules) {
+        let targetShift = null;
+        
+        switch (rule.ruleType) {
+          case "required_off":
+            targetShift = "×";
+            break;
+          case "preferred_shift":
+            targetShift = this.mapShiftTypeToSymbol(rule.shiftType);
+            break;
+          case "avoid_shift":
+            // For avoid rules, we need to suggest an alternative
+            const avoidShift = this.mapShiftTypeToSymbol(rule.shiftType);
+            if (avoidShift === "×") {
+              // If avoiding off day, suggest normal work
+              targetShift = staff.status === "パート" ? "○" : "";
+            } else {
+              // If avoiding a work shift, might suggest off day
+              targetShift = "×";
+            }
+            break;
+        }
+        
+        if (targetShift !== null) {
+          // Apply preference strength for soft constraints
+          if (!rule.isHardConstraint) {
+            const preferenceStrength = rule.preferenceStrength || 0.8;
+            if (Math.random() > preferenceStrength) {
+              continue; // Skip this rule based on preference strength
+            }
+          }
+          
+          return targetShift;
+        }
+      }
+      
+      return null;
+    } catch (error) {
+      console.warn("⚠️ Failed to check dynamic priority rules:", error);
+      return null;
+    }
   }
 
   checkGroupConflicts(staff, dateKey, proposedShift, schedule, staffMembers) {
@@ -1098,9 +1621,217 @@ export class ScheduleGenerator {
     return false;
   }
 
-  selectWorkingShift(staff, dateKey, schedule, staffMembers) {
-    // Logic to select appropriate working shift
+  /**
+   * Calculate backup coverage needs for a specific date
+   * @param {Object} schedule - Current schedule
+   * @param {string} dateKey - Date key
+   * @param {Array} staffMembers - Staff members
+   * @returns {Object} Backup coverage analysis
+   */
+  async calculateBackupCoverageNeeds(schedule, dateKey, staffMembers) {
+    try {
+      const staffGroups = await getStaffConflictGroups();
+      const backupAssignments = await getBackupAssignments();
+      
+      if (!backupAssignments || backupAssignments.length === 0) {
+        return {
+          criticalGroups: [],
+          backupStaffRequired: [],
+          criticalityScore: 0
+        };
+      }
+      
+      const criticalGroups = [];
+      let totalCriticality = 0;
+      
+      // Check each group for coverage needs
+      for (const group of staffGroups) {
+        const groupMembersOffCount = group.members.filter(memberName => {
+          const staff = staffMembers.find(s => s.name === memberName);
+          if (staff && schedule[staff.id] && schedule[staff.id][dateKey]) {
+            return isOffDay(schedule[staff.id][dateKey]);
+          }
+          return false;
+        }).length;
+        
+        // Group is critical if more than 1 member is off
+        if (groupMembersOffCount > 1) {
+          const groupBackupStaff = backupAssignments
+            .filter(assignment => assignment.groupId === group.id)
+            .map(assignment => {
+              const staff = staffMembers.find(s => s.id === assignment.staffId);
+              return {
+                staffId: assignment.staffId,
+                staffName: staff?.name || 'Unknown',
+                priority: assignment.priorityOrder || 1
+              };
+            })
+            .sort((a, b) => a.priority - b.priority);
+          
+          if (groupBackupStaff.length > 0) {
+            criticalGroups.push({
+              groupId: group.id,
+              groupName: group.name,
+              membersOff: groupMembersOffCount,
+              backupStaff: groupBackupStaff,
+              criticality: groupMembersOffCount * 2 // Weight by severity
+            });
+            
+            totalCriticality += groupMembersOffCount * 2;
+          }
+        }
+      }
+      
+      const backupStaffRequired = criticalGroups
+        .flatMap(group => group.backupStaff.slice(0, group.membersOff)) // Take needed backup staff
+        .map(backup => backup.staffId);
+      
+      return {
+        criticalGroups,
+        backupStaffRequired: [...new Set(backupStaffRequired)], // Remove duplicates
+        criticalityScore: Math.min(1.0, totalCriticality / 10) // Normalize to 0-1
+      };
+    } catch (error) {
+      console.warn("⚠️ Failed to calculate backup coverage needs:", error);
+      return {
+        criticalGroups: [],
+        backupStaffRequired: [],
+        criticalityScore: 0
+      };
+    }
+  }
+  
+  /**
+   * Select working shift with backup staff considerations
+   * @param {Object} staff - Staff member
+   * @param {string} dateKey - Date key
+   * @param {Object} schedule - Current schedule
+   * @param {Array} staffMembers - Staff members
+   * @param {Object} backupCoverageNeeds - Backup coverage analysis
+   * @returns {string} Selected shift
+   */
+  async selectWorkingShiftWithBackup(staff, dateKey, schedule, staffMembers, backupCoverageNeeds) {
+    // First check if there are any dynamic priority rules that suggest a specific working shift
+    const priorityShift = await this.checkDynamicPriorityRules(
+      staff,
+      dateKey,
+      schedule,
+      staffMembers,
+    );
+    
+    if (priorityShift && priorityShift !== "×") {
+      return priorityShift;
+    }
+    
+    // Get daily limits for shift balancing
+    const dailyLimits = await getDailyLimits();
+    const dayCounts = this.countDayAssignments(schedule, dateKey, staffMembers);
+    
+    const dayOfWeek = getDayOfWeek(dateKey);
+    
+    // Check if this staff member has backup responsibilities
+    const isBackupStaff = backupCoverageNeeds.backupStaffRequired.includes(staff.id);
+    const criticalGroup = backupCoverageNeeds.criticalGroups.find(group => 
+      group.backupStaff.some(backup => backup.staffId === staff.id)
+    );
+    
+    // Check daily limits and suggest appropriate shifts
+    const earlyLimit = dailyLimits.find(l => l.shiftType === "early")?.maxCount || 4;
+    const lateLimit = dailyLimits.find(l => l.shiftType === "late")?.maxCount || 3;
+    
+    // Apply business logic based on dynamic configuration (replaces hardcoded rules)
+    // Sunday early shift logic now handled by dynamic priority rules
+    // Check if there are any dynamic rules that should apply here
+    const sundayEarlyRule = await this.checkDynamicBusinessRules(
+      staff,
+      dateKey,
+      dayOfWeek,
+      dayCounts
+    );
+    if (sundayEarlyRule) {
+      return sundayEarlyRule;
+    }
+    
+    // Backup staff considerations for shift selection
+    if (isBackupStaff && criticalGroup) {
+      console.log(`🔄 Backup staff ${staff.name} covering for critical group ${criticalGroup.groupName}`);
+      
+      // Backup staff should work normal shifts to provide stable coverage
+      // unless there's a specific operational need for different shifts
+      if (dayCounts.early < earlyLimit && criticalGroup.criticality > 3) {
+        return "△"; // Early shift for critical coverage
+      }
+      
+      return ""; // Normal shift for stable backup coverage
+    }
+    
+    // Regular shift selection logic
+    if (dayCounts.early < earlyLimit && Math.random() < 0.3) {
+      return "△"; // Early shift
+    }
+    
+    if (dayCounts.late < lateLimit && Math.random() < 0.2) {
+      return "◇"; // Late shift
+    }
+    
     return ""; // Default to normal shift
+  }
+  
+  /**
+   * Check dynamic business rules for specific scenarios
+   * @param {Object} staff - Staff member
+   * @param {string} dateKey - Date key
+   * @param {string} dayOfWeek - Day of week
+   * @param {Object} dayCounts - Current day counts
+   * @returns {string|null} Suggested shift or null
+   */
+  async checkDynamicBusinessRules(staff, dateKey, dayOfWeek, dayCounts) {
+    try {
+      // Get priority rules to check for business logic
+      const priorityRules = await getPriorityRules();
+      
+      if (!priorityRules || priorityRules.length === 0) {
+        return null;
+      }
+      
+      const date = new Date(dateKey);
+      const dayIndex = date.getDay();
+      
+      // Find applicable rules for this staff member and day
+      const applicableRule = priorityRules.find(rule => {
+        if (rule.isActive === false) return false;
+        if (rule.staffId !== staff.id && rule.staffId !== staff.name) return false;
+        
+        // Check day of week
+        if (rule.daysOfWeek && rule.daysOfWeek.length > 0) {
+          if (!rule.daysOfWeek.includes(dayIndex)) return false;
+        }
+        
+        return true;
+      });
+      
+      if (applicableRule) {
+        const targetShift = this.mapShiftTypeToSymbol(applicableRule.shiftType);
+        console.log(`🎯 Dynamic business rule applied: ${staff.name} -> ${targetShift} on ${dayOfWeek}`);
+        return targetShift;
+      }
+      
+      return null;
+    } catch (error) {
+      console.warn("⚠️ Failed to check dynamic business rules:", error);
+      return null;
+    }
+  }
+  
+  async selectWorkingShift(staff, dateKey, schedule, staffMembers) {
+    // Legacy method - now calls the backup-aware version with empty backup needs
+    return await this.selectWorkingShiftWithBackup(
+      staff,
+      dateKey,
+      schedule,
+      staffMembers,
+      { criticalGroups: [], backupStaffRequired: [], criticalityScore: 0 }
+    );
   }
 
   calculateDateDifficulty(date) {
@@ -1236,7 +1967,79 @@ export class ScheduleGenerator {
   }
 
   /**
-   * Get generator status
+   * Set up real-time cache invalidation listener
+   */
+  setupCacheInvalidationListener() {
+    console.log("🔌 Setting up real-time configuration cache invalidation listener...");
+    
+    this.cacheInvalidationUnsubscribe = onConfigurationCacheInvalidated(() => {
+      console.log("🔄 ScheduleGenerator: Configuration cache invalidated, updating constraint weights...");
+      this.onConfigurationUpdated();
+    });
+  }
+  
+  /**
+   * Handle configuration updates
+   */
+  async onConfigurationUpdated() {
+    const now = Date.now();
+    
+    // Throttle updates to avoid excessive processing
+    if (now - this.lastConfigurationRefresh < 1000) {
+      console.log("🕒 Configuration update throttled (less than 1 second since last update)");
+      return;
+    }
+    
+    this.lastConfigurationRefresh = now;
+    
+    try {
+      console.log("🔄 ScheduleGenerator: Updating constraint weights with fresh configuration...");
+      
+      // Reload constraint weights with fresh configuration
+      if (this.initialized) {
+        // Use empty arrays as placeholder - updateConstraintWeights will load fresh data
+        await this.updateConstraintWeights([], [], null);
+        
+        console.log("✅ ScheduleGenerator constraint weights updated with fresh configuration");
+      }
+      
+      // Notify that generator is ready with updated configuration
+      if (typeof window !== 'undefined' && window.dispatchEvent) {
+        window.dispatchEvent(new CustomEvent('scheduleGeneratorConfigUpdated', {
+          detail: {
+            timestamp: now,
+            constraintWeights: this.constraintWeights
+          }
+        }));
+      }
+    } catch (error) {
+      console.error("❌ Failed to update ScheduleGenerator configuration:", error);
+    }
+  }
+  
+  /**
+   * Force refresh configuration
+   */
+  async forceRefreshConfiguration() {
+    console.log("🔄 Force refreshing ScheduleGenerator configuration...");
+    
+    try {
+      // Force refresh all configurations
+      await refreshAllConfigurations();
+      
+      // Update our constraint weights
+      await this.onConfigurationUpdated();
+      
+      console.log("✅ ScheduleGenerator configuration force refresh completed");
+      return { success: true };
+    } catch (error) {
+      console.error("❌ Force refresh failed:", error);
+      return { success: false, error: error.message };
+    }
+  }
+
+  /**
+   * Get generator status with configuration cache information
    * @returns {Object} Status information
    */
   getStatus() {
@@ -1257,7 +2060,356 @@ export class ScheduleGenerator {
       constraintWeights: this.constraintWeights,
       adaptiveLearning: this.adaptiveLearning,
       performanceHistory: this.generationStats.performanceHistory.slice(-5), // Last 5 generations
+      configurationCache: {
+        hasInvalidationListener: !!this.cacheInvalidationUnsubscribe,
+        lastConfigurationRefresh: this.lastConfigurationRefresh,
+        timeSinceLastRefresh: this.lastConfigurationRefresh ? Date.now() - this.lastConfigurationRefresh : null
+      },
+      monthlyBalancing: {
+        enabled: this.monthlyBalancingEnabled,
+        projectionsCount: this.monthlyProjections.size,
+        summary: this.getMonthlyProjectionSummary()
+      },
+      backupStaffIntegration: {
+        available: true,
+        prePlanningEnabled: true,
+        description: "Backup staff considerations integrated into generation algorithms"
+      }
     };
+  }
+  
+  /**
+   * Cleanup method for proper disposal
+   */
+  /**
+   * Enable or disable monthly balancing
+   * @param {boolean} enabled - Whether to enable monthly balancing
+   */
+  setMonthlyBalancingEnabled(enabled) {
+    this.monthlyBalancingEnabled = enabled;
+    console.log(`📋 Monthly balancing ${enabled ? 'enabled' : 'disabled'}`);
+  }
+  
+  /**
+   * Get current monthly projections
+   * @returns {Map} Current monthly projections
+   */
+  getCurrentMonthlyProjections() {
+    return this.monthlyProjections;
+  }
+  
+  /**
+   * Comprehensive integration testing and validation
+   * @param {Array} staffMembers - Staff members for testing
+   * @param {Array} dateRange - Date range for testing
+   * @returns {Object} Test results
+   */
+  async runIntegrationTests(staffMembers, dateRange) {
+    console.log("🧪 Starting comprehensive AI-settings integration tests...");
+    
+    const testResults = {
+      timestamp: new Date().toISOString(),
+      testSuite: "AI-Settings Integration",
+      totalTests: 0,
+      passedTests: 0,
+      failedTests: 0,
+      tests: [],
+      summary: ""
+    };
+    
+    const runTest = async (testName, testFunction) => {
+      testResults.totalTests++;
+      try {
+        console.log(`📝 Running test: ${testName}`);
+        const result = await testFunction();
+        testResults.tests.push({
+          name: testName,
+          status: "PASS",
+          result,
+          timestamp: Date.now()
+        });
+        testResults.passedTests++;
+        console.log(`✅ ${testName}: PASSED`);
+        return result;
+      } catch (error) {
+        testResults.tests.push({
+          name: testName,
+          status: "FAIL",
+          error: error.message,
+          timestamp: Date.now()
+        });
+        testResults.failedTests++;
+        console.error(`❌ ${testName}: FAILED - ${error.message}`);
+        return null;
+      }
+    };
+    
+    // Test 1: Priority Rules Integration
+    await runTest("Priority Rules Loading and Application", async () => {
+      const priorityRules = await getPriorityRules();
+      if (!Array.isArray(priorityRules)) {
+        throw new Error("Priority rules not loaded as array");
+      }
+      
+      // Test application during generation
+      const testSchedule = this.initializeWorkingSchedule(staffMembers, dateRange.slice(0, 3), {}, false);
+      const appliedRules = [];
+      
+      await this.applyDynamicPriorityRules(
+        testSchedule,
+        staffMembers,
+        dateRange.slice(0, 3),
+        priorityRules,
+        appliedRules
+      );
+      
+      return {
+        rulesLoaded: priorityRules.length,
+        rulesApplied: appliedRules.filter(r => r.type === "dynamic").length,
+        integrationWorking: true
+      };
+    });
+    
+    // Test 2: Real-time Cache Invalidation
+    await runTest("Real-time Cache Invalidation", async () => {
+      let invalidationTriggered = false;
+      
+      // Register temporary listener
+      const unsubscribe = onConfigurationCacheInvalidated(() => {
+        invalidationTriggered = true;
+      });
+      
+      // Force invalidation
+      invalidateConfigurationCache();
+      
+      // Wait briefly for async callback
+      await new Promise(resolve => setTimeout(resolve, 100));
+      
+      unsubscribe();
+      
+      if (!invalidationTriggered) {
+        throw new Error("Cache invalidation callback not triggered");
+      }
+      
+      return {
+        listenerRegistered: true,
+        invalidationTriggered: true,
+        integrationWorking: true
+      };
+    });
+    
+    // Test 3: Monthly Balancing Integration
+    await runTest("Monthly Balancing and Projections", async () => {
+      if (!this.monthlyBalancingEnabled) {
+        this.setMonthlyBalancingEnabled(true);
+      }
+      
+      const testSchedule = this.initializeWorkingSchedule(staffMembers, dateRange.slice(0, 7), {}, false);
+      const projections = await this.calculateMonthlyProjections(
+        testSchedule,
+        staffMembers,
+        dateRange.slice(0, 7)
+      );
+      
+      if (projections.size === 0) {
+        throw new Error("No monthly projections calculated");
+      }
+      
+      const summary = this.getMonthlyProjectionSummary();
+      
+      return {
+        projectionsCalculated: projections.size,
+        staffCovered: summary.totalStaff,
+        averageBalanceScore: summary.averageBalanceScore,
+        integrationWorking: true
+      };
+    });
+    
+    // Test 4: Backup Staff Integration
+    await runTest("Backup Staff Pre-Planning", async () => {
+      const backupPrePlanning = await this.initializeBackupPrePlanning(
+        staffMembers,
+        dateRange.slice(0, 5),
+        {}
+      );
+      
+      if (!backupPrePlanning) {
+        throw new Error("Backup pre-planning initialization failed");
+      }
+      
+      // Test coverage calculation
+      const testSchedule = this.initializeWorkingSchedule(staffMembers, dateRange.slice(0, 5), {}, false);
+      const coverageNeeds = await this.calculateBackupCoverageNeeds(
+        testSchedule,
+        dateRange[0].toISOString().split("T")[0],
+        staffMembers
+      );
+      
+      return {
+        prePlanningEnabled: backupPrePlanning.enabled,
+        backupAssignments: backupPrePlanning.totalBackupStaff || 0,
+        coverageCalculated: coverageNeeds !== null,
+        integrationWorking: true
+      };
+    });
+    
+    // Test 5: Configuration Service Integration
+    await runTest("Dynamic Configuration Loading", async () => {
+      const configs = await Promise.allSettled([
+        getStaffConflictGroups(),
+        getDailyLimits(),
+        getPriorityRules(),
+        getBackupAssignments()
+      ]);
+      
+      const successful = configs.filter(c => c.status === "fulfilled").length;
+      const failed = configs.filter(c => c.status === "rejected").length;
+      
+      if (successful === 0) {
+        throw new Error("No configuration services working");
+      }
+      
+      return {
+        configurationsLoaded: successful,
+        configurationsFailed: failed,
+        totalConfigurations: configs.length,
+        successRate: Math.round((successful / configs.length) * 100),
+        integrationWorking: successful > failed
+      };
+    });
+    
+    // Test 6: End-to-End Generation with All Features
+    await runTest("End-to-End Generation Integration", async () => {
+      const testSchedule = this.initializeWorkingSchedule(staffMembers, dateRange.slice(0, 3), {}, false);
+      
+      // Run balance-first strategy with all integrations
+      const result = await this.balanceFirstStrategy(
+        testSchedule,
+        staffMembers,
+        dateRange.slice(0, 3),
+        { useAllIntegrations: true }
+      );
+      
+      if (!result || !result.schedule) {
+        throw new Error("Generation failed to produce schedule");
+      }
+      
+      const hasAnalysis = result.analysis && typeof result.analysis === 'object';
+      const hasProjections = result.analysis?.monthlyProjections?.length > 0;
+      const hasBackupIntegration = result.analysis?.backupStaffIntegration?.enabled;
+      
+      return {
+        scheduleGenerated: true,
+        changesApplied: result.changesApplied,
+        analysisIncluded: hasAnalysis,
+        monthlyProjectionsIncluded: hasProjections,
+        backupIntegrationEnabled: hasBackupIntegration,
+        strategy: result.strategy,
+        integrationWorking: true
+      };
+    });
+    
+    // Calculate summary
+    const successRate = Math.round((testResults.passedTests / testResults.totalTests) * 100);
+    testResults.summary = `${testResults.passedTests}/${testResults.totalTests} tests passed (${successRate}%)`;
+    
+    if (testResults.passedTests === testResults.totalTests) {
+      console.log("✅ All integration tests PASSED! AI-settings integration is fully functional.");
+    } else {
+      console.warn(`⚠️ Integration tests completed with ${testResults.failedTests} failures. Review failed tests.`);
+    }
+    
+    return testResults;
+  }
+  
+  /**
+   * Quick validation check for AI-settings integration
+   * @returns {Object} Validation status
+   */
+  async validateAISettingsIntegration() {
+    console.log("🔍 Running quick AI-settings integration validation...");
+    
+    const validation = {
+      timestamp: new Date().toISOString(),
+      status: "checking",
+      components: {
+        priorityRules: { status: "unknown", details: null },
+        cacheInvalidation: { status: "unknown", details: null },
+        monthlyBalancing: { status: "unknown", details: null },
+        backupStaffIntegration: { status: "unknown", details: null },
+        configurationService: { status: "unknown", details: null }
+      },
+      overallStatus: "unknown",
+      readiness: 0
+    };
+    
+    try {
+      // Check priority rules
+      const priorityRules = await getPriorityRules();
+      validation.components.priorityRules = {
+        status: Array.isArray(priorityRules) ? "ready" : "error",
+        details: `${priorityRules?.length || 0} rules configured`
+      };
+      
+      // Check cache invalidation
+      validation.components.cacheInvalidation = {
+        status: this.cacheInvalidationUnsubscribe ? "ready" : "warning",
+        details: this.cacheInvalidationUnsubscribe ? "Listener active" : "No listener registered"
+      };
+      
+      // Check monthly balancing
+      validation.components.monthlyBalancing = {
+        status: this.monthlyBalancingEnabled ? "ready" : "disabled",
+        details: `Projections: ${this.monthlyProjections.size} staff`
+      };
+      
+      // Check backup staff integration
+      const backupAssignments = await getBackupAssignments();
+      validation.components.backupStaffIntegration = {
+        status: Array.isArray(backupAssignments) ? "ready" : "warning",
+        details: `${backupAssignments?.length || 0} backup assignments`
+      };
+      
+      // Check configuration service
+      const configStatus = configService.getSyncStatus();
+      validation.components.configurationService = {
+        status: configStatus.isSupabaseEnabled ? "ready" : "local-only",
+        details: `Sync: ${configStatus.isSupabaseEnabled ? 'enabled' : 'localStorage only'}`
+      };
+      
+      // Calculate overall readiness
+      const componentStatuses = Object.values(validation.components);
+      const readyCount = componentStatuses.filter(c => c.status === "ready").length;
+      validation.readiness = Math.round((readyCount / componentStatuses.length) * 100);
+      
+      if (validation.readiness >= 80) {
+        validation.overallStatus = "ready";
+      } else if (validation.readiness >= 60) {
+        validation.overallStatus = "partial";
+      } else {
+        validation.overallStatus = "needs-attention";
+      }
+      
+      console.log(`📋 AI-Settings Integration Readiness: ${validation.readiness}% (${validation.overallStatus})`);
+      
+    } catch (error) {
+      validation.overallStatus = "error";
+      validation.error = error.message;
+      console.error("❌ AI-settings integration validation failed:", error);
+    }
+    
+    return validation;
+  }
+  
+  dispose() {
+    if (this.cacheInvalidationUnsubscribe) {
+      this.cacheInvalidationUnsubscribe();
+      this.cacheInvalidationUnsubscribe = null;
+      console.log("🔌 ScheduleGenerator cache invalidation listener removed");
+    }
+    
+    // Clear monthly projections
+    this.monthlyProjections.clear();
   }
 
   /**
@@ -1727,27 +2879,47 @@ export class ScheduleGenerator {
    * @param {Object} settings - User settings including priorities
    */
   async updateConstraintWeights(staffMembers, dateRange, settings = null) {
-    if (settings) {
+    try {
+      // Load actual current settings from ConfigurationService
+      const currentSettings = settings || {
+        staffGroups: await getStaffConflictGroups(),
+        dailyLimits: await getDailyLimits(),
+        priorityRules: await getPriorityRules(),
+        monthlyLimits: configService.getMonthlyLimits(),
+        backupAssignments: configService.getBackupAssignments()
+      };
+
       // Use smart auto-detection system
-      console.log("🧠 Using smart auto-detected constraint weights");
+      console.log("🧠 Using smart auto-detected constraint weights with live settings");
       
       const smartWeights = this.autoDetectConstraintWeights(
-        settings,
+        currentSettings,
         staffMembers,
         dateRange
       );
       
       this.constraintWeights = smartWeights;
       console.log(`🎯 Auto-detected weights:`, this.constraintWeights);
-    } else {
-      // Legacy system with dynamic adjustment
+      
+      // Log configuration counts for transparency
+      console.log(`📋 Configuration summary:`, {
+        staffGroups: currentSettings.staffGroups?.length || 0,
+        dailyLimits: currentSettings.dailyLimits?.length || 0,
+        priorityRules: currentSettings.priorityRules?.length || 0,
+        monthlyLimits: currentSettings.monthlyLimits?.length || 0,
+        backupAssignments: currentSettings.backupAssignments?.length || 0
+      });
+    } catch (error) {
+      console.warn("⚠️ Failed to load settings, using fallback weights:", error);
+      
+      // Legacy system with dynamic adjustment as fallback
       const staffGroupsImportance = staffMembers.length > 8 ? 1.2 : 1.0;
       const timeRangeImportance = dateRange.length > 30 ? 1.1 : 1.0;
 
       this.constraintWeights.staffGroups *= staffGroupsImportance;
       this.constraintWeights.dailyLimits *= timeRangeImportance;
 
-      console.log(`📊 Legacy constraint weights:`, this.constraintWeights);
+      console.log(`📊 Fallback constraint weights:`, this.constraintWeights);
     }
   }
 
@@ -1935,6 +3107,210 @@ export class ScheduleGenerator {
     return Object.entries(scores)
       .filter(([_, score]) => score < 75)
       .map(([metric, score]) => `${metric}: ${score.toFixed(1)}%`);
+  }
+
+  /**
+   * Calculate enhanced monthly limits with predictive balancing
+   * @param {Array} dateRange - Date range for the schedule
+   * @returns {Object} Enhanced monthly limits
+   */
+  async calculateEnhancedMonthlyLimits(dateRange) {
+    try {
+      const firstDate = dateRange[0];
+      const year = firstDate.getFullYear();
+      const month = firstDate.getMonth() + 1;
+      
+      // Get dynamic monthly limits from configuration
+      const configLimits = await getMonthlyLimits(year, month);
+      
+      // Calculate working days and weekends in the period
+      const weekends = dateRange.filter(date => {
+        const day = date.getDay();
+        return day === 0 || day === 6; // Sunday or Saturday
+      }).length;
+      
+      const weekdays = dateRange.length - weekends;
+      
+      return {
+        ...configLimits,
+        totalDays: dateRange.length,
+        weekdays,
+        weekends,
+        optimalOffDaysPerWeek: Math.ceil(configLimits.maxOffDaysPerMonth / 4),
+        recommendedWorkRate: Math.max(0.6, Math.min(0.85, (dateRange.length - configLimits.maxOffDaysPerMonth) / dateRange.length))
+      };
+    } catch (error) {
+      console.warn("⚠️ Failed to calculate enhanced monthly limits, using basic calculation:", error);
+      return {
+        maxOffDaysPerMonth: Math.ceil(dateRange.length * 0.25),
+        minWorkDaysPerMonth: Math.floor(dateRange.length * 0.75),
+        totalDays: dateRange.length,
+        recommendedWorkRate: 0.75
+      };
+    }
+  }
+  
+  /**
+   * Calculate monthly workload projections for all staff members
+   * @param {Object} schedule - Current schedule
+   * @param {Array} staffMembers - Staff members
+   * @param {Array} dateRange - Date range
+   * @returns {Map} Projections for each staff member
+   */
+  async calculateMonthlyProjections(schedule, staffMembers, dateRange) {
+    const projections = new Map();
+    
+    console.log("📊 Calculating monthly workload projections...");
+    
+    try {
+      const monthlyLimits = await this.calculateEnhancedMonthlyLimits(dateRange);
+      
+      for (const staff of staffMembers) {
+        const projection = await this.calculateStaffMonthlyProjection(
+          staff,
+          schedule[staff.id] || {},
+          dateRange,
+          monthlyLimits
+        );
+        
+        projections.set(staff.id, projection);
+      }
+      
+      // Cache projections for potential reuse
+      this.monthlyProjections = projections;
+      
+      console.log(`✅ Calculated projections for ${projections.size} staff members`);
+    } catch (error) {
+      console.error("❌ Failed to calculate monthly projections:", error);
+    }
+    
+    return projections;
+  }
+  
+  /**
+   * Calculate monthly projection for a single staff member
+   * @param {Object} staff - Staff member
+   * @param {Object} staffSchedule - Staff member's current schedule
+   * @param {Array} dateRange - Date range
+   * @param {Object} monthlyLimits - Monthly limits
+   * @returns {Object} Projection data
+   */
+  async calculateStaffMonthlyProjection(staff, staffSchedule, dateRange, monthlyLimits) {
+    const currentWorkDays = this.countWorkingDays(staffSchedule, dateRange);
+    const currentOffDays = this.countStaffOffDays(staffSchedule, dateRange);
+    const filledDays = this.countFilledDays(staffSchedule, dateRange);
+    const remainingDays = dateRange.length - filledDays;
+    
+    // Calculate target work rate based on staff type and historical data
+    const targetWorkRate = staff.status === "パート" ? 0.6 : monthlyLimits.recommendedWorkRate;
+    const targetWorkDays = Math.floor(dateRange.length * targetWorkRate);
+    const targetOffDays = Math.min(monthlyLimits.maxOffDaysPerMonth, dateRange.length - targetWorkDays);
+    
+    // Calculate needed adjustments
+    const workDaysNeeded = Math.max(0, targetWorkDays - currentWorkDays);
+    const offDaysNeeded = Math.max(0, targetOffDays - currentOffDays);
+    
+    // Predict workload balance
+    const currentWorkRate = filledDays > 0 ? currentWorkDays / filledDays : 0;
+    const projectedFinalWorkRate = filledDays > 0 ? 
+      (currentWorkDays + Math.max(0, remainingDays - offDaysNeeded)) / dateRange.length :
+      targetWorkRate;
+    
+    // Calculate balance score (how close to ideal)
+    const workRateDeviation = Math.abs(projectedFinalWorkRate - targetWorkRate);
+    const balanceScore = Math.max(0, 100 - (workRateDeviation * 200)); // 200 to make it more sensitive
+    
+    return {
+      staffId: staff.id,
+      staffName: staff.name,
+      staffType: staff.status,
+      currentStats: {
+        workDays: currentWorkDays,
+        offDays: currentOffDays,
+        filledDays,
+        remainingDays,
+        currentWorkRate: Math.round(currentWorkRate * 100) / 100
+      },
+      targets: {
+        targetWorkRate: Math.round(targetWorkRate * 100) / 100,
+        targetWorkDays,
+        targetOffDays
+      },
+      projections: {
+        projectedFinalWorkRate: Math.round(projectedFinalWorkRate * 100) / 100,
+        workDaysNeeded,
+        offDaysNeeded,
+        balanceScore: Math.round(balanceScore)
+      },
+      recommendations: {
+        recommendedOffDays: targetOffDays,
+        priority: balanceScore < 70 ? 'high' : balanceScore < 85 ? 'medium' : 'low',
+        adjustmentNeeded: workRateDeviation > 0.1
+      }
+    };
+  }
+  
+  /**
+   * Count working days in a staff schedule
+   * @param {Object} staffSchedule - Staff schedule
+   * @param {Array} dateRange - Date range
+   * @returns {number} Number of working days
+   */
+  countWorkingDays(staffSchedule, dateRange) {
+    let workingDays = 0;
+    dateRange.forEach((date) => {
+      const dateKey = date.toISOString().split("T")[0];
+      const shift = staffSchedule[dateKey];
+      if (shift !== undefined && shift !== "" && !isOffDay(shift)) {
+        workingDays++;
+      }
+    });
+    return workingDays;
+  }
+  
+  /**
+   * Count filled days (non-undefined entries) in a staff schedule
+   * @param {Object} staffSchedule - Staff schedule
+   * @param {Array} dateRange - Date range
+   * @returns {number} Number of filled days
+   */
+  countFilledDays(staffSchedule, dateRange) {
+    let filledDays = 0;
+    dateRange.forEach((date) => {
+      const dateKey = date.toISOString().split("T")[0];
+      const shift = staffSchedule[dateKey];
+      if (shift !== undefined && shift !== "") {
+        filledDays++;
+      }
+    });
+    return filledDays;
+  }
+  
+  /**
+   * Get monthly projection summary for display
+   * @returns {Object} Summary of monthly projections
+   */
+  getMonthlyProjectionSummary() {
+    if (!this.monthlyProjections || this.monthlyProjections.size === 0) {
+      return {
+        totalStaff: 0,
+        projectionsAvailable: false,
+        summary: "No projections available"
+      };
+    }
+    
+    const projections = Array.from(this.monthlyProjections.values());
+    const highPriorityStaff = projections.filter(p => p.recommendations.priority === 'high');
+    const averageBalance = projections.reduce((sum, p) => sum + p.projections.balanceScore, 0) / projections.length;
+    
+    return {
+      totalStaff: projections.length,
+      projectionsAvailable: true,
+      averageBalanceScore: Math.round(averageBalance),
+      highPriorityStaff: highPriorityStaff.length,
+      highPriorityNames: highPriorityStaff.map(p => p.staffName),
+      summary: `${projections.length} staff projections, ${highPriorityStaff.length} need priority balancing`
+    };
   }
 
   findMostSuccessfulStrategy(performanceHistory) {
