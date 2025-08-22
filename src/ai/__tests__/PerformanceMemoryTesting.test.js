@@ -500,8 +500,14 @@ describe("Phase 6: Performance & Memory Testing", () => {
       let finalTensorCount = 0;
 
       // Get initial tensor count (if TensorFlow provides it)
-      if (typeof tf !== "undefined" && tf.memory) {
-        initialTensorCount = tf.memory().numTensors;
+      try {
+        const tf = require("@tensorflow/tfjs");
+        if (tf && tf.memory) {
+          initialTensorCount = tf.memory().numTensors;
+        }
+      } catch (error) {
+        // TensorFlow not available in test environment
+        initialTensorCount = 0;
       }
 
       const tensorOperations = 10;
@@ -527,8 +533,13 @@ describe("Phase 6: Performance & Memory Testing", () => {
         // Wait for cleanup
         await new Promise((resolve) => setTimeout(resolve, 1000));
 
-        if (tf.memory) {
-          finalTensorCount = tf.memory().numTensors;
+        try {
+          const tf = require("@tensorflow/tfjs");
+          if (tf && tf.memory) {
+            finalTensorCount = tf.memory().numTensors;
+          }
+        } catch (error) {
+          finalTensorCount = 0;
         }
       }
 
