@@ -1482,40 +1482,51 @@ export const getAllConfigurations = async () => {
     const withTimeout = (promise, name, timeoutMs = 3000) => {
       return Promise.race([
         promise,
-        new Promise((_, reject) => 
-          setTimeout(() => reject(new Error(`${name} loading timeout after ${timeoutMs}ms`)), timeoutMs)
-        )
+        new Promise((_, reject) =>
+          setTimeout(
+            () =>
+              reject(new Error(`${name} loading timeout after ${timeoutMs}ms`)),
+            timeoutMs,
+          ),
+        ),
       ]);
     };
 
     // Load all configurations with individual timeout protection
     const [
       staffGroups,
-      dailyLimits, 
+      dailyLimits,
       priorityRules,
       businessRules,
       constraintConfig,
       systemSettings,
-      _checksum
+      _checksum,
     ] = await Promise.allSettled([
-      withTimeout(getStaffConflictGroups(), 'staffGroups'),
-      withTimeout(getDailyLimits(), 'dailyLimits'),
-      withTimeout(getPriorityRules(), 'priorityRules'),
-      withTimeout(getBusinessRules(), 'businessRules'),
-      withTimeout(getConstraintConfiguration(), 'constraintConfig'),
-      withTimeout(getSystemSettings(), 'systemSettings'),
-      withTimeout(getConfigurationChecksum(), 'checksum')
+      withTimeout(getStaffConflictGroups(), "staffGroups"),
+      withTimeout(getDailyLimits(), "dailyLimits"),
+      withTimeout(getPriorityRules(), "priorityRules"),
+      withTimeout(getBusinessRules(), "businessRules"),
+      withTimeout(getConstraintConfiguration(), "constraintConfig"),
+      withTimeout(getSystemSettings(), "systemSettings"),
+      withTimeout(getConfigurationChecksum(), "checksum"),
     ]);
 
     const configurations = {
-      staffGroups: staffGroups.status === 'fulfilled' ? staffGroups.value : {},
-      dailyLimits: dailyLimits.status === 'fulfilled' ? dailyLimits.value : {},
-      priorityRules: priorityRules.status === 'fulfilled' ? priorityRules.value : [],
-      businessRules: businessRules.status === 'fulfilled' ? businessRules.value : {},
-      constraintConfig: constraintConfig.status === 'fulfilled' ? constraintConfig.value : {},
-      systemSettings: systemSettings.status === 'fulfilled' ? systemSettings.value : {},
+      staffGroups: staffGroups.status === "fulfilled" ? staffGroups.value : {},
+      dailyLimits: dailyLimits.status === "fulfilled" ? dailyLimits.value : {},
+      priorityRules:
+        priorityRules.status === "fulfilled" ? priorityRules.value : [],
+      businessRules:
+        businessRules.status === "fulfilled" ? businessRules.value : {},
+      constraintConfig:
+        constraintConfig.status === "fulfilled" ? constraintConfig.value : {},
+      systemSettings:
+        systemSettings.status === "fulfilled" ? systemSettings.value : {},
       _timestamp: Date.now(),
-      _checksum: _checksum.status === 'fulfilled' ? _checksum.value : Date.now().toString(36),
+      _checksum:
+        _checksum.status === "fulfilled"
+          ? _checksum.value
+          : Date.now().toString(36),
     };
 
     return configurations;
@@ -1573,7 +1584,38 @@ export const getSpecificConfiguration = async (type) => {
  */
 export const getConfigurationChecksum = async () => {
   try {
-    const configs = await getAllConfigurations();
+    // Get individual configurations directly to avoid infinite recursion
+    // DO NOT call getAllConfigurations() here as it creates a circular dependency
+    const [
+      staffGroups,
+      dailyLimits,
+      priorityRules,
+      businessRules,
+      constraintConfig,
+      systemSettings,
+    ] = await Promise.allSettled([
+      getStaffConflictGroups(),
+      getDailyLimits(),
+      getPriorityRules(),
+      getBusinessRules(),
+      getConstraintConfiguration(),
+      getSystemSettings(),
+    ]);
+
+    // Build configuration object for checksum calculation
+    const configs = {
+      staffGroups: staffGroups.status === "fulfilled" ? staffGroups.value : {},
+      dailyLimits: dailyLimits.status === "fulfilled" ? dailyLimits.value : {},
+      priorityRules:
+        priorityRules.status === "fulfilled" ? priorityRules.value : [],
+      businessRules:
+        businessRules.status === "fulfilled" ? businessRules.value : {},
+      constraintConfig:
+        constraintConfig.status === "fulfilled" ? constraintConfig.value : {},
+      systemSettings:
+        systemSettings.status === "fulfilled" ? systemSettings.value : {},
+    };
+
     // Simple checksum based on serialized configuration
     const configString = JSON.stringify(configs);
     let hash = 0;

@@ -144,7 +144,7 @@ export const useAIAssistant = (
               console.log(
                 "📦 Pre-loading system configurations in background...",
               );
-              
+
               // Use requestIdleCallback if available for better performance
               const initializeCache = async () => {
                 await configurationCache.initialize();
@@ -154,10 +154,13 @@ export const useAIAssistant = (
                 setConfigurationStatus("ready");
               };
 
-              if (typeof requestIdleCallback !== 'undefined') {
-                requestIdleCallback(async () => {
-                  await initializeCache();
-                }, { timeout: 5000 });
+              if (typeof requestIdleCallback !== "undefined") {
+                requestIdleCallback(
+                  async () => {
+                    await initializeCache();
+                  },
+                  { timeout: 5000 },
+                );
               } else {
                 await initializeCache();
               }
