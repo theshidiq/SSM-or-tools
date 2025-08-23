@@ -126,9 +126,10 @@ export class HybridPredictor {
 
     try {
       console.log("🔮 Generating hybrid schedule predictions...");
-      
+
       // Ensure fresh configuration is loaded before prediction
-      const { refreshAllConfigurations, initializeConstraintConfiguration } = await import("../constraints/ConstraintEngine");
+      const { refreshAllConfigurations, initializeConstraintConfiguration } =
+        await import("../constraints/ConstraintEngine");
       await refreshAllConfigurations();
       console.log("✅ Fresh configuration loaded for schedule prediction");
 
@@ -195,9 +196,11 @@ export class HybridPredictor {
 
         // STRICT CONSTRAINT ENFORCEMENT: Only accept schedules that fully pass validation
         // Block schedules with critical violations (daily limits, staff group conflicts)
-        const hasCriticalViolations = ruleValidationResult.hasCriticalViolations || false;
-        const canAcceptSchedule = ruleValidationResult.valid && !hasCriticalViolations;
-        
+        const hasCriticalViolations =
+          ruleValidationResult.hasCriticalViolations || false;
+        const canAcceptSchedule =
+          ruleValidationResult.valid && !hasCriticalViolations;
+
         if (canAcceptSchedule) {
           validatedPredictions = mlPredictions.predictions;
           console.log(
@@ -208,7 +211,7 @@ export class HybridPredictor {
             "❌ ML predictions rejected due to constraint violations:",
           );
           if (ruleValidationResult.criticalViolations) {
-            ruleValidationResult.criticalViolations.forEach(v => {
+            ruleValidationResult.criticalViolations.forEach((v) => {
               console.log(`   - ${v.type}: ${v.message}`);
             });
           }
@@ -321,13 +324,17 @@ export class HybridPredictor {
   async validateMLPredictions(mlSchedule, staffMembers, dateRange) {
     try {
       console.log("🔍 Validating ML predictions against business rules...");
-      
+
       // Ensure fresh configuration is loaded for constraint validation
-      const { refreshAllConfigurations } = await import("../constraints/ConstraintEngine");
+      const { refreshAllConfigurations } = await import(
+        "../constraints/ConstraintEngine"
+      );
       await refreshAllConfigurations();
-      
+
       console.log("📊 Constraint validation details:");
-      console.log(`- Schedule data: ${Object.keys(mlSchedule).length} staff members`);
+      console.log(
+        `- Schedule data: ${Object.keys(mlSchedule).length} staff members`,
+      );
       console.log(`- Date range: ${dateRange.length} days`);
       console.log(`- Staff count: ${staffMembers.length}`);
 
@@ -337,17 +344,19 @@ export class HybridPredictor {
         staffMembers,
         dateRange,
       );
-      
+
       // Enhanced constraint violation logging
       if (!validationResult.valid) {
         console.error("❌ ML predictions violate constraints:");
-        validationResult.violations.forEach(violation => {
+        validationResult.violations.forEach((violation) => {
           console.error(`  - ${violation.type}: ${violation.message}`);
           if (violation.details) {
             console.error(`    Details:`, violation.details);
           }
         });
-        console.error(`📊 Total violations: ${validationResult.violations.length}`);
+        console.error(
+          `📊 Total violations: ${validationResult.violations.length}`,
+        );
         console.error(`📊 Constraint summary:`, validationResult.summary);
       } else {
         console.log("✅ ML predictions passed all constraint validations");
@@ -365,16 +374,23 @@ export class HybridPredictor {
         ...(validationResult.violations || []),
         ...(additionalChecks.violations || []),
       ];
-      
-      const criticalViolations = allViolations.filter(v => v.severity === 'critical' || v.severity === 'high');
+
+      const criticalViolations = allViolations.filter(
+        (v) => v.severity === "critical" || v.severity === "high",
+      );
       const hasCriticalViolations = criticalViolations.length > 0;
-      
+
       // Enforce strict constraint adherence - reject schedules with critical violations
-      const isValidForProduction = validationResult.valid && additionalChecks.valid && !hasCriticalViolations;
-      
+      const isValidForProduction =
+        validationResult.valid &&
+        additionalChecks.valid &&
+        !hasCriticalViolations;
+
       if (!isValidForProduction && hasCriticalViolations) {
-        console.error("🚫 Schedule rejected due to critical constraint violations:");
-        criticalViolations.forEach(violation => {
+        console.error(
+          "🚫 Schedule rejected due to critical constraint violations:",
+        );
+        criticalViolations.forEach((violation) => {
           console.error(`  - CRITICAL: ${violation.message}`);
         });
       }
@@ -669,7 +685,7 @@ export class HybridPredictor {
   async reset() {
     try {
       console.log("🔄 Starting HybridPredictor reset...");
-      
+
       this.predictionHistory = [];
       this.metrics = {
         totalPredictions: 0,
@@ -684,7 +700,10 @@ export class HybridPredictor {
           await this.mlEngine.reset();
           console.log("✅ ML engine reset completed");
         } catch (error) {
-          console.warn("⚠️ ML engine reset failed (handled gracefully):", error.message);
+          console.warn(
+            "⚠️ ML engine reset failed (handled gracefully):",
+            error.message,
+          );
           // Don't throw - continue with reset process
         }
       }
@@ -698,7 +717,10 @@ export class HybridPredictor {
           await this.ruleValidator.reset();
           console.log("✅ Rule validator reset completed");
         } catch (error) {
-          console.warn("⚠️ Rule validator reset failed (handled gracefully):", error.message);
+          console.warn(
+            "⚠️ Rule validator reset failed (handled gracefully):",
+            error.message,
+          );
           // Don't throw - continue with reset process
         }
       }
@@ -718,13 +740,14 @@ export class HybridPredictor {
 
       this.status = "idle";
       console.log("✅ HybridPredictor reset completed successfully");
-      
     } catch (error) {
       console.error("❌ HybridPredictor reset failed:", error);
       // Set status to idle even if reset failed
       this.status = "idle";
       // Don't throw - log error but allow system to continue
-      console.warn("⚠️ Reset completed with errors, system should still be functional");
+      console.warn(
+        "⚠️ Reset completed with errors, system should still be functional",
+      );
     }
   }
 
@@ -771,15 +794,19 @@ export class HybridPredictor {
    */
   async onConfigurationUpdated() {
     try {
-      console.log("🔄 HybridPredictor: Configuration updated, refreshing constraints...");
-      const { refreshAllConfigurations } = await import("../constraints/ConstraintEngine");
+      console.log(
+        "🔄 HybridPredictor: Configuration updated, refreshing constraints...",
+      );
+      const { refreshAllConfigurations } = await import(
+        "../constraints/ConstraintEngine"
+      );
       await refreshAllConfigurations();
-      
+
       // Also refresh the business rule validator configuration
       if (this.ruleValidator && this.ruleValidator.refreshConfiguration) {
         await this.ruleValidator.refreshConfiguration();
       }
-      
+
       console.log("✅ HybridPredictor: Configuration refresh completed");
     } catch (error) {
       console.error("❌ HybridPredictor: Configuration refresh failed:", error);

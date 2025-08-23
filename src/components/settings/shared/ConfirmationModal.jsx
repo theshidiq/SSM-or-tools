@@ -1,6 +1,6 @@
-import React, { useEffect, useRef } from 'react';
-import { createPortal } from 'react-dom';
-import { AlertTriangle, X } from 'lucide-react';
+import React, { useEffect, useRef } from "react";
+import { createPortal } from "react-dom";
+import { AlertTriangle, X } from "lucide-react";
 
 const ConfirmationModal = ({
   isOpen,
@@ -31,13 +31,13 @@ const ConfirmationModal = ({
       button: "bg-red-600 hover:bg-red-700 focus:ring-red-500",
     },
     warning: {
-      icon: "text-yellow-600", 
+      icon: "text-yellow-600",
       iconBg: "bg-yellow-100",
       button: "bg-yellow-600 hover:bg-yellow-700 focus:ring-yellow-500",
     },
     info: {
       icon: "text-blue-600",
-      iconBg: "bg-blue-100", 
+      iconBg: "bg-blue-100",
       button: "bg-blue-600 hover:bg-blue-700 focus:ring-blue-500",
     },
   };
@@ -52,10 +52,10 @@ const ConfirmationModal = ({
   };
 
   const handleKeyDown = (e) => {
-    if (e.key === 'Escape') {
+    if (e.key === "Escape") {
       e.stopPropagation(); // Prevent event from bubbling to parent modals
       onClose();
-    } else if (e.key === 'Enter' && !isLoading && onConfirm) {
+    } else if (e.key === "Enter" && !isLoading && onConfirm) {
       e.stopPropagation(); // Prevent event from bubbling to parent modals
       onConfirm();
     }
@@ -76,7 +76,7 @@ const ConfirmationModal = ({
   // Use React Portal to render outside parent DOM hierarchy
   const modal = (
     // eslint-disable-next-line jsx-a11y/no-noninteractive-element-interactions
-    <div 
+    <div
       ref={modalRef}
       className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[50000] p-4"
       onClick={handleBackdropClick}
@@ -86,11 +86,11 @@ const ConfirmationModal = ({
       aria-modal="true"
       style={{ zIndex: 50000 }} // Inline style as backup
     >
-      <div 
-        className="bg-white rounded-xl w-full max-w-md shadow-2xl transform transition-all" 
+      <div
+        className="bg-white rounded-xl w-full max-w-md shadow-2xl transform transition-all"
         role="document"
       >
-        <div 
+        <div
           className="p-6"
           onClick={(e) => e.stopPropagation()} // Prevent clicks inside modal from bubbling
         >

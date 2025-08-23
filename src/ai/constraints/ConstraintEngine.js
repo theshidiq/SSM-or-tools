@@ -26,11 +26,13 @@ export const initializeConstraintConfiguration = async (restaurantId) => {
   if (!configService && restaurantId) {
     configService = new ConfigurationService();
     await configService.initialize({ restaurantId });
-    
+
     // Set up real-time cache invalidation
     setupCacheInvalidationWatcher();
-    
-    console.log("✅ Constraint Engine configuration service initialized with real-time cache invalidation");
+
+    console.log(
+      "✅ Constraint Engine configuration service initialized with real-time cache invalidation",
+    );
   }
   return configService;
 };
@@ -45,14 +47,16 @@ const setupCacheInvalidationWatcher = () => {
 
   // Watch for localStorage changes (settings updates)
   settingsChangeWatcher = () => {
-    console.log("🔄 Settings change detected, invalidating constraint cache...");
+    console.log(
+      "🔄 Settings change detected, invalidating constraint cache...",
+    );
     invalidateConfigurationCache();
   };
 
   // Listen for storage events (when settings change in other tabs/windows)
-  if (typeof window !== 'undefined') {
-    window.addEventListener('storage', (event) => {
-      if (event.key === 'shift-schedule-settings') {
+  if (typeof window !== "undefined") {
+    window.addEventListener("storage", (event) => {
+      if (event.key === "shift-schedule-settings") {
         settingsChangeWatcher();
       }
     });
@@ -62,10 +66,12 @@ const setupCacheInvalidationWatcher = () => {
   if (configService) {
     // Monkey patch the saveSettings method to trigger cache invalidation
     const originalSaveSettings = configService.saveSettings.bind(configService);
-    configService.saveSettings = async function(settings) {
+    configService.saveSettings = async function (settings) {
       const result = await originalSaveSettings(settings);
       if (result) {
-        console.log("🔄 Configuration updated, invalidating constraint cache...");
+        console.log(
+          "🔄 Configuration updated, invalidating constraint cache...",
+        );
         invalidateConfigurationCache();
       }
       return result;
@@ -82,7 +88,11 @@ const getCachedConfig = async (configType) => {
   const cacheKey = `${configType}_${now}`;
 
   // Check if cache is still valid (immediate invalidation if forced)
-  if (configCache.has(configType) && now - cacheTimestamp < CACHE_DURATION && !configCache.get('_invalidated')) {
+  if (
+    configCache.has(configType) &&
+    now - cacheTimestamp < CACHE_DURATION &&
+    !configCache.get("_invalidated")
+  ) {
     console.log(`📋 Using cached ${configType} configuration`);
     return configCache.get(configType);
   }
@@ -116,13 +126,13 @@ const getCachedConfig = async (configType) => {
       if (config) {
         configCache.set(configType, config);
         cacheTimestamp = now;
-        
+
         // Clear invalidation flag
-        configCache.delete('_invalidated');
-        
+        configCache.delete("_invalidated");
+
         // Notify cache invalidation callbacks
         notifyCacheUpdate(configType, config);
-        
+
         console.log(`✅ Fresh ${configType} configuration loaded and cached`);
         return config;
       }
@@ -140,12 +150,14 @@ const getCachedConfig = async (configType) => {
  * Invalidate configuration cache immediately
  */
 export const invalidateConfigurationCache = () => {
-  console.log("🔄 Configuration cache invalidated - next access will reload from source");
-  configCache.set('_invalidated', true);
+  console.log(
+    "🔄 Configuration cache invalidated - next access will reload from source",
+  );
+  configCache.set("_invalidated", true);
   cacheTimestamp = 0; // Force cache miss
-  
+
   // Notify all registered callbacks
-  cacheInvalidationCallbacks.forEach(callback => {
+  cacheInvalidationCallbacks.forEach((callback) => {
     try {
       callback();
     } catch (error) {
@@ -282,11 +294,13 @@ export const getMonthlyLimits = async (year, month) => {
   } else if (Array.isArray(limits)) {
     // New array format from ConfigurationService
     const daysInMonth = getDaysInMonth(year, month);
-    const offDaysLimit = limits.find(l => l.limitType === "max_off_days");
-    
+    const offDaysLimit = limits.find((l) => l.limitType === "max_off_days");
+
     return {
-      maxOffDaysPerMonth: offDaysLimit?.maxCount || (daysInMonth === 31 ? 8 : 7),
-      minWorkDaysPerMonth: daysInMonth - (offDaysLimit?.maxCount || (daysInMonth === 31 ? 8 : 7)),
+      maxOffDaysPerMonth:
+        offDaysLimit?.maxCount || (daysInMonth === 31 ? 8 : 7),
+      minWorkDaysPerMonth:
+        daysInMonth - (offDaysLimit?.maxCount || (daysInMonth === 31 ? 8 : 7)),
     };
   } else if (limits && typeof limits === "object") {
     // Legacy object format
@@ -308,16 +322,16 @@ export const getMonthlyLimits = async (year, month) => {
 export const refreshAllConfigurations = async () => {
   console.log("🔄 Force refreshing all configurations...");
   invalidateConfigurationCache();
-  
+
   // Preload fresh configurations
   const refreshTasks = [
     getCachedConfig("staff_groups"),
     getCachedConfig("priority_rules"),
     getCachedConfig("daily_limits"),
     getCachedConfig("monthly_limits"),
-    getCachedConfig("backup_assignments")
+    getCachedConfig("backup_assignments"),
   ];
-  
+
   await Promise.allSettled(refreshTasks);
   console.log("✅ All configurations refreshed");
 };
@@ -1294,8 +1308,10 @@ export const validateAllConstraints = async (
     cacheStatus: {
       cacheTimestamp,
       configCacheSize: configCache.size,
-      lastInvalidation: configCache.get('_invalidated') ? 'pending_refresh' : 'valid'
-    }
+      lastInvalidation: configCache.get("_invalidated")
+        ? "pending_refresh"
+        : "valid",
+    },
   };
 };
 

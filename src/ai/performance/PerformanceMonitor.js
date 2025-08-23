@@ -1,6 +1,6 @@
 /**
  * PerformanceMonitor.js
- * 
+ *
  * Comprehensive performance monitoring and progress tracking system.
  * Monitors ML processing, memory usage, UI responsiveness, and user experience.
  */
@@ -10,7 +10,7 @@ class PerformanceMonitor {
     this.isInitialized = false;
     this.isMonitoring = false;
     this.monitoringInterval = null;
-    
+
     // Performance metrics
     this.metrics = {
       // Processing performance
@@ -20,56 +20,56 @@ class PerformanceMonitor {
       successfulJobs: 0,
       failedJobs: 0,
       cancelledJobs: 0,
-      
+
       // Memory metrics
       memoryUsage: {
         peak: 0,
         average: 0,
         current: 0,
-        samples: []
+        samples: [],
       },
-      
+
       // UI responsiveness metrics
       uiResponsiveness: {
         frameDrops: 0,
         longTasks: 0,
         averageFrameTime: 16.67, // Target 60fps
-        worstFrameTime: 0
+        worstFrameTime: 0,
       },
-      
+
       // Resource utilization
       resourceUtilization: {
         cpu: { samples: [], average: 0 },
         memory: { samples: [], average: 0 },
-        network: { requests: 0, failures: 0 }
+        network: { requests: 0, failures: 0 },
       },
-      
+
       // User experience metrics
       userExperience: {
         totalWaitTime: 0,
         averageWaitTime: 0,
         userInteractions: 0,
-        blockedInteractions: 0
-      }
+        blockedInteractions: 0,
+      },
     };
 
     // Performance thresholds
     this.thresholds = {
       processingTime: {
-        good: 5000,    // Under 5 seconds
+        good: 5000, // Under 5 seconds
         acceptable: 15000, // Under 15 seconds
-        poor: 30000    // Over 30 seconds
+        poor: 30000, // Over 30 seconds
       },
       memoryUsage: {
-        good: 200 * 1024 * 1024,      // Under 200MB
+        good: 200 * 1024 * 1024, // Under 200MB
         acceptable: 400 * 1024 * 1024, // Under 400MB
-        poor: 600 * 1024 * 1024       // Over 600MB
+        poor: 600 * 1024 * 1024, // Over 600MB
       },
       frameTime: {
-        good: 16.67,   // 60fps
+        good: 16.67, // 60fps
         acceptable: 33.33, // 30fps
-        poor: 66.67    // 15fps
-      }
+        poor: 66.67, // 15fps
+      },
     };
 
     // Progress tracking
@@ -77,7 +77,7 @@ class PerformanceMonitor {
       currentJob: null,
       jobs: new Map(),
       progressCallbacks: new Set(),
-      stageTimings: new Map()
+      stageTimings: new Map(),
     };
 
     // Performance observers
@@ -85,18 +85,18 @@ class PerformanceMonitor {
       longTask: null,
       navigation: null,
       measure: null,
-      layout: null
+      layout: null,
     };
 
     // Alerts and notifications
     this.alertCallbacks = new Set();
     this.alertHistory = [];
-    
+
     // Benchmarking
     this.benchmarks = {
       baseline: null,
       history: [],
-      regressions: []
+      regressions: [],
     };
 
     // Configuration
@@ -105,9 +105,9 @@ class PerformanceMonitor {
       sampleRetentionCount: 100,
       alertThresholds: {
         memoryIncrease: 50 * 1024 * 1024, // 50MB sudden increase
-        processingTimeIncrease: 5000,      // 5 second increase
-        frameDropThreshold: 5              // 5 consecutive dropped frames
-      }
+        processingTimeIncrease: 5000, // 5 second increase
+        frameDropThreshold: 5, // 5 consecutive dropped frames
+      },
     };
   }
 
@@ -120,7 +120,7 @@ class PerformanceMonitor {
     }
 
     try {
-      console.log('📊 Initializing Performance Monitor...');
+      console.log("📊 Initializing Performance Monitor...");
 
       // Apply configuration
       Object.assign(this.config, options.config || {});
@@ -138,15 +138,14 @@ class PerformanceMonitor {
       this.isInitialized = true;
       this.isMonitoring = true;
 
-      console.log('✅ Performance Monitor initialized:', {
-        monitoringInterval: this.config.monitoringIntervalMs + 'ms',
-        observersActive: Object.values(this.observers).filter(Boolean).length
+      console.log("✅ Performance Monitor initialized:", {
+        monitoringInterval: this.config.monitoringIntervalMs + "ms",
+        observersActive: Object.values(this.observers).filter(Boolean).length,
       });
 
       return { success: true, observers: this.getObserverStatus() };
-
     } catch (error) {
-      console.error('❌ Performance Monitor initialization failed:', error);
+      console.error("❌ Performance Monitor initialization failed:", error);
       throw error;
     }
   }
@@ -155,8 +154,10 @@ class PerformanceMonitor {
    * Setup performance observers
    */
   async setupPerformanceObservers() {
-    if (!('PerformanceObserver' in window)) {
-      console.warn('PerformanceObserver not supported, limited monitoring available');
+    if (!("PerformanceObserver" in window)) {
+      console.warn(
+        "PerformanceObserver not supported, limited monitoring available",
+      );
       return;
     }
 
@@ -167,7 +168,7 @@ class PerformanceMonitor {
           this.handleLongTask(entry);
         }
       });
-      this.observers.longTask.observe({ type: 'longtask', buffered: false });
+      this.observers.longTask.observe({ type: "longtask", buffered: false });
 
       // Navigation Timing Observer
       this.observers.navigation = new PerformanceObserver((list) => {
@@ -175,7 +176,7 @@ class PerformanceMonitor {
           this.handleNavigationTiming(entry);
         }
       });
-      this.observers.navigation.observe({ type: 'navigation', buffered: true });
+      this.observers.navigation.observe({ type: "navigation", buffered: true });
 
       // Measure Observer - custom performance measurements
       this.observers.measure = new PerformanceObserver((list) => {
@@ -183,20 +184,22 @@ class PerformanceMonitor {
           this.handleCustomMeasure(entry);
         }
       });
-      this.observers.measure.observe({ type: 'measure', buffered: false });
+      this.observers.measure.observe({ type: "measure", buffered: false });
 
       // Layout Shift Observer (if available)
-      if ('layout-shift' in PerformanceObserver.supportedEntryTypes) {
+      if ("layout-shift" in PerformanceObserver.supportedEntryTypes) {
         this.observers.layout = new PerformanceObserver((list) => {
           for (const entry of list.getEntries()) {
             this.handleLayoutShift(entry);
           }
         });
-        this.observers.layout.observe({ type: 'layout-shift', buffered: false });
+        this.observers.layout.observe({
+          type: "layout-shift",
+          buffered: false,
+        });
       }
-
     } catch (error) {
-      console.warn('Failed to setup some performance observers:', error);
+      console.warn("Failed to setup some performance observers:", error);
     }
   }
 
@@ -233,14 +236,15 @@ class PerformanceMonitor {
       if (frameTime > this.thresholds.frameTime.poor) {
         this.metrics.uiResponsiveness.frameDrops++;
         this.metrics.uiResponsiveness.worstFrameTime = Math.max(
-          this.metrics.uiResponsiveness.worstFrameTime, 
-          frameTime
+          this.metrics.uiResponsiveness.worstFrameTime,
+          frameTime,
         );
       }
 
       // Update average every 60 frames
       if (frameCount % 60 === 0) {
-        this.metrics.uiResponsiveness.averageFrameTime = totalFrameTime / frameCount;
+        this.metrics.uiResponsiveness.averageFrameTime =
+          totalFrameTime / frameCount;
         totalFrameTime = 0;
         frameCount = 0;
       }
@@ -265,7 +269,7 @@ class PerformanceMonitor {
       currentStage: null,
       metadata: options.metadata || {},
       estimatedDuration: options.estimatedDuration || null,
-      priority: options.priority || 'normal'
+      priority: options.priority || "normal",
     };
 
     this.progressTracking.jobs.set(jobId, job);
@@ -301,14 +305,17 @@ class PerformanceMonitor {
           job.stages.push({
             stage: job.currentStage,
             duration: now - stageStart,
-            completed: true
+            completed: true,
           });
         }
       }
 
       // Start new stage
       job.currentStage = stageInfo.stage;
-      this.progressTracking.stageTimings.set(`${jobId}-${stageInfo.stage}`, now);
+      this.progressTracking.stageTimings.set(
+        `${jobId}-${stageInfo.stage}`,
+        now,
+      );
       performance.mark(`job-stage-${jobId}-${stageInfo.stage}`);
     }
 
@@ -319,7 +326,8 @@ class PerformanceMonitor {
 
     // Calculate ETA
     if (job.progress > 0) {
-      job.estimatedTimeRemaining = (elapsed / job.progress) * (100 - job.progress);
+      job.estimatedTimeRemaining =
+        (elapsed / job.progress) * (100 - job.progress);
     }
 
     // Notify progress callbacks
@@ -329,8 +337,8 @@ class PerformanceMonitor {
       stage: job.currentStage,
       elapsedTime: elapsed,
       estimatedTimeRemaining: job.estimatedTimeRemaining,
-      message: stageInfo.message || '',
-      stats: stageInfo.stats || {}
+      message: stageInfo.message || "",
+      stats: stageInfo.stats || {},
     });
 
     // Check for performance issues
@@ -358,7 +366,7 @@ class PerformanceMonitor {
         job.stages.push({
           stage: job.currentStage,
           duration: now - stageStart,
-          completed: true
+          completed: true,
         });
       }
     }
@@ -372,7 +380,11 @@ class PerformanceMonitor {
 
     // Mark performance end
     performance.mark(`job-end-${jobId}`);
-    performance.measure(`job-total-${jobId}`, `job-start-${jobId}`, `job-end-${jobId}`);
+    performance.measure(
+      `job-total-${jobId}`,
+      `job-start-${jobId}`,
+      `job-end-${jobId}`,
+    );
 
     // Update metrics
     this.updateProcessingMetrics(job);
@@ -383,14 +395,16 @@ class PerformanceMonitor {
       this.progressTracking.currentJob = null;
     }
 
-    console.log(`✅ Completed tracking job: ${jobId} in ${Math.round(totalDuration)}ms`);
+    console.log(
+      `✅ Completed tracking job: ${jobId} in ${Math.round(totalDuration)}ms`,
+    );
     return job;
   }
 
   /**
    * Cancel job tracking
    */
-  cancelJob(jobId, reason = 'cancelled') {
+  cancelJob(jobId, reason = "cancelled") {
     const job = this.progressTracking.jobs.get(jobId);
     if (job) {
       job.cancelled = true;
@@ -406,33 +420,40 @@ class PerformanceMonitor {
   collectMetrics() {
     try {
       // Memory metrics
-      if ('memory' in performance) {
+      if ("memory" in performance) {
         const memInfo = performance.memory;
         const currentMemory = memInfo.usedJSHeapSize;
-        
+
         this.metrics.memoryUsage.current = currentMemory;
-        this.metrics.memoryUsage.peak = Math.max(this.metrics.memoryUsage.peak, currentMemory);
+        this.metrics.memoryUsage.peak = Math.max(
+          this.metrics.memoryUsage.peak,
+          currentMemory,
+        );
         this.metrics.memoryUsage.samples.push({
           timestamp: Date.now(),
-          memory: currentMemory
+          memory: currentMemory,
         });
 
         // Keep only recent samples
-        if (this.metrics.memoryUsage.samples.length > this.config.sampleRetentionCount) {
+        if (
+          this.metrics.memoryUsage.samples.length >
+          this.config.sampleRetentionCount
+        ) {
           this.metrics.memoryUsage.samples.shift();
         }
 
         // Update average
-        this.metrics.memoryUsage.average = this.metrics.memoryUsage.samples.reduce(
-          (sum, sample) => sum + sample.memory, 0
-        ) / this.metrics.memoryUsage.samples.length;
+        this.metrics.memoryUsage.average =
+          this.metrics.memoryUsage.samples.reduce(
+            (sum, sample) => sum + sample.memory,
+            0,
+          ) / this.metrics.memoryUsage.samples.length;
       }
 
       // CPU utilization (approximation using navigation timing)
       this.collectCPUMetrics();
-
     } catch (error) {
-      console.warn('Error collecting metrics:', error);
+      console.warn("Error collecting metrics:", error);
     }
   }
 
@@ -441,15 +462,18 @@ class PerformanceMonitor {
    */
   collectCPUMetrics() {
     // Use paint timing as CPU utilization approximation
-    const paintEntries = performance.getEntriesByType('paint');
+    const paintEntries = performance.getEntriesByType("paint");
     if (paintEntries.length > 0) {
       const paintTime = paintEntries[paintEntries.length - 1].startTime;
       this.metrics.resourceUtilization.cpu.samples.push({
         timestamp: Date.now(),
-        paintTime
+        paintTime,
       });
 
-      if (this.metrics.resourceUtilization.cpu.samples.length > this.config.sampleRetentionCount) {
+      if (
+        this.metrics.resourceUtilization.cpu.samples.length >
+        this.config.sampleRetentionCount
+      ) {
         this.metrics.resourceUtilization.cpu.samples.shift();
       }
     }
@@ -478,33 +502,38 @@ class PerformanceMonitor {
     // Check memory threshold
     if (this.metrics.memoryUsage.current > this.thresholds.memoryUsage.poor) {
       alerts.push({
-        type: 'memory_high',
-        severity: 'critical',
+        type: "memory_high",
+        severity: "critical",
         message: `High memory usage: ${Math.round(this.metrics.memoryUsage.current / 1024 / 1024)}MB`,
         threshold: this.thresholds.memoryUsage.poor,
-        current: this.metrics.memoryUsage.current
+        current: this.metrics.memoryUsage.current,
       });
     }
 
     // Check frame rate threshold
-    if (this.metrics.uiResponsiveness.averageFrameTime > this.thresholds.frameTime.poor) {
+    if (
+      this.metrics.uiResponsiveness.averageFrameTime >
+      this.thresholds.frameTime.poor
+    ) {
       alerts.push({
-        type: 'frame_rate_low',
-        severity: 'warning',
+        type: "frame_rate_low",
+        severity: "warning",
         message: `Low frame rate: ${Math.round(1000 / this.metrics.uiResponsiveness.averageFrameTime)}fps`,
         threshold: this.thresholds.frameTime.poor,
-        current: this.metrics.uiResponsiveness.averageFrameTime
+        current: this.metrics.uiResponsiveness.averageFrameTime,
       });
     }
 
     // Check processing time threshold
-    if (this.metrics.averageProcessingTime > this.thresholds.processingTime.poor) {
+    if (
+      this.metrics.averageProcessingTime > this.thresholds.processingTime.poor
+    ) {
       alerts.push({
-        type: 'processing_slow',
-        severity: 'warning',
+        type: "processing_slow",
+        severity: "warning",
         message: `Slow processing: ${Math.round(this.metrics.averageProcessingTime)}ms average`,
         threshold: this.thresholds.processingTime.poor,
-        current: this.metrics.averageProcessingTime
+        current: this.metrics.averageProcessingTime,
       });
     }
 
@@ -518,32 +547,40 @@ class PerformanceMonitor {
    * Detect performance regressions
    */
   detectRegressions() {
-    if (!this.benchmarks.baseline || this.metrics.processingTimes.length === 0) {
+    if (
+      !this.benchmarks.baseline ||
+      this.metrics.processingTimes.length === 0
+    ) {
       return;
     }
 
-    const recentAverage = this.metrics.processingTimes
-      .slice(-10)
-      .reduce((sum, time) => sum + time, 0) / Math.min(10, this.metrics.processingTimes.length);
+    const recentAverage =
+      this.metrics.processingTimes
+        .slice(-10)
+        .reduce((sum, time) => sum + time, 0) /
+      Math.min(10, this.metrics.processingTimes.length);
 
-    const regression = recentAverage - this.benchmarks.baseline.averageProcessingTime;
+    const regression =
+      recentAverage - this.benchmarks.baseline.averageProcessingTime;
 
     if (regression > this.config.alertThresholds.processingTimeIncrease) {
       this.benchmarks.regressions.push({
         timestamp: Date.now(),
-        type: 'processing_time',
+        type: "processing_time",
         regression,
         baseline: this.benchmarks.baseline.averageProcessingTime,
-        current: recentAverage
+        current: recentAverage,
       });
 
-      this.fireAlerts([{
-        type: 'performance_regression',
-        severity: 'warning',
-        message: `Performance regression detected: ${Math.round(regression)}ms slower than baseline`,
-        regression,
-        baseline: this.benchmarks.baseline.averageProcessingTime
-      }]);
+      this.fireAlerts([
+        {
+          type: "performance_regression",
+          severity: "warning",
+          message: `Performance regression detected: ${Math.round(regression)}ms slower than baseline`,
+          regression,
+          baseline: this.benchmarks.baseline.averageProcessingTime,
+        },
+      ]);
     }
   }
 
@@ -558,20 +595,24 @@ class PerformanceMonitor {
 
     if (older.length === 0) return;
 
-    const recentAverage = recent.reduce((sum, sample) => sum + sample.memory, 0) / recent.length;
-    const olderAverage = older.reduce((sum, sample) => sum + sample.memory, 0) / older.length;
+    const recentAverage =
+      recent.reduce((sum, sample) => sum + sample.memory, 0) / recent.length;
+    const olderAverage =
+      older.reduce((sum, sample) => sum + sample.memory, 0) / older.length;
 
     const memoryIncrease = recentAverage - olderAverage;
 
     if (memoryIncrease > this.config.alertThresholds.memoryIncrease) {
-      this.fireAlerts([{
-        type: 'memory_leak_suspected',
-        severity: 'warning',
-        message: `Suspected memory leak: ${Math.round(memoryIncrease / 1024 / 1024)}MB increase`,
-        increase: memoryIncrease,
-        recentAverage,
-        olderAverage
-      }]);
+      this.fireAlerts([
+        {
+          type: "memory_leak_suspected",
+          severity: "warning",
+          message: `Suspected memory leak: ${Math.round(memoryIncrease / 1024 / 1024)}MB increase`,
+          increase: memoryIncrease,
+          recentAverage,
+          olderAverage,
+        },
+      ]);
     }
   }
 
@@ -581,13 +622,15 @@ class PerformanceMonitor {
   checkResourceBottlenecks() {
     // Check for consistent long tasks
     if (this.metrics.uiResponsiveness.longTasks > 5) {
-      this.fireAlerts([{
-        type: 'ui_blocking',
-        severity: 'critical',
-        message: `UI blocking detected: ${this.metrics.uiResponsiveness.longTasks} long tasks`,
-        longTasks: this.metrics.uiResponsiveness.longTasks
-      }]);
-      
+      this.fireAlerts([
+        {
+          type: "ui_blocking",
+          severity: "critical",
+          message: `UI blocking detected: ${this.metrics.uiResponsiveness.longTasks} long tasks`,
+          longTasks: this.metrics.uiResponsiveness.longTasks,
+        },
+      ]);
+
       // Reset counter
       this.metrics.uiResponsiveness.longTasks = 0;
     }
@@ -598,22 +641,24 @@ class PerformanceMonitor {
    */
   handleLongTask(entry) {
     this.metrics.uiResponsiveness.longTasks++;
-    
-    console.warn('🐌 Long task detected:', {
-      duration: Math.round(entry.duration) + 'ms',
+
+    console.warn("🐌 Long task detected:", {
+      duration: Math.round(entry.duration) + "ms",
       startTime: Math.round(entry.startTime),
-      name: entry.name
+      name: entry.name,
     });
 
     // Fire immediate alert for very long tasks
     if (entry.duration > 500) {
-      this.fireAlerts([{
-        type: 'very_long_task',
-        severity: 'critical',
-        message: `Very long task: ${Math.round(entry.duration)}ms`,
-        duration: entry.duration,
-        immediate: true
-      }]);
+      this.fireAlerts([
+        {
+          type: "very_long_task",
+          severity: "critical",
+          message: `Very long task: ${Math.round(entry.duration)}ms`,
+          duration: entry.duration,
+          immediate: true,
+        },
+      ]);
     }
   }
 
@@ -621,10 +666,12 @@ class PerformanceMonitor {
    * Handle navigation timing
    */
   handleNavigationTiming(entry) {
-    console.log('📊 Navigation timing:', {
+    console.log("📊 Navigation timing:", {
       loadTime: Math.round(entry.loadEventEnd - entry.fetchStart),
-      domContentLoaded: Math.round(entry.domContentLoadedEventEnd - entry.fetchStart),
-      firstByte: Math.round(entry.responseStart - entry.fetchStart)
+      domContentLoaded: Math.round(
+        entry.domContentLoadedEventEnd - entry.fetchStart,
+      ),
+      firstByte: Math.round(entry.responseStart - entry.fetchStart),
     });
   }
 
@@ -632,9 +679,11 @@ class PerformanceMonitor {
    * Handle custom performance measures
    */
   handleCustomMeasure(entry) {
-    if (entry.name.startsWith('job-total-')) {
-      const jobId = entry.name.replace('job-total-', '');
-      console.log(`⏱️ Job ${jobId} completed in ${Math.round(entry.duration)}ms`);
+    if (entry.name.startsWith("job-total-")) {
+      const jobId = entry.name.replace("job-total-", "");
+      console.log(
+        `⏱️ Job ${jobId} completed in ${Math.round(entry.duration)}ms`,
+      );
     }
   }
 
@@ -642,10 +691,11 @@ class PerformanceMonitor {
    * Handle layout shift
    */
   handleLayoutShift(entry) {
-    if (entry.value > 0.1) { // Significant layout shift
-      console.warn('📐 Layout shift detected:', {
+    if (entry.value > 0.1) {
+      // Significant layout shift
+      console.warn("📐 Layout shift detected:", {
         value: entry.value,
-        sources: entry.sources?.length || 0
+        sources: entry.sources?.length || 0,
       });
     }
   }
@@ -655,7 +705,7 @@ class PerformanceMonitor {
    */
   updateProcessingMetrics(job) {
     this.metrics.totalProcessingJobs++;
-    
+
     if (job.success) {
       this.metrics.successfulJobs++;
     } else {
@@ -663,21 +713,24 @@ class PerformanceMonitor {
     }
 
     this.metrics.processingTimes.push(job.totalDuration);
-    
+
     // Keep only recent processing times
-    if (this.metrics.processingTimes.length > this.config.sampleRetentionCount) {
+    if (
+      this.metrics.processingTimes.length > this.config.sampleRetentionCount
+    ) {
       this.metrics.processingTimes.shift();
     }
 
     // Update average
-    this.metrics.averageProcessingTime = this.metrics.processingTimes.reduce(
-      (sum, time) => sum + time, 0
-    ) / this.metrics.processingTimes.length;
+    this.metrics.averageProcessingTime =
+      this.metrics.processingTimes.reduce((sum, time) => sum + time, 0) /
+      this.metrics.processingTimes.length;
 
     // Update user experience metrics
     this.metrics.userExperience.totalWaitTime += job.totalDuration;
-    this.metrics.userExperience.averageWaitTime = 
-      this.metrics.userExperience.totalWaitTime / this.metrics.totalProcessingJobs;
+    this.metrics.userExperience.averageWaitTime =
+      this.metrics.userExperience.totalWaitTime /
+      this.metrics.totalProcessingJobs;
   }
 
   /**
@@ -685,28 +738,39 @@ class PerformanceMonitor {
    */
   checkJobPerformance(job) {
     // Check if job is taking too long
-    if (job.elapsedTime > this.thresholds.processingTime.poor && job.progress < 90) {
-      this.fireAlerts([{
-        type: 'job_slow',
-        severity: 'warning',
-        message: `Job ${job.id} is taking longer than expected`,
-        jobId: job.id,
-        elapsedTime: job.elapsedTime,
-        progress: job.progress
-      }]);
+    if (
+      job.elapsedTime > this.thresholds.processingTime.poor &&
+      job.progress < 90
+    ) {
+      this.fireAlerts([
+        {
+          type: "job_slow",
+          severity: "warning",
+          message: `Job ${job.id} is taking longer than expected`,
+          jobId: job.id,
+          elapsedTime: job.elapsedTime,
+          progress: job.progress,
+        },
+      ]);
     }
 
     // Check if job is stuck
-    if (job.progress > 0 && job.lastUpdate && 
-        (performance.now() - job.lastUpdate) > 30000) { // 30 seconds no update
-      this.fireAlerts([{
-        type: 'job_stuck',
-        severity: 'critical',
-        message: `Job ${job.id} appears to be stuck`,
-        jobId: job.id,
-        lastUpdate: job.lastUpdate,
-        progress: job.progress
-      }]);
+    if (
+      job.progress > 0 &&
+      job.lastUpdate &&
+      performance.now() - job.lastUpdate > 30000
+    ) {
+      // 30 seconds no update
+      this.fireAlerts([
+        {
+          type: "job_stuck",
+          severity: "critical",
+          message: `Job ${job.id} appears to be stuck`,
+          jobId: job.id,
+          lastUpdate: job.lastUpdate,
+          progress: job.progress,
+        },
+      ]);
     }
   }
 
@@ -717,7 +781,7 @@ class PerformanceMonitor {
     for (const alert of alerts) {
       alert.timestamp = Date.now();
       this.alertHistory.push(alert);
-      
+
       // Keep only recent alerts
       if (this.alertHistory.length > 100) {
         this.alertHistory.shift();
@@ -728,13 +792,16 @@ class PerformanceMonitor {
         try {
           callback(alert);
         } catch (error) {
-          console.warn('Alert callback failed:', error);
+          console.warn("Alert callback failed:", error);
         }
       }
 
       // Log alert
-      const logLevel = alert.severity === 'critical' ? 'error' : 'warn';
-      console[logLevel](`🚨 Performance Alert (${alert.severity}):`, alert.message);
+      const logLevel = alert.severity === "critical" ? "error" : "warn";
+      console[logLevel](
+        `🚨 Performance Alert (${alert.severity}):`,
+        alert.message,
+      );
     }
   }
 
@@ -746,7 +813,7 @@ class PerformanceMonitor {
       try {
         callback(progressData);
       } catch (error) {
-        console.warn('Progress callback failed:', error);
+        console.warn("Progress callback failed:", error);
       }
     }
   }
@@ -760,10 +827,13 @@ class PerformanceMonitor {
         timestamp: Date.now(),
         averageProcessingTime: this.metrics.averageProcessingTime,
         averageMemoryUsage: this.metrics.memoryUsage.average,
-        averageFrameTime: this.metrics.uiResponsiveness.averageFrameTime
+        averageFrameTime: this.metrics.uiResponsiveness.averageFrameTime,
       };
-      
-      console.log('📊 Performance baseline established:', this.benchmarks.baseline);
+
+      console.log(
+        "📊 Performance baseline established:",
+        this.benchmarks.baseline,
+      );
     }
   }
 
@@ -795,7 +865,7 @@ class PerformanceMonitor {
       recentAlerts: this.alertHistory.slice(-10),
       benchmarks: this.benchmarks,
       isMonitoring: this.isMonitoring,
-      observerStatus: this.getObserverStatus()
+      observerStatus: this.getObserverStatus(),
     };
   }
 
@@ -807,7 +877,7 @@ class PerformanceMonitor {
       longTask: !!this.observers.longTask,
       navigation: !!this.observers.navigation,
       measure: !!this.observers.measure,
-      layout: !!this.observers.layout
+      layout: !!this.observers.layout,
     };
   }
 
@@ -821,7 +891,7 @@ class PerformanceMonitor {
       alertHistory: this.alertHistory,
       benchmarks: this.benchmarks,
       config: this.config,
-      thresholds: this.thresholds
+      thresholds: this.thresholds,
     };
   }
 
@@ -830,27 +900,27 @@ class PerformanceMonitor {
    */
   stopMonitoring() {
     this.isMonitoring = false;
-    
+
     if (this.monitoringInterval) {
       clearInterval(this.monitoringInterval);
       this.monitoringInterval = null;
     }
 
     // Disconnect observers
-    Object.values(this.observers).forEach(observer => {
+    Object.values(this.observers).forEach((observer) => {
       if (observer) {
         observer.disconnect();
       }
     });
 
-    console.log('⏹️ Performance monitoring stopped');
+    console.log("⏹️ Performance monitoring stopped");
   }
 
   /**
    * Destroy performance monitor
    */
   async destroy() {
-    console.log('🧹 Destroying Performance Monitor...');
+    console.log("🧹 Destroying Performance Monitor...");
 
     this.stopMonitoring();
 
@@ -863,7 +933,7 @@ class PerformanceMonitor {
     this.alertHistory = [];
 
     this.isInitialized = false;
-    console.log('✅ Performance Monitor destroyed');
+    console.log("✅ Performance Monitor destroyed");
   }
 }
 

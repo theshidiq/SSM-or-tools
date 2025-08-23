@@ -1,11 +1,11 @@
 /**
  * TensorMemoryManager.js
- * 
+ *
  * Advanced memory management system for TensorFlow.js operations.
  * Prevents memory leaks, manages tensor lifecycle, and optimizes memory usage.
  */
 
-import * as tf from '@tensorflow/tfjs';
+import * as tf from "@tensorflow/tfjs";
 
 class TensorMemoryManager {
   constructor() {
@@ -15,7 +15,7 @@ class TensorMemoryManager {
       warningThreshold: 400 * 1024 * 1024, // 400MB warning threshold
       criticalThreshold: 480 * 1024 * 1024, // 480MB critical threshold
       maxTensors: 10000, // Maximum number of tensors
-      warningTensorCount: 8000 // Warning tensor count
+      warningTensorCount: 8000, // Warning tensor count
     };
 
     // Memory tracking
@@ -27,7 +27,7 @@ class TensorMemoryManager {
       currentTensorCount: 0,
       memoryCleanups: 0,
       forceCleanups: 0,
-      oomEvents: 0
+      oomEvents: 0,
     };
 
     // Tensor tracking for lifecycle management
@@ -46,7 +46,7 @@ class TensorMemoryManager {
       averageDisposalTime: 0,
       averageCleanupTime: 0,
       totalDisposalOperations: 0,
-      totalCleanupOperations: 0
+      totalCleanupOperations: 0,
     };
 
     // Tensor pooling for reuse
@@ -60,7 +60,7 @@ class TensorMemoryManager {
       tensorPooling: true,
       automaticDisposal: true,
       memoryDefragmentation: true,
-      scopeManagement: true
+      scopeManagement: true,
     };
   }
 
@@ -73,7 +73,7 @@ class TensorMemoryManager {
     }
 
     try {
-      console.log('🧠 Initializing TensorFlow Memory Manager...');
+      console.log("🧠 Initializing TensorFlow Memory Manager...");
 
       // Apply configuration options
       this.applyConfiguration(options);
@@ -92,17 +92,17 @@ class TensorMemoryManager {
 
       this.isInitialized = true;
 
-      console.log('✅ TensorFlow Memory Manager initialized:', {
-        maxMemory: Math.round(this.memoryLimits.maxTotalMemory / 1024 / 1024) + 'MB',
+      console.log("✅ TensorFlow Memory Manager initialized:", {
+        maxMemory:
+          Math.round(this.memoryLimits.maxTotalMemory / 1024 / 1024) + "MB",
         maxTensors: this.memoryLimits.maxTensors,
         poolingEnabled: this.poolingEnabled,
-        autoCleanup: this.autoCleanupEnabled
+        autoCleanup: this.autoCleanupEnabled,
       });
 
       return { success: true, config: this.getConfiguration() };
-
     } catch (error) {
-      console.error('❌ Memory Manager initialization failed:', error);
+      console.error("❌ Memory Manager initialization failed:", error);
       throw error;
     }
   }
@@ -113,13 +113,19 @@ class TensorMemoryManager {
   applyConfiguration(options) {
     if (options.maxMemoryMB) {
       this.memoryLimits.maxTotalMemory = options.maxMemoryMB * 1024 * 1024;
-      this.memoryLimits.warningThreshold = Math.floor(this.memoryLimits.maxTotalMemory * 0.8);
-      this.memoryLimits.criticalThreshold = Math.floor(this.memoryLimits.maxTotalMemory * 0.95);
+      this.memoryLimits.warningThreshold = Math.floor(
+        this.memoryLimits.maxTotalMemory * 0.8,
+      );
+      this.memoryLimits.criticalThreshold = Math.floor(
+        this.memoryLimits.maxTotalMemory * 0.95,
+      );
     }
 
     if (options.maxTensors) {
       this.memoryLimits.maxTensors = options.maxTensors;
-      this.memoryLimits.warningTensorCount = Math.floor(options.maxTensors * 0.8);
+      this.memoryLimits.warningTensorCount = Math.floor(
+        options.maxTensors * 0.8,
+      );
     }
 
     if (options.poolingEnabled !== undefined) {
@@ -131,7 +137,10 @@ class TensorMemoryManager {
     }
 
     // Apply optimization strategies
-    Object.assign(this.optimizationStrategies, options.optimizationStrategies || {});
+    Object.assign(
+      this.optimizationStrategies,
+      options.optimizationStrategies || {},
+    );
   }
 
   /**
@@ -142,19 +151,19 @@ class TensorMemoryManager {
     await tf.ready();
 
     // Configure memory management settings
-    tf.env().set('WEBGL_DELETE_TEXTURE_THRESHOLD', 0); // Immediate cleanup
-    tf.env().set('WEBGL_FORCE_F16_TEXTURES', true); // Use half precision
-    tf.env().set('WEBGL_PACK', true); // Enable texture packing
-    tf.env().set('WEBGL_MAX_TEXTURE_SIZE', 4096); // Limit texture size
+    tf.env().set("WEBGL_DELETE_TEXTURE_THRESHOLD", 0); // Immediate cleanup
+    tf.env().set("WEBGL_FORCE_F16_TEXTURES", true); // Use half precision
+    tf.env().set("WEBGL_PACK", true); // Enable texture packing
+    tf.env().set("WEBGL_MAX_TEXTURE_SIZE", 4096); // Limit texture size
 
     // Set memory growth for GPU backend
-    if (tf.getBackend() === 'webgl') {
-      tf.env().set('WEBGL_MEMORY_GROWTH', true);
+    if (tf.getBackend() === "webgl") {
+      tf.env().set("WEBGL_MEMORY_GROWTH", true);
     }
 
-    console.log('🔧 TensorFlow configured for optimal memory usage:', {
+    console.log("🔧 TensorFlow configured for optimal memory usage:", {
       backend: tf.getBackend(),
-      flags: tf.env().getFlags()
+      flags: tf.env().getFlags(),
     });
   }
 
@@ -169,18 +178,18 @@ class TensorMemoryManager {
     }, 5000);
 
     // Setup performance observer for memory pressure (if available)
-    if ('PerformanceObserver' in window) {
+    if ("PerformanceObserver" in window) {
       try {
         const observer = new PerformanceObserver((list) => {
           for (const entry of list.getEntries()) {
-            if (entry.name === 'measure-memory') {
+            if (entry.name === "measure-memory") {
               this.handleMemoryMeasurement(entry);
             }
           }
         });
-        observer.observe({ type: 'measure' });
+        observer.observe({ type: "measure" });
       } catch (error) {
-        console.warn('Performance Observer not available:', error);
+        console.warn("Performance Observer not available:", error);
       }
     }
   }
@@ -197,8 +206,10 @@ class TensorMemoryManager {
     }, 30000);
 
     // Emergency cleanup on memory pressure
-    this.onMemoryPressure('high', async () => {
-      console.warn('🚨 High memory pressure detected, performing emergency cleanup');
+    this.onMemoryPressure("high", async () => {
+      console.warn(
+        "🚨 High memory pressure detected, performing emergency cleanup",
+      );
       await this.performEmergencyCleanup();
     });
   }
@@ -209,48 +220,53 @@ class TensorMemoryManager {
   setupTensorHooks() {
     try {
       const self = this;
-      
+
       // Use TensorFlow.js engine registration hooks instead of overriding properties
       // This is a safer approach that works with TensorFlow.js internal architecture
-      
+
       // Set up engine disposal hooks
       if (tf.engine && tf.engine().startScope && tf.engine().endScope) {
         const originalStartScope = tf.engine().startScope.bind(tf.engine());
         const originalEndScope = tf.engine().endScope.bind(tf.engine());
-        
+
         // Override scope management for tracking
-        tf.engine().startScope = function(name) {
-          self.enterTensorScope(name || 'unnamed');
+        tf.engine().startScope = function (name) {
+          self.enterTensorScope(name || "unnamed");
           return originalStartScope(name);
         };
-        
-        tf.engine().endScope = function(result) {
+
+        tf.engine().endScope = function (result) {
           try {
             const scopeResult = originalEndScope(result);
             self.exitTensorScope();
             return scopeResult;
           } catch (error) {
             // Handle null reference errors gracefully
-            console.warn('TensorFlow engine endScope error (handled gracefully):', error.message);
+            console.warn(
+              "TensorFlow engine endScope error (handled gracefully):",
+              error.message,
+            );
             self.exitTensorScope();
             return result; // Return the original result
           }
         };
       }
-      
+
       // Use tf.util.createScalarValue hook for tensor tracking if available
       if (tf.util && tf.util.createScalarValue) {
         // This is a more compatible way to track tensor creation
-        console.log('🔧 Using TensorFlow.js util hooks for tensor tracking');
+        console.log("🔧 Using TensorFlow.js util hooks for tensor tracking");
       }
-      
+
       // Set up periodic memory monitoring instead of hooking every operation
       this.setupPeriodicMemoryTracking();
-      
-      console.log('✅ TensorFlow hooks configured safely');
-      
+
+      console.log("✅ TensorFlow hooks configured safely");
     } catch (error) {
-      console.warn('⚠️ TensorFlow hooks setup failed, using fallback monitoring:', error.message);
+      console.warn(
+        "⚠️ TensorFlow hooks setup failed, using fallback monitoring:",
+        error.message,
+      );
       // Fallback to periodic monitoring only
       this.setupPeriodicMemoryTracking();
     }
@@ -265,25 +281,29 @@ class TensorMemoryManager {
       try {
         const memInfo = tf.memory();
         this.updateMemoryStatsFromTF(memInfo);
-        
+
         // Estimate tensors created based on memory info
         const estimatedTensors = memInfo.numTensors || 0;
         if (estimatedTensors > this.memoryStats.currentTensorCount) {
-          this.memoryStats.totalTensorsCreated += (estimatedTensors - this.memoryStats.currentTensorCount);
+          this.memoryStats.totalTensorsCreated +=
+            estimatedTensors - this.memoryStats.currentTensorCount;
         }
-        
+
         this.memoryStats.currentTensorCount = estimatedTensors;
-        
+
         // Check for memory pressure
-        if (this.memoryStats.currentTensorCount > 0 && this.memoryStats.currentTensorCount % 100 === 0) {
+        if (
+          this.memoryStats.currentTensorCount > 0 &&
+          this.memoryStats.currentTensorCount % 100 === 0
+        ) {
           this.checkMemoryPressure();
         }
       } catch (error) {
-        console.warn('Periodic memory tracking error:', error.message);
+        console.warn("Periodic memory tracking error:", error.message);
       }
     }, 5000); // Check every 5 seconds
   }
-  
+
   /**
    * Register a tensor for tracking (fallback method)
    */
@@ -297,7 +317,7 @@ class TensorMemoryManager {
       size: tensor.size,
       createdAt: Date.now(),
       scope: this.getCurrentScope(),
-      disposed: false
+      disposed: false,
     };
 
     this.tensorRegistry.set(tensor.id, tensorInfo);
@@ -326,11 +346,11 @@ class TensorMemoryManager {
   /**
    * Enter a tensor scope
    */
-  enterTensorScope(scopeName = 'unnamed') {
+  enterTensorScope(scopeName = "unnamed") {
     this.tensorScopeStack.push({
       name: scopeName,
       tensors: new Set(),
-      startTime: Date.now()
+      startTime: Date.now(),
     });
   }
 
@@ -348,16 +368,18 @@ class TensorMemoryManager {
       this.cleanupScopeTensors(scope);
     }
 
-    console.log(`📊 Tensor scope '${scope.name}' completed in ${duration}ms with ${scope.tensors.size} tensors`);
+    console.log(
+      `📊 Tensor scope '${scope.name}' completed in ${duration}ms with ${scope.tensors.size} tensors`,
+    );
   }
 
   /**
    * Get current tensor scope
    */
   getCurrentScope() {
-    return this.tensorScopeStack.length > 0 
-      ? this.tensorScopeStack[this.tensorScopeStack.length - 1].name 
-      : 'global';
+    return this.tensorScopeStack.length > 0
+      ? this.tensorScopeStack[this.tensorScopeStack.length - 1].name
+      : "global";
   }
 
   /**
@@ -368,7 +390,7 @@ class TensorMemoryManager {
       const memInfo = tf.memory();
       this.updateMemoryStatsFromTF(memInfo);
     } catch (error) {
-      console.warn('Failed to update memory stats:', error);
+      console.warn("Failed to update memory stats:", error);
     }
   }
 
@@ -378,7 +400,7 @@ class TensorMemoryManager {
   updateMemoryStatsFromTF(memInfo) {
     this.memoryStats.currentMemoryUsage = memInfo.numBytes;
     this.memoryStats.currentTensorCount = memInfo.numTensors;
-    
+
     if (memInfo.numBytes > this.memoryStats.peakMemoryUsage) {
       this.memoryStats.peakMemoryUsage = memInfo.numBytes;
     }
@@ -391,29 +413,33 @@ class TensorMemoryManager {
     const memoryUsage = this.memoryStats.currentMemoryUsage;
     const tensorCount = this.memoryStats.currentTensorCount;
 
-    let pressureLevel = 'normal';
+    let pressureLevel = "normal";
 
     // Check memory thresholds
-    if (memoryUsage > this.memoryLimits.criticalThreshold || 
-        tensorCount > this.memoryLimits.maxTensors) {
-      pressureLevel = 'critical';
-    } else if (memoryUsage > this.memoryLimits.warningThreshold || 
-               tensorCount > this.memoryLimits.warningTensorCount) {
-      pressureLevel = 'high';
+    if (
+      memoryUsage > this.memoryLimits.criticalThreshold ||
+      tensorCount > this.memoryLimits.maxTensors
+    ) {
+      pressureLevel = "critical";
+    } else if (
+      memoryUsage > this.memoryLimits.warningThreshold ||
+      tensorCount > this.memoryLimits.warningTensorCount
+    ) {
+      pressureLevel = "high";
     }
 
-    if (pressureLevel !== 'normal') {
+    if (pressureLevel !== "normal") {
       this.notifyMemoryPressure(pressureLevel, {
         memoryUsage,
         memoryLimit: this.memoryLimits.maxTotalMemory,
         tensorCount,
-        tensorLimit: this.memoryLimits.maxTensors
+        tensorLimit: this.memoryLimits.maxTensors,
       });
 
       // Trigger automatic cleanup for high pressure
-      if (pressureLevel === 'high') {
+      if (pressureLevel === "high") {
         this.performAutomaticCleanup();
-      } else if (pressureLevel === 'critical') {
+      } else if (pressureLevel === "critical") {
         this.performEmergencyCleanup();
       }
     }
@@ -429,7 +455,7 @@ class TensorMemoryManager {
     const beforeMemory = tf.memory();
 
     try {
-      console.log('🧹 Performing automatic tensor cleanup...');
+      console.log("🧹 Performing automatic tensor cleanup...");
 
       // Clean up disposed tensors
       await this.cleanupDisposedTensors();
@@ -453,13 +479,12 @@ class TensorMemoryManager {
       this.updateCleanupMetrics(cleanupTime);
 
       console.log(`✅ Automatic cleanup completed in ${cleanupTime}ms:`, {
-        memoryReleased: Math.round(memoryReleased / 1024 / 1024) + 'MB',
+        memoryReleased: Math.round(memoryReleased / 1024 / 1024) + "MB",
         tensorsRemaining: afterMemory.numTensors,
-        currentMemory: Math.round(afterMemory.numBytes / 1024 / 1024) + 'MB'
+        currentMemory: Math.round(afterMemory.numBytes / 1024 / 1024) + "MB",
       });
-
     } catch (error) {
-      console.error('Automatic cleanup failed:', error);
+      console.error("Automatic cleanup failed:", error);
     }
   }
 
@@ -467,8 +492,8 @@ class TensorMemoryManager {
    * Perform emergency cleanup for critical memory pressure
    */
   async performEmergencyCleanup() {
-    console.warn('🚨 Performing emergency memory cleanup...');
-    
+    console.warn("🚨 Performing emergency memory cleanup...");
+
     const startTime = Date.now();
     this.memoryStats.forceCleanups++;
 
@@ -482,17 +507,16 @@ class TensorMemoryManager {
       // Force multiple GC cycles
       for (let i = 0; i < 3; i++) {
         await this.forceGarbageCollection();
-        await new Promise(resolve => setTimeout(resolve, 100));
+        await new Promise((resolve) => setTimeout(resolve, 100));
       }
 
       // Notify OOM callbacks
       this.notifyOOMEvent({
-        type: 'emergency_cleanup',
-        duration: Date.now() - startTime
+        type: "emergency_cleanup",
+        duration: Date.now() - startTime,
       });
-
     } catch (error) {
-      console.error('Emergency cleanup failed:', error);
+      console.error("Emergency cleanup failed:", error);
       this.memoryStats.oomEvents++;
     }
   }
@@ -504,12 +528,12 @@ class TensorMemoryManager {
     try {
       // Use TensorFlow.js dispose to clean up all unused tensors
       const beforeMemory = tf.memory();
-      
+
       // Force disposal of unreferenced tensors
       tf.dispose();
-      
+
       // Clear our registry of old entries
-      const cutoffTime = Date.now() - (5 * 60 * 1000);
+      const cutoffTime = Date.now() - 5 * 60 * 1000;
       const tensorsToRemove = [];
 
       for (const [id, tensorInfo] of this.tensorRegistry) {
@@ -519,22 +543,26 @@ class TensorMemoryManager {
       }
 
       // Remove old tensor references from our registry
-      tensorsToRemove.forEach(id => {
+      tensorsToRemove.forEach((id) => {
         this.unregisterTensor(id);
       });
-      
+
       const afterMemory = tf.memory();
       const tensorsDisposed = beforeMemory.numTensors - afterMemory.numTensors;
-      
+
       if (tensorsDisposed > 0) {
-        console.log(`🗑️ Aggressively disposed ${tensorsDisposed} tensors via tf.dispose()`);
+        console.log(
+          `🗑️ Aggressively disposed ${tensorsDisposed} tensors via tf.dispose()`,
+        );
       }
-      
+
       // Yield to allow cleanup to complete
-      await new Promise(resolve => setTimeout(resolve, 10));
-      
+      await new Promise((resolve) => setTimeout(resolve, 10));
     } catch (error) {
-      console.warn('Aggressive cleanup error (handled gracefully):', error.message);
+      console.warn(
+        "Aggressive cleanup error (handled gracefully):",
+        error.message,
+      );
       // Continue with basic cleanup
       this.tensorRegistry.clear();
     }
@@ -545,17 +573,19 @@ class TensorMemoryManager {
    */
   async cleanupDisposedTensors() {
     const disposedTensors = [];
-    
+
     for (const [id, tensorInfo] of this.tensorRegistry) {
       if (tensorInfo.disposed) {
         disposedTensors.push(id);
       }
     }
 
-    disposedTensors.forEach(id => this.tensorRegistry.delete(id));
-    
+    disposedTensors.forEach((id) => this.tensorRegistry.delete(id));
+
     if (disposedTensors.length > 0) {
-      console.log(`🧹 Cleaned up ${disposedTensors.length} disposed tensor references`);
+      console.log(
+        `🧹 Cleaned up ${disposedTensors.length} disposed tensor references`,
+      );
     }
   }
 
@@ -566,21 +596,21 @@ class TensorMemoryManager {
     if (!this.poolingEnabled) return;
 
     let cleanedPools = 0;
-    const cutoffTime = Date.now() - (10 * 60 * 1000); // 10 minutes
+    const cutoffTime = Date.now() - 10 * 60 * 1000; // 10 minutes
 
     for (const [key, pool] of this.tensorPools) {
-      const activeTensors = pool.tensors.filter(tensor => {
+      const activeTensors = pool.tensors.filter((tensor) => {
         return tensor.lastUsed > cutoffTime && !tensor.tensor.isDisposed;
       });
 
       // Dispose unused tensors
       const disposedCount = pool.tensors.length - activeTensors.length;
-      pool.tensors.forEach(tensor => {
+      pool.tensors.forEach((tensor) => {
         if (tensor.lastUsed <= cutoffTime || tensor.tensor.isDisposed) {
           try {
             tensor.tensor.dispose();
           } catch (error) {
-            console.warn('Failed to dispose pooled tensor:', error);
+            console.warn("Failed to dispose pooled tensor:", error);
           }
         }
       });
@@ -608,17 +638,17 @@ class TensorMemoryManager {
    */
   clearAllTensorPools() {
     for (const [key, pool] of this.tensorPools) {
-      pool.tensors.forEach(tensor => {
+      pool.tensors.forEach((tensor) => {
         try {
           tensor.tensor.dispose();
         } catch (error) {
-          console.warn('Failed to dispose pooled tensor:', error);
+          console.warn("Failed to dispose pooled tensor:", error);
         }
       });
     }
-    
+
     this.tensorPools.clear();
-    console.log('🗑️ Cleared all tensor pools');
+    console.log("🗑️ Cleared all tensor pools");
   }
 
   /**
@@ -634,7 +664,7 @@ class TensorMemoryManager {
     }
 
     // Yield to allow GC to run
-    await new Promise(resolve => setTimeout(resolve, 16));
+    await new Promise((resolve) => setTimeout(resolve, 16));
   }
 
   /**
@@ -644,31 +674,33 @@ class TensorMemoryManager {
     try {
       // This is a placeholder for memory defragmentation
       // In practice, this would involve reorganizing tensor storage
-      console.log('🔧 Memory defragmentation completed');
+      console.log("🔧 Memory defragmentation completed");
     } catch (error) {
-      console.warn('Memory defragmentation failed:', error);
+      console.warn("Memory defragmentation failed:", error);
     }
   }
 
   /**
    * Get or create a tensor from pool
    */
-  getTensorFromPool(poolKey, shape, dtype = 'float32') {
+  getTensorFromPool(poolKey, shape, dtype = "float32") {
     if (!this.poolingEnabled) return null;
 
     const pool = this.tensorPools.get(poolKey);
     if (!pool) return null;
 
     // Find matching tensor in pool
-    const matchingTensor = pool.tensors.find(tensor => {
-      return !tensor.tensor.isDisposed &&
-             tensor.tensor.shape.toString() === shape.toString() &&
-             tensor.tensor.dtype === dtype;
+    const matchingTensor = pool.tensors.find((tensor) => {
+      return (
+        !tensor.tensor.isDisposed &&
+        tensor.tensor.shape.toString() === shape.toString() &&
+        tensor.tensor.dtype === dtype
+      );
     });
 
     if (matchingTensor) {
       // Remove from pool and return
-      pool.tensors = pool.tensors.filter(t => t !== matchingTensor);
+      pool.tensors = pool.tensors.filter((t) => t !== matchingTensor);
       matchingTensor.lastUsed = Date.now();
       console.log(`♻️ Retrieved tensor from pool '${poolKey}'`);
       return matchingTensor.tensor;
@@ -700,7 +732,7 @@ class TensorMemoryManager {
     pool.tensors.push({
       tensor,
       lastUsed: Date.now(),
-      pooledAt: Date.now()
+      pooledAt: Date.now(),
     });
 
     console.log(`♻️ Returned tensor to pool '${poolKey}'`);
@@ -740,12 +772,13 @@ class TensorMemoryManager {
    * Notify memory pressure callbacks
    */
   notifyMemoryPressure(level, stats) {
-    for (const { level: callbackLevel, callback } of this.memoryPressureCallbacks) {
-      if (callbackLevel === level || callbackLevel === 'all') {
+    for (const { level: callbackLevel, callback } of this
+      .memoryPressureCallbacks) {
+      if (callbackLevel === level || callbackLevel === "all") {
         try {
           callback({ level, stats });
         } catch (error) {
-          console.warn('Memory pressure callback failed:', error);
+          console.warn("Memory pressure callback failed:", error);
         }
       }
     }
@@ -759,7 +792,7 @@ class TensorMemoryManager {
       try {
         callback(eventInfo);
       } catch (error) {
-        console.warn('OOM callback failed:', error);
+        console.warn("OOM callback failed:", error);
       }
     }
   }
@@ -774,12 +807,17 @@ class TensorMemoryManager {
         ...this.memoryStats,
         currentMemoryUsage: tfMemory.numBytes,
         currentTensorCount: tfMemory.numTensors,
-        memoryUtilization: (tfMemory.numBytes / this.memoryLimits.maxTotalMemory) * 100,
-        tensorUtilization: (tfMemory.numTensors / this.memoryLimits.maxTensors) * 100,
-        pooledTensors: Array.from(this.tensorPools.values()).reduce((sum, pool) => sum + pool.tensors.length, 0)
+        memoryUtilization:
+          (tfMemory.numBytes / this.memoryLimits.maxTotalMemory) * 100,
+        tensorUtilization:
+          (tfMemory.numTensors / this.memoryLimits.maxTensors) * 100,
+        pooledTensors: Array.from(this.tensorPools.values()).reduce(
+          (sum, pool) => sum + pool.tensors.length,
+          0,
+        ),
       };
     } catch (error) {
-      console.warn('Failed to get memory stats:', error);
+      console.warn("Failed to get memory stats:", error);
       return this.memoryStats;
     }
   }
@@ -791,7 +829,7 @@ class TensorMemoryManager {
     return {
       ...this.performanceMetrics,
       memoryStats: this.getMemoryStats(),
-      isInitialized: this.isInitialized
+      isInitialized: this.isInitialized,
     };
   }
 
@@ -804,7 +842,7 @@ class TensorMemoryManager {
       optimizationStrategies: this.optimizationStrategies,
       poolingEnabled: this.poolingEnabled,
       autoCleanupEnabled: this.autoCleanupEnabled,
-      maxPoolSize: this.maxPoolSize
+      maxPoolSize: this.maxPoolSize,
     };
   }
 
@@ -813,8 +851,13 @@ class TensorMemoryManager {
    */
   updateCleanupMetrics(cleanupTime) {
     this.performanceMetrics.totalCleanupOperations++;
-    const totalTime = (this.performanceMetrics.averageCleanupTime * (this.performanceMetrics.totalCleanupOperations - 1)) + cleanupTime;
-    this.performanceMetrics.averageCleanupTime = Math.round(totalTime / this.performanceMetrics.totalCleanupOperations);
+    const totalTime =
+      this.performanceMetrics.averageCleanupTime *
+        (this.performanceMetrics.totalCleanupOperations - 1) +
+      cleanupTime;
+    this.performanceMetrics.averageCleanupTime = Math.round(
+      totalTime / this.performanceMetrics.totalCleanupOperations,
+    );
   }
 
   /**
@@ -830,7 +873,10 @@ class TensorMemoryManager {
    */
   handleMemoryMeasurement(entry) {
     if (entry.detail && entry.detail.bytes) {
-      console.log('📊 Browser memory usage:', Math.round(entry.detail.bytes / 1024 / 1024) + 'MB');
+      console.log(
+        "📊 Browser memory usage:",
+        Math.round(entry.detail.bytes / 1024 / 1024) + "MB",
+      );
     }
   }
 
@@ -838,7 +884,7 @@ class TensorMemoryManager {
    * Destroy memory manager with safe cleanup
    */
   async destroy() {
-    console.log('🧹 Destroying TensorFlow Memory Manager...');
+    console.log("🧹 Destroying TensorFlow Memory Manager...");
 
     try {
       // Stop monitoring timers
@@ -851,7 +897,7 @@ class TensorMemoryManager {
         clearInterval(this.cleanupTimer);
         this.cleanupTimer = null;
       }
-      
+
       if (this.tensorTrackingTimer) {
         clearInterval(this.tensorTrackingTimer);
         this.tensorTrackingTimer = null;
@@ -861,22 +907,24 @@ class TensorMemoryManager {
       try {
         await this.performEmergencyCleanup();
       } catch (error) {
-        console.warn('Emergency cleanup error during destroy (handled):', error.message);
+        console.warn(
+          "Emergency cleanup error during destroy (handled):",
+          error.message,
+        );
       }
 
       // Clear all callbacks
       this.memoryPressureCallbacks.clear();
       this.oomCallbacks.clear();
-      
+
       // Clear registries
       this.tensorRegistry.clear();
       this.tensorPools.clear();
 
       this.isInitialized = false;
-      console.log('✅ Memory Manager destroyed safely');
-      
+      console.log("✅ Memory Manager destroyed safely");
     } catch (error) {
-      console.warn('Memory Manager destroy error (handled):', error.message);
+      console.warn("Memory Manager destroy error (handled):", error.message);
       this.isInitialized = false;
     }
   }

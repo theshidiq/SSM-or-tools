@@ -199,35 +199,35 @@ const DailyLimitsTab = ({
   const deleteDailyLimit = (limitId) => {
     const limit = dailyLimits.find((l) => l.id === limitId);
     if (limit) {
-      setDeleteConfirmation({ type: 'daily', id: limitId, name: limit.name });
+      setDeleteConfirmation({ type: "daily", id: limitId, name: limit.name });
     }
   };
 
   const deleteMonthlyLimit = (limitId) => {
     const limit = monthlyLimits.find((l) => l.id === limitId);
     if (limit) {
-      setDeleteConfirmation({ type: 'monthly', id: limitId, name: limit.name });
+      setDeleteConfirmation({ type: "monthly", id: limitId, name: limit.name });
     }
   };
 
   const handleDeleteConfirm = async () => {
     if (!deleteConfirmation) return;
-    
+
     setIsDeleting(true);
     try {
       const { type, id } = deleteConfirmation;
-      
-      if (type === 'daily') {
+
+      if (type === "daily") {
         const updatedLimits = dailyLimits.filter((limit) => limit.id !== id);
         updateDailyLimits(updatedLimits);
-      } else if (type === 'monthly') {
+      } else if (type === "monthly") {
         const updatedLimits = monthlyLimits.filter((limit) => limit.id !== id);
         updateMonthlyLimits(updatedLimits);
       }
-      
+
       setDeleteConfirmation(null);
     } catch (error) {
-      console.error('Error deleting limit:', error);
+      console.error("Error deleting limit:", error);
     } finally {
       setIsDeleting(false);
     }
@@ -957,15 +957,15 @@ const DailyLimitsTab = ({
           </div>
         )}
       </div>
-      
+
       {/* Delete Confirmation Modal */}
       <ConfirmationModal
         isOpen={deleteConfirmation !== null}
         onClose={handleDeleteCancel}
         onConfirm={handleDeleteConfirm}
-        title={`Delete ${deleteConfirmation?.type === 'daily' ? 'Daily' : 'Monthly'} Limit`}
+        title={`Delete ${deleteConfirmation?.type === "daily" ? "Daily" : "Monthly"} Limit`}
         message={`Are you sure you want to delete the ${deleteConfirmation?.type} limit "${deleteConfirmation?.name}"? This action cannot be undone.`}
-        confirmText={`Delete ${deleteConfirmation?.type === 'daily' ? 'Daily' : 'Monthly'} Limit`}
+        confirmText={`Delete ${deleteConfirmation?.type === "daily" ? "Daily" : "Monthly"} Limit`}
         cancelText="Cancel"
         variant="danger"
         isLoading={isDeleting}

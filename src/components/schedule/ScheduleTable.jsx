@@ -559,14 +559,11 @@ const ScheduleTable = ({
   );
 
   // Handle drag-to-fill events (placeholder for future implementation)
-  const handleDragFillStart = useCallback((cellKey, event) => {
-  }, []);
+  const handleDragFillStart = useCallback((cellKey, event) => {}, []);
 
-  const handleDragFillPreview = useCallback((event) => {
-  }, []);
+  const handleDragFillPreview = useCallback((event) => {}, []);
 
-  const handleDragFillEnd = useCallback((event) => {
-  }, []);
+  const handleDragFillEnd = useCallback((event) => {}, []);
 
   return (
     <div className="relative">

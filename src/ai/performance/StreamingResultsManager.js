@@ -1,6 +1,6 @@
 /**
  * StreamingResultsManager.js
- * 
+ *
  * Manages streaming results and lazy loading for AI processing.
  * Provides progressive result updates and optimized data loading.
  */
@@ -12,7 +12,7 @@ class StreamingResultsManager {
     this.resultCache = new Map();
     this.subscriptions = new Map();
     this.lazyLoaders = new Map();
-    
+
     // Configuration
     this.config = {
       streamBufferSize: 100,
@@ -20,7 +20,7 @@ class StreamingResultsManager {
       cacheTTL: 5 * 60 * 1000, // 5 minutes
       lazyLoadThreshold: 50, // Start lazy loading after 50 items
       batchSize: 20,
-      maxConcurrentStreams: 5
+      maxConcurrentStreams: 5,
     };
 
     // Stream state tracking
@@ -30,7 +30,7 @@ class StreamingResultsManager {
       bytesStreamed: 0,
       itemsStreamed: 0,
       cacheHits: 0,
-      cacheMisses: 0
+      cacheMisses: 0,
     };
 
     // Performance tracking
@@ -38,7 +38,7 @@ class StreamingResultsManager {
       averageLatency: 0,
       throughput: 0,
       streamingOverhead: 0,
-      memoryUsage: 0
+      memoryUsage: 0,
     };
 
     // Event handlers
@@ -46,7 +46,7 @@ class StreamingResultsManager {
       stream: new Set(),
       chunk: new Set(),
       complete: new Set(),
-      error: new Set()
+      error: new Set(),
     };
   }
 
@@ -59,7 +59,7 @@ class StreamingResultsManager {
     }
 
     try {
-      console.log('🌊 Initializing Streaming Results Manager...');
+      console.log("🌊 Initializing Streaming Results Manager...");
 
       // Apply configuration
       Object.assign(this.config, options.config || {});
@@ -72,16 +72,15 @@ class StreamingResultsManager {
 
       this.isInitialized = true;
 
-      console.log('✅ Streaming Results Manager initialized:', {
+      console.log("✅ Streaming Results Manager initialized:", {
         bufferSize: this.config.streamBufferSize,
         cacheSize: this.config.cacheMaxSize,
-        batchSize: this.config.batchSize
+        batchSize: this.config.batchSize,
       });
 
       return { success: true, config: this.config };
-
     } catch (error) {
-      console.error('❌ Streaming Manager initialization failed:', error);
+      console.error("❌ Streaming Manager initialization failed:", error);
       throw error;
     }
   }
@@ -96,7 +95,7 @@ class StreamingResultsManager {
     }
 
     if (this.streamStats.activeStreams >= this.config.maxConcurrentStreams) {
-      throw new Error('Maximum concurrent streams reached');
+      throw new Error("Maximum concurrent streams reached");
     }
 
     const stream = new ResultStream(streamId, {
@@ -104,7 +103,7 @@ class StreamingResultsManager {
       ...options,
       onChunk: (chunk) => this.handleStreamChunk(streamId, chunk),
       onComplete: (result) => this.handleStreamComplete(streamId, result),
-      onError: (error) => this.handleStreamError(streamId, error)
+      onError: (error) => this.handleStreamError(streamId, error),
     });
 
     this.streams.set(streamId, stream);
@@ -120,7 +119,7 @@ class StreamingResultsManager {
    */
   subscribeToStream(streamId, callback, options = {}) {
     const subscriptionId = `${streamId}_${Date.now()}_${Math.random()}`;
-    
+
     const subscription = {
       id: subscriptionId,
       streamId,
@@ -128,20 +127,22 @@ class StreamingResultsManager {
       options: {
         includePartial: options.includePartial || false,
         throttle: options.throttle || 0,
-        filter: options.filter || null
+        filter: options.filter || null,
       },
       lastUpdate: 0,
-      active: true
+      active: true,
     };
 
     if (!this.subscriptions.has(streamId)) {
       this.subscriptions.set(streamId, new Set());
     }
-    
+
     this.subscriptions.get(streamId).add(subscription);
 
-    console.log(`📡 Subscribed to stream ${streamId} with ID ${subscriptionId}`);
-    
+    console.log(
+      `📡 Subscribed to stream ${streamId} with ID ${subscriptionId}`,
+    );
+
     // Return unsubscribe function
     return () => this.unsubscribeFromStream(subscriptionId);
   }
@@ -168,29 +169,28 @@ class StreamingResultsManager {
    */
   async streamMLResults(streamId, data, progressCallback) {
     const stream = this.createStream(streamId, {
-      type: 'ml_results',
-      estimatedSize: data.estimatedSize || 0
+      type: "ml_results",
+      estimatedSize: data.estimatedSize || 0,
     });
 
     try {
       const { scheduleData, staffMembers, dateRange, options = {} } = data;
-      
+
       // Initialize streaming processing
       console.log(`🌊 Starting ML results stream: ${streamId}`);
       stream.start();
 
       // Process results in streaming fashion
       await this.processStreamingMLResults(
-        stream, 
-        scheduleData, 
-        staffMembers, 
-        dateRange, 
+        stream,
+        scheduleData,
+        staffMembers,
+        dateRange,
         options,
-        progressCallback
+        progressCallback,
       );
 
       return stream;
-
     } catch (error) {
       stream.error(error);
       throw error;
@@ -200,7 +200,14 @@ class StreamingResultsManager {
   /**
    * Process ML results with streaming
    */
-  async processStreamingMLResults(stream, scheduleData, staffMembers, dateRange, options, progressCallback) {
+  async processStreamingMLResults(
+    stream,
+    scheduleData,
+    staffMembers,
+    dateRange,
+    options,
+    progressCallback,
+  ) {
     const totalCells = staffMembers.length * dateRange.length;
     let processedCells = 0;
     let resultBuffer = [];
@@ -209,7 +216,7 @@ class StreamingResultsManager {
     const lazyLoader = this.createLazyLoader(stream.id, {
       staffMembers,
       dateRange,
-      totalItems: totalCells
+      totalItems: totalCells,
     });
 
     // Process in batches for streaming
@@ -227,19 +234,36 @@ class StreamingResultsManager {
           options,
           (progress) => {
             processedCells += progress.itemsProcessed || 0;
-            this.updateStreamProgress(stream, processedCells, totalCells, progressCallback);
-          }
+            this.updateStreamProgress(
+              stream,
+              processedCells,
+              totalCells,
+              progressCallback,
+            );
+          },
         );
         continue;
       }
 
       // Process dates in batches
-      for (let dateIndex = 0; dateIndex < dateRange.length; dateIndex += this.config.batchSize) {
-        const dateBatch = dateRange.slice(dateIndex, Math.min(dateIndex + this.config.batchSize, dateRange.length));
-        
+      for (
+        let dateIndex = 0;
+        dateIndex < dateRange.length;
+        dateIndex += this.config.batchSize
+      ) {
+        const dateBatch = dateRange.slice(
+          dateIndex,
+          Math.min(dateIndex + this.config.batchSize, dateRange.length),
+        );
+
         // Process batch
-        const batchResults = await this.processBatch(staff, dateBatch, scheduleData, options);
-        
+        const batchResults = await this.processBatch(
+          staff,
+          dateBatch,
+          scheduleData,
+          options,
+        );
+
         // Add to buffer
         resultBuffer.push(...batchResults);
         processedCells += batchResults.length;
@@ -251,7 +275,12 @@ class StreamingResultsManager {
         }
 
         // Update progress
-        this.updateStreamProgress(stream, processedCells, totalCells, progressCallback);
+        this.updateStreamProgress(
+          stream,
+          processedCells,
+          totalCells,
+          progressCallback,
+        );
 
         // Yield control to prevent blocking
         await this.yieldControl();
@@ -268,38 +297,59 @@ class StreamingResultsManager {
       totalItems: processedCells,
       processingTime: stream.getElapsedTime(),
       cacheHits: this.streamStats.cacheHits,
-      cacheMisses: this.streamStats.cacheMisses
+      cacheMisses: this.streamStats.cacheMisses,
     });
   }
 
   /**
    * Process with lazy loading
    */
-  async processWithLazyLoading(stream, lazyLoader, staff, dateRange, scheduleData, options, progressCallback) {
+  async processWithLazyLoading(
+    stream,
+    lazyLoader,
+    staff,
+    dateRange,
+    scheduleData,
+    options,
+    progressCallback,
+  ) {
     // Create lazy loading promise for this staff member
-    const lazyPromise = lazyLoader.loadStaffData(staff, dateRange, scheduleData, options);
-    
+    const lazyPromise = lazyLoader.loadStaffData(
+      staff,
+      dateRange,
+      scheduleData,
+      options,
+    );
+
     // Stream placeholder while loading
-    await this.streamResultChunk(stream, [{
-      type: 'lazy_placeholder',
-      staffId: staff.id,
-      staffName: staff.name,
-      dateRange: dateRange.map(d => d.toISOString().split('T')[0]),
-      status: 'loading',
-      promise: lazyPromise
-    }]);
+    await this.streamResultChunk(stream, [
+      {
+        type: "lazy_placeholder",
+        staffId: staff.id,
+        staffName: staff.name,
+        dateRange: dateRange.map((d) => d.toISOString().split("T")[0]),
+        status: "loading",
+        promise: lazyPromise,
+      },
+    ]);
 
     // Process lazy loading in background
     lazyPromise.then(async (results) => {
       // Stream actual results when ready
-      await this.streamResultChunk(stream, results.map(result => ({
-        ...result,
-        type: 'lazy_result',
-        staffId: staff.id
-      })));
-      
+      await this.streamResultChunk(
+        stream,
+        results.map((result) => ({
+          ...result,
+          type: "lazy_result",
+          staffId: staff.id,
+        })),
+      );
+
       if (progressCallback) {
-        progressCallback({ itemsProcessed: results.length, type: 'lazy_loaded' });
+        progressCallback({
+          itemsProcessed: results.length,
+          type: "lazy_loaded",
+        });
       }
     });
   }
@@ -309,18 +359,18 @@ class StreamingResultsManager {
    */
   async processBatch(staff, dateBatch, scheduleData, options) {
     const results = [];
-    
+
     for (const date of dateBatch) {
-      const dateKey = date.toISOString().split('T')[0];
+      const dateKey = date.toISOString().split("T")[0];
       const cellKey = `${staff.id}_${dateKey}`;
-      
+
       // Check cache first
       if (this.resultCache.has(cellKey)) {
         const cached = this.resultCache.get(cellKey);
         if (Date.now() - cached.timestamp < this.config.cacheTTL) {
           results.push({
             ...cached.result,
-            fromCache: true
+            fromCache: true,
           });
           this.streamStats.cacheHits++;
           continue;
@@ -328,11 +378,16 @@ class StreamingResultsManager {
           this.resultCache.delete(cellKey);
         }
       }
-      
+
       // Process prediction
       try {
-        const prediction = await this.generateStreamingPrediction(staff, date, scheduleData, options);
-        
+        const prediction = await this.generateStreamingPrediction(
+          staff,
+          date,
+          scheduleData,
+          options,
+        );
+
         if (prediction) {
           const result = {
             cellKey,
@@ -344,29 +399,31 @@ class StreamingResultsManager {
             confidence: prediction.confidence,
             probabilities: prediction.probabilities,
             timestamp: Date.now(),
-            fromCache: false
+            fromCache: false,
           };
-          
+
           results.push(result);
-          
+
           // Cache result
           this.cacheResult(cellKey, result);
           this.streamStats.cacheMisses++;
         }
-        
       } catch (error) {
-        console.warn(`Streaming prediction failed for ${staff.name} on ${dateKey}:`, error);
+        console.warn(
+          `Streaming prediction failed for ${staff.name} on ${dateKey}:`,
+          error,
+        );
         results.push({
           cellKey,
           staffId: staff.id,
           staffName: staff.name,
           dateKey,
           error: error.message,
-          timestamp: Date.now()
+          timestamp: Date.now(),
         });
       }
     }
-    
+
     return results;
   }
 
@@ -377,48 +434,51 @@ class StreamingResultsManager {
     // Simplified prediction for streaming (can be enhanced)
     const dayOfWeek = date.getDay();
     const isWeekend = dayOfWeek === 0 || dayOfWeek === 6;
-    
+
     // Basic probability model
     const probabilities = {
-      '○': 0.4, // normal
-      '△': 0.2, // early
-      '▽': 0.2, // late
-      '×': 0.2  // off
+      "○": 0.4, // normal
+      "△": 0.2, // early
+      "▽": 0.2, // late
+      "×": 0.2, // off
     };
-    
+
     // Adjust for specific rules
-    if (staff.name === '料理長' && dayOfWeek === 0) {
-      probabilities['△'] = 0.7;
-      probabilities['○'] = 0.2;
-      probabilities['▽'] = 0.05;
-      probabilities['×'] = 0.05;
+    if (staff.name === "料理長" && dayOfWeek === 0) {
+      probabilities["△"] = 0.7;
+      probabilities["○"] = 0.2;
+      probabilities["▽"] = 0.05;
+      probabilities["×"] = 0.05;
     }
-    
+
     if (isWeekend) {
-      probabilities['×'] += 0.1;
+      probabilities["×"] += 0.1;
     }
-    
+
     // Normalize probabilities
-    const total = Object.values(probabilities).reduce((sum, prob) => sum + prob, 0);
-    Object.keys(probabilities).forEach(key => {
+    const total = Object.values(probabilities).reduce(
+      (sum, prob) => sum + prob,
+      0,
+    );
+    Object.keys(probabilities).forEach((key) => {
       probabilities[key] = probabilities[key] / total;
     });
-    
+
     // Select best prediction
-    let bestShift = '○';
+    let bestShift = "○";
     let bestProb = 0;
-    
+
     for (const [shift, prob] of Object.entries(probabilities)) {
       if (prob > bestProb) {
         bestProb = prob;
         bestShift = shift;
       }
     }
-    
+
     return {
       shift: bestShift,
       confidence: Math.round(bestProb * 100),
-      probabilities
+      probabilities,
     };
   }
 
@@ -429,17 +489,20 @@ class StreamingResultsManager {
     const chunkSize = JSON.stringify(chunk).length;
     this.streamStats.bytesStreamed += chunkSize;
     this.streamStats.itemsStreamed += chunk.length;
-    
+
     // Send chunk to stream
     stream.pushChunk({
       data: chunk,
       size: chunkSize,
       timestamp: Date.now(),
-      chunkId: stream.getNextChunkId()
+      chunkId: stream.getNextChunkId(),
     });
-    
+
     // Notify subscribers
-    await this.notifySubscribers(stream.id, chunk, { type: 'chunk', partial: true });
+    await this.notifySubscribers(stream.id, chunk, {
+      type: "chunk",
+      partial: true,
+    });
   }
 
   /**
@@ -447,21 +510,25 @@ class StreamingResultsManager {
    */
   updateStreamProgress(stream, processed, total, progressCallback) {
     const progress = Math.min(100, Math.floor((processed / total) * 100));
-    
+
     stream.updateProgress(progress, {
       processed,
       total,
       throughput: this.calculateThroughput(stream),
-      estimatedTimeRemaining: this.estimateTimeRemaining(stream, processed, total)
+      estimatedTimeRemaining: this.estimateTimeRemaining(
+        stream,
+        processed,
+        total,
+      ),
     });
-    
+
     if (progressCallback) {
       progressCallback({
         progress,
         processed,
         total,
-        stage: 'streaming',
-        message: `Streaming results... (${processed}/${total})`
+        stage: "streaming",
+        message: `Streaming results... (${processed}/${total})`,
       });
     }
   }
@@ -473,9 +540,9 @@ class StreamingResultsManager {
     const lazyLoader = new LazyLoader(streamId, {
       ...options,
       batchSize: this.config.batchSize,
-      cacheManager: this
+      cacheManager: this,
     });
-    
+
     this.lazyLoaders.set(streamId, lazyLoader);
     return lazyLoader;
   }
@@ -487,18 +554,19 @@ class StreamingResultsManager {
     // Implement LRU cache with size limit
     if (this.resultCache.size >= this.config.cacheMaxSize) {
       // Remove oldest entries
-      const sortedEntries = Array.from(this.resultCache.entries())
-        .sort(([,a], [,b]) => a.timestamp - b.timestamp);
-      
+      const sortedEntries = Array.from(this.resultCache.entries()).sort(
+        ([, a], [, b]) => a.timestamp - b.timestamp,
+      );
+
       const removeCount = Math.floor(this.config.cacheMaxSize * 0.1); // Remove 10%
       for (let i = 0; i < removeCount; i++) {
         this.resultCache.delete(sortedEntries[i][0]);
       }
     }
-    
+
     this.resultCache.set(key, {
       result,
-      timestamp: Date.now()
+      timestamp: Date.now(),
     });
   }
 
@@ -506,10 +574,10 @@ class StreamingResultsManager {
    * Handle stream chunk
    */
   handleStreamChunk(streamId, chunk) {
-    this.notifySubscribers(streamId, chunk.data, { 
-      type: 'chunk', 
+    this.notifySubscribers(streamId, chunk.data, {
+      type: "chunk",
       chunkId: chunk.chunkId,
-      size: chunk.size 
+      size: chunk.size,
     });
   }
 
@@ -518,8 +586,8 @@ class StreamingResultsManager {
    */
   handleStreamComplete(streamId, result) {
     this.streamStats.activeStreams--;
-    this.notifySubscribers(streamId, result, { type: 'complete' });
-    
+    this.notifySubscribers(streamId, result, { type: "complete" });
+
     // Cleanup
     setTimeout(() => {
       this.cleanup(streamId);
@@ -531,8 +599,8 @@ class StreamingResultsManager {
    */
   handleStreamError(streamId, error) {
     this.streamStats.activeStreams--;
-    this.notifySubscribers(streamId, error, { type: 'error' });
-    
+    this.notifySubscribers(streamId, error, { type: "error" });
+
     console.error(`Stream ${streamId} error:`, error);
   }
 
@@ -544,27 +612,31 @@ class StreamingResultsManager {
     if (!subscriptions) return;
 
     const now = Date.now();
-    
+
     for (const subscription of subscriptions) {
       if (!subscription.active) continue;
-      
+
       // Check throttling
-      if (subscription.options.throttle > 0 && 
-          now - subscription.lastUpdate < subscription.options.throttle) {
+      if (
+        subscription.options.throttle > 0 &&
+        now - subscription.lastUpdate < subscription.options.throttle
+      ) {
         continue;
       }
-      
+
       // Apply filter if specified
-      if (subscription.options.filter && 
-          !subscription.options.filter(data, metadata)) {
+      if (
+        subscription.options.filter &&
+        !subscription.options.filter(data, metadata)
+      ) {
         continue;
       }
-      
+
       // Skip partial results if not requested
       if (metadata.partial && !subscription.options.includePartial) {
         continue;
       }
-      
+
       try {
         subscription.callback(data, metadata);
         subscription.lastUpdate = now;
@@ -579,7 +651,7 @@ class StreamingResultsManager {
    */
   calculateThroughput(stream) {
     const elapsed = stream.getElapsedTime();
-    return elapsed > 0 ? (stream.getProcessedCount() / (elapsed / 1000)) : 0; // Items per second
+    return elapsed > 0 ? stream.getProcessedCount() / (elapsed / 1000) : 0; // Items per second
   }
 
   /**
@@ -595,7 +667,7 @@ class StreamingResultsManager {
    * Yield control to prevent blocking
    */
   async yieldControl() {
-    return new Promise(resolve => setTimeout(resolve, 1));
+    return new Promise((resolve) => setTimeout(resolve, 1));
   }
 
   /**
@@ -603,22 +675,25 @@ class StreamingResultsManager {
    */
   setupCacheCleanup() {
     // Cleanup expired cache entries every 2 minutes
-    setInterval(() => {
-      const now = Date.now();
-      const expiredKeys = [];
-      
-      for (const [key, cached] of this.resultCache) {
-        if (now - cached.timestamp > this.config.cacheTTL) {
-          expiredKeys.push(key);
+    setInterval(
+      () => {
+        const now = Date.now();
+        const expiredKeys = [];
+
+        for (const [key, cached] of this.resultCache) {
+          if (now - cached.timestamp > this.config.cacheTTL) {
+            expiredKeys.push(key);
+          }
         }
-      }
-      
-      expiredKeys.forEach(key => this.resultCache.delete(key));
-      
-      if (expiredKeys.length > 0) {
-        console.log(`🧹 Cleaned ${expiredKeys.length} expired cache entries`);
-      }
-    }, 2 * 60 * 1000);
+
+        expiredKeys.forEach((key) => this.resultCache.delete(key));
+
+        if (expiredKeys.length > 0) {
+          console.log(`🧹 Cleaned ${expiredKeys.length} expired cache entries`);
+        }
+      },
+      2 * 60 * 1000,
+    );
   }
 
   /**
@@ -639,9 +714,9 @@ class StreamingResultsManager {
     for (const [, cached] of this.resultCache) {
       cacheMemory += JSON.stringify(cached).length * 2; // Rough estimate
     }
-    
+
     this.performanceMetrics.memoryUsage = cacheMemory;
-    
+
     // Update other metrics based on recent activity
     // (Implementation would track latency, throughput, etc.)
   }
@@ -654,8 +729,10 @@ class StreamingResultsManager {
       ...this.streamStats,
       performanceMetrics: this.performanceMetrics,
       cacheSize: this.resultCache.size,
-      activeSubscriptions: Array.from(this.subscriptions.values())
-        .reduce((sum, subs) => sum + subs.size, 0)
+      activeSubscriptions: Array.from(this.subscriptions.values()).reduce(
+        (sum, subs) => sum + subs.size,
+        0,
+      ),
     };
   }
 
@@ -665,17 +742,17 @@ class StreamingResultsManager {
   cleanup(streamId) {
     // Remove stream
     this.streams.delete(streamId);
-    
+
     // Remove subscriptions
     this.subscriptions.delete(streamId);
-    
+
     // Remove lazy loader
     if (this.lazyLoaders.has(streamId)) {
       const lazyLoader = this.lazyLoaders.get(streamId);
       lazyLoader.destroy();
       this.lazyLoaders.delete(streamId);
     }
-    
+
     console.log(`🧹 Cleaned up stream: ${streamId}`);
   }
 
@@ -683,13 +760,13 @@ class StreamingResultsManager {
    * Destroy streaming manager
    */
   async destroy() {
-    console.log('🧹 Destroying Streaming Results Manager...');
+    console.log("🧹 Destroying Streaming Results Manager...");
 
     // Stop all streams
     for (const stream of this.streams.values()) {
       stream.abort();
     }
-    
+
     // Clear all data
     this.streams.clear();
     this.subscriptions.clear();
@@ -697,7 +774,7 @@ class StreamingResultsManager {
     this.lazyLoaders.clear();
 
     this.isInitialized = false;
-    console.log('✅ Streaming Manager destroyed');
+    console.log("✅ Streaming Manager destroyed");
   }
 }
 
@@ -709,7 +786,7 @@ class ResultStream {
     this.id = id;
     this.options = options;
     this.chunks = [];
-    this.status = 'idle';
+    this.status = "idle";
     this.startTime = null;
     this.endTime = null;
     this.progress = 0;
@@ -720,7 +797,7 @@ class ResultStream {
   }
 
   start() {
-    this.status = 'streaming';
+    this.status = "streaming";
     this.startTime = Date.now();
   }
 
@@ -728,7 +805,7 @@ class ResultStream {
     this.chunks.push(chunk);
     this.totalSize += chunk.size;
     this.processedCount += chunk.data.length;
-    
+
     if (this.options.onChunk) {
       this.options.onChunk(chunk);
     }
@@ -740,30 +817,30 @@ class ResultStream {
   }
 
   complete(result) {
-    this.status = 'completed';
+    this.status = "completed";
     this.endTime = Date.now();
-    
+
     if (this.options.onComplete) {
       this.options.onComplete({
         ...result,
         streamId: this.id,
         chunks: this.chunks.length,
-        totalSize: this.totalSize
+        totalSize: this.totalSize,
       });
     }
   }
 
   error(error) {
-    this.status = 'error';
+    this.status = "error";
     this.endTime = Date.now();
-    
+
     if (this.options.onError) {
       this.options.onError(error);
     }
   }
 
   abort() {
-    this.status = 'aborted';
+    this.status = "aborted";
     this.endTime = Date.now();
   }
 
@@ -795,14 +872,19 @@ class LazyLoader {
 
   async loadStaffData(staff, dateRange, scheduleData, options) {
     const staffKey = `staff_${staff.id}`;
-    
+
     if (this.loadingPromises.has(staffKey)) {
       return this.loadingPromises.get(staffKey);
     }
-    
-    const loadPromise = this.performLazyLoad(staff, dateRange, scheduleData, options);
+
+    const loadPromise = this.performLazyLoad(
+      staff,
+      dateRange,
+      scheduleData,
+      options,
+    );
     this.loadingPromises.set(staffKey, loadPromise);
-    
+
     try {
       const result = await loadPromise;
       this.loadedData.set(staffKey, result);
@@ -815,17 +897,17 @@ class LazyLoader {
   async performLazyLoad(staff, dateRange, scheduleData, options) {
     // Simulate lazy loading with processing
     const results = [];
-    
+
     for (const date of dateRange) {
-      const dateKey = date.toISOString().split('T')[0];
-      
+      const dateKey = date.toISOString().split("T")[0];
+
       // Simplified prediction for lazy loading
       const prediction = {
-        shift: '○', // Default to normal shift
+        shift: "○", // Default to normal shift
         confidence: 75,
-        probabilities: { '○': 0.75, '△': 0.1, '▽': 0.1, '×': 0.05 }
+        probabilities: { "○": 0.75, "△": 0.1, "▽": 0.1, "×": 0.05 },
       };
-      
+
       results.push({
         cellKey: `${staff.id}_${dateKey}`,
         staffId: staff.id,
@@ -835,15 +917,15 @@ class LazyLoader {
         confidence: prediction.confidence,
         probabilities: prediction.probabilities,
         lazyLoaded: true,
-        timestamp: Date.now()
+        timestamp: Date.now(),
       });
-      
+
       // Yield periodically
       if (results.length % 10 === 0) {
-        await new Promise(resolve => setTimeout(resolve, 1));
+        await new Promise((resolve) => setTimeout(resolve, 1));
       }
     }
-    
+
     return results;
   }
 

@@ -77,13 +77,16 @@ export class ConstraintIntegrationLayer {
     const detectedPriorities = this.detectPrioritiesFromSettings(settings);
     console.log(`📊 Detected priorities: ${detectedPriorities.join(" → ")}`);
 
-    const constraintWeights = this.convertPrioritiesToWeights(detectedPriorities);
-    const penaltyMultipliers = this.calculatePenaltyMultipliers(detectedPriorities[0]);
+    const constraintWeights =
+      this.convertPrioritiesToWeights(detectedPriorities);
+    const penaltyMultipliers = this.calculatePenaltyMultipliers(
+      detectedPriorities[0],
+    );
 
     // Convert to the standard rawConstraints format for processing
     const rawConstraints = {
       staff_groups: settings?.staffGroups || [],
-      daily_limits: settings?.dailyLimits || [], 
+      daily_limits: settings?.dailyLimits || [],
       priority_rules: settings?.priorityRules || [],
       monthly_limits: settings?.monthlyLimits || [],
       backup_assignments: settings?.backupAssignments || [],
@@ -107,46 +110,54 @@ export class ConstraintIntegrationLayer {
    */
   detectPrioritiesFromSettings(settings) {
     const priorities = [];
-    
+
     // Always prioritize staffing if they have groups or limits
     const hasStaffGroups = settings?.staffGroups?.length > 0;
     const hasDailyLimits = settings?.dailyLimits?.length > 0;
     if (hasStaffGroups || hasDailyLimits) {
       priorities.push("staffing_requirements");
     }
-    
+
     // If they set up priority rules, they care about staff requests
     const hasPriorityRules = settings?.priorityRules?.length > 0;
     if (hasPriorityRules) {
       priorities.push("staff_requests");
     }
-    
+
     // If they have complex groups, they care about team dynamics
-    const hasComplexGroups = hasStaffGroups && settings.staffGroups.some(g => g.members?.length > 2);
+    const hasComplexGroups =
+      hasStaffGroups && settings.staffGroups.some((g) => g.members?.length > 2);
     if (hasComplexGroups) {
       priorities.push("team_dynamics");
     }
-    
+
     // If they have monthly limits, they care about fairness
     const hasMonthlyLimits = settings?.monthlyLimits?.length > 0;
     if (hasMonthlyLimits) {
       priorities.push("fair_treatment");
     }
-    
+
     // Cost control comes last unless specifically indicated
-    const hasStrictLimits = hasDailyLimits && settings.dailyLimits.some(l => l.isHardConstraint);
+    const hasStrictLimits =
+      hasDailyLimits && settings.dailyLimits.some((l) => l.isHardConstraint);
     if (hasStrictLimits) {
       priorities.push("cost_control");
     }
-    
+
     // Fill in defaults for any missing priorities
-    const allPriorities = ["staffing_requirements", "fair_treatment", "staff_requests", "team_dynamics", "cost_control"];
-    allPriorities.forEach(p => {
+    const allPriorities = [
+      "staffing_requirements",
+      "fair_treatment",
+      "staff_requests",
+      "team_dynamics",
+      "cost_control",
+    ];
+    allPriorities.forEach((p) => {
       if (!priorities.includes(p)) {
         priorities.push(p);
       }
     });
-    
+
     return priorities;
   }
 
@@ -169,10 +180,10 @@ export class ConstraintIntegrationLayer {
     };
 
     const baseWeights = [40, 30, 20, 15, 10];
-    
+
     priorityOrder.forEach((priorityId, index) => {
       const weight = baseWeights[index] || 5;
-      
+
       switch (priorityId) {
         case "staffing_requirements":
           weights.minimum_coverage = weight * 1.5;
@@ -197,7 +208,7 @@ export class ConstraintIntegrationLayer {
           break;
       }
     });
-    
+
     return weights;
   }
 
@@ -207,17 +218,41 @@ export class ConstraintIntegrationLayer {
   calculatePenaltyMultipliers(topPriority) {
     switch (topPriority) {
       case "staffing_requirements":
-        return { hard_constraint_violation: 2000, soft_constraint_violation: 100, preference_violation: 20 };
+        return {
+          hard_constraint_violation: 2000,
+          soft_constraint_violation: 100,
+          preference_violation: 20,
+        };
       case "fair_treatment":
-        return { hard_constraint_violation: 1200, soft_constraint_violation: 80, preference_violation: 40 };
+        return {
+          hard_constraint_violation: 1200,
+          soft_constraint_violation: 80,
+          preference_violation: 40,
+        };
       case "staff_requests":
-        return { hard_constraint_violation: 800, soft_constraint_violation: 60, preference_violation: 60 };
+        return {
+          hard_constraint_violation: 800,
+          soft_constraint_violation: 60,
+          preference_violation: 60,
+        };
       case "cost_control":
-        return { hard_constraint_violation: 1500, soft_constraint_violation: 120, preference_violation: 15 };
+        return {
+          hard_constraint_violation: 1500,
+          soft_constraint_violation: 120,
+          preference_violation: 15,
+        };
       case "team_dynamics":
-        return { hard_constraint_violation: 1000, soft_constraint_violation: 70, preference_violation: 30 };
+        return {
+          hard_constraint_violation: 1000,
+          soft_constraint_violation: 70,
+          preference_violation: 30,
+        };
       default:
-        return { hard_constraint_violation: 1000, soft_constraint_violation: 50, preference_violation: 10 };
+        return {
+          hard_constraint_violation: 1000,
+          soft_constraint_violation: 50,
+          preference_violation: 10,
+        };
     }
   }
 

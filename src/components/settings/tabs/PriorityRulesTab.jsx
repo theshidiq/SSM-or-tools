@@ -176,7 +176,7 @@ const PriorityRulesTab = ({
 
   const handleDeleteConfirm = async () => {
     if (!deleteConfirmation) return;
-    
+
     setIsDeleting(true);
     try {
       const { id } = deleteConfirmation;
@@ -184,10 +184,10 @@ const PriorityRulesTab = ({
       const rulesArray = Array.isArray(priorityRules) ? priorityRules : [];
       const updatedRules = rulesArray.filter((rule) => rule.id !== id);
       updatePriorityRules(updatedRules);
-      
+
       setDeleteConfirmation(null);
     } catch (error) {
-      console.error('Error deleting priority rule:', error);
+      console.error("Error deleting priority rule:", error);
     } finally {
       setIsDeleting(false);
     }
@@ -635,7 +635,7 @@ const PriorityRulesTab = ({
           </button>
         </div>
       )}
-      
+
       {/* Delete Confirmation Modal */}
       <ConfirmationModal
         isOpen={deleteConfirmation !== null}

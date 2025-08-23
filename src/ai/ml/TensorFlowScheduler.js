@@ -102,12 +102,14 @@ export class TensorFlowScheduler {
             enableBatchNormalization: true,
             dropoutRate: 0.3, // Prevent overfitting
           });
-          
+
           if (!this.model) {
             throw new Error("Failed to create TensorFlow model");
           }
-          
-          console.log(`✅ Model created with ${this.model.countParams()} parameters`);
+
+          console.log(
+            `✅ Model created with ${this.model.countParams()} parameters`,
+          );
           await this.saveModelVersion();
         } catch (error) {
           console.error("❌ Model creation failed:", error);
@@ -338,24 +340,34 @@ export class TensorFlowScheduler {
       console.log("⚠️ Model not initialized, initializing...");
       await this.initialize();
     }
-    
+
     // Ensure model is available after initialization
     if (!this.model) {
       console.error("❌ TensorFlow model not available after initialization");
-      throw new Error("TensorFlow model initialization failed - no model available");
+      throw new Error(
+        "TensorFlow model initialization failed - no model available",
+      );
     }
-    
+
     // Check if model needs training
     const modelInfo = this.getModelInfo();
     if (!modelInfo || modelInfo.accuracy === 0) {
       console.log("🎓 Model needs training, training on current data...");
       try {
-        const trainingResult = await this.trainModel(staffMembers, { forceRetrain: false });
+        const trainingResult = await this.trainModel(staffMembers, {
+          forceRetrain: false,
+        });
         if (!trainingResult?.success) {
-          console.warn("⚠️ Training failed, will use untrained model with reduced accuracy");
+          console.warn(
+            "⚠️ Training failed, will use untrained model with reduced accuracy",
+          );
         }
       } catch (trainingError) {
-        console.warn("⚠️ Training error:", trainingError.message, "- proceeding with untrained model");
+        console.warn(
+          "⚠️ Training error:",
+          trainingError.message,
+          "- proceeding with untrained model",
+        );
       }
     }
 
@@ -421,7 +433,11 @@ export class TensorFlowScheduler {
         predictionConfidence[staff.id] = {};
 
         // **CRITICAL FIX: Process dates in chunks with yielding**
-        for (let startIndex = 0; startIndex < dateRange.length; startIndex += CHUNK_SIZE) {
+        for (
+          let startIndex = 0;
+          startIndex < dateRange.length;
+          startIndex += CHUNK_SIZE
+        ) {
           const endIndex = Math.min(startIndex + CHUNK_SIZE, dateRange.length);
           const dateChunk = dateRange.slice(startIndex, endIndex);
 
@@ -452,13 +468,25 @@ export class TensorFlowScheduler {
                 staffMembers,
               });
             } catch (featureError) {
-              console.warn(`⚠️ Feature generation failed for ${staff.name} on ${dateKey}:`, featureError.message);
+              console.warn(
+                `⚠️ Feature generation failed for ${staff.name} on ${dateKey}:`,
+                featureError.message,
+              );
               features = null;
             }
 
-            if (!features || !Array.isArray(features) || features.length !== MODEL_CONFIG.INPUT_FEATURES.TOTAL) {
-              console.warn(`⚠️ Invalid features for ${staff.name} on ${dateKey}, using emergency fallback`);
-              const emergencyShift = this.getEmergencyShift(staff, date.getDay());
+            if (
+              !features ||
+              !Array.isArray(features) ||
+              features.length !== MODEL_CONFIG.INPUT_FEATURES.TOTAL
+            ) {
+              console.warn(
+                `⚠️ Invalid features for ${staff.name} on ${dateKey}, using emergency fallback`,
+              );
+              const emergencyShift = this.getEmergencyShift(
+                staff,
+                date.getDay(),
+              );
               predictions[staff.id][dateKey] = emergencyShift;
               predictionConfidence[staff.id][dateKey] = 0.5;
               processedCount++;
@@ -474,7 +502,8 @@ export class TensorFlowScheduler {
                 // Convert prediction to shift symbol
                 const shiftSymbol = this.predictionToShift(result.predictions);
                 predictions[staff.id][dateKey] = shiftSymbol;
-                predictionConfidence[staff.id][dateKey] = result.confidence || 0.8;
+                predictionConfidence[staff.id][dateKey] =
+                  result.confidence || 0.8;
               } else {
                 throw new Error(result.error || "Prediction failed");
               }
@@ -482,7 +511,10 @@ export class TensorFlowScheduler {
               console.warn(
                 `⚠️ TensorFlow prediction failed for ${staff.name} on ${dateKey}: ${error.message}, using emergency fallback`,
               );
-              const emergencyShift = this.getEmergencyShift(staff, date.getDay());
+              const emergencyShift = this.getEmergencyShift(
+                staff,
+                date.getDay(),
+              );
               predictions[staff.id][dateKey] = emergencyShift;
               predictionConfidence[staff.id][dateKey] = 0.6;
             }
@@ -492,7 +524,7 @@ export class TensorFlowScheduler {
 
           // **CRITICAL: Yield control to UI thread every chunk to prevent blocking**
           if (startIndex + CHUNK_SIZE < dateRange.length) {
-            await new Promise(resolve => {
+            await new Promise((resolve) => {
               setTimeout(resolve, 1); // 1ms yield to allow UI updates
             });
           }
@@ -539,13 +571,15 @@ export class TensorFlowScheduler {
       }
 
       // Handle single feature vector wrapped in array
-      const features = Array.isArray(featuresArray[0]) ? featuresArray[0] : featuresArray;
+      const features = Array.isArray(featuresArray[0])
+        ? featuresArray[0]
+        : featuresArray;
 
       // Make prediction using TensorFlow model
       const inputTensor = tf.tensor2d([features]);
       const prediction = this.model.predict(inputTensor);
       const probabilities = await prediction.data();
-      
+
       // Clean up tensors
       inputTensor.dispose();
       prediction.dispose();
@@ -557,18 +591,18 @@ export class TensorFlowScheduler {
         predictions: Array.from(probabilities),
         confidence,
         predictedClass,
-        success: true
+        success: true,
       };
     } catch (error) {
       console.error("❌ Batch prediction failed:", error);
-      
+
       // Return fallback prediction
       return {
         predictions: [0.1, 0.4, 0.2, 0.2, 0.1], // Bias toward normal shift (○)
         confidence: 0.6,
         predictedClass: 1, // Default to normal shift
         success: false,
-        error: error.message
+        error: error.message,
       };
     }
   }
@@ -682,14 +716,14 @@ export class TensorFlowScheduler {
       if (dayOfWeek === 6) return "○"; // Saturday normal
       return "○"; // Default normal shift
     }
-    
+
     if (staff.name === "与儀") {
       // Part-time staff - pattern based on common schedules
       if (dayOfWeek === 0) return "×"; // Sunday off
       if (dayOfWeek === 3) return "×"; // Wednesday off
       return "○"; // Normal shift when working
     }
-    
+
     // General patterns based on staff status and day of week
     if (staff.status === "パート") {
       // Part-time staff - more likely to have off days
@@ -697,7 +731,7 @@ export class TensorFlowScheduler {
       if (Math.random() < 0.3) return "×"; // 30% chance of weekday off
       return "○"; // Normal shift
     }
-    
+
     if (staff.status === "社員") {
       // Full-time staff - more varied shifts
       if (dayOfWeek === 1) return "×"; // Monday off (common in restaurants)
@@ -705,7 +739,7 @@ export class TensorFlowScheduler {
       if (dayOfWeek === 6) return "▽"; // Saturday late shift
       return "○"; // Normal shift
     }
-    
+
     // Default fallback - bias toward working shifts
     if (dayOfWeek === 0) return Math.random() < 0.7 ? "○" : "×"; // Sunday
     if (dayOfWeek === 1) return Math.random() < 0.3 ? "×" : "○"; // Monday
@@ -1827,28 +1861,28 @@ export class TensorFlowScheduler {
   createSimpleFallbackModel() {
     try {
       console.log("🆘 Creating simple fallback model...");
-      
+
       const model = tf.sequential({
         layers: [
           tf.layers.dense({
             inputShape: [MODEL_CONFIG.INPUT_FEATURES.TOTAL],
             units: 32,
-            activation: 'relu',
-            name: 'fallback_hidden'
+            activation: "relu",
+            name: "fallback_hidden",
           }),
-          tf.layers.dropout({ rate: 0.2, name: 'fallback_dropout' }),
+          tf.layers.dropout({ rate: 0.2, name: "fallback_dropout" }),
           tf.layers.dense({
             units: MODEL_CONFIG.ARCHITECTURE.OUTPUT_SIZE,
-            activation: 'softmax',
-            name: 'fallback_output'
-          })
-        ]
+            activation: "softmax",
+            name: "fallback_output",
+          }),
+        ],
       });
 
       model.compile({
-        optimizer: 'adam',
-        loss: 'categoricalCrossentropy',
-        metrics: ['accuracy']
+        optimizer: "adam",
+        loss: "categoricalCrossentropy",
+        metrics: ["accuracy"],
       });
 
       console.log("✅ Fallback model created successfully");

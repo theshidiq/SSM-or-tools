@@ -68,7 +68,7 @@ const StaffGroupsTab = ({
   const [deleteConfirmation, setDeleteConfirmation] = useState(null); // null or { groupId, groupName }
   const [isDeleting, setIsDeleting] = useState(false);
   const [deleteSuccess, setDeleteSuccess] = useState(false); // Track if delete was successful
-  
+
   // Backup staff service hook for database integration
   const {
     backupAssignments: hookBackupAssignments,
@@ -82,9 +82,9 @@ const StaffGroupsTab = ({
   } = useBackupStaffService();
 
   // Use ref to persist modal state across parent re-renders
-  const modalStateRef = useRef({ 
-    deleteConfirmation: null, 
-    deleteSuccess: false 
+  const modalStateRef = useRef({
+    deleteConfirmation: null,
+    deleteSuccess: false,
   });
 
   // Synchronize local state with ref to handle parent re-renders
@@ -108,13 +108,20 @@ const StaffGroupsTab = ({
   );
   // Prefer hook backup assignments (from database) over settings
   const backupAssignments = useMemo(
-    () => hookBackupAssignments.length > 0 ? hookBackupAssignments : (settings?.backupAssignments || []),
+    () =>
+      hookBackupAssignments.length > 0
+        ? hookBackupAssignments
+        : settings?.backupAssignments || [],
     [hookBackupAssignments, settings?.backupAssignments],
   );
 
   // Keep settings in sync with hook backup assignments
   useEffect(() => {
-    if (hookBackupAssignments.length > 0 && JSON.stringify(hookBackupAssignments) !== JSON.stringify(settings?.backupAssignments)) {
+    if (
+      hookBackupAssignments.length > 0 &&
+      JSON.stringify(hookBackupAssignments) !==
+        JSON.stringify(settings?.backupAssignments)
+    ) {
       onSettingsChange({
         ...settings,
         backupAssignments: hookBackupAssignments,
@@ -131,7 +138,6 @@ const StaffGroupsTab = ({
     },
     [settings, onSettingsChange],
   );
-
 
   // Automatically ensure all groups have intra-group conflict rules enabled
   // Use a ref to prevent interference with delete operations
@@ -281,11 +287,11 @@ const StaffGroupsTab = ({
       const confirmationData = { groupId, groupName: group.name };
       setDeleteConfirmation(confirmationData);
       setDeleteSuccess(false); // Reset success state
-      
+
       // Update ref to persist across re-renders
-      modalStateRef.current = { 
-        deleteConfirmation: confirmationData, 
-        deleteSuccess: false 
+      modalStateRef.current = {
+        deleteConfirmation: confirmationData,
+        deleteSuccess: false,
       };
     }
   };
@@ -313,7 +319,7 @@ const StaffGroupsTab = ({
       const relatedBackupAssignments = backupAssignments.filter(
         (assignment) => assignment.groupId === groupId,
       );
-      
+
       // Remove each backup assignment through the hook for proper database sync
       for (const assignment of relatedBackupAssignments) {
         await hookRemoveBackupAssignment(assignment.id);
@@ -329,21 +335,20 @@ const StaffGroupsTab = ({
       // Show success state first (before updating settings to prevent parent modal from closing)
       setDeleteSuccess(true);
       setIsDeleting(false);
-      
+
       // Auto-close the confirmation modal after showing success message
       setTimeout(() => {
         // Update settings AFTER the success message is shown and modal is closing
         onSettingsChange(updatedSettings);
-        
+
         // Clean up modal state
         setDeleteConfirmation(null);
         setDeleteSuccess(false);
-        modalStateRef.current = { 
-          deleteConfirmation: null, 
-          deleteSuccess: false 
+        modalStateRef.current = {
+          deleteConfirmation: null,
+          deleteSuccess: false,
         };
       }, 1500); // Show success message for 1.5 seconds
-      
     } catch (error) {
       console.error("Error deleting group:", error);
     } finally {
@@ -357,11 +362,11 @@ const StaffGroupsTab = ({
   const handleDeleteCancel = () => {
     setDeleteConfirmation(null);
     setDeleteSuccess(false);
-    
+
     // Reset ref state
-    modalStateRef.current = { 
-      deleteConfirmation: null, 
-      deleteSuccess: false 
+    modalStateRef.current = {
+      deleteConfirmation: null,
+      deleteSuccess: false,
     };
   };
 
@@ -390,25 +395,25 @@ const StaffGroupsTab = ({
   // Use hook-based backup assignment functions with database persistence
   const addBackupAssignment = async (staffId, groupId) => {
     const success = await hookAddBackupAssignment(staffId, groupId, {
-      assignmentType: 'regular',
+      assignmentType: "regular",
       priorityOrder: 1,
-      notes: '',
+      notes: "",
     });
-    
+
     if (!success && backupError) {
-      console.error('Failed to add backup assignment:', backupError);
+      console.error("Failed to add backup assignment:", backupError);
     }
-    
+
     return success;
   };
 
   const removeBackupAssignment = async (assignmentId) => {
     const success = await hookRemoveBackupAssignment(assignmentId);
-    
+
     if (!success && backupError) {
-      console.error('Failed to remove backup assignment:', backupError);
+      console.error("Failed to remove backup assignment:", backupError);
     }
-    
+
     return success;
   };
 
@@ -1018,7 +1023,9 @@ const StaffGroupsTab = ({
         isOpen={deleteConfirmation !== null}
         onClose={handleDeleteCancel}
         onConfirm={deleteSuccess ? null : handleDeleteConfirm}
-        title={deleteSuccess ? "Group Deleted Successfully" : "Delete Staff Group"}
+        title={
+          deleteSuccess ? "Group Deleted Successfully" : "Delete Staff Group"
+        }
         message={
           deleteSuccess
             ? `The group "${deleteConfirmation?.groupName}" has been successfully deleted along with any related conflict rules and backup assignments.`

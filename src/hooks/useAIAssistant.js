@@ -8,9 +8,9 @@
 import { useState, useCallback, useRef, useEffect } from "react";
 import { optimizedStorage } from "../utils/storageUtils";
 import { generateDateRange } from "../utils/dateUtils";
-import { 
-  onConfigurationCacheInvalidated, 
-  refreshAllConfigurations 
+import {
+  onConfigurationCacheInvalidated,
+  refreshAllConfigurations,
 } from "../ai/constraints/ConstraintEngine";
 
 // Enhanced imports for production-ready AI system
@@ -35,9 +35,11 @@ const loadEnhancedAISystem = async () => {
       "../ai/ml/TensorFlowScheduler"
     );
     const { aiErrorHandler } = await import("../ai/utils/ErrorHandler");
-    
+
     // Load performance optimization system
-    const { AIPerformanceManager } = await import("../ai/performance/AIPerformanceManager");
+    const { AIPerformanceManager } = await import(
+      "../ai/performance/AIPerformanceManager"
+    );
 
     return {
       HybridPredictor,
@@ -89,7 +91,7 @@ export const useAIAssistant = (
   const [errorHistory, setErrorHistory] = useState([]);
   const [lastError, setLastError] = useState(null);
   const [recoveryAttempts, setRecoveryAttempts] = useState(0);
-  const [configurationStatus, setConfigurationStatus] = useState('unknown');
+  const [configurationStatus, setConfigurationStatus] = useState("unknown");
   const aiSystemRef = useRef(null);
   const performanceManagerRef = useRef(null);
   const configInvalidationUnsubscribe = useRef(null);
@@ -103,25 +105,36 @@ export const useAIAssistant = (
   // Set up configuration change monitoring
   useEffect(() => {
     // Set up cache invalidation listener
-    configInvalidationUnsubscribe.current = onConfigurationCacheInvalidated(() => {
-      console.log("🔄 useAIAssistant: Configuration updated, marking for refresh...");
-      setConfigurationStatus('updated');
-      
-      // If AI system is initialized, notify it about the update
-      const system = aiSystemRef.current;
-      if (system && system.type === "enhanced") {
-        try {
-          if (system.hybridPredictor && typeof system.hybridPredictor.onConfigurationUpdated === 'function') {
-            system.hybridPredictor.onConfigurationUpdated();
+    configInvalidationUnsubscribe.current = onConfigurationCacheInvalidated(
+      () => {
+        console.log(
+          "🔄 useAIAssistant: Configuration updated, marking for refresh...",
+        );
+        setConfigurationStatus("updated");
+
+        // If AI system is initialized, notify it about the update
+        const system = aiSystemRef.current;
+        if (system && system.type === "enhanced") {
+          try {
+            if (
+              system.hybridPredictor &&
+              typeof system.hybridPredictor.onConfigurationUpdated ===
+                "function"
+            ) {
+              system.hybridPredictor.onConfigurationUpdated();
+            }
+          } catch (error) {
+            console.warn(
+              "⚠️ Failed to notify AI system of configuration update:",
+              error,
+            );
           }
-        } catch (error) {
-          console.warn("⚠️ Failed to notify AI system of configuration update:", error);
         }
-      }
-    });
-    
-    setConfigurationStatus('monitoring');
-    
+      },
+    );
+
+    setConfigurationStatus("monitoring");
+
     return () => {
       if (configInvalidationUnsubscribe.current) {
         configInvalidationUnsubscribe.current();
@@ -809,23 +822,27 @@ export const useAIAssistant = (
       try {
         console.log("🔄 Refreshing AI configuration...");
         await refreshAllConfigurations();
-        setConfigurationStatus('refreshed');
-        
+        setConfigurationStatus("refreshed");
+
         // Force AI system to refresh if it supports it
         const system = aiSystemRef.current;
         if (system && system.type === "enhanced") {
-          if (system.hybridPredictor && typeof system.hybridPredictor.forceRefreshConfiguration === 'function') {
+          if (
+            system.hybridPredictor &&
+            typeof system.hybridPredictor.forceRefreshConfiguration ===
+              "function"
+          ) {
             await system.hybridPredictor.forceRefreshConfiguration();
           }
         }
-        
+
         return { success: true };
       } catch (error) {
         console.error("❌ Failed to refresh configuration:", error);
         return { success: false, error: error.message };
       }
     },
-    
+
     // Recovery utilities
     clearErrors: () => {
       setLastError(null);

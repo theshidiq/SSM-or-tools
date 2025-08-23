@@ -10,22 +10,22 @@ import "@testing-library/jest-dom";
  */
 
 // Mock TensorFlow.js for Jest environment
-jest.mock('@tensorflow/tfjs', () => {
+jest.mock("@tensorflow/tfjs", () => {
   const mockTensor = {
     id: Math.random().toString(),
     shape: [1, 1],
-    dtype: 'float32',
+    dtype: "float32",
     size: 1,
     isDisposed: false,
-    dispose: jest.fn()
+    dispose: jest.fn(),
   };
 
   const mockEngine = {
     startScope: jest.fn(),
     endScope: jest.fn(() => mockTensor),
     state: {
-      tensorInfo: new Map()
-    }
+      tensorInfo: new Map(),
+    },
   };
 
   return {
@@ -35,20 +35,20 @@ jest.mock('@tensorflow/tfjs', () => {
       numBytes: 1024 * 1024,
       numTensors: 10,
       numDataBuffers: 5,
-      unreliable: false
+      unreliable: false,
     })),
     tidy: jest.fn((fn) => fn()),
     dispose: jest.fn(),
     engine: jest.fn(() => mockEngine),
-    getBackend: jest.fn(() => 'cpu'),
+    getBackend: jest.fn(() => "cpu"),
     env: jest.fn(() => ({
       set: jest.fn(),
       get: jest.fn(() => true),
-      getFlags: jest.fn(() => ({}))
+      getFlags: jest.fn(() => ({})),
     })),
     util: {
-      createScalarValue: jest.fn()
-    }
+      createScalarValue: jest.fn(),
+    },
   };
 });
 
@@ -62,21 +62,21 @@ if (!global.performance.memory) {
   global.performance.memory = {
     usedJSHeapSize: 10 * 1024 * 1024, // 10MB
     totalJSHeapSize: 50 * 1024 * 1024, // 50MB
-    jsHeapSizeLimit: 100 * 1024 * 1024 // 100MB
+    jsHeapSizeLimit: 100 * 1024 * 1024, // 100MB
   };
 }
 
 // Mock performance.getEntriesByType for PerformanceMonitor
 if (!global.performance.getEntriesByType) {
   global.performance.getEntriesByType = jest.fn((type) => {
-    if (type === 'measure') {
+    if (type === "measure") {
       return [
         {
-          name: 'test-measure',
-          entryType: 'measure',
+          name: "test-measure",
+          entryType: "measure",
           startTime: 0,
-          duration: 100
-        }
+          duration: 100,
+        },
       ];
     }
     return [];
@@ -103,11 +103,11 @@ global.PerformanceObserver = class MockPerformanceObserver {
   constructor(callback) {
     this.callback = callback;
   }
-  
+
   observe(options) {
     // Mock implementation - don't actually observe
   }
-  
+
   disconnect() {
     // Mock implementation
   }
@@ -127,10 +127,10 @@ global.Worker = class MockWorker {
       if (this.onmessage) {
         this.onmessage({
           data: {
-            type: 'success',
+            type: "success",
             result: data,
-            processingTime: 100
-          }
+            processingTime: 100,
+          },
         });
       }
     }, 10);
@@ -146,21 +146,34 @@ const originalConsoleLog = console.log;
 const originalConsoleWarn = console.warn;
 
 console.log = (...args) => {
-  const message = args.join(' ');
-  if (!message.includes('🧠') && !message.includes('TensorFlow') && 
-      !message.includes('Memory Manager') && !message.includes('Performance') &&
-      !message.includes('🚀') && !message.includes('✅') && !message.includes('⚠️')) {
+  const message = args.join(" ");
+  if (
+    !message.includes("🧠") &&
+    !message.includes("TensorFlow") &&
+    !message.includes("Memory Manager") &&
+    !message.includes("Performance") &&
+    !message.includes("🚀") &&
+    !message.includes("✅") &&
+    !message.includes("⚠️")
+  ) {
     originalConsoleLog.apply(console, args);
   }
 };
 
 console.warn = (...args) => {
-  const message = args.join(' ');
-  if (!message.includes('TensorFlow') && !message.includes('Memory') && 
-      !message.includes('Performance Observer') && !message.includes('hooks') &&
-      !message.includes('engine') && !message.includes('tensor') &&
-      !message.includes('Error collecting metrics') && !message.includes('performance.getEntriesByType') &&
-      !message.includes('Unknown worker message type') && !message.includes('PerformanceObserver not supported')) {
+  const message = args.join(" ");
+  if (
+    !message.includes("TensorFlow") &&
+    !message.includes("Memory") &&
+    !message.includes("Performance Observer") &&
+    !message.includes("hooks") &&
+    !message.includes("engine") &&
+    !message.includes("tensor") &&
+    !message.includes("Error collecting metrics") &&
+    !message.includes("performance.getEntriesByType") &&
+    !message.includes("Unknown worker message type") &&
+    !message.includes("PerformanceObserver not supported")
+  ) {
     originalConsoleWarn.apply(console, args);
   }
 };
@@ -168,4 +181,6 @@ console.warn = (...args) => {
 // Setup longer timeout for ML tests
 jest.setTimeout(30000); // 30 seconds
 
-console.log('✅ Test environment setup completed with TensorFlow.js compatibility mocks');
+console.log(
+  "✅ Test environment setup completed with TensorFlow.js compatibility mocks",
+);

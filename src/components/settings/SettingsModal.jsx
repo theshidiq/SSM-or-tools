@@ -59,7 +59,9 @@ const SettingsModal = ({
   const handleOutsideClick = (event) => {
     if (modalRef.current && !modalRef.current.contains(event.target)) {
       // Check if click is on a confirmation modal (higher z-index)
-      const targetZIndex = window.getComputedStyle(event.target.closest('[role="dialog"]') || event.target).zIndex;
+      const targetZIndex = window.getComputedStyle(
+        event.target.closest('[role="dialog"]') || event.target,
+      ).zIndex;
       if (parseInt(targetZIndex) > 10000) {
         return; // Don't close if clicking on a higher z-index modal
       }
@@ -75,7 +77,9 @@ const SettingsModal = ({
       // Close modal on Escape - but not if there's a confirmation modal open
       if (event.key === "Escape") {
         // Check if there's a confirmation modal open (higher z-index)
-        const confirmationModal = document.querySelector('[role="dialog"][style*="z-index: 50000"], [role="dialog"][style*="zIndex: 50000"]');
+        const confirmationModal = document.querySelector(
+          '[role="dialog"][style*="z-index: 50000"], [role="dialog"][style*="zIndex: 50000"]',
+        );
         if (confirmationModal) {
           return; // Let the confirmation modal handle the escape key
         }
@@ -117,7 +121,7 @@ const SettingsModal = ({
       onResetConfig();
       setResetConfirmation(false);
     } catch (error) {
-      console.error('Error resetting configuration:', error);
+      console.error("Error resetting configuration:", error);
     } finally {
       setIsResetting(false);
     }
@@ -299,7 +303,7 @@ const SettingsModal = ({
           </div>
         </div>
       </div>
-      
+
       {/* Reset Confirmation Modal - Moved outside to prevent z-index issues */}
       {resetConfirmation && (
         <ConfirmationModal
