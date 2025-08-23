@@ -690,26 +690,49 @@ export class ConfigurationService {
    */
   async checkSupabaseConnection() {
     try {
-      const { data, error } = await supabase
-        .from("restaurants")
-        .select("id")
-        .limit(1);
+      // Add timeout to prevent blocking on startup
+      const timeoutPromise = new Promise((_, reject) =>
+        setTimeout(
+          () => reject(new Error("Supabase connection timeout")),
+          3000,
+        ),
+      );
+
+      const queryPromise = supabase.from("restaurants").select("id").limit(1);
+
+      const { data, error } = await Promise.race([
+        queryPromise,
+        timeoutPromise,
+      ]);
 
       if (error) throw error;
 
       this.isSupabaseEnabled = true;
 
-      // Get or create restaurant entry
+      // Get or create restaurant entry (also with timeout)
       if (data && data.length > 0) {
         this.restaurantId = data[0].id;
       } else {
-        await this.createRestaurantEntry();
+        // Do this in background to not block initialization
+        setTimeout(async () => {
+          try {
+            await this.createRestaurantEntry();
+          } catch (error) {
+            console.warn("⚠️ Failed to create restaurant entry:", error);
+          }
+        }, 100);
       }
 
       console.log("✅ Supabase configuration sync enabled");
 
-      // Load settings from database if available
-      await this.loadFromDatabase();
+      // Load settings from database in background to not block initialization
+      setTimeout(async () => {
+        try {
+          await this.loadFromDatabase();
+        } catch (error) {
+          console.warn("⚠️ Failed to load from database:", error);
+        }
+      }, 200);
 
       this.supabaseInitialized = true;
     } catch (error) {

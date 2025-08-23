@@ -105,43 +105,76 @@ export const useAIAssistant = (
 
   // Set up configuration change monitoring and cache initialization
   useEffect(() => {
-    const initializeConfigurationSystem = async () => {
+    const initializeConfigurationSystem = () => {
       try {
         console.log("🚀 Initializing AI configuration system...");
-        
-        // Initialize configuration cache (prevents main thread blocking)
-        if (!configurationCache.isHealthy()) {
-          console.log("📦 Pre-loading system configurations...");
-          await configurationCache.initialize();
-          console.log("✅ Configuration cache ready - AI will use instant access");
-        }
 
-        // Set up cache change listener to refresh when settings change
+        // Set up cache change listener immediately (non-blocking)
         configurationCache.addChangeListener((changedType) => {
           console.log(`🔄 Configuration changed: ${changedType}`);
           setConfigurationStatus("updated");
-          
+
           // Notify AI system of the change
           const system = aiSystemRef.current;
           if (system && system.type === "enhanced") {
             try {
               if (
                 system.hybridPredictor &&
-                typeof system.hybridPredictor.onConfigurationUpdated === "function"
+                typeof system.hybridPredictor.onConfigurationUpdated ===
+                  "function"
               ) {
                 system.hybridPredictor.onConfigurationUpdated();
               }
             } catch (error) {
-              console.warn("⚠️ Failed to notify AI system of configuration update:", error);
+              console.warn(
+                "⚠️ Failed to notify AI system of configuration update:",
+                error,
+              );
             }
           }
         });
 
-        setConfigurationStatus("ready");
-        console.log("🎯 AI configuration system ready - optimized for performance");
+        setConfigurationStatus("initializing");
+        console.log("🎯 AI configuration system listeners ready");
 
+        // Initialize cache asynchronously in background (non-blocking)
+        setTimeout(async () => {
+          try {
+            if (!configurationCache.isHealthy()) {
+              console.log(
+                "📦 Pre-loading system configurations in background...",
+              );
+              
+              // Use requestIdleCallback if available for better performance
+              const initializeCache = async () => {
+                await configurationCache.initialize();
+                console.log(
+                  "✅ Configuration cache ready - AI will use instant access",
+                );
+                setConfigurationStatus("ready");
+              };
+
+              if (typeof requestIdleCallback !== 'undefined') {
+                requestIdleCallback(async () => {
+                  await initializeCache();
+                }, { timeout: 5000 });
+              } else {
+                await initializeCache();
+              }
+            } else {
+              setConfigurationStatus("ready");
+            }
+          } catch (error) {
+            console.warn(
+              "⚠️ Configuration cache initialization failed, using fallbacks:",
+              error,
+            );
+            setConfigurationStatus("fallback");
+            // Don't throw - continue with fallback configurations
+          }
+        }, 50); // Longer delay to ensure UI render is complete
       } catch (error) {
-        console.error("❌ Failed to initialize configuration system:", error);
+        console.error("❌ Failed to setup configuration system:", error);
         setConfigurationStatus("error");
       }
     };
@@ -155,7 +188,7 @@ export const useAIAssistant = (
       },
     );
 
-    // Initialize the configuration system
+    // Initialize the configuration system (non-blocking)
     initializeConfigurationSystem();
 
     return () => {

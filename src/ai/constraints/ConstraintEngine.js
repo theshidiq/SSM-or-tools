@@ -99,29 +99,42 @@ const getCachedConfig = async (configType) => {
 
   console.log(`🔄 Loading fresh ${configType} configuration...`);
 
-  // Load fresh configuration
+  // Load fresh configuration with timeout protection
   if (configService) {
     try {
-      let config;
+      // Add timeout to prevent blocking
+      const timeoutPromise = new Promise((_, reject) =>
+        setTimeout(
+          () =>
+            reject(
+              new Error(`Configuration loading timeout for ${configType}`),
+            ),
+          5000,
+        ),
+      );
+
+      let configPromise;
       switch (configType) {
         case "staff_groups":
-          config = await configService.getStaffGroups();
+          configPromise = configService.getStaffGroups();
           break;
         case "priority_rules":
-          config = await configService.getPriorityRules();
+          configPromise = configService.getPriorityRules();
           break;
         case "daily_limits":
-          config = await configService.getDailyLimits();
+          configPromise = configService.getDailyLimits();
           break;
         case "monthly_limits":
-          config = await configService.getMonthlyLimits();
+          configPromise = configService.getMonthlyLimits();
           break;
         case "backup_assignments":
-          config = await configService.getBackupAssignments();
+          configPromise = configService.getBackupAssignments();
           break;
         default:
-          config = null;
+          configPromise = Promise.resolve(null);
       }
+
+      const config = await Promise.race([configPromise, timeoutPromise]);
 
       if (config) {
         configCache.set(configType, config);
@@ -137,7 +150,10 @@ const getCachedConfig = async (configType) => {
         return config;
       }
     } catch (error) {
-      console.warn(`⚠️ Failed to load ${configType} configuration:`, error);
+      console.warn(
+        `⚠️ Failed to load ${configType} configuration (using fallback):`,
+        error.message,
+      );
     }
   }
 
@@ -1462,20 +1478,49 @@ export const getViolationRecommendations = (violations) => {
  */
 export const getAllConfigurations = async () => {
   try {
+    // Helper to add timeout protection to configuration calls
+    const withTimeout = (promise, name, timeoutMs = 3000) => {
+      return Promise.race([
+        promise,
+        new Promise((_, reject) => 
+          setTimeout(() => reject(new Error(`${name} loading timeout after ${timeoutMs}ms`)), timeoutMs)
+        )
+      ]);
+    };
+
+    // Load all configurations with individual timeout protection
+    const [
+      staffGroups,
+      dailyLimits, 
+      priorityRules,
+      businessRules,
+      constraintConfig,
+      systemSettings,
+      _checksum
+    ] = await Promise.allSettled([
+      withTimeout(getStaffConflictGroups(), 'staffGroups'),
+      withTimeout(getDailyLimits(), 'dailyLimits'),
+      withTimeout(getPriorityRules(), 'priorityRules'),
+      withTimeout(getBusinessRules(), 'businessRules'),
+      withTimeout(getConstraintConfiguration(), 'constraintConfig'),
+      withTimeout(getSystemSettings(), 'systemSettings'),
+      withTimeout(getConfigurationChecksum(), 'checksum')
+    ]);
+
     const configurations = {
-      staffGroups: await getStaffGroups(),
-      dailyLimits: await getDailyLimits(), 
-      priorityRules: await getPriorityRules(),
-      businessRules: await getBusinessRules(),
-      constraintConfig: await getConstraintConfiguration(),
-      systemSettings: await getSystemSettings(),
+      staffGroups: staffGroups.status === 'fulfilled' ? staffGroups.value : {},
+      dailyLimits: dailyLimits.status === 'fulfilled' ? dailyLimits.value : {},
+      priorityRules: priorityRules.status === 'fulfilled' ? priorityRules.value : [],
+      businessRules: businessRules.status === 'fulfilled' ? businessRules.value : {},
+      constraintConfig: constraintConfig.status === 'fulfilled' ? constraintConfig.value : {},
+      systemSettings: systemSettings.status === 'fulfilled' ? systemSettings.value : {},
       _timestamp: Date.now(),
-      _checksum: await getConfigurationChecksum()
+      _checksum: _checksum.status === 'fulfilled' ? _checksum.value : Date.now().toString(36),
     };
 
     return configurations;
   } catch (error) {
-    console.error('Failed to get all configurations:', error);
+    console.error("Failed to get all configurations:", error);
     return {
       staffGroups: {},
       dailyLimits: {},
@@ -1484,7 +1529,7 @@ export const getAllConfigurations = async () => {
       constraintConfig: {},
       systemSettings: {},
       _timestamp: Date.now(),
-      _error: error.message
+      _error: error.message,
     };
   }
 };
@@ -1495,23 +1540,23 @@ export const getAllConfigurations = async () => {
 export const getSpecificConfiguration = async (type) => {
   try {
     switch (type) {
-      case 'staff_groups':
-      case 'staffGroups':
-        return await getStaffGroups();
-      case 'daily_limits': 
-      case 'dailyLimits':
-        return await getDailyLimits();
-      case 'priority_rules':
-      case 'priorityRules':
-        return await getPriorityRules();
-      case 'business_rules':
-      case 'businessRules':
+      case "staff_groups":
+      case "staffGroups":
+        return await getStaffConflictGroups(); // Use existing export
+      case "daily_limits":
+      case "dailyLimits":
+        return await getDailyLimits(); // Use existing export
+      case "priority_rules":
+      case "priorityRules":
+        return await getPriorityRules(); // Use existing export
+      case "business_rules":
+      case "businessRules":
         return await getBusinessRules();
-      case 'constraint_config':
-      case 'constraintConfig':
+      case "constraint_config":
+      case "constraintConfig":
         return await getConstraintConfiguration();
-      case 'system_settings':
-      case 'systemSettings':
+      case "system_settings":
+      case "systemSettings":
         return await getSystemSettings();
       default:
         console.warn(`Unknown configuration type: ${type}`);
@@ -1534,12 +1579,12 @@ export const getConfigurationChecksum = async () => {
     let hash = 0;
     for (let i = 0; i < configString.length; i++) {
       const char = configString.charCodeAt(i);
-      hash = ((hash << 5) - hash) + char;
+      hash = (hash << 5) - hash + char;
       hash = hash & hash; // Convert to 32-bit integer
     }
     return hash.toString(36);
   } catch (error) {
-    console.error('Failed to generate configuration checksum:', error);
+    console.error("Failed to generate configuration checksum:", error);
     return Date.now().toString(36); // Fallback to timestamp
   }
 };
@@ -1547,40 +1592,29 @@ export const getConfigurationChecksum = async () => {
 /**
  * Helper functions to get individual configuration types
  */
-async function getStaffGroups() {
-  try {
-    return await getConstraintsByType('staffGroups') || {};
-  } catch (error) {
-    console.error('Failed to get staff groups:', error);
-    return {};
-  }
-}
-
-
-
 async function getBusinessRules() {
   try {
-    return await getConstraintsByType('businessRules') || {};
+    return (await getConstraintsByType("businessRules")) || {};
   } catch (error) {
-    console.error('Failed to get business rules:', error);
+    console.error("Failed to get business rules:", error);
     return {};
   }
 }
 
 async function getConstraintConfiguration() {
   try {
-    return await getConstraintsByType('constraintConfig') || {};
+    return (await getConstraintsByType("constraintConfig")) || {};
   } catch (error) {
-    console.error('Failed to get constraint configuration:', error);
+    console.error("Failed to get constraint configuration:", error);
     return {};
   }
 }
 
 async function getSystemSettings() {
   try {
-    return await getConstraintsByType('systemSettings') || {};
+    return (await getConstraintsByType("systemSettings")) || {};
   } catch (error) {
-    console.error('Failed to get system settings:', error);
+    console.error("Failed to get system settings:", error);
     return {};
   }
 }
@@ -1589,15 +1623,15 @@ async function getConstraintsByType(type) {
   if (!configService) {
     await initializeConstraintConfiguration();
   }
-  
-  if (configService && typeof configService.getConstraints === 'function') {
+
+  if (configService && typeof configService.getConstraints === "function") {
     return await configService.getConstraints(type);
   }
-  
+
   // Fallback to cached data if service is not available
   if (configCache.has(type)) {
     return configCache.get(type);
   }
-  
+
   return null;
 }
