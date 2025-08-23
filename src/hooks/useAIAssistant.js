@@ -35,12 +35,16 @@ const loadEnhancedAISystem = async () => {
       "../ai/ml/TensorFlowScheduler"
     );
     const { aiErrorHandler } = await import("../ai/utils/ErrorHandler");
+    
+    // Load performance optimization system
+    const { AIPerformanceManager } = await import("../ai/performance/AIPerformanceManager");
 
     return {
       HybridPredictor,
       BusinessRuleValidator,
       TensorFlowScheduler,
       aiErrorHandler,
+      AIPerformanceManager,
       isEnhanced: true,
     };
   } catch (error) {
@@ -87,6 +91,7 @@ export const useAIAssistant = (
   const [recoveryAttempts, setRecoveryAttempts] = useState(0);
   const [configurationStatus, setConfigurationStatus] = useState('unknown');
   const aiSystemRef = useRef(null);
+  const performanceManagerRef = useRef(null);
   const configInvalidationUnsubscribe = useRef(null);
   const performanceMonitor = useRef({
     tensorCleanupCount: 0,

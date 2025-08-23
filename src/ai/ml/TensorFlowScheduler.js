@@ -410,70 +410,91 @@ export class TensorFlowScheduler {
         dateRange: dateRange,
       };
 
-      // Process only active staff members
+      // **PERFORMANCE FIX: Process in chunks with yielding to prevent UI blocking**
+      const CHUNK_SIZE = 5; // Process 5 predictions at a time
+      let processedCount = 0;
+      const totalPredictions = activeStaff.length * dateRange.length;
+
+      // Process only active staff members with non-blocking chunked processing
       for (const staff of activeStaff) {
         predictions[staff.id] = {};
         predictionConfidence[staff.id] = {};
 
-        // Process each date
-        for (let dateIndex = 0; dateIndex < dateRange.length; dateIndex++) {
-          const date = dateRange[dateIndex];
-          const dateKey = date.toISOString().split("T")[0];
+        // **CRITICAL FIX: Process dates in chunks with yielding**
+        for (let startIndex = 0; startIndex < dateRange.length; startIndex += CHUNK_SIZE) {
+          const endIndex = Math.min(startIndex + CHUNK_SIZE, dateRange.length);
+          const dateChunk = dateRange.slice(startIndex, endIndex);
 
-          // Skip if cell is already filled
-          if (
-            currentSchedule[staff.id] &&
-            currentSchedule[staff.id][dateKey] !== undefined &&
-            currentSchedule[staff.id][dateKey] !== null &&
-            currentSchedule[staff.id][dateKey] !== ""
-          ) {
-            continue;
-          }
+          // Process chunk
+          for (const date of dateChunk) {
+            const dateKey = date.toISOString().split("T")[0];
 
-          // Generate features for this staff-date combination
-          let features;
-          try {
-            features = this.featureEngineer.generateFeatures({
-              staff,
-              date,
-              dateIndex,
-              periodData: currentPeriodData,
-              allHistoricalData,
-              staffMembers,
-            });
-          } catch (featureError) {
-            console.warn(`⚠️ Feature generation failed for ${staff.name} on ${dateKey}:`, featureError.message);
-            features = null;
-          }
-
-          if (!features || !Array.isArray(features) || features.length !== MODEL_CONFIG.INPUT_FEATURES.TOTAL) {
-            console.warn(`⚠️ Invalid features for ${staff.name} on ${dateKey}, using emergency fallback`);
-            const emergencyShift = this.getEmergencyShift(staff, date.getDay());
-            predictions[staff.id][dateKey] = emergencyShift;
-            predictionConfidence[staff.id][dateKey] = 0.5;
-            continue;
-          }
-
-          // Make prediction using TensorFlow model
-          try {
-            // Use TensorFlow prediction with proper error handling
-            const result = await this.predict([features]);
-
-            if (result.success && result.predictions) {
-              // Convert prediction to shift symbol
-              const shiftSymbol = this.predictionToShift(result.predictions);
-              predictions[staff.id][dateKey] = shiftSymbol;
-              predictionConfidence[staff.id][dateKey] = result.confidence || 0.8;
-            } else {
-              throw new Error(result.error || "Prediction failed");
+            // Skip if cell is already filled
+            if (
+              currentSchedule[staff.id] &&
+              currentSchedule[staff.id][dateKey] !== undefined &&
+              currentSchedule[staff.id][dateKey] !== null &&
+              currentSchedule[staff.id][dateKey] !== ""
+            ) {
+              processedCount++;
+              continue;
             }
-          } catch (error) {
-            console.warn(
-              `⚠️ TensorFlow prediction failed for ${staff.name} on ${dateKey}: ${error.message}, using emergency fallback`,
-            );
-            const emergencyShift = this.getEmergencyShift(staff, date.getDay());
-            predictions[staff.id][dateKey] = emergencyShift;
-            predictionConfidence[staff.id][dateKey] = 0.6;
+
+            // Generate features for this staff-date combination
+            let features;
+            try {
+              features = this.featureEngineer.generateFeatures({
+                staff,
+                date,
+                dateIndex: dateRange.indexOf(date),
+                periodData: currentPeriodData,
+                allHistoricalData,
+                staffMembers,
+              });
+            } catch (featureError) {
+              console.warn(`⚠️ Feature generation failed for ${staff.name} on ${dateKey}:`, featureError.message);
+              features = null;
+            }
+
+            if (!features || !Array.isArray(features) || features.length !== MODEL_CONFIG.INPUT_FEATURES.TOTAL) {
+              console.warn(`⚠️ Invalid features for ${staff.name} on ${dateKey}, using emergency fallback`);
+              const emergencyShift = this.getEmergencyShift(staff, date.getDay());
+              predictions[staff.id][dateKey] = emergencyShift;
+              predictionConfidence[staff.id][dateKey] = 0.5;
+              processedCount++;
+              continue;
+            }
+
+            // Make prediction using TensorFlow model
+            try {
+              // Use TensorFlow prediction with proper error handling
+              const result = await this.predict([features]);
+
+              if (result.success && result.predictions) {
+                // Convert prediction to shift symbol
+                const shiftSymbol = this.predictionToShift(result.predictions);
+                predictions[staff.id][dateKey] = shiftSymbol;
+                predictionConfidence[staff.id][dateKey] = result.confidence || 0.8;
+              } else {
+                throw new Error(result.error || "Prediction failed");
+              }
+            } catch (error) {
+              console.warn(
+                `⚠️ TensorFlow prediction failed for ${staff.name} on ${dateKey}: ${error.message}, using emergency fallback`,
+              );
+              const emergencyShift = this.getEmergencyShift(staff, date.getDay());
+              predictions[staff.id][dateKey] = emergencyShift;
+              predictionConfidence[staff.id][dateKey] = 0.6;
+            }
+
+            processedCount++;
+          }
+
+          // **CRITICAL: Yield control to UI thread every chunk to prevent blocking**
+          if (startIndex + CHUNK_SIZE < dateRange.length) {
+            await new Promise(resolve => {
+              setTimeout(resolve, 1); // 1ms yield to allow UI updates
+            });
           }
         }
       }
