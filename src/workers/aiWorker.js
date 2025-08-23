@@ -29,6 +29,52 @@ const tensorMemoryTracker = {
   cleanupThreshold: 400 * 1024 * 1024, // Cleanup at 400MB
 };
 
+// Model creation functions
+async function createConstraintModel(config) {
+  console.log('Creating constraint validation model...');
+  
+  // Simple neural network for constraint validation
+  const model = tf.sequential({
+    layers: [
+      tf.layers.dense({ inputShape: [10], units: 16, activation: 'relu' }),
+      tf.layers.dropout({ rate: 0.2 }),
+      tf.layers.dense({ units: 8, activation: 'relu' }),
+      tf.layers.dense({ units: 1, activation: 'sigmoid' })
+    ]
+  });
+
+  model.compile({
+    optimizer: 'adam',
+    loss: 'binaryCrossentropy',
+    metrics: ['accuracy']
+  });
+
+  return model;
+}
+
+async function createPatternModel(config) {
+  console.log('Creating pattern recognition model...');
+  
+  // Simple pattern recognition neural network
+  const model = tf.sequential({
+    layers: [
+      tf.layers.dense({ inputShape: [20], units: 32, activation: 'relu' }),
+      tf.layers.dropout({ rate: 0.3 }),
+      tf.layers.dense({ units: 16, activation: 'relu' }),
+      tf.layers.dense({ units: 8, activation: 'relu' }),
+      tf.layers.dense({ units: 4, activation: 'softmax' })
+    ]
+  });
+
+  model.compile({
+    optimizer: 'adam',
+    loss: 'categoricalCrossentropy',
+    metrics: ['accuracy']
+  });
+
+  return model;
+}
+
 /**
  * Initialize the AI worker with models and configurations
  */

@@ -1454,3 +1454,150 @@ export const getViolationRecommendations = (violations) => {
 
   return recommendations;
 };
+
+// Configuration Cache Helper Functions for ConfigurationCacheManager integration
+
+/**
+ * Get all configurations for caching
+ */
+export const getAllConfigurations = async () => {
+  try {
+    const configurations = {
+      staffGroups: await getStaffGroups(),
+      dailyLimits: await getDailyLimits(), 
+      priorityRules: await getPriorityRules(),
+      businessRules: await getBusinessRules(),
+      constraintConfig: await getConstraintConfiguration(),
+      systemSettings: await getSystemSettings(),
+      _timestamp: Date.now(),
+      _checksum: await getConfigurationChecksum()
+    };
+
+    return configurations;
+  } catch (error) {
+    console.error('Failed to get all configurations:', error);
+    return {
+      staffGroups: {},
+      dailyLimits: {},
+      priorityRules: [],
+      businessRules: {},
+      constraintConfig: {},
+      systemSettings: {},
+      _timestamp: Date.now(),
+      _error: error.message
+    };
+  }
+};
+
+/**
+ * Get specific configuration by type
+ */
+export const getSpecificConfiguration = async (type) => {
+  try {
+    switch (type) {
+      case 'staff_groups':
+      case 'staffGroups':
+        return await getStaffGroups();
+      case 'daily_limits': 
+      case 'dailyLimits':
+        return await getDailyLimits();
+      case 'priority_rules':
+      case 'priorityRules':
+        return await getPriorityRules();
+      case 'business_rules':
+      case 'businessRules':
+        return await getBusinessRules();
+      case 'constraint_config':
+      case 'constraintConfig':
+        return await getConstraintConfiguration();
+      case 'system_settings':
+      case 'systemSettings':
+        return await getSystemSettings();
+      default:
+        console.warn(`Unknown configuration type: ${type}`);
+        return {};
+    }
+  } catch (error) {
+    console.error(`Failed to get ${type} configuration:`, error);
+    return {};
+  }
+};
+
+/**
+ * Generate checksum for configuration integrity checking
+ */
+export const getConfigurationChecksum = async () => {
+  try {
+    const configs = await getAllConfigurations();
+    // Simple checksum based on serialized configuration
+    const configString = JSON.stringify(configs);
+    let hash = 0;
+    for (let i = 0; i < configString.length; i++) {
+      const char = configString.charCodeAt(i);
+      hash = ((hash << 5) - hash) + char;
+      hash = hash & hash; // Convert to 32-bit integer
+    }
+    return hash.toString(36);
+  } catch (error) {
+    console.error('Failed to generate configuration checksum:', error);
+    return Date.now().toString(36); // Fallback to timestamp
+  }
+};
+
+/**
+ * Helper functions to get individual configuration types
+ */
+async function getStaffGroups() {
+  try {
+    return await getConstraintsByType('staffGroups') || {};
+  } catch (error) {
+    console.error('Failed to get staff groups:', error);
+    return {};
+  }
+}
+
+
+
+async function getBusinessRules() {
+  try {
+    return await getConstraintsByType('businessRules') || {};
+  } catch (error) {
+    console.error('Failed to get business rules:', error);
+    return {};
+  }
+}
+
+async function getConstraintConfiguration() {
+  try {
+    return await getConstraintsByType('constraintConfig') || {};
+  } catch (error) {
+    console.error('Failed to get constraint configuration:', error);
+    return {};
+  }
+}
+
+async function getSystemSettings() {
+  try {
+    return await getConstraintsByType('systemSettings') || {};
+  } catch (error) {
+    console.error('Failed to get system settings:', error);
+    return {};
+  }
+}
+
+async function getConstraintsByType(type) {
+  if (!configService) {
+    await initializeConstraintConfiguration();
+  }
+  
+  if (configService && typeof configService.getConstraints === 'function') {
+    return await configService.getConstraints(type);
+  }
+  
+  // Fallback to cached data if service is not available
+  if (configCache.has(type)) {
+    return configCache.get(type);
+  }
+  
+  return null;
+}

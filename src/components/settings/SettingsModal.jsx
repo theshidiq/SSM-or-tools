@@ -11,6 +11,9 @@ import MLParametersTab from "./tabs/MLParametersTab";
 import TabButton from "./shared/TabButton";
 import ConfirmationModal from "./shared/ConfirmationModal";
 
+// Import configuration cache hook
+import { useSettingsCache } from "../../hooks/useConfigurationCache";
+
 const TABS = [
   { id: "staff-groups", label: "Staff Groups", icon: "👥" },
   { id: "daily-limits", label: "Daily Limits", icon: "📅" },
@@ -43,6 +46,24 @@ const SettingsModal = ({
   const [resetConfirmation, setResetConfirmation] = useState(false);
   const [isResetting, setIsResetting] = useState(false);
   const modalRef = useRef(null);
+
+  // Configuration cache management
+  const { onSettingSaved, onSettingsBulkSaved, cacheStatus, isRefreshing } = useSettingsCache();
+
+  // Enhanced settings change handler that also refreshes cache
+  const handleSettingsChange = async (newSettings, changedSection = null) => {
+    // Call the original settings change handler
+    if (onSettingsChange) {
+      onSettingsChange(newSettings);
+    }
+
+    // Refresh configuration cache based on what changed
+    if (changedSection) {
+      await onSettingSaved(changedSection);
+    } else {
+      await onSettingsBulkSaved();
+    }
+  };
 
   useEffect(() => {
     if (isOpen) {
@@ -134,7 +155,7 @@ const SettingsModal = ({
   const renderTabContent = () => {
     const commonProps = {
       settings,
-      onSettingsChange,
+      onSettingsChange: handleSettingsChange,
       staffMembers,
       validationErrors: validationErrors[activeTab] || {},
     };

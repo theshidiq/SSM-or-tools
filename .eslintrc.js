@@ -112,6 +112,19 @@ module.exports = {
         'import/no-extraneous-dependencies': 'off',
       },
     },
+    {
+      files: ['src/workers/**/*.js'],
+      env: {
+        worker: true,
+      },
+      globals: {
+        importScripts: 'readonly',
+        tf: 'readonly',
+        self: 'readonly',
+        postMessage: 'readonly',
+        onmessage: 'writable',
+      },
+    },
   ],
   ignorePatterns: [
     'build/',

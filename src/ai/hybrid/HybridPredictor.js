@@ -127,11 +127,18 @@ export class HybridPredictor {
     try {
       console.log("🔮 Generating hybrid schedule predictions...");
 
-      // Ensure fresh configuration is loaded before prediction
-      const { refreshAllConfigurations, initializeConstraintConfiguration } =
-        await import("../constraints/ConstraintEngine");
-      await refreshAllConfigurations();
-      console.log("✅ Fresh configuration loaded for schedule prediction");
+      // Use cached configuration for instant access (no main thread blocking)
+      const { configurationCache } = await import("../cache/ConfigurationCacheManager");
+      
+      // Ensure cache is initialized (only happens once at app start)
+      if (!configurationCache.isHealthy()) {
+        console.log("🔄 Initializing configuration cache...");
+        await configurationCache.initialize();
+      }
+      
+      // Get cached configuration instantly (no database queries)
+      const cachedConfig = configurationCache.getAllConfigurations();
+      console.log("⚡ Using cached configuration for schedule prediction (instant access)");
 
       // Step 1: Get ML predictions with confidence analysis
       let mlPredictions = null;

@@ -12,6 +12,7 @@ import {
   onConfigurationCacheInvalidated,
   refreshAllConfigurations,
 } from "../ai/constraints/ConstraintEngine";
+import { configurationCache } from "../ai/cache/ConfigurationCacheManager";
 
 // Enhanced imports for production-ready AI system
 let aiErrorHandler = null;
@@ -102,38 +103,60 @@ export const useAIAssistant = (
     cleanupInterval: null,
   });
 
-  // Set up configuration change monitoring
+  // Set up configuration change monitoring and cache initialization
   useEffect(() => {
-    // Set up cache invalidation listener
+    const initializeConfigurationSystem = async () => {
+      try {
+        console.log("🚀 Initializing AI configuration system...");
+        
+        // Initialize configuration cache (prevents main thread blocking)
+        if (!configurationCache.isHealthy()) {
+          console.log("📦 Pre-loading system configurations...");
+          await configurationCache.initialize();
+          console.log("✅ Configuration cache ready - AI will use instant access");
+        }
+
+        // Set up cache change listener to refresh when settings change
+        configurationCache.addChangeListener((changedType) => {
+          console.log(`🔄 Configuration changed: ${changedType}`);
+          setConfigurationStatus("updated");
+          
+          // Notify AI system of the change
+          const system = aiSystemRef.current;
+          if (system && system.type === "enhanced") {
+            try {
+              if (
+                system.hybridPredictor &&
+                typeof system.hybridPredictor.onConfigurationUpdated === "function"
+              ) {
+                system.hybridPredictor.onConfigurationUpdated();
+              }
+            } catch (error) {
+              console.warn("⚠️ Failed to notify AI system of configuration update:", error);
+            }
+          }
+        });
+
+        setConfigurationStatus("ready");
+        console.log("🎯 AI configuration system ready - optimized for performance");
+
+      } catch (error) {
+        console.error("❌ Failed to initialize configuration system:", error);
+        setConfigurationStatus("error");
+      }
+    };
+
+    // Set up legacy cache invalidation listener (for backwards compatibility)
     configInvalidationUnsubscribe.current = onConfigurationCacheInvalidated(
       () => {
-        console.log(
-          "🔄 useAIAssistant: Configuration updated, marking for refresh...",
-        );
-        setConfigurationStatus("updated");
-
-        // If AI system is initialized, notify it about the update
-        const system = aiSystemRef.current;
-        if (system && system.type === "enhanced") {
-          try {
-            if (
-              system.hybridPredictor &&
-              typeof system.hybridPredictor.onConfigurationUpdated ===
-                "function"
-            ) {
-              system.hybridPredictor.onConfigurationUpdated();
-            }
-          } catch (error) {
-            console.warn(
-              "⚠️ Failed to notify AI system of configuration update:",
-              error,
-            );
-          }
-        }
+        console.log("🔄 Legacy configuration update detected");
+        // Refresh the new cache system
+        configurationCache.forceRefresh().catch(console.error);
       },
     );
 
-    setConfigurationStatus("monitoring");
+    // Initialize the configuration system
+    initializeConfigurationSystem();
 
     return () => {
       if (configInvalidationUnsubscribe.current) {

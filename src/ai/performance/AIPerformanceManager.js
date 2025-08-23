@@ -258,15 +258,16 @@ class AIPerformanceManager {
     this.state.canCancel = true;
     this.state.canPause = false; // Will be enabled during processing
 
+    // Start performance monitoring
+    let performanceJob = null;
+    if (this.components.performanceMonitor) {
+      performanceJob = this.components.performanceMonitor.startJob(jobId, {
+        type: "ml_predictions",
+        estimatedDuration: this.estimateProcessingTime(data),
+      });
+    }
+
     try {
-      // Start performance monitoring
-      let performanceJob = null;
-      if (this.components.performanceMonitor) {
-        performanceJob = this.components.performanceMonitor.startJob(jobId, {
-          type: "ml_predictions",
-          estimatedDuration: this.estimateProcessingTime(data),
-        });
-      }
 
       // Determine processing strategy
       const strategy = this.selectProcessingStrategy(data);
