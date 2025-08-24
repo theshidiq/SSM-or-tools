@@ -22,24 +22,60 @@ try {
   console.log("⚠️ Enhanced error handler not available");
 }
 
-// Simplified AI system loader - fast and reliable
-const loadSimplifiedAISystem = async () => {
+// Enhanced lazy import for production-ready hybrid AI system
+const loadEnhancedAISystem = async () => {
   try {
-    console.log("🚀 Loading simplified AI system...");
+    console.log("🚀 Loading enhanced hybrid AI system...");
 
-    // Load the simplified, reliable AI predictor
-    const { SimplifiedAIPredictor } = await import("../ai/SimplifiedAIPredictor");
+    // Load hybrid system components
+    const { HybridPredictor } = await import("../ai/hybrid/HybridPredictor");
+    const { BusinessRuleValidator } = await import(
+      "../ai/hybrid/BusinessRuleValidator"
+    );
+    const { TensorFlowScheduler } = await import(
+      "../ai/ml/TensorFlowScheduler"
+    );
+    const { aiErrorHandler } = await import("../ai/utils/ErrorHandler");
+
+    // Load performance optimization system
+    const { AIPerformanceManager } = await import(
+      "../ai/performance/AIPerformanceManager"
+    );
 
     return {
-      SimplifiedAIPredictor,
-      isSimplified: true,
+      HybridPredictor,
+      BusinessRuleValidator,
+      TensorFlowScheduler,
+      aiErrorHandler,
+      AIPerformanceManager,
+      isEnhanced: true,
     };
   } catch (error) {
     console.log(
-      "⚠️ Simplified AI system not available:",
+      "⚠️ Enhanced AI system not available, attempting fallback...",
       error.message,
     );
-    return null;
+
+    // Fallback to legacy system
+    try {
+      const { autonomousEngine } = await import("../ai/AutonomousEngine");
+      const { analyticsDashboard } = await import(
+        "../ai/enterprise/AnalyticsDashboard"
+      );
+      const { advancedIntelligence } = await import(
+        "../ai/AdvancedIntelligence"
+      );
+      return {
+        autonomousEngine,
+        analyticsDashboard,
+        advancedIntelligence,
+        isEnhanced: false,
+        fallback: true,
+      };
+    } catch (fallbackError) {
+      console.log("❌ Both enhanced and legacy AI systems unavailable");
+      return null;
+    }
   }
 };
 
@@ -221,7 +257,7 @@ export const useAIAssistant = (
     };
   }, []);
 
-  // Simplified AI system initialization
+  // Enhanced AI system initialization
   const initializeAI = useCallback(async () => {
     if (isInitialized || aiSystemRef.current) return;
 
@@ -229,31 +265,80 @@ export const useAIAssistant = (
       setIsProcessing(true);
       const startTime = Date.now();
 
-      const aiSystem = await loadSimplifiedAISystem();
+      const aiSystem = await loadEnhancedAISystem();
 
-      if (aiSystem && aiSystem.isSimplified) {
-        console.log("🤖 Initializing simplified AI system...");
+      if (aiSystem) {
+        if (aiSystem.isEnhanced) {
+          console.log("🤖 Initializing enhanced hybrid AI system...");
 
-        // Initialize simplified predictor
-        const simplifiedPredictor = new aiSystem.SimplifiedAIPredictor();
-        await simplifiedPredictor.initialize();
+          // Initialize hybrid predictor
+          const hybridPredictor = new aiSystem.HybridPredictor();
+          await hybridPredictor.initialize({
+            mlConfidenceThreshold: 0.8,
+            useMLPredictions: true,
+            strictRuleEnforcement: true,
+            enableIntelligentDecisionEngine: true,
+            dynamicThresholdAdjustment: true,
+            enablePerformanceMonitoring: true,
+          });
 
-        aiSystemRef.current = {
-          simplifiedPredictor,
-          type: "simplified",
-        };
+          // Initialize business rule validator
+          const businessValidator = new aiSystem.BusinessRuleValidator();
+          await businessValidator.initialize({
+            strictValidation: true,
+            enableSeasonalAdjustments: true,
+            enableAdvancedLaborLawCompliance: true,
+            enableSmartCoverageOptimization: true,
+            enableStaffSatisfactionMetrics: true,
+          });
 
-        setSystemType("simplified");
-        setSystemHealth({
-          status: "healthy",
-          initialized: true,
-          ready: true,
-        });
+          // Initialize TensorFlow scheduler
+          const mlScheduler = new aiSystem.TensorFlowScheduler();
+          await mlScheduler.initialize({
+            adaptiveLearning: {
+              enabled: true,
+              learningRate: 0.001,
+              batchSize: 32,
+              epochs: 50,
+            },
+          });
+
+          aiSystemRef.current = {
+            hybridPredictor,
+            businessValidator,
+            mlScheduler,
+            errorHandler: aiSystem.aiErrorHandler,
+            type: "enhanced",
+          };
+
+          setSystemType("enhanced");
+          setSystemHealth(hybridPredictor.getDetailedStatus());
+        } else {
+          // Legacy system initialization
+          console.log("🔄 Initializing legacy AI system...");
+
+          await aiSystem.autonomousEngine.initialize({
+            scheduleGenerationInterval: 60000,
+            proactiveMonitoring: false,
+            autoCorrection: true,
+          });
+
+          await aiSystem.analyticsDashboard.initialize();
+
+          aiSystemRef.current = {
+            autonomousEngine: aiSystem.autonomousEngine,
+            analyticsDashboard: aiSystem.analyticsDashboard,
+            advancedIntelligence: aiSystem.advancedIntelligence,
+            type: "legacy",
+          };
+
+          setSystemType("legacy");
+        }
 
         const initTime = Date.now() - startTime;
         setIsInitialized(true);
         console.log(
-          `✨ Simplified AI Assistant initialized successfully in ${initTime}ms`,
+          `✨ AI Assistant (${systemType}) initialized successfully in ${initTime}ms`,
         );
       } else {
         setSystemType("unavailable");
@@ -356,18 +441,25 @@ export const useAIAssistant = (
     try {
       const system = aiSystemRef.current;
 
-      if (system && system.type === "simplified") {
-        // Use simplified AI system
+      if (system && system.type === "enhanced") {
+        // Use enhanced hybrid AI system
         console.log(
-          "🤖 Using simplified AI system for schedule prediction...",
+          "🤖 Using enhanced hybrid AI system for schedule prediction...",
         );
+
+        // Prepare input data with proper structure for HybridPredictor
+        const inputData = {
+          scheduleData,
+          currentMonthIndex,
+          timestamp: Date.now(),
+        };
 
         // Generate date range for current month
         const dateRange = generateDateRange(currentMonthIndex);
 
-        // Use simplified predictor for fast, reliable schedule completion
-        const result = await system.simplifiedPredictor.predictSchedule(
-          scheduleData,
+        // Use hybrid predictor for intelligent schedule completion
+        const result = await system.hybridPredictor.predictSchedule(
+          inputData,
           staffMembers,
           dateRange,
         );
@@ -376,31 +468,99 @@ export const useAIAssistant = (
           // Update the schedule with AI predictions
           updateSchedule(result.schedule);
 
-          // Count filled cells
-          const filledCells = countFilledCells(scheduleData, result.schedule);
+          // Update system health
+          setSystemHealth(system.hybridPredictor.getDetailedStatus());
+
+          // Count filled cells with enhanced details
+          const filledDetails = countFilledCells(scheduleData, result.schedule);
 
           return {
             success: true,
-            message: `🤖 ${filledCells}個のセルを高速AIで予測（${result.metadata.method}, 精度: ${result.metadata.quality.overall}%, 処理時間: ${result.metadata.processingTime}ms）`,
+            message: `🤖 ${filledDetails}個のセルをハイブリッドAIで予測（${result.metadata.method}, 精度: ${Math.round(result.metadata.quality)}%, 処理時間: ${result.metadata.processingTime}ms）`,
             data: {
-              filledCells,
-              accuracy: result.metadata.quality.overall,
+              filledCells: filledDetails,
+              accuracy: Math.round(result.metadata.quality),
               method: result.metadata.method,
+              mlUsed: result.metadata.mlUsed,
+              mlConfidence: Math.round(
+                (result.metadata.mlConfidence || 0) * 100,
+              ),
+              predictionConfidence: result.metadata.predictionConfidence,
               processingTime: result.metadata.processingTime,
-              coverage: result.metadata.coverage,
-              timeout: result.metadata.timeout || false,
-              systemHealth: {
-                status: "healthy",
-                reliable: true,
-                fast: true
-              },
+              violations: result.metadata.violations || [],
+              finalValidation: result.metadata.finalValidation,
+              systemHealth: system.hybridPredictor.getDetailedStatus(),
+              // Enhanced feedback data
+              trainingProgress: result.metadata.trainingProgress,
+              modelAccuracy: Math.round(
+                (result.metadata.mlConfidence || 0) * 100,
+              ),
+              hybridMethod: result.metadata.method,
+              rulesApplied:
+                result.metadata.ruleValidationResult?.violations?.length > 0,
             },
           };
         } else {
+          // Hybrid system failed, try error handling with memory cleanup
+          console.warn(
+            "⚠️ Hybrid prediction failed, attempting error recovery...",
+          );
+
+          // Perform memory cleanup before error handling
+          if (typeof window !== "undefined" && window.tf) {
+            const beforeMemory = window.tf.memory();
+            if (beforeMemory.numTensors > 50) {
+              try {
+                window.tf.disposeVariables();
+                performanceMonitor.current.tensorCleanupCount++;
+                console.log(
+                  "🧼 Memory cleanup performed during error recovery",
+                );
+              } catch (cleanupError) {
+                console.warn(
+                  "⚠️ Memory cleanup during error recovery failed:",
+                  cleanupError,
+                );
+              }
+            }
+          }
+
+          const errorResult = await system.errorHandler.handleError(
+            new Error(result.error || "Hybrid prediction failed"),
+            "auto_fill_schedule",
+            {
+              scheduleData,
+              staffMembers,
+              dateRange,
+              userAction: true,
+            },
+          );
+
+          if (errorResult.success && errorResult.data?.schedule) {
+            updateSchedule(errorResult.data.schedule);
+            const filledCells = countFilledCells(
+              scheduleData,
+              errorResult.data.schedule,
+            );
+
+            return {
+              success: true,
+              message: `🔄 ${filledCells}個のセルをフォールバックシステムで予測（${errorResult.fallback}, 精度: ${errorResult.data.accuracy || 50}%）`,
+              data: {
+                filledCells,
+                accuracy: errorResult.data.accuracy || 50,
+                method: errorResult.fallback,
+                fallback: true,
+                errorRecovered: true,
+              },
+            };
+          }
+
           return {
             success: false,
-            message: `簡易AIシステムエラー: ${result.error || "Unknown error"}`,
-            error: result.error || "Prediction failed",
+            message: `ハイブリッドAIシステムエラー: ${errorResult.message}`,
+            error: errorResult,
+            recommendedAction: errorResult.recommendedAction,
           };
         }
       } else if (system && system.type === "legacy") {
@@ -518,53 +678,54 @@ export const useAIAssistant = (
       }
 
       const system = aiSystemRef.current;
-      if (!system || system.type !== "simplified") {
+      if (!system || system.type !== "enhanced") {
         return await autoFillSchedule(); // Fallback to legacy method
       }
 
       if (onProgress)
         onProgress({
-          stage: "initializing",
+          stage: "training",
           progress: 20,
-          message: "高速AIシステム準備中...",
+          message: "MLモデルトレーニング中...",
         });
 
       try {
-        // Generate date range for current month
-        const dateRange = generateDateRange(currentMonthIndex);
+        // Ensure ML model is trained
+        await system.hybridPredictor.ensureMLModelTrained(staffMembers);
 
-        // Use simplified predictor with progress tracking and guaranteed completion
-        const PREDICTION_TIMEOUT = 3000; // 3 seconds hard timeout
-        console.log("🔮 Starting simplified AI prediction with timeout protection...");
+        if (onProgress)
+          onProgress({
+            stage: "predicting",
+            progress: 70,
+            message: "AI予測生成中...",
+          });
+
+        // Generate predictions with timeout protection to prevent hanging
+        const PREDICTION_TIMEOUT = 45000; // 45 seconds timeout
+        console.log("🔮 Starting AI prediction with timeout protection...");
         
-        const predictionPromise = system.simplifiedPredictor.predictSchedule(
-          scheduleData,
-          staffMembers,
-          dateRange,
-          onProgress // Direct progress forwarding
-        );
-        
+        const predictionPromise = autoFillSchedule();
         const timeoutPromise = new Promise((_, reject) =>
-          setTimeout(() => reject(new Error("AI prediction timeout - system safety triggered")), PREDICTION_TIMEOUT)
+          setTimeout(() => reject(new Error("AI prediction timeout - process took too long")), PREDICTION_TIMEOUT)
         );
 
         let result;
         try {
           result = await Promise.race([predictionPromise, timeoutPromise]);
-          console.log("✅ Simplified AI prediction completed successfully");
+          console.log("✅ AI prediction completed successfully");
         } catch (timeoutError) {
           if (timeoutError.message.includes("timeout")) {
-            console.warn("⏱️ AI prediction timed out, using emergency fallback...");
+            console.warn("⏱️ AI prediction timed out, attempting emergency recovery...");
             
             // Update progress to show timeout recovery
             if (onProgress)
               onProgress({
                 stage: "recovery",
                 progress: 75,
-                message: "緊急フォールバック実行中...",
+                message: "タイムアウト回復中...",
               });
 
-            // Use emergency fallback
+            // Try a simpler fallback prediction method
             result = await performEmergencyPrediction(scheduleData, staffMembers);
             
             // Update schedule if emergency prediction succeeded
@@ -574,26 +735,6 @@ export const useAIAssistant = (
           } else {
             throw timeoutError;
           }
-        }
-
-        // If we got a valid result from simplified predictor, update the schedule
-        if (result.success && result.schedule) {
-          updateSchedule(result.schedule);
-          
-          // Convert result format for consistency
-          const filledCells = countFilledCells(scheduleData, result.schedule);
-          
-          result = {
-            success: true,
-            message: `🤖 ${filledCells}個のセルを高速AIで予測（処理時間: ${result.metadata?.processingTime || 0}ms）`,
-            data: {
-              filledCells,
-              accuracy: result.metadata?.quality?.overall || 85,
-              method: result.metadata?.method || "pattern_based",
-              processingTime: result.metadata?.processingTime || 0,
-              timeout: result.metadata?.timeout || false,
-            },
-          };
         }
 
         if (onProgress)
@@ -676,19 +817,17 @@ export const useAIAssistant = (
       };
     }
 
-    if (system.type === "simplified") {
+    if (system.type === "enhanced") {
       return {
-        type: "simplified",
+        type: "enhanced",
         initialized: isInitialized,
         available: true,
         health: systemHealth,
         components: {
-          simplifiedPredictor: system.simplifiedPredictor?.getStatus(),
-        },
-        guarantees: {
-          maxProcessingTime: "3 seconds",
-          reliability: "100%",
-          hangPrevention: "timeout protection"
+          hybridPredictor: system.hybridPredictor?.getStatus(),
+          businessValidator: system.businessValidator?.getStatus(),
+          mlScheduler: system.mlScheduler?.getModelInfo(),
+          errorHandler: system.errorHandler?.getSystemHealth(),
         },
       };
     }
@@ -706,9 +845,9 @@ export const useAIAssistant = (
   const checkSystemHealth = useCallback(async () => {
     const system = aiSystemRef.current;
 
-    if (system && system.type === "simplified") {
+    if (system && system.type === "enhanced") {
       try {
-        const health = system.simplifiedPredictor.getStatus();
+        const health = system.hybridPredictor.getDetailedStatus();
         setSystemHealth(health);
         return health;
       } catch (error) {
@@ -751,13 +890,22 @@ export const useAIAssistant = (
       }
 
       // Reset system components
-      if (system && system.type === "simplified") {
-        await system.simplifiedPredictor.reset();
-        setSystemHealth({
-          status: "healthy",
-          initialized: true,
-          ready: true,
-        });
+      if (system && system.type === "enhanced") {
+        await system.hybridPredictor.reset();
+        if (
+          system.businessValidator &&
+          typeof system.businessValidator.reset === "function"
+        ) {
+          await system.businessValidator.reset();
+        }
+        if (
+          system.mlScheduler &&
+          typeof system.mlScheduler.reset === "function"
+        ) {
+          await system.mlScheduler.reset();
+        }
+
+        setSystemHealth(system.hybridPredictor.getDetailedStatus());
       }
 
       // Clear system reference to force re-initialization
@@ -791,23 +939,23 @@ export const useAIAssistant = (
     resetSystem,
 
     // System information
-    isSimplified: systemType === "simplified",
+    isEnhanced: systemType === "enhanced",
     isLegacy: systemType === "legacy",
     isAvailable: systemType !== "unavailable" && systemType !== "error",
 
-    // Simplified AI information
-    isReady: () => {
+    // ML-specific information
+    isMLReady: () => {
       const system = aiSystemRef.current;
       return (
         system &&
-        system.type === "simplified" &&
-        system.simplifiedPredictor?.isReady()
+        system.type === "enhanced" &&
+        system.hybridPredictor?.isMLReady()
       );
     },
-    getSystemInfo: () => {
+    getMLModelInfo: () => {
       const system = aiSystemRef.current;
-      return system && system.type === "simplified"
-        ? system.simplifiedPredictor?.getStatus()
+      return system && system.type === "enhanced"
+        ? system.mlScheduler?.getModelInfo()
         : null;
     },
 
@@ -829,11 +977,16 @@ export const useAIAssistant = (
         await refreshAllConfigurations();
         setConfigurationStatus("refreshed");
 
-        // The simplified AI system automatically uses the latest configuration
-        // from the cache, so no additional refresh is needed
+        // Force AI system to refresh if it supports it
         const system = aiSystemRef.current;
-        if (system && system.type === "simplified") {
-          console.log("✅ Simplified AI will use refreshed configuration on next prediction");
+        if (system && system.type === "enhanced") {
+          if (
+            system.hybridPredictor &&
+            typeof system.hybridPredictor.forceRefreshConfiguration ===
+              "function"
+          ) {
+            await system.hybridPredictor.forceRefreshConfiguration();
+          }
         }
 
         return { success: true };
