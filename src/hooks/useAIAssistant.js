@@ -360,6 +360,65 @@ export const useAIAssistant = (
     }
   }, [isInitialized]);
 
+  // Emergency prediction fallback for timeout recovery
+  const performEmergencyPrediction = useCallback(async (scheduleData, staffMembers) => {
+    console.log("🆘 Performing emergency prediction fallback...");
+    
+    try {
+      // Use the simplest possible prediction method
+      const newSchedule = JSON.parse(JSON.stringify(scheduleData));
+      let filledCells = 0;
+
+      // Basic pattern-based filling for empty cells only
+      Object.keys(newSchedule).forEach((staffId) => {
+        const staff = staffMembers.find((s) => s.id === staffId);
+        if (!staff) return;
+
+        Object.keys(newSchedule[staffId]).forEach((dateKey) => {
+          const currentValue = newSchedule[staffId][dateKey];
+
+          // Fill only truly empty cells
+          if (!currentValue || currentValue === "") {
+            const date = new Date(dateKey);
+            const dayOfWeek = date.getDay();
+            
+            // Simple emergency pattern
+            let shift;
+            if (staff.status === "パート") {
+              // Part-time: work 4-5 days per week
+              shift = (dayOfWeek === 0 || dayOfWeek === 6) ? "×" : "○";
+            } else {
+              // Full-time: work 5-6 days per week  
+              if (dayOfWeek === 1) shift = "×"; // Monday off
+              else if (dayOfWeek === 0) shift = "△"; // Sunday early
+              else shift = "○"; // Normal shift
+            }
+
+            newSchedule[staffId][dateKey] = shift;
+            filledCells++;
+          }
+        });
+      });
+
+      return {
+        success: true,
+        newSchedule,
+        message: `🆘 ${filledCells}個のセルを緊急モードで予測（タイムアウト回復）`,
+        filledCells,
+        accuracy: 60,
+        method: "emergency_fallback",
+        emergencyRecovery: true,
+      };
+    } catch (error) {
+      console.error("❌ Emergency prediction failed:", error);
+      return {
+        success: false,
+        message: `緊急予測も失敗しました: ${error.message}`,
+        error: error.message,
+      };
+    }
+  }, []);
+
   // Enhanced auto-fill using hybrid AI system
   const autoFillSchedule = useCallback(async () => {
     if (!scheduleData || !staffMembers || staffMembers.length === 0) {
@@ -641,8 +700,42 @@ export const useAIAssistant = (
             message: "AI予測生成中...",
           });
 
-        // Generate predictions
-        const result = await autoFillSchedule();
+        // Generate predictions with timeout protection to prevent hanging
+        const PREDICTION_TIMEOUT = 45000; // 45 seconds timeout
+        console.log("🔮 Starting AI prediction with timeout protection...");
+        
+        const predictionPromise = autoFillSchedule();
+        const timeoutPromise = new Promise((_, reject) =>
+          setTimeout(() => reject(new Error("AI prediction timeout - process took too long")), PREDICTION_TIMEOUT)
+        );
+
+        let result;
+        try {
+          result = await Promise.race([predictionPromise, timeoutPromise]);
+          console.log("✅ AI prediction completed successfully");
+        } catch (timeoutError) {
+          if (timeoutError.message.includes("timeout")) {
+            console.warn("⏱️ AI prediction timed out, attempting emergency recovery...");
+            
+            // Update progress to show timeout recovery
+            if (onProgress)
+              onProgress({
+                stage: "recovery",
+                progress: 75,
+                message: "タイムアウト回復中...",
+              });
+
+            // Try a simpler fallback prediction method
+            result = await performEmergencyPrediction(scheduleData, staffMembers);
+            
+            // Update schedule if emergency prediction succeeded
+            if (result.success && result.newSchedule) {
+              updateSchedule(result.newSchedule);
+            }
+          } else {
+            throw timeoutError;
+          }
+        }
 
         if (onProgress)
           onProgress({
@@ -835,6 +928,7 @@ export const useAIAssistant = (
     initializeAI,
     autoFillSchedule,
     generateAIPredictions,
+    performEmergencyPrediction,
 
     // Enhanced features
     systemType,

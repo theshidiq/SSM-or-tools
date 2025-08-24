@@ -423,25 +423,39 @@ export class TensorFlowScheduler {
       };
 
       // **PERFORMANCE FIX: Process in chunks with yielding to prevent UI blocking**
-      const CHUNK_SIZE = 5; // Process 5 predictions at a time
+      const CHUNK_SIZE = 3; // Smaller chunks for better responsiveness
+      const YIELD_INTERVAL = 5; // Yield every 5 predictions
       let processedCount = 0;
+      let yieldCounter = 0;
       const totalPredictions = activeStaff.length * dateRange.length;
+      const startTime = Date.now();
+      const PREDICTION_TIMEOUT = 30000; // 30 second timeout
 
-      // Process only active staff members with non-blocking chunked processing
+      console.log(`🔮 Starting non-blocking prediction processing for ${totalPredictions} predictions...`);
+
+      // Process only active staff members with fully non-blocking chunked processing
       for (const staff of activeStaff) {
         predictions[staff.id] = {};
         predictionConfidence[staff.id] = {};
 
-        // **CRITICAL FIX: Process dates in chunks with yielding**
+        console.log(`👤 Processing ${staff.name}...`);
+
+        // **CRITICAL FIX: Process dates in smaller chunks with frequent yielding**
         for (
           let startIndex = 0;
           startIndex < dateRange.length;
           startIndex += CHUNK_SIZE
         ) {
+          // Check timeout
+          if (Date.now() - startTime > PREDICTION_TIMEOUT) {
+            console.warn(`⏱️ Prediction timeout reached, stopping processing`);
+            break;
+          }
+
           const endIndex = Math.min(startIndex + CHUNK_SIZE, dateRange.length);
           const dateChunk = dateRange.slice(startIndex, endIndex);
 
-          // Process chunk
+          // Process chunk with timeout protection
           for (const date of dateChunk) {
             const dateKey = date.toISOString().split("T")[0];
 
@@ -456,9 +470,10 @@ export class TensorFlowScheduler {
               continue;
             }
 
-            // Generate features for this staff-date combination
+            // Generate features for this staff-date combination with timeout
             let features;
             try {
+              const featureStartTime = Date.now();
               features = this.featureEngineer.generateFeatures({
                 staff,
                 date,
@@ -467,6 +482,11 @@ export class TensorFlowScheduler {
                 allHistoricalData,
                 staffMembers,
               });
+
+              // Warn if feature generation is taking too long
+              if (Date.now() - featureStartTime > 100) {
+                console.warn(`🐌 Slow feature generation for ${staff.name}: ${Date.now() - featureStartTime}ms`);
+              }
             } catch (featureError) {
               console.warn(
                 `⚠️ Feature generation failed for ${staff.name} on ${dateKey}:`,
@@ -493,10 +513,15 @@ export class TensorFlowScheduler {
               continue;
             }
 
-            // Make prediction using TensorFlow model
+            // Make prediction using TensorFlow model with timeout protection
             try {
-              // Use TensorFlow prediction with proper error handling
-              const result = await this.predict([features]);
+              // Create a timeout promise to prevent hanging
+              const predictionPromise = this.predict([features]);
+              const timeoutPromise = new Promise((_, reject) =>
+                setTimeout(() => reject(new Error("Prediction timeout")), 5000)
+              );
+
+              const result = await Promise.race([predictionPromise, timeoutPromise]);
 
               if (result.success && result.predictions) {
                 // Convert prediction to shift symbol
@@ -508,9 +533,13 @@ export class TensorFlowScheduler {
                 throw new Error(result.error || "Prediction failed");
               }
             } catch (error) {
-              console.warn(
-                `⚠️ TensorFlow prediction failed for ${staff.name} on ${dateKey}: ${error.message}, using emergency fallback`,
-              );
+              if (error.message === "Prediction timeout") {
+                console.warn(`⏱️ Prediction timeout for ${staff.name} on ${dateKey}, using fallback`);
+              } else {
+                console.warn(
+                  `⚠️ TensorFlow prediction failed for ${staff.name} on ${dateKey}: ${error.message}, using emergency fallback`,
+                );
+              }
               const emergencyShift = this.getEmergencyShift(
                 staff,
                 date.getDay(),
@@ -520,15 +549,37 @@ export class TensorFlowScheduler {
             }
 
             processedCount++;
+            yieldCounter++;
+
+            // **CRITICAL: Yield control to UI thread more frequently to prevent blocking**
+            if (yieldCounter >= YIELD_INTERVAL) {
+              const progress = Math.round((processedCount / totalPredictions) * 100);
+              console.log(`⚡ Progress: ${progress}% (${processedCount}/${totalPredictions}) - Yielding to UI...`);
+              
+              await new Promise((resolve) => {
+                // Use requestAnimationFrame for better UI responsiveness
+                if (typeof requestAnimationFrame !== 'undefined') {
+                  requestAnimationFrame(() => setTimeout(resolve, 1));
+                } else {
+                  setTimeout(resolve, 1);
+                }
+              });
+              
+              yieldCounter = 0; // Reset yield counter
+            }
           }
 
-          // **CRITICAL: Yield control to UI thread every chunk to prevent blocking**
+          // **ADDITIONAL: Yield after each date chunk for better responsiveness**
           if (startIndex + CHUNK_SIZE < dateRange.length) {
             await new Promise((resolve) => {
-              setTimeout(resolve, 1); // 1ms yield to allow UI updates
+              setTimeout(resolve, 2); // Slightly longer yield between chunks
             });
           }
         }
+
+        // Yield after each staff member to prevent UI blocking
+        console.log(`✅ Completed predictions for ${staff.name}`);
+        await new Promise((resolve) => setTimeout(resolve, 5));
       }
 
       console.log("✅ ML predictions generated");
