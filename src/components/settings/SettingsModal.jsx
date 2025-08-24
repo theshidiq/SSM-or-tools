@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from "react";
 import { X, RotateCcw, AlertTriangle, Check } from "lucide-react";
 
 // Import tab components
+import { useSettingsCache } from "../../hooks/useConfigurationCache";
 import StaffGroupsTab from "./tabs/StaffGroupsTab";
 import DailyLimitsTab from "./tabs/DailyLimitsTab";
 import PriorityRulesTab from "./tabs/PriorityRulesTab";
@@ -12,7 +13,6 @@ import TabButton from "./shared/TabButton";
 import ConfirmationModal from "./shared/ConfirmationModal";
 
 // Import configuration cache hook
-import { useSettingsCache } from "../../hooks/useConfigurationCache";
 
 const TABS = [
   { id: "staff-groups", label: "Staff Groups", icon: "👥" },
@@ -48,7 +48,8 @@ const SettingsModal = ({
   const modalRef = useRef(null);
 
   // Configuration cache management
-  const { onSettingSaved, onSettingsBulkSaved, cacheStatus, isRefreshing } = useSettingsCache();
+  const { onSettingSaved, onSettingsBulkSaved, cacheStatus, isRefreshing } =
+    useSettingsCache();
 
   // Enhanced settings change handler that also refreshes cache
   const handleSettingsChange = async (newSettings, changedSection = null) => {

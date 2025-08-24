@@ -268,7 +268,6 @@ class AIPerformanceManager {
     }
 
     try {
-
       // Determine processing strategy
       const strategy = this.selectProcessingStrategy(data);
       console.log("🎯 Selected processing strategy:", strategy);

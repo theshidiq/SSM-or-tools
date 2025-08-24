@@ -28,17 +28,16 @@ const loadSimplifiedAISystem = async () => {
     console.log("🚀 Loading simplified AI system...");
 
     // Load the simplified, reliable AI predictor
-    const { SimplifiedAIPredictor } = await import("../ai/SimplifiedAIPredictor");
+    const { SimplifiedAIPredictor } = await import(
+      "../ai/SimplifiedAIPredictor"
+    );
 
     return {
       SimplifiedAIPredictor,
       isSimplified: true,
     };
   } catch (error) {
-    console.log(
-      "⚠️ Simplified AI system not available:",
-      error.message,
-    );
+    console.log("⚠️ Simplified AI system not available:", error.message);
     return null;
   }
 };
@@ -276,63 +275,68 @@ export const useAIAssistant = (
   }, [isInitialized]);
 
   // Emergency prediction fallback for timeout recovery
-  const performEmergencyPrediction = useCallback(async (scheduleData, staffMembers) => {
-    console.log("🆘 Performing emergency prediction fallback...");
-    
-    try {
-      // Use the simplest possible prediction method
-      const newSchedule = JSON.parse(JSON.stringify(scheduleData));
-      let filledCells = 0;
+  const performEmergencyPrediction = useCallback(
+    async (scheduleData, staffMembers) => {
+      console.log("🆘 Performing emergency prediction fallback...");
 
-      // Basic pattern-based filling for empty cells only
-      Object.keys(newSchedule).forEach((staffId) => {
-        const staff = staffMembers.find((s) => s.id === staffId);
-        if (!staff) return;
+      try {
+        // Use the simplest possible prediction method
+        const newSchedule = JSON.parse(JSON.stringify(scheduleData));
+        let filledCells = 0;
 
-        Object.keys(newSchedule[staffId]).forEach((dateKey) => {
-          const currentValue = newSchedule[staffId][dateKey];
+        // Basic pattern-based filling for empty cells only
+        Object.keys(newSchedule).forEach((staffId) => {
+          const staff = staffMembers.find((s) => s.id === staffId);
+          if (!staff) return;
 
-          // Fill only truly empty cells
-          if (!currentValue || currentValue === "") {
-            const date = new Date(dateKey);
-            const dayOfWeek = date.getDay();
-            
-            // Simple emergency pattern
-            let shift;
-            if (staff.status === "パート") {
-              // Part-time: work 4-5 days per week
-              shift = (dayOfWeek === 0 || dayOfWeek === 6) ? "×" : "○";
-            } else {
-              // Full-time: work 5-6 days per week  
-              if (dayOfWeek === 1) shift = "×"; // Monday off
-              else if (dayOfWeek === 0) shift = "△"; // Sunday early
-              else shift = "○"; // Normal shift
+          Object.keys(newSchedule[staffId]).forEach((dateKey) => {
+            const currentValue = newSchedule[staffId][dateKey];
+
+            // Fill only truly empty cells
+            if (!currentValue || currentValue === "") {
+              const date = new Date(dateKey);
+              const dayOfWeek = date.getDay();
+
+              // Simple emergency pattern
+              let shift;
+              if (staff.status === "パート") {
+                // Part-time: work 4-5 days per week
+                shift = dayOfWeek === 0 || dayOfWeek === 6 ? "×" : "○";
+              } else {
+                // Full-time: work 5-6 days per week
+                if (dayOfWeek === 1)
+                  shift = "×"; // Monday off
+                else if (dayOfWeek === 0)
+                  shift = "△"; // Sunday early
+                else shift = "○"; // Normal shift
+              }
+
+              newSchedule[staffId][dateKey] = shift;
+              filledCells++;
             }
-
-            newSchedule[staffId][dateKey] = shift;
-            filledCells++;
-          }
+          });
         });
-      });
 
-      return {
-        success: true,
-        newSchedule,
-        message: `🆘 ${filledCells}個のセルを緊急モードで予測（タイムアウト回復）`,
-        filledCells,
-        accuracy: 60,
-        method: "emergency_fallback",
-        emergencyRecovery: true,
-      };
-    } catch (error) {
-      console.error("❌ Emergency prediction failed:", error);
-      return {
-        success: false,
-        message: `緊急予測も失敗しました: ${error.message}`,
-        error: error.message,
-      };
-    }
-  }, []);
+        return {
+          success: true,
+          newSchedule,
+          message: `🆘 ${filledCells}個のセルを緊急モードで予測（タイムアウト回復）`,
+          filledCells,
+          accuracy: 60,
+          method: "emergency_fallback",
+          emergencyRecovery: true,
+        };
+      } catch (error) {
+        console.error("❌ Emergency prediction failed:", error);
+        return {
+          success: false,
+          message: `緊急予測も失敗しました: ${error.message}`,
+          error: error.message,
+        };
+      }
+    },
+    [],
+  );
 
   // Enhanced auto-fill using hybrid AI system
   const autoFillSchedule = useCallback(async () => {
@@ -358,9 +362,7 @@ export const useAIAssistant = (
 
       if (system && system.type === "simplified") {
         // Use simplified AI system
-        console.log(
-          "🤖 Using simplified AI system for schedule prediction...",
-        );
+        console.log("🤖 Using simplified AI system for schedule prediction...");
 
         // Generate date range for current month
         const dateRange = generateDateRange(currentMonthIndex);
@@ -392,7 +394,7 @@ export const useAIAssistant = (
               systemHealth: {
                 status: "healthy",
                 reliable: true,
-                fast: true
+                fast: true,
               },
             },
           };
@@ -535,17 +537,25 @@ export const useAIAssistant = (
 
         // Use simplified predictor with progress tracking and guaranteed completion
         const PREDICTION_TIMEOUT = 3000; // 3 seconds hard timeout
-        console.log("🔮 Starting simplified AI prediction with timeout protection...");
-        
+        console.log(
+          "🔮 Starting simplified AI prediction with timeout protection...",
+        );
+
         const predictionPromise = system.simplifiedPredictor.predictSchedule(
           scheduleData,
           staffMembers,
           dateRange,
-          onProgress // Direct progress forwarding
+          onProgress, // Direct progress forwarding
         );
-        
+
         const timeoutPromise = new Promise((_, reject) =>
-          setTimeout(() => reject(new Error("AI prediction timeout - system safety triggered")), PREDICTION_TIMEOUT)
+          setTimeout(
+            () =>
+              reject(
+                new Error("AI prediction timeout - system safety triggered"),
+              ),
+            PREDICTION_TIMEOUT,
+          ),
         );
 
         let result;
@@ -554,8 +564,10 @@ export const useAIAssistant = (
           console.log("✅ Simplified AI prediction completed successfully");
         } catch (timeoutError) {
           if (timeoutError.message.includes("timeout")) {
-            console.warn("⏱️ AI prediction timed out, using emergency fallback...");
-            
+            console.warn(
+              "⏱️ AI prediction timed out, using emergency fallback...",
+            );
+
             // Update progress to show timeout recovery
             if (onProgress)
               onProgress({
@@ -565,8 +577,11 @@ export const useAIAssistant = (
               });
 
             // Use emergency fallback
-            result = await performEmergencyPrediction(scheduleData, staffMembers);
-            
+            result = await performEmergencyPrediction(
+              scheduleData,
+              staffMembers,
+            );
+
             // Update schedule if emergency prediction succeeded
             if (result.success && result.newSchedule) {
               updateSchedule(result.newSchedule);
@@ -579,10 +594,10 @@ export const useAIAssistant = (
         // If we got a valid result from simplified predictor, update the schedule
         if (result.success && result.schedule) {
           updateSchedule(result.schedule);
-          
+
           // Convert result format for consistency
           const filledCells = countFilledCells(scheduleData, result.schedule);
-          
+
           result = {
             success: true,
             message: `🤖 ${filledCells}個のセルを高速AIで予測（処理時間: ${result.metadata?.processingTime || 0}ms）`,
@@ -688,7 +703,7 @@ export const useAIAssistant = (
         guarantees: {
           maxProcessingTime: "3 seconds",
           reliability: "100%",
-          hangPrevention: "timeout protection"
+          hangPrevention: "timeout protection",
         },
       };
     }
@@ -833,7 +848,9 @@ export const useAIAssistant = (
         // from the cache, so no additional refresh is needed
         const system = aiSystemRef.current;
         if (system && system.type === "simplified") {
-          console.log("✅ Simplified AI will use refreshed configuration on next prediction");
+          console.log(
+            "✅ Simplified AI will use refreshed configuration on next prediction",
+          );
         }
 
         return { success: true };
