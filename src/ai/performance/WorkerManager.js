@@ -147,10 +147,13 @@ class WorkerManager {
   }
 
   /**
-   * Process using web worker
+   * Process using web worker with enhanced timeout and cancellation
    */
   async processWithWorker(data, progressCallback) {
     const requestId = this.generateRequestId();
+    const startTime = Date.now();
+    let processingTimeout = null;
+    let cancellationTimeout = null;
 
     // Register progress callback
     if (progressCallback) {
@@ -158,17 +161,84 @@ class WorkerManager {
     }
 
     try {
-      const result = await this.sendWorkerMessage(
-        "process_ml_predictions",
-        data,
+      // Enhanced timeout management
+      const maxProcessingTime = data.timeout || 30000; // 30 seconds default
+      const emergencyTimeout = maxProcessingTime + 5000; // +5s for cleanup
+      
+      console.log(`🚀 Starting worker processing (timeout: ${maxProcessingTime}ms)...`);
+      
+      // Set up processing timeout
+      const timeoutPromise = new Promise((_, reject) => {
+        processingTimeout = setTimeout(() => {
+          console.warn(`⏱️ Worker processing timeout after ${maxProcessingTime}ms`);
+          reject(new Error(`Worker processing timeout after ${maxProcessingTime}ms`));
+        }, maxProcessingTime);
+      });
+
+      // Set up emergency cancellation timeout
+      const emergencyPromise = new Promise((_, reject) => {
+        cancellationTimeout = setTimeout(async () => {
+          console.warn(`🆘 Emergency worker cancellation after ${emergencyTimeout}ms`);
+          await this.emergencyWorkerCancellation();
+          reject(new Error(`Emergency worker cancellation after ${emergencyTimeout}ms`));
+        }, emergencyTimeout);
+      });
+
+      // Main processing promise using new full AI prediction
+      const processingPromise = this.sendWorkerMessage(
+        "process_full_ai_prediction",
+        {
+          ...data,
+          timeout: maxProcessingTime - 2000, // Give worker 2s less time
+        },
         {
           requestId,
-          timeout: 300000, // 5 minutes max
+          timeout: maxProcessingTime,
           trackProgress: true,
         },
       );
 
-      return result;
+      // Race between processing, timeout, and emergency cancellation
+      const result = await Promise.race([
+        processingPromise,
+        timeoutPromise,
+        emergencyPromise,
+      ]);
+      
+      // Clear timeouts if processing completed successfully
+      if (processingTimeout) clearTimeout(processingTimeout);
+      if (cancellationTimeout) clearTimeout(cancellationTimeout);
+      
+      const processingTime = Date.now() - startTime;
+      console.log(`✅ Worker processing completed in ${processingTime}ms`);
+      
+      return {
+        ...result,
+        processingTime,
+        method: "worker",
+      };
+    } catch (error) {
+      // Clear any active timeouts
+      if (processingTimeout) clearTimeout(processingTimeout);
+      if (cancellationTimeout) clearTimeout(cancellationTimeout);
+      
+      const processingTime = Date.now() - startTime;
+      
+      if (error.message.includes('timeout') || error.message.includes('Emergency')) {
+        console.warn(`⏱️ Worker timeout/cancellation after ${processingTime}ms, attempting fallback...`);
+        
+        // Attempt graceful cancellation
+        try {
+          await this.sendWorkerMessage("cancel", {}, { timeout: 2000 });
+        } catch (cancelError) {
+          console.warn("Failed to cancel worker gracefully:", cancelError);
+        }
+        
+        // Return emergency fallback result
+        return await this.performEmergencyWorkerFallback(data, progressCallback);
+      }
+      
+      throw error;
     } finally {
       this.progressCallbacks.delete(requestId);
     }
@@ -190,25 +260,53 @@ class WorkerManager {
   }
 
   /**
-   * Cancel current processing
+   * Cancel current processing with enhanced cleanup
    */
   async cancelProcessing() {
     if (!this.isProcessing) {
       return { success: false, reason: "No processing to cancel" };
     }
 
+    console.log("🛑 Initiating processing cancellation...");
+    
     try {
       if (this.worker) {
-        await this.sendWorkerMessage("cancel", {}, { timeout: 5000 });
+        // Try graceful cancellation first
+        const gracefulTimeout = new Promise((_, reject) => 
+          setTimeout(() => reject(new Error("Graceful cancellation timeout")), 3000)
+        );
+        
+        const gracefulCancel = this.sendWorkerMessage("cancel", {}, { timeout: 3000 });
+        
+        try {
+          await Promise.race([gracefulCancel, gracefulTimeout]);
+          console.log("✅ Graceful worker cancellation successful");
+        } catch (gracefulError) {
+          console.warn("⚠️ Graceful cancellation failed, forcing emergency stop...");
+          await this.emergencyWorkerCancellation();
+        }
       } else if (this.fallbackProcessor) {
         this.fallbackProcessor.cancel();
       }
 
       this.isProcessing = false;
+      
+      // Clear all pending requests
+      for (const [requestId, request] of this.pendingRequests) {
+        if (request.timeout) clearTimeout(request.timeout);
+        request.reject(new Error("Processing cancelled by user"));
+      }
+      this.pendingRequests.clear();
+      
       return { success: true };
     } catch (error) {
-      console.error("Failed to cancel processing:", error);
-      return { success: false, error: error.message };
+      console.error("❌ Failed to cancel processing:", error);
+      
+      // Force cleanup even if cancellation failed
+      this.isProcessing = false;
+      this.pendingRequests.clear();
+      
+      return { success: false, error: error.message, forcedCleanup: true };
     }
   }
 
@@ -264,6 +362,181 @@ class WorkerManager {
     } catch (error) {
       console.warn("Memory cleanup failed:", error);
       return { success: false, error: error.message };
+    }
+  }
+
+  /**
+   * Emergency worker cancellation when normal cancellation fails
+   */
+  async emergencyWorkerCancellation() {
+    console.warn("🆘 Performing emergency worker cancellation...");
+    
+    try {
+      if (this.worker) {
+        // Immediately terminate the worker
+        this.worker.terminate();
+        console.log("⚡ Worker forcefully terminated");
+        
+        // Clear worker reference
+        this.worker = null;
+        
+        // Recreate worker for future use
+        setTimeout(async () => {
+          try {
+            console.log("🔄 Recreating worker after emergency termination...");
+            this.worker = new Worker("/src/workers/aiWorker.js");
+            this.setupWorkerEventListeners();
+            
+            // Reinitialize if needed
+            if (this.isInitialized) {
+              await this.initializeWorkerQuietly();
+            }
+          } catch (recreateError) {
+            console.error("Failed to recreate worker:", recreateError);
+            this.isInitialized = false;
+          }
+        }, 1000);
+      }
+      
+      // Clear all pending requests
+      for (const [requestId, request] of this.pendingRequests) {
+        if (request.timeout) clearTimeout(request.timeout);
+        request.reject(new Error("Emergency worker cancellation"));
+      }
+      this.pendingRequests.clear();
+      this.progressCallbacks.clear();
+      
+      this.isProcessing = false;
+      
+    } catch (error) {
+      console.error("Emergency cancellation failed:", error);
+    }
+  }
+  
+  /**
+   * Emergency fallback when worker completely fails
+   */
+  async performEmergencyWorkerFallback(data, progressCallback) {
+    console.log("🆘 Performing emergency worker fallback...");
+    
+    try {
+      if (progressCallback) {
+        progressCallback({
+          stage: "emergency_fallback",
+          progress: 25,
+          message: "緊急フォールバック実行中...",
+        });
+      }
+      
+      // Use fallback processor or simple logic
+      if (this.fallbackProcessor) {
+        const result = await this.fallbackProcessor.process(data, progressCallback);
+        return {
+          ...result,
+          emergencyFallback: true,
+          method: "emergency_fallback_processor",
+        };
+      } else {
+        // Ultra-simple emergency logic
+        const emergencySchedule = await this.performUltraSimpleEmergencyFill(
+          data.scheduleData,
+          data.staffMembers,
+          progressCallback
+        );
+        
+        return {
+          success: true,
+          schedule: emergencySchedule.schedule,
+          metadata: {
+            method: "ultra_simple_emergency",
+            processingTime: 500,
+            filledCells: emergencySchedule.filledCells,
+            quality: 50,
+            confidence: 50,
+            emergencyFallback: true,
+          },
+        };
+      }
+    } catch (error) {
+      console.error("Emergency fallback also failed:", error);
+      return {
+        success: false,
+        error: "All processing methods failed: " + error.message,
+        emergencyFallback: true,
+        schedule: data.scheduleData, // Return original
+      };
+    }
+  }
+  
+  /**
+   * Ultra-simple emergency schedule filling
+   */
+  async performUltraSimpleEmergencyFill(scheduleData, staffMembers, progressCallback) {
+    const schedule = JSON.parse(JSON.stringify(scheduleData));
+    let filledCells = 0;
+    
+    if (progressCallback) {
+      progressCallback({
+        stage: "ultra_simple_fill",
+        progress: 50,
+        message: "最小限のスケジュール生成中...",
+      });
+    }
+    
+    Object.keys(schedule).forEach((staffId) => {
+      const staff = staffMembers.find((s) => s.id === staffId);
+      if (!staff) return;
+      
+      Object.keys(schedule[staffId]).forEach((dateKey) => {
+        const currentValue = schedule[staffId][dateKey];
+        
+        if (!currentValue || currentValue === "") {
+          const date = new Date(dateKey);
+          const dayOfWeek = date.getDay();
+          
+          // Ultra-simple pattern
+          let shift;
+          if (staff.status === "パート") {
+            // Part-time: work weekdays, rest weekends
+            shift = (dayOfWeek === 0 || dayOfWeek === 6) ? "×" : "○";
+          } else {
+            // Full-time: work most days, occasional rest
+            shift = (dayOfWeek === 1) ? "×" : ""; // Monday off
+          }
+          
+          schedule[staffId][dateKey] = shift;
+          filledCells++;
+        }
+      });
+    });
+    
+    if (progressCallback) {
+      progressCallback({
+        stage: "ultra_simple_complete",
+        progress: 100,
+        message: `緊急フィル完了 (${filledCells}個のセル)`,
+      });
+    }
+    
+    return { schedule, filledCells };
+  }
+  
+  /**
+   * Initialize worker quietly (for recreation)
+   */
+  async initializeWorkerQuietly() {
+    try {
+      const config = {
+        ...this.workerConfig,
+        quiet: true,
+      };
+      
+      await this.sendWorkerMessage("initialize", config, { timeout: 15000 });
+      this.isInitialized = true;
+      console.log("🔄 Worker quietly reinitialized");
+    } catch (error) {
+      console.warn("Quiet worker initialization failed:", error);
+      this.isInitialized = false;
     }
   }
 
