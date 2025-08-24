@@ -431,9 +431,7 @@ export class TensorFlowScheduler {
       const startTime = Date.now();
       const PREDICTION_TIMEOUT = 30000; // 30 second timeout
 
-      console.log(
-        `🔮 Starting non-blocking prediction processing for ${totalPredictions} predictions...`,
-      );
+      console.log(`🔮 Starting non-blocking prediction processing for ${totalPredictions} predictions...`);
 
       // Process only active staff members with fully non-blocking chunked processing
       for (const staff of activeStaff) {
@@ -487,9 +485,7 @@ export class TensorFlowScheduler {
 
               // Warn if feature generation is taking too long
               if (Date.now() - featureStartTime > 100) {
-                console.warn(
-                  `🐌 Slow feature generation for ${staff.name}: ${Date.now() - featureStartTime}ms`,
-                );
+                console.warn(`🐌 Slow feature generation for ${staff.name}: ${Date.now() - featureStartTime}ms`);
               }
             } catch (featureError) {
               console.warn(
@@ -522,13 +518,10 @@ export class TensorFlowScheduler {
               // Create a timeout promise to prevent hanging
               const predictionPromise = this.predict([features]);
               const timeoutPromise = new Promise((_, reject) =>
-                setTimeout(() => reject(new Error("Prediction timeout")), 5000),
+                setTimeout(() => reject(new Error("Prediction timeout")), 5000)
               );
 
-              const result = await Promise.race([
-                predictionPromise,
-                timeoutPromise,
-              ]);
+              const result = await Promise.race([predictionPromise, timeoutPromise]);
 
               if (result.success && result.predictions) {
                 // Convert prediction to shift symbol
@@ -541,9 +534,7 @@ export class TensorFlowScheduler {
               }
             } catch (error) {
               if (error.message === "Prediction timeout") {
-                console.warn(
-                  `⏱️ Prediction timeout for ${staff.name} on ${dateKey}, using fallback`,
-                );
+                console.warn(`⏱️ Prediction timeout for ${staff.name} on ${dateKey}, using fallback`);
               } else {
                 console.warn(
                   `⚠️ TensorFlow prediction failed for ${staff.name} on ${dateKey}: ${error.message}, using emergency fallback`,
@@ -562,22 +553,18 @@ export class TensorFlowScheduler {
 
             // **CRITICAL: Yield control to UI thread more frequently to prevent blocking**
             if (yieldCounter >= YIELD_INTERVAL) {
-              const progress = Math.round(
-                (processedCount / totalPredictions) * 100,
-              );
-              console.log(
-                `⚡ Progress: ${progress}% (${processedCount}/${totalPredictions}) - Yielding to UI...`,
-              );
-
+              const progress = Math.round((processedCount / totalPredictions) * 100);
+              console.log(`⚡ Progress: ${progress}% (${processedCount}/${totalPredictions}) - Yielding to UI...`);
+              
               await new Promise((resolve) => {
                 // Use requestAnimationFrame for better UI responsiveness
-                if (typeof requestAnimationFrame !== "undefined") {
+                if (typeof requestAnimationFrame !== 'undefined') {
                   requestAnimationFrame(() => setTimeout(resolve, 1));
                 } else {
                   setTimeout(resolve, 1);
                 }
               });
-
+              
               yieldCounter = 0; // Reset yield counter
             }
           }
