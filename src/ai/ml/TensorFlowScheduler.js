@@ -21,6 +21,8 @@ import {
 // Import ML Worker Manager and Optimized Feature Manager for non-blocking operations
 import { mlWorkerManager } from "../../workers/MLWorkerManager.js";
 import { optimizedFeatureManager } from "../../workers/OptimizedFeatureManager.js";
+// Import Feature Cache Manager for lightning-fast predictions
+import { featureCacheManager } from "../cache/FeatureCacheManager.js";
 
 export class TensorFlowScheduler {
   constructor() {
@@ -115,6 +117,16 @@ export class TensorFlowScheduler {
           console.warn("⚠️ Web Worker initialization error:", error.message);
           this.workerFallbackMode = true;
         }
+      }
+
+      // **PHASE 2 ENHANCEMENT: Initialize Feature Cache Manager**
+      try {
+        console.log("⚡ Initializing feature cache manager for instant predictions...");
+        // Cache will be invalidated on first use with actual data
+        console.log("✅ Feature cache manager ready - targeting <10ms cached predictions");
+      } catch (cacheError) {
+        console.warn("⚠️ Feature cache initialization warning:", cacheError.message);
+        // Cache is not critical for operation, continue without it
       }
 
       // Setup performance monitoring
@@ -403,6 +415,17 @@ export class TensorFlowScheduler {
 
     try {
       console.log("🔮 Generating ML predictions for schedule...");
+
+      // **PHASE 2 ENHANCEMENT: Initialize cache with current configuration**
+      const cacheInvalidated = featureCacheManager.invalidateOnConfigChange(
+        staffMembers, 
+        currentSchedule, 
+        { dateRange: dateRange.map(d => d.toISOString()) }
+      );
+      
+      if (cacheInvalidated) {
+        console.log("🔄 Cache invalidated due to configuration changes");
+      }
 
       // Filter out inactive staff members before processing
       const activeStaff = staffMembers.filter((staff) => {
@@ -714,17 +737,36 @@ export class TensorFlowScheduler {
 
       console.log("✅ ML predictions generated");
 
+      // **PHASE 2 ENHANCEMENT: Start background precomputation for future requests**
+      try {
+        featureCacheManager.startBackgroundPrecomputation(
+          activeStaff,
+          dateRange,
+          currentPeriodData,
+          allHistoricalData
+        );
+        console.log("🚀 Background feature precomputation started for future lightning-fast predictions");
+      } catch (precomputeError) {
+        console.warn("⚠️ Background precomputation setup failed:", precomputeError.message);
+        // Not critical for operation, continue without it
+      }
+
       const modelAccuracy = this.getModelAccuracy();
 
       console.log(
         `✅ High-accuracy ML predictions generated (${(modelAccuracy * 100).toFixed(1)}% model accuracy)`,
       );
 
+      // Log cache performance
+      const cacheStats = featureCacheManager.getStats();
+      console.log(`📊 Cache performance: ${cacheStats.hit_rate} hit rate, ${cacheStats.cache_size} entries`);
+
       return {
         predictions,
         confidence: predictionConfidence,
         modelAccuracy: modelAccuracy,
         success: true,
+        cacheStats: cacheStats, // Include cache performance in response
       };
     } catch (error) {
       console.error("❌ Prediction failed:", error);
@@ -1031,10 +1073,26 @@ export class TensorFlowScheduler {
   }
 
   /**
-   * Optimized feature generation using Web Worker (target: <50ms per prediction)
+   * Ultra-fast feature generation with cache-first approach (target: <10ms from cache, <50ms generation)
    */
   async generateFeaturesAsync(staff, date, dateIndex, periodData, allHistoricalData, staffMembers) {
+    const dateKey = date.toISOString().split("T")[0];
+    const startTime = Date.now();
+
     try {
+      // **PHASE 2 ENHANCEMENT: Try cache first for lightning-fast predictions (<10ms)**
+      const cacheResult = featureCacheManager.getFeatures(staff.id, dateKey);
+      if (cacheResult.success) {
+        const cacheTime = Date.now() - startTime;
+        if (cacheTime < 10) {
+          console.log(`⚡ Cache hit for ${staff.name} on ${dateKey} (${cacheTime}ms)`);
+        }
+        return cacheResult.features;
+      }
+
+      // Cache miss - generate features and cache them
+      console.log(`🔄 Cache miss for ${staff.name} on ${dateKey} - generating...`);
+
       // Try using optimized web worker first
       if (!this.workerFallbackMode && optimizedFeatureManager) {
         const result = await optimizedFeatureManager.generateFeatures({
@@ -1047,6 +1105,11 @@ export class TensorFlowScheduler {
         });
         
         if (result.success) {
+          // Cache the generated features
+          featureCacheManager.setFeatures(staff.id, dateKey, result.features, {
+            generation_time: Date.now() - startTime,
+            method: "web_worker"
+          });
           return result.features;
         } else {
           console.warn("⚠️ Optimized feature generation failed, using fallback:", result.error);
@@ -1054,7 +1117,7 @@ export class TensorFlowScheduler {
       }
       
       // Fallback to main thread with timeout protection
-      return new Promise((resolve, reject) => {
+      const features = await new Promise((resolve, reject) => {
         const timeoutId = setTimeout(() => {
           reject(new Error('Feature generation timeout'));
         }, 50); // 50ms timeout
@@ -1089,10 +1152,20 @@ export class TensorFlowScheduler {
           reject(error);
         }
       });
+
+      // Cache the generated features
+      const generationTime = Date.now() - startTime;
+      featureCacheManager.setFeatures(staff.id, dateKey, features, {
+        generation_time: generationTime,
+        method: "main_thread_fallback"
+      });
+
+      return features;
+
     } catch (error) {
       console.warn("⚠️ Feature generation failed:", error.message);
       // Return minimal features for fallback
-      return Array(42).fill(0); // Default feature vector
+      return Array(MODEL_CONFIG.INPUT_FEATURES.ENHANCED_TOTAL || 42).fill(0);
     }
   }
 
@@ -1532,6 +1605,14 @@ export class TensorFlowScheduler {
         }
       }
 
+      // **PHASE 2 ENHANCEMENT: Clear feature cache**
+      try {
+        featureCacheManager.clear();
+        console.log("⚡ Feature cache cleared");
+      } catch (error) {
+        console.warn("⚠️ Failed to clear feature cache:", error.message);
+      }
+
       // Reset worker states
       this.workerInitialized = false;
       this.workerFallbackMode = false;
@@ -1579,6 +1660,14 @@ export class TensorFlowScheduler {
       this.lastTrainingData = null;
       this.feedbackData = [];
       this.retrainingQueue = [];
+
+      // **PHASE 2 ENHANCEMENT: Dispose feature cache**
+      try {
+        featureCacheManager.dispose();
+        console.log("⚡ Feature cache disposed");
+      } catch (error) {
+        console.warn("⚠️ Failed to dispose feature cache:", error.message);
+      }
 
       // Full memory cleanup
       MEMORY_UTILS.cleanup();

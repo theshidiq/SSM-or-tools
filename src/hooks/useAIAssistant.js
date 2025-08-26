@@ -9,6 +9,8 @@
 import { useState, useCallback, useRef, useEffect } from "react";
 import { optimizedStorage } from "../utils/storageUtils";
 import { generateDateRange } from "../utils/dateUtils";
+// Import feature cache manager for Phase 2 optimizations
+import { featureCacheManager } from "../ai/cache/FeatureCacheManager.js";
 // Lazy imports to prevent blocking main thread
 const loadConstraintEngine = async () => {
   const module = await import("../ai/constraints/ConstraintEngine");
@@ -470,6 +472,35 @@ export const useAIAssistant = (
       console.log(
         "🎯 Starting AI prediction with strict business rule enforcement...",
       );
+
+      // **PHASE 2 ENHANCEMENT: Invalidate feature cache on configuration changes**
+      try {
+        const dateRange = generateDateRange(currentMonthIndex);
+        const cacheInvalidated = featureCacheManager.invalidateOnConfigChange(
+          staffMembers, 
+          scheduleData, 
+          { 
+            monthIndex: currentMonthIndex,
+            dateRange: dateRange.map(d => d.toISOString()),
+            timestamp: Date.now() 
+          }
+        );
+        
+        if (cacheInvalidated) {
+          console.log("⚡ Feature cache invalidated due to configuration changes - will rebuild during predictions");
+        } else {
+          console.log("⚡ Feature cache is valid - predictions will benefit from cache hits");
+        }
+        
+        // Log cache health status
+        const cacheHealth = featureCacheManager.getHealth();
+        if (cacheHealth.status !== "excellent" && cacheHealth.issues.length > 0) {
+          console.log(`📊 Cache health: ${cacheHealth.status} (${cacheHealth.issues.join(", ")})`);
+        }
+      } catch (cacheError) {
+        console.warn("⚠️ Cache invalidation check failed:", cacheError.message);
+        // Continue without cache - not critical for operation
+      }
 
       // Prepare data for processing
       const dateRange = generateDateRange(currentMonthIndex);
