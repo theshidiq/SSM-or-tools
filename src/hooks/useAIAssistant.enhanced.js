@@ -14,21 +14,9 @@ import {
 } from "../ai/constraints/ConstraintEngine";
 import { configurationCache } from "../ai/cache/ConfigurationCacheManager";
 
-// Lazy import for WorkerManager
-let getWorkerManager = null;
-try {
-  ({ getWorkerManager } = require("../ai/performance/WorkerManager"));
-} catch (error) {
-  console.log("⚠️ WorkerManager not available, using fallback modes");
-}
-
-// Enhanced imports for production-ready AI system fallback
-let aiErrorHandler = null;
-try {
-  ({ aiErrorHandler } = require("../ai/utils/ErrorHandler"));
-} catch (error) {
-  console.log("⚠️ Enhanced error handler not available");
-}
+// Import WorkerManager and ErrorHandler
+import { getWorkerManager } from "../ai/performance/WorkerManager";
+import { aiErrorHandler } from "../ai/utils/ErrorHandler";
 
 // Enhanced lazy import for production-ready hybrid AI system fallback
 const loadEnhancedAISystem = async () => {
@@ -267,7 +255,7 @@ export const useAIAssistant = (
       // Try to initialize WorkerManager first (preferred method)
       if (getWorkerManager) {
         console.log("🚀 Initializing worker-based AI system...");
-        
+
         try {
           const workerManager = getWorkerManager();
           const initResult = await workerManager.initialize({
@@ -275,9 +263,9 @@ export const useAIAssistant = (
             enableConstraintML: true,
             enablePatternRecognition: true,
             memoryLimitMB: 300, // Conservative limit
-            restaurantId: 'default',
+            restaurantId: "default",
           });
-          
+
           if (initResult.success) {
             workerManagerRef.current = workerManager;
             setSystemType(initResult.fallback ? "worker_fallback" : "worker");
@@ -287,17 +275,20 @@ export const useAIAssistant = (
               fallback: initResult.fallback,
               initTime: Date.now() - startTime,
             });
-            
+
             console.log(
               `✅ Worker-based AI system initialized in ${Date.now() - startTime}ms`,
-              initResult.fallback ? "(using fallback)" : ""
+              initResult.fallback ? "(using fallback)" : "",
             );
-            
+
             setIsInitialized(true);
             return;
           }
         } catch (workerError) {
-          console.warn("⚠️ Worker initialization failed, trying enhanced system:", workerError);
+          console.warn(
+            "⚠️ Worker initialization failed, trying enhanced system:",
+            workerError,
+          );
           performanceMonitor.current.fallbackUsage++;
         }
       }
@@ -326,14 +317,14 @@ export const useAIAssistant = (
         setSystemType("enhanced");
         setSystemHealth(hybridPredictor.getDetailedStatus());
         setIsInitialized(true);
-        
+
         console.log(
           `✨ Enhanced AI system initialized in ${Date.now() - startTime}ms (worker fallback mode)`,
         );
       } else if (aiSystem && aiSystem.fallback) {
         // Legacy system fallback
         console.log("🔄 Falling back to legacy AI system...");
-        
+
         await aiSystem.autonomousEngine.initialize({
           scheduleGenerationInterval: 60000,
           proactiveMonitoring: false,
@@ -361,7 +352,7 @@ export const useAIAssistant = (
           error: error.message,
         },
       ]);
-      
+
       // Still mark as initialized to allow basic functionality
       setIsInitialized(true);
     } finally {
@@ -370,58 +361,63 @@ export const useAIAssistant = (
   }, [isInitialized]);
 
   // Emergency prediction fallback for timeout recovery
-  const performEmergencyPrediction = useCallback(async (scheduleData, staffMembers) => {
-    console.log("🆘 Performing emergency prediction fallback...");
-    
-    try {
-      const newSchedule = JSON.parse(JSON.stringify(scheduleData));
-      let filledCells = 0;
+  const performEmergencyPrediction = useCallback(
+    async (scheduleData, staffMembers) => {
+      console.log("🆘 Performing emergency prediction fallback...");
 
-      // Basic pattern-based filling for empty cells only
-      Object.keys(newSchedule).forEach((staffId) => {
-        const staff = staffMembers.find((s) => s.id === staffId);
-        if (!staff) return;
+      try {
+        const newSchedule = JSON.parse(JSON.stringify(scheduleData));
+        let filledCells = 0;
 
-        Object.keys(newSchedule[staffId]).forEach((dateKey) => {
-          const currentValue = newSchedule[staffId][dateKey];
+        // Basic pattern-based filling for empty cells only
+        Object.keys(newSchedule).forEach((staffId) => {
+          const staff = staffMembers.find((s) => s.id === staffId);
+          if (!staff) return;
 
-          if (!currentValue || currentValue === "") {
-            const date = new Date(dateKey);
-            const dayOfWeek = date.getDay();
-            
-            let shift;
-            if (staff.status === "パート") {
-              shift = (dayOfWeek === 0 || dayOfWeek === 6) ? "×" : "○";
-            } else {
-              if (dayOfWeek === 1) shift = "×"; // Monday off
-              else if (dayOfWeek === 0) shift = "△"; // Sunday early
-              else shift = ""; // Normal shift
+          Object.keys(newSchedule[staffId]).forEach((dateKey) => {
+            const currentValue = newSchedule[staffId][dateKey];
+
+            if (!currentValue || currentValue === "") {
+              const date = new Date(dateKey);
+              const dayOfWeek = date.getDay();
+
+              let shift;
+              if (staff.status === "パート") {
+                shift = dayOfWeek === 0 || dayOfWeek === 6 ? "×" : "○";
+              } else {
+                if (dayOfWeek === 1)
+                  shift = "×"; // Monday off
+                else if (dayOfWeek === 0)
+                  shift = "△"; // Sunday early
+                else shift = ""; // Normal shift
+              }
+
+              newSchedule[staffId][dateKey] = shift;
+              filledCells++;
             }
-
-            newSchedule[staffId][dateKey] = shift;
-            filledCells++;
-          }
+          });
         });
-      });
 
-      return {
-        success: true,
-        newSchedule,
-        message: `🆘 ${filledCells}個のセルを緊急モードで予測（タイムアウト回復）`,
-        filledCells,
-        accuracy: 60,
-        method: "emergency_fallback",
-        emergencyRecovery: true,
-      };
-    } catch (error) {
-      console.error("❌ Emergency prediction failed:", error);
-      return {
-        success: false,
-        message: `緊急予測も失敗しました: ${error.message}`,
-        error: error.message,
-      };
-    }
-  }, []);
+        return {
+          success: true,
+          newSchedule,
+          message: `🆘 ${filledCells}個のセルを緊急モードで予測（タイムアウト回復）`,
+          filledCells,
+          accuracy: 60,
+          method: "emergency_fallback",
+          emergencyRecovery: true,
+        };
+      } catch (error) {
+        console.error("❌ Emergency prediction failed:", error);
+        return {
+          success: false,
+          message: `緊急予測も失敗しました: ${error.message}`,
+          error: error.message,
+        };
+      }
+    },
+    [],
+  );
 
   // True non-blocking auto-fill using worker-first approach
   const autoFillSchedule = useCallback(async () => {
@@ -476,11 +472,14 @@ export const useAIAssistant = (
       };
 
       let result;
-      
+
       // Method 1: Try Worker-based processing (preferred - truly non-blocking)
-      if (workerManagerRef.current && (systemType === "worker" || systemType === "worker_fallback")) {
+      if (
+        workerManagerRef.current &&
+        (systemType === "worker" || systemType === "worker_fallback")
+      ) {
         console.log("🚀 Using worker-based AI processing (non-blocking)...");
-        
+
         try {
           // Store current processing reference for cancellation
           currentProcessingRef.current = {
@@ -488,34 +487,36 @@ export const useAIAssistant = (
             startTime,
             canCancel: true,
           };
-          
+
           result = await workerManagerRef.current.processMLPredictions(
             processingData,
-            progressCallback
+            progressCallback,
           );
-          
+
           // Track worker performance
           const processingTime = Date.now() - startTime;
           performanceMonitor.current.workerProcessingTimes.push(processingTime);
-          
+
           if (performanceMonitor.current.workerProcessingTimes.length > 10) {
-            performanceMonitor.current.workerProcessingTimes = 
+            performanceMonitor.current.workerProcessingTimes =
               performanceMonitor.current.workerProcessingTimes.slice(-10);
           }
-          
+
           console.log(`✅ Worker processing completed in ${processingTime}ms`);
-          
         } catch (workerError) {
-          console.warn("⚠️ Worker processing failed, falling back to enhanced system:", workerError);
+          console.warn(
+            "⚠️ Worker processing failed, falling back to enhanced system:",
+            workerError,
+          );
           performanceMonitor.current.fallbackUsage++;
-          
+
           currentProcessingRef.current = null;
-          
+
           // Worker failed, fall back to enhanced system
           result = await processWithEnhancedSystem(
             processingData,
             progressCallback,
-            startTime
+            startTime,
           );
         }
       } else if (systemType === "enhanced" && aiSystemRef.current) {
@@ -524,7 +525,7 @@ export const useAIAssistant = (
         result = await processWithEnhancedSystem(
           processingData,
           progressCallback,
-          startTime
+          startTime,
         );
       } else {
         // Method 3: Legacy or basic fallback
@@ -532,29 +533,32 @@ export const useAIAssistant = (
         result = await processWithLegacySystem(
           processingData,
           progressCallback,
-          startTime
+          startTime,
         );
       }
 
       // Apply results if successful
       if (result && result.success && result.schedule) {
         updateSchedule(result.schedule);
-        
+
         const filledDetails = countFilledCells(scheduleData, result.schedule);
         const processingTime = Date.now() - startTime;
-        
+
         return {
           success: true,
           message: `✨ ${filledDetails}個のセルを${getSystemDisplayName(result.metadata?.method || systemType)}で予測（精度: ${Math.round(result.metadata?.quality || result.metadata?.confidence || 75)}%, 処理時間: ${processingTime}ms）`,
           data: {
             filledCells: filledDetails,
-            accuracy: Math.round(result.metadata?.quality || result.metadata?.confidence || 75),
+            accuracy: Math.round(
+              result.metadata?.quality || result.metadata?.confidence || 75,
+            ),
             method: result.metadata?.method || systemType,
             mlUsed: result.metadata?.mlUsed || false,
             processingTime,
             emergencyFallback: result.metadata?.emergencyFallback || false,
             violations: result.metadata?.violations || [],
-            systemHealth: systemType === "worker" ? "worker_healthy" : systemHealth,
+            systemHealth:
+              systemType === "worker" ? "worker_healthy" : systemHealth,
           },
         };
       } else {
@@ -565,7 +569,6 @@ export const useAIAssistant = (
           error: result?.error,
         };
       }
-      
     } catch (error) {
       console.error("❌ AI auto-fill error:", error);
 
@@ -578,17 +581,20 @@ export const useAIAssistant = (
         systemType,
         recoveryAttempt: recoveryAttempts,
       };
-      
+
       setErrorHistory((prev) => [...prev.slice(-9), errorInfo]);
       setLastError(error);
-      setRecoveryAttempts(prev => prev + 1);
+      setRecoveryAttempts((prev) => prev + 1);
 
       // Try emergency recovery
-      if (recoveryAttempts < 2 && !error.message.includes('timeout')) {
+      if (recoveryAttempts < 2 && !error.message.includes("timeout")) {
         console.log("🆘 Attempting emergency recovery...");
-        
-        const emergencyResult = await performEmergencyPrediction(scheduleData, staffMembers);
-        
+
+        const emergencyResult = await performEmergencyPrediction(
+          scheduleData,
+          staffMembers,
+        );
+
         if (emergencyResult.success && emergencyResult.newSchedule) {
           updateSchedule(emergencyResult.newSchedule);
           return {
@@ -622,118 +628,138 @@ export const useAIAssistant = (
     isProcessing,
     recoveryAttempts,
   ]);
-  
+
   // Helper function to process with enhanced system (with timeout)
-  const processWithEnhancedSystem = useCallback(async (processingData, progressCallback, startTime) => {
-    const system = aiSystemRef.current;
-    
-    if (!system || system.type !== "enhanced") {
-      throw new Error("Enhanced system not available");
-    }
-    
-    currentProcessingRef.current = {
-      type: "enhanced",
-      startTime,
-      canCancel: false,
-    };
-    
-    const ENHANCED_TIMEOUT = processingData.timeout || 20000;
-    
-    const timeoutPromise = new Promise((_, reject) => 
-      setTimeout(() => reject(new Error(`Enhanced system timeout after ${ENHANCED_TIMEOUT}ms`)), ENHANCED_TIMEOUT)
-    );
-    
-    const processingPromise = system.hybridPredictor.predictSchedule(
-      {
-        scheduleData: processingData.scheduleData,
-        currentMonthIndex: processingData.currentMonthIndex,
-        timestamp: Date.now(),
-      },
-      processingData.staffMembers,
-      processingData.dateRange,
-    );
-    
-    try {
-      const result = await Promise.race([processingPromise, timeoutPromise]);
-      return result;
-    } catch (error) {
-      if (error.message.includes('timeout')) {
-        console.warn("⏱️ Enhanced system timed out, using emergency fallback");
-        return await performEmergencyWorkerFallback(processingData, progressCallback);
+  const processWithEnhancedSystem = useCallback(
+    async (processingData, progressCallback, startTime) => {
+      const system = aiSystemRef.current;
+
+      if (!system || system.type !== "enhanced") {
+        throw new Error("Enhanced system not available");
       }
-      throw error;
-    }
-  }, []);
-  
+
+      currentProcessingRef.current = {
+        type: "enhanced",
+        startTime,
+        canCancel: false,
+      };
+
+      const ENHANCED_TIMEOUT = processingData.timeout || 20000;
+
+      const timeoutPromise = new Promise((_, reject) =>
+        setTimeout(
+          () =>
+            reject(
+              new Error(`Enhanced system timeout after ${ENHANCED_TIMEOUT}ms`),
+            ),
+          ENHANCED_TIMEOUT,
+        ),
+      );
+
+      const processingPromise = system.hybridPredictor.predictSchedule(
+        {
+          scheduleData: processingData.scheduleData,
+          currentMonthIndex: processingData.currentMonthIndex,
+          timestamp: Date.now(),
+        },
+        processingData.staffMembers,
+        processingData.dateRange,
+      );
+
+      try {
+        const result = await Promise.race([processingPromise, timeoutPromise]);
+        return result;
+      } catch (error) {
+        if (error.message.includes("timeout")) {
+          console.warn(
+            "⏱️ Enhanced system timed out, using emergency fallback",
+          );
+          return await performEmergencyWorkerFallback(
+            processingData,
+            progressCallback,
+          );
+        }
+        throw error;
+      }
+    },
+    [],
+  );
+
   // Helper function to process with legacy system
-  const processWithLegacySystem = useCallback(async (processingData, progressCallback, startTime) => {
-    currentProcessingRef.current = {
-      type: "legacy",
-      startTime,
-      canCancel: false,
-    };
-    
-    if (progressCallback) {
-      progressCallback({
-        stage: "legacy_processing",
-        progress: 50,
-        message: "レガシーシステムで処理中...",
-      });
-    }
-    
-    const historicalData = await loadAllHistoricalData();
-    const result = await analyzeAndFillScheduleWithHistory(
-      processingData.scheduleData,
-      processingData.staffMembers,
-      processingData.currentMonthIndex,
-      historicalData,
-    );
-    
-    return {
-      success: result.success,
-      schedule: result.newSchedule,
-      metadata: {
-        method: "legacy",
-        quality: result.accuracy,
-        confidence: result.accuracy,
-        filledCells: result.filledCells,
-        processingTime: Date.now() - startTime,
-      },
-      error: result.success ? null : result.message,
-    };
-  }, []);
-  
+  const processWithLegacySystem = useCallback(
+    async (processingData, progressCallback, startTime) => {
+      currentProcessingRef.current = {
+        type: "legacy",
+        startTime,
+        canCancel: false,
+      };
+
+      if (progressCallback) {
+        progressCallback({
+          stage: "legacy_processing",
+          progress: 50,
+          message: "レガシーシステムで処理中...",
+        });
+      }
+
+      const historicalData = await loadAllHistoricalData();
+      const result = await analyzeAndFillScheduleWithHistory(
+        processingData.scheduleData,
+        processingData.staffMembers,
+        processingData.currentMonthIndex,
+        historicalData,
+      );
+
+      return {
+        success: result.success,
+        schedule: result.newSchedule,
+        metadata: {
+          method: "legacy",
+          quality: result.accuracy,
+          confidence: result.accuracy,
+          filledCells: result.filledCells,
+          processingTime: Date.now() - startTime,
+        },
+        error: result.success ? null : result.message,
+      };
+    },
+    [],
+  );
+
   // Emergency worker fallback when even enhanced system fails
-  const performEmergencyWorkerFallback = useCallback(async (processingData, progressCallback) => {
-    console.log("🆘 Performing emergency worker fallback...");
-    
-    if (progressCallback) {
-      progressCallback({
-        stage: "emergency_fallback",
-        progress: 50,
-        message: "緊急フォールバック実行中...",
-      });
-    }
-    
-    const emergencyResult = await performEmergencyPrediction(
-      processingData.scheduleData, 
-      processingData.staffMembers
-    );
-    
-    return {
-      success: emergencyResult.success,
-      schedule: emergencyResult.newSchedule,
-      metadata: {
-        method: "emergency_fallback",
-        quality: emergencyResult.accuracy || 60,
-        confidence: 60,
-        filledCells: emergencyResult.filledCells || 0,
-        emergencyFallback: true,
-      },
-      error: emergencyResult.success ? null : emergencyResult.message,
-    };
-  }, []);
-  
+  const performEmergencyWorkerFallback = useCallback(
+    async (processingData, progressCallback) => {
+      console.log("🆘 Performing emergency worker fallback...");
+
+      if (progressCallback) {
+        progressCallback({
+          stage: "emergency_fallback",
+          progress: 50,
+          message: "緊急フォールバック実行中...",
+        });
+      }
+
+      const emergencyResult = await performEmergencyPrediction(
+        processingData.scheduleData,
+        processingData.staffMembers,
+      );
+
+      return {
+        success: emergencyResult.success,
+        schedule: emergencyResult.newSchedule,
+        metadata: {
+          method: "emergency_fallback",
+          quality: emergencyResult.accuracy || 60,
+          confidence: 60,
+          filledCells: emergencyResult.filledCells || 0,
+          emergencyFallback: true,
+        },
+        error: emergencyResult.success ? null : emergencyResult.message,
+      };
+    },
+    [],
+  );
+
   // Get display name for system type
   const getSystemDisplayName = useCallback((method) => {
     switch (method) {
@@ -762,7 +788,7 @@ export const useAIAssistant = (
           message: "スケジュールデータまたはスタッフデータがありません。",
         };
       }
-      
+
       if (isProcessing) {
         return {
           success: false,
@@ -817,20 +843,31 @@ export const useAIAssistant = (
         };
       }
     },
-    [scheduleData, staffMembers, isInitialized, initializeAI, autoFillSchedule, isProcessing],
+    [
+      scheduleData,
+      staffMembers,
+      isInitialized,
+      initializeAI,
+      autoFillSchedule,
+      isProcessing,
+    ],
   );
-  
+
   // Cancel current processing
   const cancelProcessing = useCallback(async () => {
     if (!isProcessing || !currentProcessingRef.current) {
       return { success: false, reason: "No processing to cancel" };
     }
-    
+
     const processingInfo = currentProcessingRef.current;
     console.log(`🛑 Cancelling ${processingInfo.type} processing...`);
-    
+
     try {
-      if (processingInfo.type === "worker" && processingInfo.canCancel && workerManagerRef.current) {
+      if (
+        processingInfo.type === "worker" &&
+        processingInfo.canCancel &&
+        workerManagerRef.current
+      ) {
         const result = await workerManagerRef.current.cancelProcessing();
         if (result.success) {
           setIsProcessing(false);
@@ -839,25 +876,24 @@ export const useAIAssistant = (
           return { success: true, method: "worker" };
         }
       }
-      
+
       // For other types or if worker cancellation failed, force cleanup
       setIsProcessing(false);
       setProcessingProgress(null);
       currentProcessingRef.current = null;
-      
-      return { 
-        success: true, 
-        method: "forced", 
-        note: "Processing state cleared - may still complete in background" 
+
+      return {
+        success: true,
+        method: "forced",
+        note: "Processing state cleared - may still complete in background",
       };
-      
     } catch (error) {
       console.error("❌ Failed to cancel processing:", error);
-      
+
       setIsProcessing(false);
       setProcessingProgress(null);
       currentProcessingRef.current = null;
-      
+
       return { success: false, error: error.message, forcedCleanup: true };
     }
   }, [isProcessing, workerManagerRef]);
@@ -1005,7 +1041,7 @@ export const useAIAssistant = (
     getSystemStatus,
     checkSystemHealth,
     resetSystem,
-    
+
     // Progress tracking
     processingProgress,
     currentProcessing: currentProcessingRef.current,
@@ -1015,7 +1051,7 @@ export const useAIAssistant = (
     isEnhanced: systemType === "enhanced",
     isLegacy: systemType === "legacy",
     isAvailable: systemType !== "unavailable" && systemType !== "error",
-    
+
     // Worker-specific information
     isWorkerReady: () => {
       return workerManagerRef.current && workerManagerRef.current.isInitialized;
@@ -1057,8 +1093,8 @@ export const useAIAssistant = (
       ...performanceMonitor.current,
       currentMemory:
         typeof window !== "undefined" && window.tf ? window.tf.memory() : null,
-      workerPerformance: workerManagerRef.current 
-        ? workerManagerRef.current.getPerformanceMetrics() 
+      workerPerformance: workerManagerRef.current
+        ? workerManagerRef.current.getPerformanceMetrics()
         : null,
     }),
 
@@ -1080,9 +1116,12 @@ export const useAIAssistant = (
             await system.hybridPredictor.forceRefreshConfiguration();
           }
         }
-        
+
         // Refresh worker if available
-        if (workerManagerRef.current && workerManagerRef.current.refreshConfiguration) {
+        if (
+          workerManagerRef.current &&
+          workerManagerRef.current.refreshConfiguration
+        ) {
           await workerManagerRef.current.refreshConfiguration();
         }
 
@@ -1099,7 +1138,7 @@ export const useAIAssistant = (
       setRecoveryAttempts(0);
       setErrorHistory([]);
     },
-    
+
     // Worker management
     restartWorker: async () => {
       if (workerManagerRef.current) {

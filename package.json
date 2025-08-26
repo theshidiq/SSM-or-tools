@@ -84,6 +84,7 @@
     "file-saver": "^2.0.5",
     "lodash": "^4.17.21",
     "lucide-react": "^0.263.1",
+    "playwright": "^1.55.0",
     "postcss": "^8.4.27",
     "react": ">=16.8.0",
     "react-dom": ">=16.8.0",

@@ -31,6 +31,9 @@ import StaffEditModal from "./schedule/StaffEditModal";
 import StatusModal from "./common/StatusModal";
 import SettingsModal from "./settings/SettingsModal";
 
+// Temporary debug tester - REMOVE AFTER DEBUGGING
+import AIAssistantDebugTester from "./debug/AIAssistantDebugTester";
+
 // Import custom hooks
 
 const ShiftScheduleEditor = ({
@@ -825,6 +828,16 @@ const ShiftScheduleEditor = ({
         isAutosaveEnabled={isAutosaveEnabled}
         onToggleAutosave={setIsAutosaveEnabled}
       />
+
+      {/* Temporary debug tester - REMOVE AFTER DEBUGGING */}
+      {process.env.NODE_ENV === 'development' && (
+        <AIAssistantDebugTester
+          scheduleData={schedule}
+          staffMembers={staffMembers}
+          currentMonthIndex={currentMonthIndex}
+          updateSchedule={updateSchedule}
+        />
+      )}
     </div>
   );
 };

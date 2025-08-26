@@ -10,6 +10,7 @@ import * as tf from "@tensorflow/tfjs";
 import { extractAllDataForAI } from "../utils/DataExtractor.js";
 import { isStaffActiveInCurrentPeriod } from "../../utils/staffUtils.js";
 import { ScheduleFeatureEngineer } from "./FeatureEngineering.js";
+import { EnhancedFeatureEngineering } from "./EnhancedFeatureEngineering.js";
 import {
   MODEL_CONFIG,
   MEMORY_UTILS,
@@ -17,6 +18,9 @@ import {
   MODEL_STORAGE,
   initializeTensorFlow,
 } from "./TensorFlowConfig.js";
+// Import ML Worker Manager and Optimized Feature Manager for non-blocking operations
+import { mlWorkerManager } from "../../workers/MLWorkerManager.js";
+import { optimizedFeatureManager } from "../../workers/OptimizedFeatureManager.js";
 
 export class TensorFlowScheduler {
   constructor() {
@@ -25,7 +29,7 @@ export class TensorFlowScheduler {
 
     // Keep existing properties for backward compatibility
     this.model = null;
-    this.featureEngineer = new ScheduleFeatureEngineer();
+    this.featureEngineer = new EnhancedFeatureEngineering(); // Use optimized enhanced features
     this.isInitialized = false;
     this.isTraining = false;
     this.trainingHistory = null;
@@ -60,6 +64,11 @@ export class TensorFlowScheduler {
       successCounts: 0,
     };
 
+    // Web Worker integration for non-blocking operations
+    this.useWebWorker = true;
+    this.workerFallbackMode = false;
+    this.workerInitialized = false;
+
     // Model backup system
     this.modelBackups = new Map();
     this.maxBackups = 3;
@@ -85,6 +94,27 @@ export class TensorFlowScheduler {
       const tfReady = await initializeTensorFlow();
       if (!tfReady) {
         throw new Error("TensorFlow initialization failed");
+      }
+
+      // **PERFORMANCE ENHANCEMENT: Initialize ML Web Worker and Optimized Feature Manager**
+      if (this.useWebWorker) {
+        try {
+          // Initialize main ML worker
+          this.workerInitialized = await mlWorkerManager.initializeWorker();
+          if (this.workerInitialized) {
+            console.log("⚡ ML Web Worker initialized - heavy operations will run off main thread");
+          } else {
+            console.warn("⚠️ ML Web Worker failed to initialize - using main thread fallback");
+            this.workerFallbackMode = true;
+          }
+
+          // Initialize optimized feature generation worker (separate for performance)
+          await optimizedFeatureManager.initialize();
+          console.log("🚀 Optimized feature generation worker initialized - targeting <50ms per prediction");
+        } catch (error) {
+          console.warn("⚠️ Web Worker initialization error:", error.message);
+          this.workerFallbackMode = true;
+        }
       }
 
       // Setup performance monitoring
@@ -422,16 +452,68 @@ export class TensorFlowScheduler {
         dateRange: dateRange,
       };
 
-      // **PERFORMANCE FIX: Process in chunks with yielding to prevent UI blocking**
-      const CHUNK_SIZE = 3; // Smaller chunks for better responsiveness
-      const YIELD_INTERVAL = 5; // Yield every 5 predictions
+      // **CRITICAL PERFORMANCE FIX: Ultra-responsive chunking to prevent UI blocking**
+      const CHUNK_SIZE = 2; // Very small chunks for maximum responsiveness
+      const YIELD_INTERVAL = 3; // Yield every 3 predictions (more frequent)
+      const IDLE_YIELD_TIME = 16; // Target 60fps (16ms frame time)
       let processedCount = 0;
       let yieldCounter = 0;
       const totalPredictions = activeStaff.length * dateRange.length;
       const startTime = Date.now();
       const PREDICTION_TIMEOUT = 30000; // 30 second timeout
+      
+      // Add progress callback for UI updates
+      const updateProgress = (progress) => {
+        console.log(`⚡ Progress: ${progress}% (${processedCount}/${totalPredictions})`);
+        // Dispatch custom event for UI progress updates
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new CustomEvent('ml-progress', {
+            detail: { progress, processed: processedCount, total: totalPredictions }
+          }));
+        }
+      };
 
-      console.log(`🔮 Starting non-blocking prediction processing for ${totalPredictions} predictions...`);
+      console.log(
+        `🔮 Starting ultra-responsive prediction processing for ${totalPredictions} predictions...`,
+      );
+
+      // **ULTRA-PERFORMANCE FIX: Try batch processing first for massive speed improvement**
+      if (!this.workerFallbackMode && totalPredictions > 10) {
+        try {
+          console.log("🚀 Attempting batch feature generation for ultra-fast processing...");
+          const batchResult = await this.processPredictionsBatch(
+            activeStaff, 
+            dateRange, 
+            currentSchedule, 
+            currentPeriodData, 
+            allHistoricalData,
+            updateProgress
+          );
+          
+          if (batchResult.success) {
+            console.log(`✅ Batch processing completed ${batchResult.processedCount} predictions in ${batchResult.totalTime}ms`);
+            return {
+              success: true,
+              predictions: batchResult.predictions,
+              predictionConfidence: batchResult.confidence,
+              method: "batch_optimized",
+              performanceStats: {
+                totalPredictions: batchResult.processedCount,
+                totalTime: batchResult.totalTime,
+                avgTimePerPrediction: batchResult.totalTime / batchResult.processedCount,
+                usingWebWorkers: true
+              }
+            };
+          } else {
+            console.warn("⚠️ Batch processing failed, falling back to individual processing");
+          }
+        } catch (batchError) {
+          console.warn("⚠️ Batch processing error, falling back to individual processing:", batchError.message);
+        }
+      }
+
+      // Fallback to individual processing for compatibility
+      console.log("🔄 Using individual prediction processing...");
 
       // Process only active staff members with fully non-blocking chunked processing
       for (const staff of activeStaff) {
@@ -470,22 +552,27 @@ export class TensorFlowScheduler {
               continue;
             }
 
-            // Generate features for this staff-date combination with timeout
+            // **PERFORMANCE FIX: Ultra-fast feature generation using Web Worker (<50ms target)**
             let features;
             try {
               const featureStartTime = Date.now();
-              features = this.featureEngineer.generateFeatures({
+              
+              // Use optimized Web Worker feature generation
+              features = await this.generateFeaturesAsync(
                 staff,
                 date,
-                dateIndex: dateRange.indexOf(date),
-                periodData: currentPeriodData,
+                dateRange.indexOf(date),
+                currentPeriodData,
                 allHistoricalData,
-                staffMembers,
-              });
+                staffMembers
+              );
 
-              // Warn if feature generation is taking too long
-              if (Date.now() - featureStartTime > 100) {
-                console.warn(`🐌 Slow feature generation for ${staff.name}: ${Date.now() - featureStartTime}ms`);
+              // Track performance
+              const duration = Date.now() - featureStartTime;
+              if (duration > 50) {
+                console.warn(
+                  `🐌 Feature generation exceeded 50ms target for ${staff.name}: ${duration}ms`,
+                );
               }
             } catch (featureError) {
               console.warn(
@@ -498,7 +585,7 @@ export class TensorFlowScheduler {
             if (
               !features ||
               !Array.isArray(features) ||
-              features.length !== MODEL_CONFIG.INPUT_FEATURES.TOTAL
+              features.length !== MODEL_CONFIG.INPUT_FEATURES.ENHANCED_TOTAL
             ) {
               console.warn(
                 `⚠️ Invalid features for ${staff.name} on ${dateKey}, using emergency fallback`,
@@ -518,10 +605,13 @@ export class TensorFlowScheduler {
               // Create a timeout promise to prevent hanging
               const predictionPromise = this.predict([features]);
               const timeoutPromise = new Promise((_, reject) =>
-                setTimeout(() => reject(new Error("Prediction timeout")), 5000)
+                setTimeout(() => reject(new Error("Prediction timeout")), 5000),
               );
 
-              const result = await Promise.race([predictionPromise, timeoutPromise]);
+              const result = await Promise.race([
+                predictionPromise,
+                timeoutPromise,
+              ]);
 
               if (result.success && result.predictions) {
                 // Convert prediction to shift symbol
@@ -534,7 +624,9 @@ export class TensorFlowScheduler {
               }
             } catch (error) {
               if (error.message === "Prediction timeout") {
-                console.warn(`⏱️ Prediction timeout for ${staff.name} on ${dateKey}, using fallback`);
+                console.warn(
+                  `⏱️ Prediction timeout for ${staff.name} on ${dateKey}, using fallback`,
+                );
               } else {
                 console.warn(
                   `⚠️ TensorFlow prediction failed for ${staff.name} on ${dateKey}: ${error.message}, using emergency fallback`,
@@ -551,35 +643,73 @@ export class TensorFlowScheduler {
             processedCount++;
             yieldCounter++;
 
-            // **CRITICAL: Yield control to UI thread more frequently to prevent blocking**
+            // **CRITICAL PERFORMANCE FIX: Ultra-responsive yielding with progress updates**
             if (yieldCounter >= YIELD_INTERVAL) {
-              const progress = Math.round((processedCount / totalPredictions) * 100);
-              console.log(`⚡ Progress: ${progress}% (${processedCount}/${totalPredictions}) - Yielding to UI...`);
+              const progress = Math.round(
+                (processedCount / totalPredictions) * 100,
+              );
               
+              updateProgress(progress);
+
+              // **ENHANCED: Use requestIdleCallback for intelligent yielding**
               await new Promise((resolve) => {
-                // Use requestAnimationFrame for better UI responsiveness
-                if (typeof requestAnimationFrame !== 'undefined') {
+                const yieldOperation = (deadline) => {
+                  // Check if we have enough idle time to continue
+                  const hasIdleTime = deadline ? deadline.timeRemaining() > IDLE_YIELD_TIME : false;
+                  
+                  if (hasIdleTime || !deadline) {
+                    resolve();
+                  } else {
+                    // Reschedule if system is busy
+                    if (typeof requestIdleCallback !== "undefined") {
+                      requestIdleCallback(yieldOperation, { timeout: IDLE_YIELD_TIME });
+                    } else {
+                      setTimeout(resolve, 1);
+                    }
+                  }
+                };
+                
+                // Use requestIdleCallback for intelligent scheduling
+                if (typeof requestIdleCallback !== "undefined") {
+                  requestIdleCallback(yieldOperation, { timeout: IDLE_YIELD_TIME });
+                } else if (typeof requestAnimationFrame !== "undefined") {
                   requestAnimationFrame(() => setTimeout(resolve, 1));
                 } else {
                   setTimeout(resolve, 1);
                 }
               });
-              
+
               yieldCounter = 0; // Reset yield counter
             }
           }
 
-          // **ADDITIONAL: Yield after each date chunk for better responsiveness**
+          // **ENHANCED: Intelligent yielding after each date chunk**
           if (startIndex + CHUNK_SIZE < dateRange.length) {
             await new Promise((resolve) => {
-              setTimeout(resolve, 2); // Slightly longer yield between chunks
+              // Use requestIdleCallback for better timing
+              if (typeof requestIdleCallback !== 'undefined') {
+                requestIdleCallback(() => resolve(), { timeout: 5 });
+              } else {
+                setTimeout(resolve, 2);
+              }
             });
           }
         }
 
-        // Yield after each staff member to prevent UI blocking
+        // **PERFORMANCE FIX: Smart yielding after each staff member**
         console.log(`✅ Completed predictions for ${staff.name}`);
-        await new Promise((resolve) => setTimeout(resolve, 5));
+        const progress = Math.round(
+          (activeStaff.indexOf(staff) + 1) / activeStaff.length * 100,
+        );
+        
+        await new Promise((resolve) => {
+          // Use requestIdleCallback for optimal performance
+          if (typeof requestIdleCallback !== 'undefined') {
+            requestIdleCallback(() => resolve(), { timeout: 10 });
+          } else {
+            setTimeout(resolve, 3);
+          }
+        });
       }
 
       console.log("✅ ML predictions generated");
@@ -607,7 +737,415 @@ export class TensorFlowScheduler {
   }
 
   /**
-   * Make batch predictions for multiple feature vectors
+   * Async generator for processing predictions with automatic yielding
+   * This prevents UI blocking by processing data in chunks with regular yields
+   */
+  async* processPredictionBatches(activeStaff, dateRange, currentPeriodData, allHistoricalData, currentSchedule) {
+    const BATCH_SIZE = 5; // Process 5 staff-date combinations at a time
+    const YIELD_INTERVAL = 10; // Yield every 10 operations
+    
+    let processedCount = 0;
+    let batchBuffer = [];
+    
+    for (const staff of activeStaff) {
+      for (const date of dateRange) {
+        const dateKey = date.toISOString().split("T")[0];
+        
+        // Skip if cell is already filled
+        if (
+          currentSchedule[staff.id] &&
+          currentSchedule[staff.id][dateKey] !== undefined &&
+          currentSchedule[staff.id][dateKey] !== null &&
+          currentSchedule[staff.id][dateKey] !== ""
+        ) {
+          continue;
+        }
+        
+        // Add to batch
+        batchBuffer.push({ staff, date, dateKey });
+        processedCount++;
+        
+        // Process batch when full or yield interval reached
+        if (batchBuffer.length >= BATCH_SIZE || processedCount % YIELD_INTERVAL === 0) {
+          // Process current batch
+          const batchResults = [];
+          
+          for (const item of batchBuffer) {
+            try {
+              // Generate features asynchronously
+              const features = await this.generateFeaturesAsync(
+                item.staff,
+                item.date,
+                dateRange.indexOf(item.date),
+                currentPeriodData,
+                allHistoricalData,
+                activeStaff
+              );
+              
+              if (features && features.length === MODEL_CONFIG.INPUT_FEATURES.ENHANCED_TOTAL) {
+                // Make prediction
+                const prediction = await this.predictSingleAsync(features);
+                
+                batchResults.push({
+                  staffId: item.staff.id,
+                  dateKey: item.dateKey,
+                  prediction,
+                  features,
+                  success: true
+                });
+              } else {
+                // Use emergency fallback
+                batchResults.push({
+                  staffId: item.staff.id,
+                  dateKey: item.dateKey,
+                  prediction: {
+                    predictedClass: 1,
+                    confidence: 0.6,
+                    probabilities: [0.1, 0.4, 0.2, 0.2, 0.1]
+                  },
+                  fallback: true,
+                  success: true
+                });
+              }
+            } catch (error) {
+              console.warn(`⚠️ Batch processing failed for ${item.staff.name} on ${item.dateKey}:`, error.message);
+              // Use emergency fallback
+              batchResults.push({
+                staffId: item.staff.id,
+                dateKey: item.dateKey,
+                prediction: {
+                  predictedClass: 1,
+                  confidence: 0.5,
+                  probabilities: [0.1, 0.4, 0.2, 0.2, 0.1]
+                },
+                error: true,
+                success: true
+              });
+            }
+          }
+          
+          // Yield results and clear batch
+          yield {
+            batch: batchResults,
+            processed: processedCount,
+            total: activeStaff.length * dateRange.length,
+            progress: Math.round((processedCount / (activeStaff.length * dateRange.length)) * 100)
+          };
+          
+          batchBuffer = [];
+          
+          // Yield control to UI thread
+          await new Promise(resolve => {
+            if (typeof requestIdleCallback !== 'undefined') {
+              requestIdleCallback(() => resolve(), { timeout: 16 });
+            } else {
+              setTimeout(resolve, 1);
+            }
+          });
+        }
+      }
+    }
+    
+    // Process any remaining items in buffer
+    if (batchBuffer.length > 0) {
+      const batchResults = [];
+      
+      for (const item of batchBuffer) {
+        try {
+          const features = await this.generateFeaturesAsync(
+            item.staff,
+            item.date,
+            dateRange.indexOf(item.date),
+            currentPeriodData,
+            allHistoricalData,
+            activeStaff
+          );
+          
+          if (features && features.length === MODEL_CONFIG.INPUT_FEATURES.ENHANCED_TOTAL) {
+            const prediction = await this.predictSingleAsync(features);
+            
+            batchResults.push({
+              staffId: item.staff.id,
+              dateKey: item.dateKey,
+              prediction,
+              features,
+              success: true
+            });
+          } else {
+            batchResults.push({
+              staffId: item.staff.id,
+              dateKey: item.dateKey,
+              prediction: {
+                predictedClass: 1,
+                confidence: 0.6,
+                probabilities: [0.1, 0.4, 0.2, 0.2, 0.1]
+              },
+              fallback: true,
+              success: true
+            });
+          }
+        } catch (error) {
+          batchResults.push({
+            staffId: item.staff.id,
+            dateKey: item.dateKey,
+            prediction: {
+              predictedClass: 1,
+              confidence: 0.5,
+              probabilities: [0.1, 0.4, 0.2, 0.2, 0.1]
+            },
+            error: true,
+            success: true
+          });
+        }
+      }
+      
+      yield {
+        batch: batchResults,
+        processed: processedCount,
+        total: activeStaff.length * dateRange.length,
+        progress: 100,
+        final: true
+      };
+    }
+  }
+
+  /**
+   * Ultra-fast batch processing for multiple predictions using Web Workers
+   */
+  async processPredictionsBatch(
+    activeStaff, 
+    dateRange, 
+    currentSchedule, 
+    currentPeriodData, 
+    allHistoricalData,
+    updateProgress
+  ) {
+    const startTime = Date.now();
+    const predictions = {};
+    const confidence = {};
+    let processedCount = 0;
+    
+    try {
+      // Prepare batch parameters for all predictions
+      const batchParams = [];
+      for (const staff of activeStaff) {
+        predictions[staff.id] = {};
+        confidence[staff.id] = {};
+        
+        for (const date of dateRange) {
+          const dateKey = date.toISOString().split("T")[0];
+          
+          // Skip if cell is already filled
+          if (
+            currentSchedule[staff.id] &&
+            currentSchedule[staff.id][dateKey] !== undefined &&
+            currentSchedule[staff.id][dateKey] !== null &&
+            currentSchedule[staff.id][dateKey] !== ""
+          ) {
+            continue;
+          }
+          
+          batchParams.push({
+            staff,
+            date,
+            dateIndex: dateRange.indexOf(date),
+            periodData: currentPeriodData,
+            allHistoricalData,
+            staffMembers: activeStaff,
+            staffId: staff.id,
+            dateKey
+          });
+        }
+      }
+      
+      console.log(`🚀 Processing ${batchParams.length} predictions in batch mode...`);
+      
+      // Process batch with progress updates
+      const batchResult = await optimizedFeatureManager.generateFeaturesBatch(
+        batchParams,
+        (progress) => {
+          if (updateProgress) {
+            updateProgress(progress.percentage);
+          }
+          console.log(`📊 Batch progress: ${progress.completed}/${progress.total} (${progress.percentage.toFixed(1)}%)`);
+        }
+      );
+      
+      if (!batchResult.results) {
+        throw new Error("Batch processing returned no results");
+      }
+      
+      // Process the batch results
+      for (let i = 0; i < batchResult.results.length; i++) {
+        const result = batchResult.results[i];
+        const params = batchParams[i];
+        
+        if (result.success && result.features) {
+          // Make prediction using the features
+          const predictionResult = await this.predict([result.features]);
+          
+          if (predictionResult.success) {
+            const shiftSymbol = this.predictionToShift(predictionResult.predictions);
+            predictions[params.staffId][params.dateKey] = shiftSymbol;
+            confidence[params.staffId][params.dateKey] = predictionResult.confidence || 0.8;
+            processedCount++;
+          } else {
+            // Use emergency fallback
+            const emergencyShift = this.getEmergencyShift(params.staff, params.date.getDay());
+            predictions[params.staffId][params.dateKey] = emergencyShift;
+            confidence[params.staffId][params.dateKey] = 0.5;
+            processedCount++;
+          }
+        } else {
+          // Use emergency fallback
+          const emergencyShift = this.getEmergencyShift(params.staff, params.date.getDay());
+          predictions[params.staffId][params.dateKey] = emergencyShift;
+          confidence[params.staffId][params.dateKey] = 0.5;
+          processedCount++;
+        }
+      }
+      
+      const totalTime = Date.now() - startTime;
+      console.log(`✅ Batch processing completed: ${processedCount} predictions in ${totalTime}ms (avg: ${(totalTime / processedCount).toFixed(1)}ms per prediction)`);
+      
+      // Log performance summary
+      optimizedFeatureManager.logPerformanceSummary();
+      
+      return {
+        success: true,
+        predictions,
+        confidence,
+        processedCount,
+        totalTime,
+        avgTimePerPrediction: totalTime / processedCount
+      };
+      
+    } catch (error) {
+      console.error("❌ Batch processing failed:", error.message);
+      return {
+        success: false,
+        error: error.message,
+        processedCount
+      };
+    }
+  }
+
+  /**
+   * Optimized feature generation using Web Worker (target: <50ms per prediction)
+   */
+  async generateFeaturesAsync(staff, date, dateIndex, periodData, allHistoricalData, staffMembers) {
+    try {
+      // Try using optimized web worker first
+      if (!this.workerFallbackMode && optimizedFeatureManager) {
+        const result = await optimizedFeatureManager.generateFeatures({
+          staff,
+          date,
+          dateIndex,
+          periodData,
+          allHistoricalData,
+          staffMembers,
+        });
+        
+        if (result.success) {
+          return result.features;
+        } else {
+          console.warn("⚠️ Optimized feature generation failed, using fallback:", result.error);
+        }
+      }
+      
+      // Fallback to main thread with timeout protection
+      return new Promise((resolve, reject) => {
+        const timeoutId = setTimeout(() => {
+          reject(new Error('Feature generation timeout'));
+        }, 50); // 50ms timeout
+
+        try {
+          // Use requestIdleCallback for feature generation if available
+          const performGeneration = () => {
+            try {
+              const features = this.featureEngineer.generateFeatures({
+                staff,
+                date,
+                dateIndex,
+                periodData,
+                allHistoricalData,
+                staffMembers,
+              });
+              clearTimeout(timeoutId);
+              resolve(features);
+            } catch (error) {
+              clearTimeout(timeoutId);
+              reject(error);
+            }
+          };
+
+          if (typeof requestIdleCallback !== 'undefined') {
+            requestIdleCallback(performGeneration, { timeout: 30 });
+          } else {
+            setTimeout(performGeneration, 0);
+          }
+        } catch (error) {
+          clearTimeout(timeoutId);
+          reject(error);
+        }
+      });
+    } catch (error) {
+      console.warn("⚠️ Feature generation failed:", error.message);
+      // Return minimal features for fallback
+      return Array(42).fill(0); // Default feature vector
+    }
+  }
+
+  /**
+   * Async wrapper for single prediction with non-blocking execution
+   */
+  async predictSingleAsync(features) {
+    return new Promise((resolve, reject) => {
+      const timeoutId = setTimeout(() => {
+        reject(new Error('Prediction timeout'));
+      }, 100); // 100ms timeout
+
+      const performPrediction = async () => {
+        try {
+          if (!this.model) {
+            throw new Error('Model not available');
+          }
+
+          // Use tf.tidy to manage memory
+          const result = await tf.tidy(async () => {
+            const inputTensor = tf.tensor2d([features]);
+            const prediction = this.model.predict(inputTensor);
+            const probabilities = await prediction.data();
+            
+            const predictedClass = probabilities.indexOf(Math.max(...probabilities));
+            const confidence = Math.max(...probabilities);
+
+            return {
+              predictedClass,
+              confidence,
+              probabilities: Array.from(probabilities)
+            };
+          });
+
+          clearTimeout(timeoutId);
+          resolve(result);
+        } catch (error) {
+          clearTimeout(timeoutId);
+          reject(error);
+        }
+      };
+
+      // Schedule prediction with idle callback
+      if (typeof requestIdleCallback !== 'undefined') {
+        requestIdleCallback(() => performPrediction(), { timeout: 50 });
+      } else {
+        setTimeout(performPrediction, 0);
+      }
+    });
+  }
+
+  /**
+   * Make batch predictions for multiple feature vectors with non-blocking operations
    * @param {Array} featuresArray - Array of feature vectors
    * @returns {Object} Prediction results with probabilities and confidence
    */
@@ -626,24 +1164,58 @@ export class TensorFlowScheduler {
         ? featuresArray[0]
         : featuresArray;
 
-      // Make prediction using TensorFlow model
-      const inputTensor = tf.tensor2d([features]);
-      const prediction = this.model.predict(inputTensor);
-      const probabilities = await prediction.data();
+      // **PERFORMANCE FIX: Use requestIdleCallback for tensor operations**
+      const tensorResult = await new Promise((resolve, reject) => {
+        const performTensorOp = (deadline) => {
+          try {
+            // Check if we have enough time for this operation
+            if (deadline && deadline.timeRemaining() < 10) {
+              // Reschedule if not enough time
+              if (typeof requestIdleCallback !== 'undefined') {
+                requestIdleCallback(performTensorOp, { timeout: 100 });
+              } else {
+                setTimeout(() => performTensorOp({}), 0);
+              }
+              return;
+            }
 
-      // Clean up tensors
-      inputTensor.dispose();
-      prediction.dispose();
+            // Create tensors and make prediction
+            const inputTensor = tf.tensor2d([features]);
+            const prediction = this.model.predict(inputTensor);
+            
+            // Use tidy to manage memory automatically
+            tf.tidy(() => {
+              // Schedule data extraction to avoid blocking
+              prediction.data().then(probabilities => {
+                const predictedClass = probabilities.indexOf(Math.max(...probabilities));
+                const confidence = Math.max(...probabilities);
+                
+                // Clean up tensors
+                inputTensor.dispose();
+                prediction.dispose();
+                
+                resolve({
+                  predictions: Array.from(probabilities),
+                  confidence,
+                  predictedClass,
+                  success: true,
+                });
+              }).catch(reject);
+            });
+          } catch (error) {
+            reject(error);
+          }
+        };
+        
+        // Start the operation with idle callback if available
+        if (typeof requestIdleCallback !== 'undefined') {
+          requestIdleCallback(performTensorOp, { timeout: 100 });
+        } else {
+          setTimeout(() => performTensorOp({}), 0);
+        }
+      });
 
-      const predictedClass = probabilities.indexOf(Math.max(...probabilities));
-      const confidence = Math.max(...probabilities);
-
-      return {
-        predictions: Array.from(probabilities),
-        confidence,
-        predictedClass,
-        success: true,
-      };
+      return tensorResult;
     } catch (error) {
       console.error("❌ Batch prediction failed:", error);
 
@@ -949,6 +1521,20 @@ export class TensorFlowScheduler {
         errorCounts: 0,
         successCounts: 0,
       };
+
+      // **PERFORMANCE FIX: Clean up Web Workers to prevent stuck states**
+      if (optimizedFeatureManager) {
+        try {
+          await optimizedFeatureManager.clearCache();
+          console.log("🚀 Optimized feature manager cache cleared");
+        } catch (error) {
+          console.warn("⚠️ Failed to clear optimized feature manager cache:", error.message);
+        }
+      }
+
+      // Reset worker states
+      this.workerInitialized = false;
+      this.workerFallbackMode = false;
 
       // Perform memory cleanup
       MEMORY_UTILS.cleanup();
@@ -1295,7 +1881,7 @@ export class TensorFlowScheduler {
         staffCount: staffMembers.length,
         featureCount:
           trainingFeatures.length > 0 ? trainingFeatures[0].length : 0,
-        expectedFeatures: MODEL_CONFIG.INPUT_FEATURES.TOTAL,
+        expectedFeatures: MODEL_CONFIG.INPUT_FEATURES.ENHANCED_TOTAL,
         dataAugmentationUsed:
           options.dataAugmentation && features.length < 1000,
       };
@@ -1803,7 +2389,7 @@ export class TensorFlowScheduler {
 
     // Check feature vector consistency
     if (features.length > 0) {
-      const expectedLength = MODEL_CONFIG.INPUT_FEATURES.TOTAL;
+      const expectedLength = MODEL_CONFIG.INPUT_FEATURES.ENHANCED_TOTAL;
       const actualLength = features[0].length;
 
       if (actualLength !== expectedLength) {
@@ -1916,7 +2502,7 @@ export class TensorFlowScheduler {
       const model = tf.sequential({
         layers: [
           tf.layers.dense({
-            inputShape: [MODEL_CONFIG.INPUT_FEATURES.TOTAL],
+            inputShape: [MODEL_CONFIG.INPUT_FEATURES.ENHANCED_TOTAL],
             units: 32,
             activation: "relu",
             name: "fallback_hidden",

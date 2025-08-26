@@ -128,22 +128,26 @@ export class HybridPredictor {
       console.log("🔮 Generating hybrid schedule predictions...");
 
       // Use cached configuration for instant access (fully non-blocking)
-      const { configurationCache } = await import("../cache/ConfigurationCacheManager");
-      
+      const { configurationCache } = await import(
+        "../cache/ConfigurationCacheManager"
+      );
+
       // **NON-BLOCKING: Initialize cache only if not healthy, but don't wait for it**
       if (!configurationCache.isHealthy()) {
         console.log("🔄 Background configuration cache initialization...");
         // Start initialization in background - don't await it to avoid blocking
-        configurationCache.initialize().catch(error => {
+        configurationCache.initialize().catch((error) => {
           console.warn("⚠️ Background cache init failed:", error.message);
         });
       }
-      
+
       // Get cached configuration instantly (no waiting, use defaults if not ready)
       let cachedConfig;
       try {
         cachedConfig = configurationCache.getAllConfigurations();
-        console.log("⚡ Using cached configuration for schedule prediction (instant access)");
+        console.log(
+          "⚡ Using cached configuration for schedule prediction (instant access)",
+        );
       } catch (error) {
         console.log("⚡ Using default configuration (cache not ready yet)");
         cachedConfig = {}; // Use empty config as fallback - constraints will use defaults

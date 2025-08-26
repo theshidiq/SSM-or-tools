@@ -1,6 +1,7 @@
 import React, { useEffect } from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import ShiftScheduleEditor from "./components/ShiftScheduleEditor.jsx";
+import ConsoleLogViewer from "./components/debug/ConsoleLogViewer.jsx";
 import { useSupabase } from "./hooks/useSupabase.js";
 import { RestaurantProvider } from "./contexts/RestaurantContext";
 
@@ -51,6 +52,8 @@ function AppContent() {
         onSaveSchedule={saveScheduleData}
         loadScheduleData={loadScheduleData}
       />
+      {/* Console Log Viewer - Only in development */}
+      {process.env.NODE_ENV === "development" && <ConsoleLogViewer />}
     </div>
   );
 }

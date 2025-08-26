@@ -475,6 +475,16 @@ class ConfigurationCacheManager {
   }
 }
 
-// Export singleton instance
-export const configurationCache = new ConfigurationCacheManager();
+// Export lazy singleton factory to prevent blocking initialization
+let _configurationCacheInstance = null;
+
+export const getConfigurationCache = () => {
+  if (!_configurationCacheInstance) {
+    _configurationCacheInstance = new ConfigurationCacheManager();
+  }
+  return _configurationCacheInstance;
+};
+
+// Export singleton instance (lazy)
+export const configurationCache = getConfigurationCache();
 export default configurationCache;

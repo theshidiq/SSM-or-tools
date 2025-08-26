@@ -14,6 +14,7 @@
 
 import { ScheduleFeatureEngineer } from "./FeatureEngineering";
 import { MODEL_CONFIG } from "./TensorFlowConfig";
+import { optimizedFeatureManager } from "../../workers/OptimizedFeatureManager.js";
 
 export class EnhancedFeatureEngineering extends ScheduleFeatureEngineer {
   constructor() {
@@ -25,6 +26,11 @@ export class EnhancedFeatureEngineering extends ScheduleFeatureEngineer {
     this.staffRelationshipCache = new Map();
     this.seasonalPatternCache = new Map();
     this.workloadBalanceCache = new Map();
+    
+    // Performance optimization flags
+    this.useOptimizedWorker = true;
+    this.performanceTarget = 50; // ms per prediction
+    this.optimizationInitialized = false;
   }
 
   /**
@@ -81,6 +87,76 @@ export class EnhancedFeatureEngineering extends ScheduleFeatureEngineer {
 
   /**
    * Generate enhanced feature vector with sophisticated analysis
+   * OPTIMIZED for <50ms per prediction using Web Worker
+   */
+  async generateEnhancedFeaturesOptimized({
+    staff,
+    date,
+    dateIndex,
+    periodData,
+    allHistoricalData,
+    staffMembers,
+  }) {
+    const startTime = performance.now();
+    
+    try {
+      // Initialize optimized worker if needed
+      if (this.useOptimizedWorker && !this.optimizationInitialized) {
+        await optimizedFeatureManager.initialize();
+        this.optimizationInitialized = true;
+        console.log('⚡ Optimized feature generation initialized');
+      }
+      
+      // Use optimized worker for feature generation
+      if (this.useOptimizedWorker && this.optimizationInitialized) {
+        const result = await optimizedFeatureManager.generateFeatures({
+          staff,
+          date,
+          dateIndex,
+          periodData,
+          allHistoricalData,
+          staffMembers
+        });
+        
+        const totalTime = performance.now() - startTime;
+        
+        if (result.success) {
+          console.log(
+            `⚡ OPTIMIZED features generated in ${totalTime.toFixed(1)}ms (worker: ${result.executionTime.toFixed(1)}ms)`
+          );
+          return result.features;
+        } else {
+          console.warn('⚠️ Optimized worker failed, falling back to sync method');
+        }
+      }
+      
+      // Fallback to synchronous method
+      return this.generateEnhancedFeatures({
+        staff,
+        date,
+        dateIndex,
+        periodData,
+        allHistoricalData,
+        staffMembers,
+      });
+      
+    } catch (error) {
+      console.error('❌ Error in optimized feature generation:', error);
+      // Fallback to synchronous method
+      return this.generateEnhancedFeatures({
+        staff,
+        date,
+        dateIndex,
+        periodData,
+        allHistoricalData,
+        staffMembers,
+      });
+    }
+  }
+
+  /**
+   * Generate enhanced feature vector with sophisticated analysis
+   * LEGACY synchronous method (kept for fallback)
    */
   generateEnhancedFeatures({
     staff,
@@ -747,6 +823,238 @@ export class EnhancedFeatureEngineering extends ScheduleFeatureEngineer {
   }
 
   /**
+   * Generate features in batch for multiple predictions with progress tracking
+   */
+  async generateFeaturesBatch(predictions, onProgress) {
+    if (!this.useOptimizedWorker) {
+      // Fallback to synchronous batch processing
+      return this.generateFeaturesBatchSync(predictions, onProgress);
+    }
+    
+    try {
+      if (!this.optimizationInitialized) {
+        await optimizedFeatureManager.initialize();
+        this.optimizationInitialized = true;
+      }
+      
+      console.log(`🚀 Starting OPTIMIZED batch feature generation for ${predictions.length} predictions`);
+      
+      const result = await optimizedFeatureManager.generateFeaturesBatch(
+        predictions,
+        (progress) => {
+          if (onProgress) {
+            onProgress({
+              completed: progress.completed,
+              total: progress.total,
+              percentage: progress.percentage,
+              message: `Generated features for ${progress.completed}/${progress.total} predictions (${progress.percentage}%)`
+            });
+          }
+        }
+      );
+      
+      console.log(`✅ OPTIMIZED batch completed in ${result.totalTime.toFixed(1)}ms`);
+      console.log(`📊 Average: ${result.avgTimePerPrediction.toFixed(1)}ms per prediction`);
+      
+      // Log performance stats
+      optimizedFeatureManager.logPerformanceSummary();
+      
+      return result.results.map(r => r.features);
+      
+    } catch (error) {
+      console.error('❌ Optimized batch processing failed:', error);
+      console.log('⚠️ Falling back to synchronous batch processing');
+      return this.generateFeaturesBatchSync(predictions, onProgress);
+    }
+  }
+  
+  /**
+   * Synchronous batch feature generation (fallback)
+   */
+  generateFeaturesBatchSync(predictions, onProgress) {
+    console.log(`🔄 Starting synchronous batch feature generation for ${predictions.length} predictions`);
+    const startTime = performance.now();
+    const results = [];
+    
+    for (let i = 0; i < predictions.length; i++) {
+      const features = this.generateEnhancedFeatures(predictions[i]);
+      results.push(features);
+      
+      if (onProgress && (i + 1) % 10 === 0) {
+        onProgress({
+          completed: i + 1,
+          total: predictions.length,
+          percentage: ((i + 1) / predictions.length * 100).toFixed(1),
+          message: `Generated features for ${i + 1}/${predictions.length} predictions`
+        });
+      }
+    }
+    
+    const totalTime = performance.now() - startTime;
+    console.log(`✅ Synchronous batch completed in ${totalTime.toFixed(1)}ms`);
+    console.log(`📊 Average: ${(totalTime / predictions.length).toFixed(1)}ms per prediction`);
+    
+    return results;
+  }
+
+  /**
+   * Override the prepare training data method to use enhanced features
+   */
+  async prepareTrainingDataOptimized(allHistoricalData, staffMembers) {
+    const features = [];
+    const labels = [];
+    const sampleMetadata = [];
+
+    console.log(
+      "🚀 Preparing OPTIMIZED ENHANCED training data with sophisticated features...",
+    );
+    console.log(
+      `📁 Processing ${Object.keys(allHistoricalData).length} historical periods`,
+    );
+    console.log(`👥 Processing ${staffMembers.length} staff members`);
+
+    let totalSamples = 0;
+    let validSamples = 0;
+    let invalidSamples = 0;
+    
+    // Collect all prediction requests for batch processing
+    const batchRequests = [];
+
+    // Process each period
+    Object.entries(allHistoricalData).forEach(([periodIndex, periodData]) => {
+      if (!periodData || !periodData.schedule) {
+        console.warn(`⚠️ Period ${periodIndex} has no schedule data`);
+        return;
+      }
+
+      const { schedule, dateRange } = periodData;
+      console.log(
+        `📅 Processing period ${periodIndex} with ${dateRange.length} days`,
+      );
+
+      // Process each staff member
+      staffMembers.forEach((staff) => {
+        if (!schedule[staff.id]) {
+          console.log(
+            `ℹ️ No schedule data for staff ${staff.name} (${staff.id}) in period ${periodIndex}`,
+          );
+          return;
+        }
+
+        const staffSchedule = schedule[staff.id];
+
+        // Process each date for this staff member
+        dateRange.forEach((date, dateIndex) => {
+          totalSamples++;
+          const dateKey = date.toISOString().split("T")[0];
+          const actualShift = staffSchedule[dateKey];
+
+          // Accept both defined values and empty strings (meaningful for regular staff)
+          if (actualShift === undefined || actualShift === null) {
+            console.log(
+              `⚠️ Missing shift data for ${staff.name} on ${dateKey}`,
+            );
+            invalidSamples++;
+            return;
+          }
+
+          // Add to batch request
+          batchRequests.push({
+            staff,
+            date,
+            dateIndex,
+            periodData,
+            allHistoricalData,
+            staffMembers,
+            metadata: {
+              staffId: staff.id,
+              staffName: staff.name,
+              date: dateKey,
+              period: periodIndex,
+              actualShift,
+              isPartTime: staff.status === "パート",
+              enhanced: true,
+            }
+          });
+        });
+      });
+    });
+    
+    console.log(`🔄 Processing ${batchRequests.length} feature requests in optimized batch mode`);
+    
+    // Process batch with progress tracking
+    const batchFeatures = await this.generateFeaturesBatch(
+      batchRequests,
+      (progress) => {
+        console.log(`📊 Training data progress: ${progress.message}`);
+      }
+    );
+    
+    // Process results and create training data
+    for (let i = 0; i < batchRequests.length; i++) {
+      const request = batchRequests[i];
+      const featureVector = batchFeatures[i];
+      const label = this.shiftToLabel(request.metadata.actualShift, request.staff);
+      
+      if (featureVector && label !== null) {
+        features.push(featureVector);
+        labels.push(label);
+        sampleMetadata.push({
+          ...request.metadata,
+          label
+        });
+        validSamples++;
+      } else {
+        console.warn(
+          `⚠️ Invalid enhanced feature/label for ${request.staff.name} on ${request.metadata.date}`,
+        );
+        invalidSamples++;
+      }
+    }
+
+    console.log(`✅ OPTIMIZED ENHANCED training data preparation completed:`);
+    console.log(`  - Total samples processed: ${totalSamples}`);
+    console.log(`  - Valid ENHANCED samples generated: ${validSamples}`);
+    console.log(`  - Invalid/skipped samples: ${invalidSamples}`);
+    console.log(
+      `  - Success rate: ${((validSamples / totalSamples) * 100).toFixed(1)}%`,
+    );
+
+    // Validate feature consistency
+    if (features.length > 0) {
+      const featureLength = features[0].length;
+      const expectedLength = this.enhancedFeatureCount;
+      console.log(
+        `🔍 OPTIMIZED ENHANCED feature validation: ${featureLength} features per sample (expected: ${expectedLength})`,
+      );
+
+      if (featureLength !== expectedLength) {
+        console.error(
+          `❌ OPTIMIZED ENHANCED feature length mismatch! This will cause training failures.`,
+        );
+      } else {
+        console.log(`✅ OPTIMIZED ENHANCED features are correctly sized!`);
+      }
+    }
+
+    return {
+      features: features,
+      labels: labels,
+      featureNames: this.enhancedFeatureNames,
+      metadata: sampleMetadata,
+      stats: {
+        totalSamples,
+        validSamples,
+        invalidSamples,
+        successRate: validSamples / totalSamples,
+      },
+      enhanced: true,
+      optimized: true,
+      featureCount: this.enhancedFeatureCount,
+    };
+  }
+  
+  /**
    * Override the prepare training data method to use enhanced features
    */
   prepareTrainingData(allHistoricalData, staffMembers) {
@@ -891,18 +1199,28 @@ export class EnhancedFeatureEngineering extends ScheduleFeatureEngineer {
   /**
    * Clear caches to prevent memory buildup
    */
-  clearCaches() {
+  async clearCaches() {
     this.staffRelationshipCache.clear();
     this.seasonalPatternCache.clear();
     this.workloadBalanceCache.clear();
+    
+    // Clear optimized worker cache
+    if (this.optimizationInitialized) {
+      try {
+        await optimizedFeatureManager.clearCache();
+      } catch (error) {
+        console.warn('⚠️ Failed to clear optimized worker cache:', error);
+      }
+    }
+    
     console.log("🧹 Enhanced feature engineering caches cleared");
   }
 
   /**
-   * Get cache statistics
+   * Get cache statistics including optimized worker performance
    */
   getCacheStats() {
-    return {
+    const baseStats = {
       staffRelationshipCache: this.staffRelationshipCache.size,
       seasonalPatternCache: this.seasonalPatternCache.size,
       workloadBalanceCache: this.workloadBalanceCache.size,
@@ -911,6 +1229,23 @@ export class EnhancedFeatureEngineering extends ScheduleFeatureEngineer {
         this.seasonalPatternCache.size +
         this.workloadBalanceCache.size,
     };
+    
+    // Add optimized worker performance stats
+    if (this.optimizationInitialized) {
+      const performanceStats = optimizedFeatureManager.getPerformanceStats();
+      return {
+        ...baseStats,
+        optimizedWorker: {
+          initialized: this.optimizationInitialized,
+          totalPredictions: performanceStats.totalPredictions,
+          avgTime: performanceStats.avgTime,
+          under50msPercentage: performanceStats.under50msPercentage,
+          performanceTarget: this.performanceTarget
+        }
+      };
+    }
+    
+    return baseStats;
   }
 }
 

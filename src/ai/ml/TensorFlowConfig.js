@@ -23,13 +23,20 @@ export const MODEL_CONFIG = {
     TEMPORAL_FEATURES: 8, // day_of_week, date, period, etc.
     HISTORICAL_FEATURES: 12, // past patterns, preferences, etc.
     CONTEXT_FEATURES: 5, // business context, constraints, etc.
-    TOTAL: 35, // Total input feature size
+    TOTAL: 35, // Basic feature size
+    
+    // Enhanced features (optimized)
+    ENHANCED_TOTAL: 65, // Enhanced feature size for high accuracy
+    ENHANCED_STAFF_RELATIONSHIP: 10,
+    ENHANCED_SEASONAL: 8,
+    ENHANCED_WORKLOAD: 7,
+    ENHANCED_TIME_SERIES: 5,
   },
 
   // Enhanced neural network architecture with performance tuning
   ARCHITECTURE: {
-    INPUT_SIZE: 35,
-    HIDDEN_LAYERS: [128, 64, 32, 16],
+    INPUT_SIZE: 65, // Updated for enhanced features
+    HIDDEN_LAYERS: [256, 128, 64, 32], // Larger network for enhanced features
     OUTPUT_SIZE: 5, // [blank, ○, △, ▽, ×]
     DROPOUT_RATE: 0.3,
     ACTIVATION: "relu",
@@ -98,6 +105,11 @@ export const MODEL_CONFIG = {
     USE_WEBGL_OPTIMIZATION: true,
     ENABLE_PROFILING: false, // Enable for debugging only
     PARALLEL_PROCESSING: true,
+    
+    // Feature generation performance
+    FEATURE_GENERATION_TIMEOUT: 100, // ms per prediction target
+    USE_OPTIMIZED_WORKER: true,
+    BATCH_FEATURE_PROCESSING: true,
 
     // Browser-specific optimizations
     WEBGL_SETTINGS: {

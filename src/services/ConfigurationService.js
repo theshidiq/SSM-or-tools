@@ -11,15 +11,67 @@ const STORAGE_KEY = "shift-schedule-settings";
 
 export class ConfigurationService {
   constructor() {
-    this.settings = this.loadSettings();
+    // Initialize with minimal defaults to prevent blocking
+    this.settings = null;
     this.restaurantId = null;
     this.currentVersionId = null;
     this.isSupabaseEnabled = false;
     this.syncInProgress = false;
     this.supabaseInitialized = false;
+    this.isInitialized = false;
+    this.initPromise = null;
 
-    // Check Supabase availability (async, doesn't block constructor)
-    this.checkSupabaseConnection();
+    // All heavy operations moved to lazy initialization
+  }
+
+  /**
+   * Initialize the configuration service asynchronously (lazy loading)
+   */
+  async initialize() {
+    if (this.initPromise) {
+      return this.initPromise;
+    }
+
+    this.initPromise = this._doInitialize();
+    return this.initPromise;
+  }
+
+  async _doInitialize() {
+    if (this.isInitialized) return;
+
+    console.log("🚀 Initializing Configuration Service (lazy)...");
+    const startTime = Date.now();
+
+    try {
+      // Load settings asynchronously
+      this.settings = await this._loadSettingsAsync();
+
+      // Check Supabase availability in background (non-blocking)
+      setTimeout(() => {
+        this.checkSupabaseConnection().catch(console.warn);
+      }, 100);
+
+      this.isInitialized = true;
+      console.log(
+        `✅ Configuration Service initialized in ${Date.now() - startTime}ms`,
+      );
+    } catch (error) {
+      console.error("❌ Configuration Service initialization failed:", error);
+      // Fallback to defaults
+      this.settings = this.getDefaultSettings();
+      this.isInitialized = true;
+    }
+  }
+
+  /**
+   * Load settings from localStorage (async version)
+   */
+  async _loadSettingsAsync() {
+    return new Promise((resolve) => {
+      setTimeout(() => {
+        resolve(this.loadSettings());
+      }, 0);
+    });
   }
 
   /**
@@ -292,9 +344,21 @@ export class ConfigurationService {
   }
 
   /**
-   * Get current settings
+   * Get current settings (with lazy initialization)
    */
-  getSettings() {
+  async getSettings() {
+    await this.initialize();
+    return { ...this.settings };
+  }
+
+  /**
+   * Get current settings synchronously (with fallback)
+   */
+  getSettingsSync() {
+    if (!this.settings) {
+      console.warn("⚠️ Settings not initialized, using defaults");
+      return this.getDefaultSettings();
+    }
     return { ...this.settings };
   }
 
@@ -503,7 +567,8 @@ export class ConfigurationService {
    * Get staff groups
    */
   getStaffGroups() {
-    return this.settings.staffGroups || this.getDefaultSettings().staffGroups;
+    const settings = this.settings || this.getDefaultSettings();
+    return settings.staffGroups || this.getDefaultSettings().staffGroups;
   }
 
   /**
@@ -517,7 +582,8 @@ export class ConfigurationService {
    * Get daily limits
    */
   getDailyLimits() {
-    return this.settings.dailyLimits || this.getDefaultSettings().dailyLimits;
+    const settings = this.settings || this.getDefaultSettings();
+    return settings.dailyLimits || this.getDefaultSettings().dailyLimits;
   }
 
   /**
@@ -531,9 +597,8 @@ export class ConfigurationService {
    * Get priority rules
    */
   getPriorityRules() {
-    return (
-      this.settings.priorityRules || this.getDefaultSettings().priorityRules
-    );
+    const settings = this.settings || this.getDefaultSettings();
+    return settings.priorityRules || this.getDefaultSettings().priorityRules;
   }
 
   /**
@@ -547,7 +612,8 @@ export class ConfigurationService {
    * Get ML parameters
    */
   getMLParameters() {
-    return this.settings.mlParameters || this.getDefaultSettings().mlParameters;
+    const settings = this.settings || this.getDefaultSettings();
+    return settings.mlParameters || this.getDefaultSettings().mlParameters;
   }
 
   /**
@@ -561,9 +627,8 @@ export class ConfigurationService {
    * Get monthly limits
    */
   getMonthlyLimits() {
-    return (
-      this.settings.monthlyLimits || this.getDefaultSettings().monthlyLimits
-    );
+    const settings = this.settings || this.getDefaultSettings();
+    return settings.monthlyLimits || this.getDefaultSettings().monthlyLimits;
   }
 
   /**
@@ -577,9 +642,9 @@ export class ConfigurationService {
    * Get backup assignments
    */
   getBackupAssignments() {
+    const settings = this.settings || this.getDefaultSettings();
     return (
-      this.settings.backupAssignments ||
-      this.getDefaultSettings().backupAssignments
+      settings.backupAssignments || this.getDefaultSettings().backupAssignments
     );
   }
 
