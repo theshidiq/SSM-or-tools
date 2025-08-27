@@ -1,0 +1,152 @@
+# Docker ignore file for React client
+# Optimized to reduce build context and improve Docker build performance
+
+# Version control
+.git
+.gitignore
+.gitattributes
+.github/
+
+# Dependencies (will be installed in container)
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+package-lock.json
+yarn.lock
+
+# Build outputs and cache
+build/
+dist/
+.next/
+.nuxt/
+.cache/
+.parcel-cache/
+.eslintcache
+.stylelintcache
+
+# Environment and configuration files
+.env*
+!.env.example
+.local
+
+# IDE and editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+# Testing and coverage
+coverage/
+.nyc_output/
+test-results/
+playwright-report/
+test-results.xml
+
+# Logs
+*.log
+logs/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+lerna-debug.log*
+
+# Runtime and temporary files
+.tmp/
+tmp/
+temp/
+*.pid
+*.seed
+*.pid.lock
+
+# Documentation and development files
+*.md
+!README.md
+docs/
+.storybook/
+storybook-static/
+
+# Development and testing tools
+.eslintrc*
+.prettierrc*
+.babelrc*
+jest.config.*
+vitest.config.*
+cypress.json
+playwright.config.*
+lighthouse-report.html
+
+# Deployment files
+docker-compose*.yml
+Dockerfile*
+.dockerignore
+deployment/
+k8s/
+
+# AI and ML specific ignores
+# TensorFlow.js models (will be downloaded/cached at runtime)
+**/*.tfjs/
+**/model.json
+**/weights.bin
+.tfjs-models/
+
+# Performance test artifacts
+ai-test-*.json
+ai-test-summary-*.txt
+performance_monitoring.sql
+browser-console-monitor.js
+playwright-*.js
+
+# Database files
+*.sql
+!simplified-database-setup.sql
+database/
+
+# Backup and temporary files
+*.backup
+*.bak
+*.tmp
+*~
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+Icon
+._*
+.DocumentRevisions-V100
+.fseventsd
+.Spotlight-V100
+.TemporaryItems
+.Trashes
+.VolumeIcon.icns
+.com.apple.timemachine.donotpresent
+.AppleDB
+.AppleDesktop
+Network Trash Folder
+Temporary Items
+.apdisk
+
+# Windows
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+*.cab
+*.msi
+*.msm
+*.msp
+*.lnk
+
+# Linux
+*~
+.fuse_hidden*
+.directory
+.Trash-*
+.nfs*
+
+# Ignore server directory when building client
+server/

@@ -1,0 +1,74 @@
+# Prometheus configuration for monitoring the AI-powered shift schedule manager
+
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+  external_labels:
+    cluster: 'shift-schedule-manager'
+    environment: 'production'
+
+# Alertmanager configuration
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets:
+          # - alertmanager:9093
+
+# Load rules once and periodically evaluate them according to the global 'evaluation_interval'.
+rule_files:
+  # - "first_rules.yml"
+  # - "second_rules.yml"
+
+# Scrape configurations
+scrape_configs:
+  # The job name is added as a label `job=<job_name>` to any timeseries scraped from this config.
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']
+
+  # Nginx metrics (if nginx-exporter is available)
+  - job_name: 'nginx'
+    static_configs:
+      - targets: ['nginx:9113']
+    metrics_path: /metrics
+    scrape_interval: 30s
+
+  # Node exporter for system metrics
+  - job_name: 'node-exporter'
+    static_configs:
+      - targets: ['node-exporter:9100']
+    scrape_interval: 15s
+
+  # AI Server metrics (custom endpoint)
+  - job_name: 'ai-server'
+    static_configs:
+      - targets: ['ai-server:3001']
+    metrics_path: /metrics
+    scrape_interval: 10s
+    scrape_timeout: 5s
+
+  # Redis metrics (if redis-exporter is available)
+  - job_name: 'redis'
+    static_configs:
+      - targets: ['redis-exporter:9121']
+    scrape_interval: 30s
+
+  # PostgreSQL metrics (if postgres-exporter is available)
+  - job_name: 'postgres'
+    static_configs:
+      - targets: ['postgres-exporter:9187']
+    scrape_interval: 30s
+
+  # Docker container metrics
+  - job_name: 'cadvisor'
+    static_configs:
+      - targets: ['cadvisor:8080']
+    scrape_interval: 15s
+
+  # Custom application metrics
+  - job_name: 'app-metrics'
+    static_configs:
+      - targets: ['nginx:80']
+    metrics_path: /api/metrics
+    scrape_interval: 30s
+    scrape_timeout: 10s

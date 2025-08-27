@@ -1,0 +1,107 @@
+# Docker ignore file for Express.js AI server
+# Optimized for TensorFlow.js Node.js and production builds
+
+# Version control
+.git
+.gitignore
+.gitattributes
+.github/
+
+# Dependencies (will be installed in container)
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Development and testing files
+test/
+tests/
+__tests__/
+*.test.js
+*.spec.js
+coverage/
+.nyc_output/
+test-results/
+
+# Configuration files (development)
+.eslintrc*
+.prettierrc*
+.babelrc*
+jest.config.*
+nodemon.json
+.nodemonignore
+
+# Environment files (will be provided at runtime)
+.env*
+!.env.example
+
+# Logs and runtime files
+*.log
+logs/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+lerna-debug.log*
+*.pid
+*.seed
+*.pid.lock
+
+# IDE and editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Documentation
+*.md
+!README.md
+docs/
+
+# Deployment files
+docker-compose*.yml
+Dockerfile*
+.dockerignore
+deployment/
+k8s/
+
+# TensorFlow.js specific ignores
+# Pre-trained models cache (will be managed at runtime)
+.tfjs-models/
+*.tfjs/
+model.json
+weights.bin
+**/models/*.json
+**/models/*.bin
+
+# Performance and profiling
+*.prof
+*.cpuprofile
+*.heapprofile
+
+# Temporary files
+.tmp/
+tmp/
+temp/
+*.tmp
+*.bak
+*.backup
+
+# Build artifacts
+build/
+dist/
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+
+# Windows
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# Linux
+*~
+.directory

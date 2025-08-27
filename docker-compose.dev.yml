@@ -1,0 +1,173 @@
+# Development Docker Compose configuration
+# Optimized for development workflow with hot reload and debugging
+
+version: '3.8'
+
+services:
+  # React development server with hot reload
+  client-dev:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: development
+    container_name: shift-schedule-client-dev
+    ports:
+      - "3000:3000"
+    volumes:
+      # Mount source code for hot reload
+      - ./src:/app/src:ro
+      - ./public:/app/public:ro
+      - ./package.json:/app/package.json:ro
+      - ./package-lock.json:/app/package-lock.json:ro
+      - ./tailwind.config.js:/app/tailwind.config.js:ro
+      - ./postcss.config.js:/app/postcss.config.js:ro
+      # Preserve node_modules performance with named volume
+      - client_node_modules:/app/node_modules
+    environment:
+      - NODE_ENV=development
+      - REACT_APP_API_BASE_URL=http://localhost:3001/api
+      - REACT_APP_ENVIRONMENT=development
+      - CHOKIDAR_USEPOLLING=true
+      - FAST_REFRESH=true
+      # Development API keys (use non-production keys)
+      - REACT_APP_SUPABASE_URL=${REACT_APP_SUPABASE_URL_DEV:-}
+      - REACT_APP_SUPABASE_ANON_KEY=${REACT_APP_SUPABASE_ANON_KEY_DEV:-}
+      - REACT_APP_GOOGLE_VISION_API_KEY=${REACT_APP_GOOGLE_VISION_API_KEY_DEV:-}
+    networks:
+      - dev-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
+  # Express.js AI server with hot reload
+  ai-server-dev:
+    build:
+      context: ./server
+      dockerfile: Dockerfile
+      target: development
+    container_name: shift-schedule-server-dev
+    ports:
+      - "3001:3001"
+    volumes:
+      # Mount server source code for hot reload
+      - ./server:/app:ro
+      - ./server/package.json:/app/package.json:ro
+      - ./server/package-lock.json:/app/package-lock.json:ro
+      # Preserve node_modules performance with named volume
+      - server_node_modules:/app/node_modules
+    environment:
+      - NODE_ENV=development
+      - PORT=3001
+      - DEBUG=shift-schedule:*
+      # TensorFlow.js optimizations for development
+      - TFJS_BACKEND=tensorflow
+      - TF_CPP_MIN_LOG_LEVEL=1
+      - NODE_OPTIONS=--max-old-space-size=2048
+      - UV_THREADPOOL_SIZE=4
+      # CORS configuration for development
+      - CORS_ORIGIN=http://localhost:3000
+    networks:
+      - dev-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "node", "-e", "const http = require('http'); http.get('http://localhost:3001/health', (res) => { res.statusCode === 200 ? process.exit(0) : process.exit(1); }).on('error', () => process.exit(1));"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+  # Redis for development caching (optional)
+  redis-dev:
+    image: redis:7-alpine
+    container_name: shift-schedule-redis-dev
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - dev-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # PostgreSQL for development database (optional - if not using Supabase)
+  postgres-dev:
+    image: postgres:15-alpine
+    container_name: shift-schedule-postgres-dev
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./database/migrations:/docker-entrypoint-initdb.d:ro
+    environment:
+      - POSTGRES_DB=shift_schedule_dev
+      - POSTGRES_USER=developer
+      - POSTGRES_PASSWORD=dev_password
+      - POSTGRES_INITDB_ARGS=--encoding=UTF-8 --lc-collate=C --lc-ctype=C
+    networks:
+      - dev-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U developer -d shift_schedule_dev"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Development utilities container
+  dev-tools:
+    image: node:18-alpine
+    container_name: shift-schedule-dev-tools
+    working_dir: /workspace
+    volumes:
+      - ./:/workspace:ro
+      - dev_tools_cache:/workspace/node_modules
+    networks:
+      - dev-network
+    command: ["sleep", "infinity"]
+    profiles:
+      - tools
+
+  # Nginx for development proxy (optional - for testing production-like routing)
+  nginx-dev:
+    image: nginx:1.25-alpine
+    container_name: shift-schedule-nginx-dev
+    ports:
+      - "8080:80"
+    volumes:
+      - ./docker/nginx.dev.conf:/etc/nginx/nginx.conf:ro
+    networks:
+      - dev-network
+    depends_on:
+      - client-dev
+      - ai-server-dev
+    profiles:
+      - proxy
+    restart: unless-stopped
+
+# Named volumes for better performance and persistence
+volumes:
+  client_node_modules:
+    driver: local
+  server_node_modules:
+    driver: local
+  redis_data:
+    driver: local
+  postgres_data:
+    driver: local
+  dev_tools_cache:
+    driver: local
+
+# Custom network for service communication
+networks:
+  dev-network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.0.0/16
