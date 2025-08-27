@@ -115,8 +115,6 @@ services:
     container_name: shift-schedule-redis
     volumes:
       - redis_data:/data
-      - ./docker/redis.conf:/etc/redis/redis.conf:ro
-    command: ["redis-server", "/etc/redis/redis.conf"]
     networks:
       - backend
     restart: unless-stopped
