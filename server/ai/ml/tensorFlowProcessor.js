@@ -3,7 +3,7 @@
  * Optimized for Node.js environment with CPU-based processing
  */
 
-const tf = require('@tensorflow/tfjs-node');
+const tf = require('@tensorflow/tfjs');
 
 class TensorFlowProcessor {
   constructor() {

@@ -51,15 +51,13 @@ services:
           memory: 256M
           cpus: '0.5'
 
-  # AI Server - Horizontally scalable
+  # AI Server - Horizontally scalable  
   ai-server:
     build:
       context: ./server
       dockerfile: Dockerfile
       target: production
-    ports:
-      # Expose ports for debugging (remove in production)
-      - "3001-3005:3001"
+    # No external ports needed - nginx will proxy internally
     volumes:
       # Model cache for TensorFlow.js
       - tf_models_cache:/app/.tfjs-models

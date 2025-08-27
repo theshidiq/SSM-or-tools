@@ -9,7 +9,13 @@
  * - Integration with existing client-side business rules
  */
 
-const tf = require('@tensorflow/tfjs-node');
+// Use pure JavaScript TensorFlow for Alpine Linux compatibility
+const tf = require('@tensorflow/tfjs');
+
+// Configure CPU backend for Alpine Linux
+if (process.env.TFJS_FORCE_CPU === 'true' || process.env.TFJS_BACKEND === 'cpu') {
+  console.log('Using TensorFlow.js CPU backend for Alpine Linux compatibility');
+}
 
 // Import business logic from client-side (we'll adapt the paths)
 const { generateDateRange } = require('./utils/dateUtils');

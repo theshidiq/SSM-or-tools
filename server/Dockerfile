@@ -31,8 +31,8 @@ RUN npm config set audit-level moderate && \
     npm config set update-notifier false
 
 # Install dependencies with npm ci for reproducible builds
-# Use --build-from-source for TensorFlow.js native optimizations
-RUN npm ci --only=production --no-audit --no-fund --build-from-source && \
+# Skip native bindings for Alpine compatibility - use CPU backend only
+RUN npm ci --omit=dev --no-audit --no-fund && \
     npm cache clean --force
 
 # Copy application source code
@@ -63,11 +63,12 @@ COPY --from=builder /app .
 RUN chown -R serverjs:nodejs /app && \
     chmod -R 755 /app
 
-# TensorFlow.js Node.js optimizations
-ENV TFJS_BACKEND=tensorflow
+# TensorFlow.js CPU-only optimizations for Alpine compatibility
+ENV TFJS_BACKEND=cpu
 ENV TF_CPP_MIN_LOG_LEVEL=2
-ENV NODE_OPTIONS="--max-old-space-size=4096"
-ENV UV_THREADPOOL_SIZE=4
+ENV TFJS_FORCE_CPU=true
+ENV NODE_OPTIONS="--max-old-space-size=2048"
+ENV UV_THREADPOOL_SIZE=2
 
 # Production environment variables
 ENV NODE_ENV=production
@@ -110,17 +111,18 @@ WORKDIR /app
 # Copy package files
 COPY package*.json ./
 
-# Install all dependencies (including dev dependencies)
-RUN npm install --build-from-source
+# Install all dependencies (including dev dependencies) - skip native bindings
+RUN npm install
 
 # Development environment variables
 ENV NODE_ENV=development
 ENV PORT=3001
 ENV DEBUG=shift-schedule:*
 
-# TensorFlow.js development optimizations
-ENV TFJS_BACKEND=tensorflow
+# TensorFlow.js development optimizations - CPU only for Alpine
+ENV TFJS_BACKEND=cpu
 ENV TF_CPP_MIN_LOG_LEVEL=1
+ENV TFJS_FORCE_CPU=true
 ENV NODE_OPTIONS="--max-old-space-size=2048"
 
 # Security: Change ownership to non-root user
