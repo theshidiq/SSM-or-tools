@@ -263,59 +263,12 @@ export const findPeriodWithData = (supabaseData = null) => {
     const { _staff_members, ...actualScheduleData } =
       supabaseData.schedule_data;
 
-    console.log(
-      "🔍 Staff IDs in Supabase data:",
-      Object.keys(actualScheduleData),
-    );
-    console.log("🔍 Total periods to check:", monthPeriods.length);
-
-    // DEBUG: Show actual data structure for first staff member
-    const firstStaffId = Object.keys(actualScheduleData)[0];
-    if (firstStaffId) {
-      console.log("🔍 DETAILED DEBUG - First staff member data:");
-      console.log(`🔍 Staff ID: ${firstStaffId}`);
-      console.log("🔍 Staff schedule data:", actualScheduleData[firstStaffId]);
-      console.log(
-        "🔍 Type of staff schedule:",
-        typeof actualScheduleData[firstStaffId],
-      );
-      console.log(
-        "🔍 Staff schedule keys:",
-        actualScheduleData[firstStaffId]
-          ? Object.keys(actualScheduleData[firstStaffId])
-          : "null/undefined",
-      );
-
-      // Check a few sample dates
-      if (
-        actualScheduleData[firstStaffId] &&
-        typeof actualScheduleData[firstStaffId] === "object"
-      ) {
-        const sampleDates = [
-          "2025-06-21",
-          "2025-06-22",
-          "2025-06-23",
-          "2025-07-01",
-          "2025-07-02",
-        ];
-        sampleDates.forEach((date) => {
-          const value = actualScheduleData[firstStaffId][date];
-          console.log(
-            `🔍 Sample date ${date}:`,
-            value,
-            `(type: ${typeof value})`,
-          );
-        });
-      }
-    }
+    // DEBUG: Show basic data info
+    console.log(`📊 Checking ${Object.keys(actualScheduleData).length} staff members across ${monthPeriods.length} periods`);
 
     // Check each period to see if Supabase data has meaningful dates in that period's range
     for (let i = 0; i < monthPeriods.length; i++) {
       const dateRange = generateDateRange(i);
-      console.log(
-        `🔍 Checking period ${i} (${monthPeriods[i].label}): ${dateRange[0].toISOString().split("T")[0]} to ${dateRange[dateRange.length - 1].toISOString().split("T")[0]}`,
-      );
-
       const hasDataInPeriod = dateRange.some((date) => {
         const dateKey = date.toISOString().split("T")[0];
         return Object.keys(actualScheduleData).some((staffId) => {
@@ -329,22 +282,12 @@ export const findPeriodWithData = (supabaseData = null) => {
             shiftValue !== "" &&
             shiftValue.toString().trim() !== "";
 
-          if (hasMeaningfulData) {
-            console.log(
-              `🔍 Found meaningful data: ${dateKey} = "${shiftValue}" in period ${i}`,
-            );
-            return true;
-          }
-          return false;
+          return hasMeaningfulData;
         });
       });
 
-      console.log(`🔍 Period ${i} has meaningful data: ${hasDataInPeriod}`);
-
       if (hasDataInPeriod) {
-        console.log(
-          `🔍 ✅ Found meaningful Supabase data in period ${i}: ${monthPeriods[i].label}`,
-        );
+        console.log(`✅ Found schedule data in period ${i}: ${monthPeriods[i].label}`);
         return i;
       }
     }
