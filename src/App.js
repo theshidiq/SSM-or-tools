@@ -1,23 +1,9 @@
-import React, { useEffect } from "react";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import ShiftScheduleEditor from "./components/ShiftScheduleEditor.jsx";
+import React, { useState } from "react";
+import ShiftScheduleEditorRealtime from "./components/ShiftScheduleEditorRealtime.jsx";
 import ConsoleLogViewer from "./components/debug/ConsoleLogViewer.jsx";
+import ForceDataLoader from "./components/ForceDataLoader.jsx";
 import { useSupabase } from "./hooks/useSupabase.js";
 import { RestaurantProvider } from "./contexts/RestaurantContext";
-
-const queryClient = new QueryClient({
-  defaultOptions: {
-    queries: {
-      staleTime: 5 * 60 * 1000, // 5 minutes
-      cacheTime: 10 * 60 * 1000, // 10 minutes
-      refetchOnWindowFocus: false,
-      retry: 3,
-    },
-    mutations: {
-      retry: 3,
-    },
-  },
-});
 
 function AppContent() {
   const {
@@ -26,32 +12,34 @@ function AppContent() {
     scheduleData,
     saveScheduleData,
     loadScheduleData,
-    checkConnection,
   } = useSupabase();
 
-  // Load initial data
-  useEffect(() => {
-    const initializeData = async () => {
-      try {
-        await checkConnection();
-        await loadScheduleData(); // Load latest schedule
-      } catch (err) {
-        console.error("Failed to initialize data:", err);
-      }
-    };
+  const [forceData, setForceData] = useState(null);
 
-    initializeData();
-  }, [checkConnection, loadScheduleData]);
+  // Use forced data if available, otherwise use Supabase data
+  const effectiveScheduleData = forceData || scheduleData;
 
   return (
     <div className="App">
-      <ShiftScheduleEditor
-        supabaseScheduleData={scheduleData}
+      {/* Phase 1: Force load actual Supabase data for migration testing */}
+      <ForceDataLoader onDataLoaded={setForceData} />
+      
+      {/* NEW REAL-TIME VERSION - Phase 1 Implementation */}
+      <ShiftScheduleEditorRealtime
+        supabaseScheduleData={effectiveScheduleData}
         isConnected={isConnected}
         error={error}
         onSaveSchedule={saveScheduleData}
         loadScheduleData={loadScheduleData}
       />
+      {/* Debug info */}
+      {process.env.NODE_ENV === "development" && (
+        <div style={{position: 'fixed', top: 10, right: 10, background: 'yellow', padding: '10px', fontSize: '12px'}}>
+          Force Data: {forceData ? 'LOADED' : 'NULL'}<br/>
+          Schedule Data: {scheduleData ? 'LOADED' : 'NULL'}<br/>
+          Effective: {effectiveScheduleData ? 'LOADED' : 'NULL'}
+        </div>
+      )}
       {/* Console Log Viewer - Only in development */}
       {process.env.NODE_ENV === "development" && <ConsoleLogViewer />}
     </div>
@@ -60,11 +48,9 @@ function AppContent() {
 
 function App() {
   return (
-    <QueryClientProvider client={queryClient}>
-      <RestaurantProvider>
-        <AppContent />
-      </RestaurantProvider>
-    </QueryClientProvider>
+    <RestaurantProvider>
+      <AppContent />
+    </RestaurantProvider>
   );
 }
 
