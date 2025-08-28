@@ -206,6 +206,16 @@ const ShiftScheduleEditorRealtime = ({
     return Promise.resolve();
   }, []);
 
+  // Connection status check function
+  const checkConnectionStatus = useCallback(() => {
+    console.log("🔍 Checking connection status...");
+    return Promise.resolve({
+      isConnected: isConnected,
+      status: realtimeStatus.status,
+      message: realtimeStatus.message
+    });
+  }, [isConnected, realtimeStatus]);
+
   // Generate ordered staff members
   const orderedStaffMembers = useMemo(() => {
     if (

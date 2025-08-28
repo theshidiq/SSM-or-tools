@@ -1,6 +1,6 @@
 /**
  * Enhanced AI Assistant Hook with Server Integration
- * 
+ *
  * This enhanced version of useAIAssistant provides:
  * - Server-side AI processing with automatic fallback to client-side
  * - Streaming progress updates via Server-Sent Events
@@ -31,7 +31,9 @@ const loadConfigurationCache = async () => {
 
 const loadEnhancedAISystem = async () => {
   try {
-    console.log("🚀 Loading enhanced hybrid AI system for client-side fallback...");
+    console.log(
+      "🚀 Loading enhanced hybrid AI system for client-side fallback...",
+    );
 
     const { HybridPredictor } = await import(
       /* webpackChunkName: "hybrid-predictor" */ "../ai/hybrid/HybridPredictor"
@@ -54,8 +56,11 @@ const loadEnhancedAISystem = async () => {
       isEnhanced: true,
     };
   } catch (error) {
-    console.log("⚠️ Enhanced AI system not available, attempting basic fallback...", error.message);
-    
+    console.log(
+      "⚠️ Enhanced AI system not available, attempting basic fallback...",
+      error.message,
+    );
+
     try {
       const { autonomousEngine } = await import(
         /* webpackChunkName: "autonomous-engine" */ "../ai/AutonomousEngine"
@@ -124,11 +129,13 @@ export const useAIAssistantEnhanced = (
       setIsProcessing(true);
       const startTime = Date.now();
 
-      console.log("🚀 Initializing Enhanced AI Assistant with server integration...");
+      console.log(
+        "🚀 Initializing Enhanced AI Assistant with server integration...",
+      );
 
       // Check server availability first
       const serverReady = await checkServerHealth();
-      
+
       if (serverReady) {
         console.log("✅ Server-side AI available and ready");
         setSystemType("server_primary");
@@ -143,16 +150,21 @@ export const useAIAssistantEnhanced = (
 
       setIsInitialized(true);
       const initTime = Date.now() - startTime;
-      console.log(`✅ Enhanced AI Assistant initialized in ${initTime}ms (mode: ${processingMode})`);
+      console.log(
+        `✅ Enhanced AI Assistant initialized in ${initTime}ms (mode: ${processingMode})`,
+      );
     } catch (error) {
       console.error("❌ AI initialization failed:", error);
       setSystemType("unavailable");
       setProcessingMode("fallback");
-      setErrorHistory(prev => [...prev, {
-        timestamp: Date.now(),
-        context: "initialization",
-        error: error.message,
-      }]);
+      setErrorHistory((prev) => [
+        ...prev,
+        {
+          timestamp: Date.now(),
+          context: "initialization",
+          error: error.message,
+        },
+      ]);
       setIsInitialized(true); // Allow basic functionality
     } finally {
       setIsProcessing(false);
@@ -164,7 +176,7 @@ export const useAIAssistantEnhanced = (
    */
   const initializeClientSideAI = useCallback(async () => {
     console.log("🔧 Initializing client-side AI system...");
-    
+
     const aiSystem = await loadEnhancedAISystem();
 
     if (aiSystem && aiSystem.isEnhanced) {
@@ -223,7 +235,7 @@ export const useAIAssistantEnhanced = (
           configurationCache.addChangeListener((changedType) => {
             console.log(`🔄 Configuration changed: ${changedType}`);
             setConfigurationStatus("updated");
-            
+
             const system = aiSystemRef.current;
             if (system && system.type === "enhanced") {
               try {
@@ -231,7 +243,10 @@ export const useAIAssistantEnhanced = (
                   system.hybridPredictor.onConfigurationUpdated();
                 }
               } catch (error) {
-                console.warn("⚠️ Failed to notify AI system of configuration update:", error);
+                console.warn(
+                  "⚠️ Failed to notify AI system of configuration update:",
+                  error,
+                );
               }
             }
           });
@@ -284,23 +299,27 @@ export const useAIAssistantEnhanced = (
     const startTime = Date.now();
 
     try {
-      console.log("🎯 Starting enhanced AI prediction with server-first approach...");
+      console.log(
+        "🎯 Starting enhanced AI prediction with server-first approach...",
+      );
 
       // Invalidate feature cache if needed
       try {
         const dateRange = generateDateRange(currentMonthIndex);
         const cacheInvalidated = featureCacheManager.invalidateOnConfigChange(
-          staffMembers, 
-          scheduleData, 
-          { 
+          staffMembers,
+          scheduleData,
+          {
             monthIndex: currentMonthIndex,
-            dateRange: dateRange.map(d => d.toISOString()),
-            timestamp: Date.now() 
-          }
+            dateRange: dateRange.map((d) => d.toISOString()),
+            timestamp: Date.now(),
+          },
         );
-        
+
         if (cacheInvalidated) {
-          console.log("⚡ Feature cache invalidated - will rebuild during predictions");
+          console.log(
+            "⚡ Feature cache invalidated - will rebuild during predictions",
+          );
         }
       } catch (cacheError) {
         console.warn("⚠️ Cache invalidation check failed:", cacheError.message);
@@ -325,7 +344,7 @@ export const useAIAssistantEnhanced = (
         try {
           console.log("🌐 Attempting server-side AI processing...");
           setProcessingMode("server");
-          
+
           result = await processWithServerAI(
             scheduleData,
             staffMembers,
@@ -335,30 +354,41 @@ export const useAIAssistantEnhanced = (
               useMLPredictions: true,
               enableProgressUpdates: true,
             },
-            progressCallback
+            progressCallback,
           );
-          
+
           processingMethod = "server_ai";
-          
+
           // Update performance metrics
           const processingTime = Date.now() - startTime;
-          setPerformanceMetrics(prev => ({
+          setPerformanceMetrics((prev) => ({
             ...prev,
             serverRequests: prev.serverRequests + 1,
-            averageServerTime: (prev.averageServerTime * (prev.serverRequests - 1) + processingTime) / prev.serverRequests,
+            averageServerTime:
+              (prev.averageServerTime * (prev.serverRequests - 1) +
+                processingTime) /
+              prev.serverRequests,
           }));
-          
-          console.log(`✅ Server-side processing completed in ${processingTime}ms`);
+
+          console.log(
+            `✅ Server-side processing completed in ${processingTime}ms`,
+          );
         } catch (serverError) {
-          console.warn("⚠️ Server-side processing failed, falling back to client:", serverError.message);
-          
+          console.warn(
+            "⚠️ Server-side processing failed, falling back to client:",
+            serverError.message,
+          );
+
           // Update error tracking
-          setErrorHistory(prev => [...prev.slice(-9), {
-            timestamp: Date.now(),
-            context: "server_processing",
-            error: serverError.message,
-          }]);
-          
+          setErrorHistory((prev) => [
+            ...prev.slice(-9),
+            {
+              timestamp: Date.now(),
+              context: "server_processing",
+              error: serverError.message,
+            },
+          ]);
+
           // Fall through to client-side processing
         }
       }
@@ -367,23 +397,29 @@ export const useAIAssistantEnhanced = (
       if (!result) {
         console.log("🔄 Using client-side AI processing...");
         setProcessingMode("client");
-        
+
         result = await processWithClientSideAI(
           scheduleData,
           staffMembers,
           currentMonthIndex,
           progressCallback,
-          startTime
+          startTime,
         );
-        
-        processingMethod = systemType === "client_enhanced" ? "client_enhanced" : "client_legacy";
-        
+
+        processingMethod =
+          systemType === "client_enhanced"
+            ? "client_enhanced"
+            : "client_legacy";
+
         // Update performance metrics
         const processingTime = Date.now() - startTime;
-        setPerformanceMetrics(prev => ({
+        setPerformanceMetrics((prev) => ({
           ...prev,
           clientFallbacks: prev.clientFallbacks + 1,
-          averageClientTime: (prev.averageClientTime * (prev.clientFallbacks - 1) + processingTime) / prev.clientFallbacks,
+          averageClientTime:
+            (prev.averageClientTime * (prev.clientFallbacks - 1) +
+              processingTime) /
+            prev.clientFallbacks,
         }));
       }
 
@@ -395,9 +431,13 @@ export const useAIAssistantEnhanced = (
         const processingTime = Date.now() - startTime;
 
         // Update success metrics
-        setPerformanceMetrics(prev => ({
+        setPerformanceMetrics((prev) => ({
           ...prev,
-          successRate: ((prev.serverRequests + prev.clientFallbacks - 1) * prev.successRate + 1) / (prev.serverRequests + prev.clientFallbacks),
+          successRate:
+            ((prev.serverRequests + prev.clientFallbacks - 1) *
+              prev.successRate +
+              1) /
+            (prev.serverRequests + prev.clientFallbacks),
         }));
 
         return {
@@ -405,7 +445,9 @@ export const useAIAssistantEnhanced = (
           message: `✅ ${filledDetails}個のセルを${getMethodDisplayName(processingMethod)}で予測（精度: ${Math.round(result.metadata?.quality || result.metadata?.confidence || 75)}%, 処理時間: ${processingTime}ms）`,
           data: {
             filledCells: filledDetails,
-            accuracy: Math.round(result.metadata?.quality || result.metadata?.confidence || 75),
+            accuracy: Math.round(
+              result.metadata?.quality || result.metadata?.confidence || 75,
+            ),
             method: processingMethod,
             processingMode,
             serverUsed: processingMode === "server",
@@ -435,14 +477,14 @@ export const useAIAssistantEnhanced = (
         recoveryAttempt: recoveryAttempts,
       };
 
-      setErrorHistory(prev => [...prev.slice(-9), errorInfo]);
+      setErrorHistory((prev) => [...prev.slice(-9), errorInfo]);
       setLastError(error);
-      setRecoveryAttempts(prev => prev + 1);
+      setRecoveryAttempts((prev) => prev + 1);
 
       // Try emergency recovery if not too many attempts
       if (recoveryAttempts < 2) {
         console.log("🆘 Attempting emergency recovery...");
-        
+
         const emergencyResult = await performEmergencyPredictionWithRules(
           scheduleData,
           staffMembers,
@@ -491,65 +533,68 @@ export const useAIAssistantEnhanced = (
   /**
    * Process with client-side AI system
    */
-  const processWithClientSideAI = useCallback(async (
-    scheduleData,
-    staffMembers,
-    currentMonthIndex,
-    progressCallback,
-    startTime
-  ) => {
-    const system = aiSystemRef.current;
+  const processWithClientSideAI = useCallback(
+    async (
+      scheduleData,
+      staffMembers,
+      currentMonthIndex,
+      progressCallback,
+      startTime,
+    ) => {
+      const system = aiSystemRef.current;
 
-    if (!system) {
-      throw new Error("Client-side AI system not available");
-    }
-
-    if (system.type === "enhanced") {
-      console.log("🎯 Processing with client-side enhanced AI...");
-      
-      return await system.hybridPredictor.predictSchedule(
-        {
-          scheduleData,
-          currentMonthIndex,
-          timestamp: Date.now(),
-        },
-        staffMembers,
-        generateDateRange(currentMonthIndex),
-      );
-    } else {
-      console.log("📚 Processing with client-side legacy AI...");
-      
-      if (progressCallback) {
-        progressCallback({
-          stage: "legacy_processing",
-          progress: 25,
-          message: "レガシーシステムで処理中...",
-        });
+      if (!system) {
+        throw new Error("Client-side AI system not available");
       }
 
-      // Use legacy processing logic
-      const historicalData = await loadAllHistoricalData();
-      const result = await analyzeAndFillScheduleWithHistoryAndRules(
-        scheduleData,
-        staffMembers,
-        currentMonthIndex,
-        historicalData,
-      );
+      if (system.type === "enhanced") {
+        console.log("🎯 Processing with client-side enhanced AI...");
 
-      return {
-        success: result.success,
-        schedule: result.newSchedule,
-        metadata: {
-          method: "legacy_client",
-          quality: result.accuracy,
-          confidence: result.accuracy,
-          filledCells: result.filledCells,
-          processingTime: Date.now() - startTime,
-        },
-        error: result.success ? null : result.message,
-      };
-    }
-  }, []);
+        return await system.hybridPredictor.predictSchedule(
+          {
+            scheduleData,
+            currentMonthIndex,
+            timestamp: Date.now(),
+          },
+          staffMembers,
+          generateDateRange(currentMonthIndex),
+        );
+      } else {
+        console.log("📚 Processing with client-side legacy AI...");
+
+        if (progressCallback) {
+          progressCallback({
+            stage: "legacy_processing",
+            progress: 25,
+            message: "レガシーシステムで処理中...",
+          });
+        }
+
+        // Use legacy processing logic
+        const historicalData = await loadAllHistoricalData();
+        const result = await analyzeAndFillScheduleWithHistoryAndRules(
+          scheduleData,
+          staffMembers,
+          currentMonthIndex,
+          historicalData,
+        );
+
+        return {
+          success: result.success,
+          schedule: result.newSchedule,
+          metadata: {
+            method: "legacy_client",
+            quality: result.accuracy,
+            confidence: result.accuracy,
+            filledCells: result.filledCells,
+            processingTime: Date.now() - startTime,
+          },
+          error: result.success ? null : result.message,
+        };
+      }
+    },
+    [],
+  );
 
   /**
    * Cancel current processing
@@ -578,7 +623,7 @@ export const useAIAssistantEnhanced = (
     }
 
     return {
-      success: results.some(r => r.success),
+      success: results.some((r) => r.success),
       results,
       method: "enhanced_cancel",
     };
@@ -643,47 +688,50 @@ export const useAIAssistantEnhanced = (
   ]);
 
   // Helper functions (simplified versions of original functions)
-  const performEmergencyPredictionWithRules = useCallback(async (scheduleData, staffMembers) => {
-    // Simplified emergency prediction logic
-    const newSchedule = JSON.parse(JSON.stringify(scheduleData));
-    let filledCells = 0;
+  const performEmergencyPredictionWithRules = useCallback(
+    async (scheduleData, staffMembers) => {
+      // Simplified emergency prediction logic
+      const newSchedule = JSON.parse(JSON.stringify(scheduleData));
+      let filledCells = 0;
 
-    Object.keys(newSchedule).forEach(staffId => {
-      const staff = staffMembers.find(s => s.id === staffId);
-      if (!staff) return;
+      Object.keys(newSchedule).forEach((staffId) => {
+        const staff = staffMembers.find((s) => s.id === staffId);
+        if (!staff) return;
 
-      Object.keys(newSchedule[staffId]).forEach(dateKey => {
-        const currentValue = newSchedule[staffId][dateKey];
-        if (!currentValue || currentValue === "") {
-          const date = new Date(dateKey);
-          const dayOfWeek = date.getDay();
-          
-          let shift;
-          if (staff.status === "パート") {
-            shift = dayOfWeek >= 1 && dayOfWeek <= 5 ? "○" : "×";
-          } else {
-            shift = dayOfWeek === 0 ? "×" : "";
+        Object.keys(newSchedule[staffId]).forEach((dateKey) => {
+          const currentValue = newSchedule[staffId][dateKey];
+          if (!currentValue || currentValue === "") {
+            const date = new Date(dateKey);
+            const dayOfWeek = date.getDay();
+
+            let shift;
+            if (staff.status === "パート") {
+              shift = dayOfWeek >= 1 && dayOfWeek <= 5 ? "○" : "×";
+            } else {
+              shift = dayOfWeek === 0 ? "×" : "";
+            }
+
+            newSchedule[staffId][dateKey] = shift;
+            filledCells++;
           }
-          
-          newSchedule[staffId][dateKey] = shift;
-          filledCells++;
-        }
+        });
       });
-    });
 
-    return {
-      success: true,
-      newSchedule,
-      message: `🆘 ${filledCells}個のセルを緊急モードで予測`,
-      filledCells,
-      accuracy: 70,
-    };
-  }, []);
+      return {
+        success: true,
+        newSchedule,
+        message: `🆘 ${filledCells}個のセルを緊急モードで予測`,
+        filledCells,
+        accuracy: 70,
+      };
+    },
+    [],
+  );
 
   const countFilledCells = useCallback((oldSchedule, newSchedule) => {
     let count = 0;
-    Object.keys(newSchedule).forEach(staffId => {
-      Object.keys(newSchedule[staffId]).forEach(dateKey => {
+    Object.keys(newSchedule).forEach((staffId) => {
+      Object.keys(newSchedule[staffId]).forEach((dateKey) => {
         const oldValue = oldSchedule[staffId]?.[dateKey];
         const newValue = newSchedule[staffId][dateKey];
         const wasEmpty = !oldValue || oldValue === "";
@@ -725,7 +773,10 @@ export const useAIAssistantEnhanced = (
           historicalData.staffMembers[periodIndex] = staffData;
         }
       } catch (error) {
-        console.warn(`Failed to load historical data for period ${periodIndex}:`, error);
+        console.warn(
+          `Failed to load historical data for period ${periodIndex}:`,
+          error,
+        );
       }
     }
     return historicalData;
@@ -741,11 +792,11 @@ export const useAIAssistantEnhanced = (
     const newSchedule = JSON.parse(JSON.stringify(currentScheduleData));
     let filledCells = 0;
 
-    Object.keys(newSchedule).forEach(staffId => {
-      const staff = currentStaffMembers.find(s => s.id === staffId);
+    Object.keys(newSchedule).forEach((staffId) => {
+      const staff = currentStaffMembers.find((s) => s.id === staffId);
       if (!staff) return;
 
-      Object.keys(newSchedule[staffId]).forEach(dateKey => {
+      Object.keys(newSchedule[staffId]).forEach((dateKey) => {
         const currentShift = newSchedule[staffId][dateKey];
         if (!currentShift || currentShift.trim() === "") {
           const predictedShift = staff.status === "パート" ? "○" : "";
@@ -757,9 +808,10 @@ export const useAIAssistantEnhanced = (
 
     return {
       success: filledCells > 0,
-      message: filledCells > 0 
-        ? `${filledCells}個のセルに自動入力しました（履歴学習モード）`
-        : "入力可能な空のセルがありませんでした。",
+      message:
+        filledCells > 0
+          ? `${filledCells}個のセルに自動入力しました（履歴学習モード）`
+          : "入力可能な空のセルがありませんでした。",
       newSchedule,
       filledCells,
       accuracy: 75,
@@ -813,16 +865,16 @@ export const useAIAssistantEnhanced = (
     isServerFirst: serverAvailable,
     hasServerSupport: true,
     hasStreamingSupport: typeof EventSource !== "undefined",
-    
+
     // Compatibility with existing API
     isMainThread: true,
     isEnhanced: systemType.includes("enhanced"),
     isAvailable: systemType !== "unavailable",
     hasBusinessRuleCompliance: true,
-    
+
     // Configuration management
     configurationStatus,
-    
+
     // Error handling
     lastError,
     recoveryAttempts,

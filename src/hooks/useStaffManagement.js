@@ -368,6 +368,7 @@ export const useStaffManagement = (
         const { _staff_members, ...scheduleData } =
           supabaseScheduleData.schedule_data;
         const staffIds = Object.keys(scheduleData);
+        
         if (staffIds.length > 0) {
           // Create staff objects from schedule data keys
           const extractedStaff = staffIds.map((staffId) => ({

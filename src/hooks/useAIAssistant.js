@@ -477,25 +477,34 @@ export const useAIAssistant = (
       try {
         const dateRange = generateDateRange(currentMonthIndex);
         const cacheInvalidated = featureCacheManager.invalidateOnConfigChange(
-          staffMembers, 
-          scheduleData, 
-          { 
+          staffMembers,
+          scheduleData,
+          {
             monthIndex: currentMonthIndex,
-            dateRange: dateRange.map(d => d.toISOString()),
-            timestamp: Date.now() 
-          }
+            dateRange: dateRange.map((d) => d.toISOString()),
+            timestamp: Date.now(),
+          },
         );
-        
+
         if (cacheInvalidated) {
-          console.log("⚡ Feature cache invalidated due to configuration changes - will rebuild during predictions");
+          console.log(
+            "⚡ Feature cache invalidated due to configuration changes - will rebuild during predictions",
+          );
         } else {
-          console.log("⚡ Feature cache is valid - predictions will benefit from cache hits");
+          console.log(
+            "⚡ Feature cache is valid - predictions will benefit from cache hits",
+          );
         }
-        
+
         // Log cache health status
         const cacheHealth = featureCacheManager.getHealth();
-        if (cacheHealth.status !== "excellent" && cacheHealth.issues.length > 0) {
-          console.log(`📊 Cache health: ${cacheHealth.status} (${cacheHealth.issues.join(", ")})`);
+        if (
+          cacheHealth.status !== "excellent" &&
+          cacheHealth.issues.length > 0
+        ) {
+          console.log(
+            `📊 Cache health: ${cacheHealth.status} (${cacheHealth.issues.join(", ")})`,
+          );
         }
       } catch (cacheError) {
         console.warn("⚠️ Cache invalidation check failed:", cacheError.message);

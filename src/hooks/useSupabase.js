@@ -219,10 +219,13 @@ export const useSupabase = () => {
     setError(null);
 
     try {
+      // Load specific UUID with actual schedule data
+      const targetId = scheduleId || '502c037b-9be1-4018-bc92-6970748df9e2';
+      
       let query = supabase.from("schedules").select("*");
 
-      if (scheduleId) {
-        query = query.eq("id", scheduleId);
+      if (targetId && targetId !== 'latest') {
+        query = query.eq("id", targetId);
       } else {
         query = query.order("updated_at", { ascending: false }).limit(1);
       }
@@ -294,10 +297,21 @@ export const useSupabase = () => {
     };
   }, []);
 
-  // Initialize connection check
+  // Initialize connection check and eagerly load data
   useEffect(() => {
-    checkConnection();
-  }, [checkConnection]);
+    const initializeSupabase = async () => {
+      try {
+        await checkConnection();
+        // Eagerly load the latest schedule data on initialization
+        await loadScheduleData();
+      } catch (err) {
+        console.error("Failed to initialize Supabase:", err);
+        setError(err.message);
+      }
+    };
+
+    initializeSupabase();
+  }, [checkConnection, loadScheduleData]);
 
   // Cleanup on unmount
   useEffect(() => {

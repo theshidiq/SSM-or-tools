@@ -165,7 +165,7 @@ export const generateDateRange = (monthIndex) => {
   if (!period || !period.start || !period.end) {
     console.error(`Invalid period for monthIndex ${monthIndex}:`, period);
     // Fallback to first available period
-    const fallbackPeriod = monthPeriods[0];
+    const _fallbackPeriod = monthPeriods[0];
     return generateDateRange(0);
   }
 
@@ -252,6 +252,115 @@ export const getCurrentMonthIndex = () => {
     `📅 Current date is after all periods, defaulting to last period: ${monthPeriods[monthPeriods.length - 1].label}`,
   );
   return monthPeriods.length - 1;
+};
+
+// Function to find period with data, prioritizing Supabase data over localStorage
+export const findPeriodWithData = (supabaseData = null) => {
+  console.log("🔍 findPeriodWithData called with data:", !!supabaseData);
+
+  // First, check if Supabase data contains schedule data for any period
+  if (supabaseData && supabaseData.schedule_data) {
+    const { _staff_members, ...actualScheduleData } =
+      supabaseData.schedule_data;
+
+    console.log(
+      "🔍 Staff IDs in Supabase data:",
+      Object.keys(actualScheduleData),
+    );
+    console.log("🔍 Total periods to check:", monthPeriods.length);
+
+    // DEBUG: Show actual data structure for first staff member
+    const firstStaffId = Object.keys(actualScheduleData)[0];
+    if (firstStaffId) {
+      console.log("🔍 DETAILED DEBUG - First staff member data:");
+      console.log(`🔍 Staff ID: ${firstStaffId}`);
+      console.log("🔍 Staff schedule data:", actualScheduleData[firstStaffId]);
+      console.log(
+        "🔍 Type of staff schedule:",
+        typeof actualScheduleData[firstStaffId],
+      );
+      console.log(
+        "🔍 Staff schedule keys:",
+        actualScheduleData[firstStaffId]
+          ? Object.keys(actualScheduleData[firstStaffId])
+          : "null/undefined",
+      );
+
+      // Check a few sample dates
+      if (
+        actualScheduleData[firstStaffId] &&
+        typeof actualScheduleData[firstStaffId] === "object"
+      ) {
+        const sampleDates = [
+          "2025-06-21",
+          "2025-06-22",
+          "2025-06-23",
+          "2025-07-01",
+          "2025-07-02",
+        ];
+        sampleDates.forEach((date) => {
+          const value = actualScheduleData[firstStaffId][date];
+          console.log(
+            `🔍 Sample date ${date}:`,
+            value,
+            `(type: ${typeof value})`,
+          );
+        });
+      }
+    }
+
+    // Check each period to see if Supabase data has meaningful dates in that period's range
+    for (let i = 0; i < monthPeriods.length; i++) {
+      const dateRange = generateDateRange(i);
+      console.log(
+        `🔍 Checking period ${i} (${monthPeriods[i].label}): ${dateRange[0].toISOString().split("T")[0]} to ${dateRange[dateRange.length - 1].toISOString().split("T")[0]}`,
+      );
+
+      const hasDataInPeriod = dateRange.some((date) => {
+        const dateKey = date.toISOString().split("T")[0];
+        return Object.keys(actualScheduleData).some((staffId) => {
+          const staffSchedule = actualScheduleData[staffId];
+          if (!staffSchedule || typeof staffSchedule !== "object") return false;
+
+          const shiftValue = staffSchedule[dateKey];
+          const hasMeaningfulData =
+            shiftValue !== undefined &&
+            shiftValue !== null &&
+            shiftValue !== "" &&
+            shiftValue.toString().trim() !== "";
+
+          if (hasMeaningfulData) {
+            console.log(
+              `🔍 Found meaningful data: ${dateKey} = "${shiftValue}" in period ${i}`,
+            );
+            return true;
+          }
+          return false;
+        });
+      });
+
+      console.log(`🔍 Period ${i} has meaningful data: ${hasDataInPeriod}`);
+
+      if (hasDataInPeriod) {
+        console.log(
+          `🔍 ✅ Found meaningful Supabase data in period ${i}: ${monthPeriods[i].label}`,
+        );
+        return i;
+      }
+    }
+
+    // If no meaningful data found, log this for debugging
+    console.log(
+      "🔍 ❌ No meaningful schedule data found in any period, using date-based period",
+    );
+  } else {
+    console.log("🔍 No Supabase data available");
+  }
+
+  // Fallback to current date-based period
+  const fallbackPeriod = getCurrentMonthIndex();
+  console.log(`🔍 Using fallback period: ${fallbackPeriod}`);
+  return fallbackPeriod;
 };
 
 // Function to reset periods to defaults (useful for testing or admin functions)

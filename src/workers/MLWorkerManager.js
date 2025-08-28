@@ -1,6 +1,6 @@
 /**
  * MLWorkerManager.js
- * 
+ *
  * Manages communication with ML Web Worker to prevent main thread blocking
  * during heavy TensorFlow operations.
  */
@@ -12,8 +12,8 @@ export class MLWorkerManager {
     this.operationCounter = 0;
     this.pendingOperations = new Map();
     this.progressCallbacks = new Map();
-    this.isSupported = typeof Worker !== 'undefined';
-    
+    this.isSupported = typeof Worker !== "undefined";
+
     // Initialize worker if supported
     if (this.isSupported) {
       this.initializeWorker();
@@ -26,22 +26,23 @@ export class MLWorkerManager {
   async initializeWorker() {
     try {
       // Create worker from URL
-      const workerUrl = new URL('./mlWorker.js', import.meta.url);
+      const workerUrl = new URL("./mlWorker.js", import.meta.url);
       this.worker = new Worker(workerUrl);
-      
+
       // Set up message handling
       this.worker.onmessage = this.handleWorkerMessage.bind(this);
       this.worker.onerror = this.handleWorkerError.bind(this);
-      
+
       // Initialize TensorFlow in worker
-      const initResult = await this.sendMessage('INITIALIZE', {});
+      const initResult = await this.sendMessage("INITIALIZE", {});
       this.initialized = initResult.success;
-      
-      console.log(`✅ ML Worker initialized: ${this.initialized ? 'SUCCESS' : 'FAILED'}`);
+
+      console.log(
+        `✅ ML Worker initialized: ${this.initialized ? "SUCCESS" : "FAILED"}`,
+      );
       return this.initialized;
-      
     } catch (error) {
-      console.warn('⚠️ ML Worker initialization failed:', error.message);
+      console.warn("⚠️ ML Worker initialization failed:", error.message);
       this.initialized = false;
       return false;
     }
@@ -52,31 +53,31 @@ export class MLWorkerManager {
    */
   handleWorkerMessage(event) {
     const { type, id, success, result, error, progress, status } = event.data;
-    
+
     switch (type) {
-      case 'WORKER_READY':
-        console.log('🚀 ML Worker is ready');
+      case "WORKER_READY":
+        console.log("🚀 ML Worker is ready");
         break;
-        
-      case 'INITIALIZATION_COMPLETE':
+
+      case "INITIALIZATION_COMPLETE":
         this.resolveOperation(id, { success, error });
         break;
-        
-      case 'OPERATION_COMPLETE':
+
+      case "OPERATION_COMPLETE":
         this.resolveOperation(id, { success, result, error });
         break;
-        
-      case 'PROGRESS_UPDATE':
-      case 'TRAINING_PROGRESS':
+
+      case "PROGRESS_UPDATE":
+      case "TRAINING_PROGRESS":
         this.handleProgressUpdate(progress, event.data);
         break;
-        
-      case 'STATUS_RESPONSE':
+
+      case "STATUS_RESPONSE":
         this.resolveOperation(id, { success: true, result: status });
         break;
-        
-      case 'ERROR':
-        console.error('🚨 ML Worker error:', error);
+
+      case "ERROR":
+        console.error("🚨 ML Worker error:", error);
         this.resolveOperation(id, { success: false, error });
         break;
     }
@@ -86,12 +87,12 @@ export class MLWorkerManager {
    * Handle worker errors
    */
   handleWorkerError(error) {
-    console.error('🚨 ML Worker error:', error);
+    console.error("🚨 ML Worker error:", error);
     this.initialized = false;
-    
+
     // Reject all pending operations
     this.pendingOperations.forEach((operation) => {
-      operation.reject(new Error('Worker error: ' + error.message));
+      operation.reject(new Error("Worker error: " + error.message));
     });
     this.pendingOperations.clear();
   }
@@ -105,7 +106,7 @@ export class MLWorkerManager {
       try {
         callback(progress, data);
       } catch (error) {
-        console.warn('Progress callback error:', error);
+        console.warn("Progress callback error:", error);
       }
     });
   }
@@ -115,29 +116,29 @@ export class MLWorkerManager {
    */
   async sendMessage(type, data, progressCallback = null) {
     if (!this.isSupported || !this.worker) {
-      throw new Error('ML Worker not supported or not available');
+      throw new Error("ML Worker not supported or not available");
     }
 
     return new Promise((resolve, reject) => {
       const id = `op_${++this.operationCounter}`;
-      
+
       // Store operation promise
       this.pendingOperations.set(id, { resolve, reject });
-      
+
       // Store progress callback if provided
       if (progressCallback) {
         this.progressCallbacks.set(id, progressCallback);
       }
-      
+
       // Send message to worker
       this.worker.postMessage({ type, data, id });
-      
+
       // Set timeout for operation
       setTimeout(() => {
         if (this.pendingOperations.has(id)) {
           this.pendingOperations.delete(id);
           this.progressCallbacks.delete(id);
-          reject(new Error('Operation timeout'));
+          reject(new Error("Operation timeout"));
         }
       }, 60000); // 60 second timeout
     });
@@ -151,11 +152,11 @@ export class MLWorkerManager {
       const { resolve, reject } = this.pendingOperations.get(id);
       this.pendingOperations.delete(id);
       this.progressCallbacks.delete(id);
-      
+
       if (result.success) {
         resolve(result.result || result);
       } else {
-        reject(new Error(result.error || 'Operation failed'));
+        reject(new Error(result.error || "Operation failed"));
       }
     }
   }
@@ -163,24 +164,31 @@ export class MLWorkerManager {
   /**
    * Perform batch predictions using worker
    */
-  async performBatchPredictions(features, modelData = null, progressCallback = null) {
+  async performBatchPredictions(
+    features,
+    modelData = null,
+    progressCallback = null,
+  ) {
     if (!this.isSupported || !this.initialized) {
-      throw new Error('ML Worker not available - falling back to main thread');
+      throw new Error("ML Worker not available - falling back to main thread");
     }
 
     try {
       const result = await this.sendMessage(
-        'QUEUE_OPERATION',
+        "QUEUE_OPERATION",
         {
-          operationType: 'PREDICT_BATCH',
-          operationData: { features, modelData }
+          operationType: "PREDICT_BATCH",
+          operationData: { features, modelData },
         },
-        progressCallback
+        progressCallback,
       );
 
       return result;
     } catch (error) {
-      console.warn('🔄 Worker prediction failed, falling back to main thread:', error.message);
+      console.warn(
+        "🔄 Worker prediction failed, falling back to main thread:",
+        error.message,
+      );
       throw error;
     }
   }
@@ -190,22 +198,25 @@ export class MLWorkerManager {
    */
   async trainModel(trainingData, modelConfig = {}, progressCallback = null) {
     if (!this.isSupported || !this.initialized) {
-      throw new Error('ML Worker not available - falling back to main thread');
+      throw new Error("ML Worker not available - falling back to main thread");
     }
 
     try {
       const result = await this.sendMessage(
-        'QUEUE_OPERATION',
+        "QUEUE_OPERATION",
         {
-          operationType: 'TRAIN_MODEL',
-          operationData: { trainingData, modelConfig }
+          operationType: "TRAIN_MODEL",
+          operationData: { trainingData, modelConfig },
         },
-        progressCallback
+        progressCallback,
       );
 
       return result;
     } catch (error) {
-      console.warn('🔄 Worker training failed, falling back to main thread:', error.message);
+      console.warn(
+        "🔄 Worker training failed, falling back to main thread:",
+        error.message,
+      );
       throw error;
     }
   }
@@ -215,22 +226,25 @@ export class MLWorkerManager {
    */
   async generateFeatures(featureData, progressCallback = null) {
     if (!this.isSupported || !this.initialized) {
-      throw new Error('ML Worker not available - falling back to main thread');
+      throw new Error("ML Worker not available - falling back to main thread");
     }
 
     try {
       const result = await this.sendMessage(
-        'QUEUE_OPERATION',
+        "QUEUE_OPERATION",
         {
-          operationType: 'FEATURE_GENERATION',
-          operationData: { featureData }
+          operationType: "FEATURE_GENERATION",
+          operationData: { featureData },
         },
-        progressCallback
+        progressCallback,
       );
 
       return result;
     } catch (error) {
-      console.warn('🔄 Worker feature generation failed, falling back to main thread:', error.message);
+      console.warn(
+        "🔄 Worker feature generation failed, falling back to main thread:",
+        error.message,
+      );
       throw error;
     }
   }
@@ -243,24 +257,24 @@ export class MLWorkerManager {
       return {
         supported: false,
         initialized: false,
-        available: false
+        available: false,
       };
     }
 
     try {
-      const status = await this.sendMessage('GET_STATUS', {});
+      const status = await this.sendMessage("GET_STATUS", {});
       return {
         supported: true,
         initialized: this.initialized,
         available: true,
-        ...status
+        ...status,
       };
     } catch (error) {
       return {
         supported: true,
         initialized: false,
         available: false,
-        error: error.message
+        error: error.message,
       };
     }
   }
@@ -279,24 +293,24 @@ export class MLWorkerManager {
     if (this.worker) {
       // Send termination message
       try {
-        this.worker.postMessage({ type: 'TERMINATE' });
+        this.worker.postMessage({ type: "TERMINATE" });
       } catch (error) {
-        console.warn('Error sending termination message:', error);
+        console.warn("Error sending termination message:", error);
       }
-      
+
       // Terminate worker
       this.worker.terminate();
       this.worker = null;
       this.initialized = false;
-      
+
       // Clear pending operations
       this.pendingOperations.forEach(({ reject }) => {
-        reject(new Error('Worker terminated'));
+        reject(new Error("Worker terminated"));
       });
       this.pendingOperations.clear();
       this.progressCallbacks.clear();
-      
-      console.log('🛑 ML Worker terminated');
+
+      console.log("🛑 ML Worker terminated");
     }
   }
 
@@ -304,13 +318,13 @@ export class MLWorkerManager {
    * Restart the worker
    */
   async restart() {
-    console.log('🔄 Restarting ML Worker...');
-    
+    console.log("🔄 Restarting ML Worker...");
+
     if (this.worker) {
       this.terminate();
     }
-    
-    await new Promise(resolve => setTimeout(resolve, 100));
+
+    await new Promise((resolve) => setTimeout(resolve, 100));
     return this.initializeWorker();
   }
 }

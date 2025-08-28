@@ -50,8 +50,9 @@ class ConsoleMonitor {
       this.setupPerformanceMonitoring();
       
       // Navigate to the app
-      console.log('🌐 Navigating to http://localhost:3000...');
-      await this.page.goto('http://localhost:3000', { 
+      const port = process.argv[2] || '3000';
+      console.log(`🌐 Navigating to http://localhost:${port}...`);
+      await this.page.goto(`http://localhost:${port}`, { 
         waitUntil: 'domcontentloaded',
         timeout: 30000 
       });

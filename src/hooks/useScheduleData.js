@@ -14,6 +14,7 @@ import {
   batchWriter,
   STORAGE_KEYS,
 } from "../utils/storageUtils";
+import { dataIntegrityMonitor, dataValidation } from "../utils/dataIntegrityUtils";
 
 // Backward compatibility: keep old functions for gradual migration
 const loadFromLocalStorage = (key) => {
@@ -135,24 +136,12 @@ export const useScheduleData = (
     }
   }, [supabaseScheduleData, currentMonthIndex, hasExplicitlyDeletedData]);
 
-  // Handle month switching - prioritize optimized storage over database
+  // Handle month switching - prioritize Supabase data first
   useEffect(() => {
-    // Priority 1: Check optimized storage first (memory cache + localStorage)
-    const localSchedule = optimizedStorage.getScheduleData(currentMonthIndex);
-    const localStaff = optimizedStorage.getStaffData(currentMonthIndex);
-
     // Update current period tracking
     optimizedStorage.saveCurrentPeriod(currentMonthIndex);
 
-    if (localSchedule && Object.keys(localSchedule).length > 0) {
-      setSchedule(localSchedule);
-      // Development mode only: log load success
-      if (process.env.NODE_ENV === "development") {
-      }
-      return;
-    }
-
-    // Priority 2: Fallback to database data if no localStorage data
+    // Priority 1: Use Supabase data if available (highest priority)
     if (supabaseScheduleData && supabaseScheduleData.schedule_data) {
       const { _staff_members, ...actualScheduleData } =
         supabaseScheduleData.schedule_data;
@@ -168,76 +157,99 @@ export const useScheduleData = (
         migratedStaffMembers,
       );
 
-      // Always use database data if it exists and we have no localStorage data
-      if (
-        migratedStaffMembers.length > 0 ||
-        Object.keys(migratedScheduleData).length > 0
-      ) {
-        // Check if database data has dates that match current month range
+      // Use database data if we have staff members OR meaningful schedule data
+      if (migratedStaffMembers.length > 0 || Object.keys(migratedScheduleData).length > 0) {
+        console.log(`🔄 Loading period ${currentMonthIndex} from Supabase database`);
+        
+        // For the current period, use the data directly
+        // For other periods, initialize empty schedules but with correct staff
         const currentDateRange = generateDateRange(currentMonthIndex);
-        const hasMatchingDates = currentDateRange.some((date) => {
+        
+        // Check if we have data for the current period
+        const hasCurrentPeriodData = currentDateRange.some((date) => {
           const dateKey = date.toISOString().split("T")[0];
-          return Object.keys(migratedScheduleData).some(
-            (staffId) =>
-              migratedScheduleData[staffId] &&
-              migratedScheduleData[staffId][dateKey] !== undefined,
-          );
+          return Object.keys(migratedScheduleData).some((staffId) => {
+            const staffSchedule = migratedScheduleData[staffId];
+            if (!staffSchedule || typeof staffSchedule !== "object") return false;
+            const shiftValue = staffSchedule[dateKey];
+            return (
+              shiftValue !== undefined &&
+              shiftValue !== null &&
+              shiftValue !== "" &&
+              shiftValue.toString().trim() !== ""
+            );
+          });
         });
 
-        if (hasMatchingDates) {
+        // Always use the migrated schedule data if we have staff structure
+        if (Object.keys(migratedScheduleData).length > 0) {
+          console.log(`📋 Using Supabase schedule structure with ${Object.keys(migratedScheduleData).length} staff members`);
           setSchedule(migratedScheduleData);
         } else {
-          setSchedule(
-            initializeSchedule(
-              migratedStaffMembers.length > 0
-                ? migratedStaffMembers
-                : defaultStaffMembersArray,
-              currentDateRange,
-            ),
+          // Fallback: Initialize new schedule with staff from database
+          console.log(`🆕 Initializing new schedule with ${migratedStaffMembers.length} staff members`);
+          const newSchedule = initializeSchedule(
+            migratedStaffMembers.length > 0 ? migratedStaffMembers : defaultStaffMembersArray,
+            currentDateRange,
           );
+          setSchedule(newSchedule);
+        }
+
+        // Always save staff data and update state
+        if (migratedStaffMembers.length > 0) {
+          optimizedStorage.saveStaffData(currentMonthIndex, migratedStaffMembers);
+          setStaffMembersByMonth((prev) => ({
+            ...prev,
+            [currentMonthIndex]: migratedStaffMembers,
+          }));
+        }
+
+        // Cache schedule data in localStorage for faster future access
+        optimizedStorage.saveScheduleData(currentMonthIndex, migratedScheduleData);
+        return;
+      }
+    }
+
+    // Priority 2: Check localStorage/optimized storage for existing data
+    const localSchedule = optimizedStorage.getScheduleData(currentMonthIndex);
+    const localStaff = optimizedStorage.getStaffData(currentMonthIndex);
+
+    const hasLocalScheduleData = localSchedule && Object.keys(localSchedule).length > 0;
+
+    if (hasLocalScheduleData) {
+      setSchedule(localSchedule);
+      console.log(`💾 Loaded period ${currentMonthIndex} from localStorage cache`);
+      return;
+    }
+
+    // Priority 3: Initialize with staff from most recent period or defaults
+    let staffToUse = defaultStaffMembersArray;
+    
+    // Try to find staff from the most recent period
+    for (let i = 5; i >= 0; i--) {
+      if (i !== currentMonthIndex) {
+        const periodStaff = optimizedStorage.getStaffData(i);
+        if (periodStaff && Array.isArray(periodStaff) && periodStaff.length > 0) {
+          staffToUse = periodStaff;
+          break;
         }
       }
+    }
+
+    // Initialize empty schedule with appropriate staff
+    const newSchedule = initializeSchedule(staffToUse, generateDateRange(currentMonthIndex));
+    setSchedule(newSchedule);
+
+    if (staffToUse !== defaultStaffMembersArray) {
+      // Save staff for current period if we found existing staff
+      optimizedStorage.saveStaffData(currentMonthIndex, staffToUse);
+      setStaffMembersByMonth((prev) => ({
+        ...prev,
+        [currentMonthIndex]: staffToUse,
+      }));
+      console.log(`🔄 Initialized period ${currentMonthIndex} with staff from previous period`);
     } else {
-      // Priority 3: Initialize with default data for new periods
-      // Try to find the most recent period with data
-      let mostRecentStaff = null;
-      for (let i = 5; i >= 0; i--) {
-        if (i !== currentMonthIndex) {
-          const periodStaff = optimizedStorage.getStaffData(i);
-          if (
-            periodStaff &&
-            Array.isArray(periodStaff) &&
-            periodStaff.length > 0
-          ) {
-            mostRecentStaff = periodStaff;
-            break;
-          }
-        }
-      }
-
-      if (mostRecentStaff) {
-        // Initialize schedule for current period with existing staff
-        const newSchedule = initializeSchedule(
-          mostRecentStaff,
-          generateDateRange(currentMonthIndex),
-        );
-        setSchedule(newSchedule);
-
-        // Save staff for current period using optimized storage
-        optimizedStorage.saveStaffData(currentMonthIndex, mostRecentStaff);
-
-        // Set staff for current period
-        setStaffMembersByMonth((prev) => ({
-          ...prev,
-          [currentMonthIndex]: mostRecentStaff,
-        }));
-      } else {
-        const newSchedule = initializeSchedule(
-          defaultStaffMembersArray,
-          generateDateRange(currentMonthIndex),
-        );
-        setSchedule(newSchedule);
-      }
+      console.log(`🆕 Initialized period ${currentMonthIndex} with default staff`);
     }
   }, [currentMonthIndex, supabaseScheduleData]);
 
@@ -263,13 +275,13 @@ export const useScheduleData = (
 
   // Auto-save function with optimized storage and debouncing
   const scheduleAutoSave = useCallback(
-    (newScheduleData, newStaffMembers = null) => {
+    (newScheduleData, newStaffMembers = null, source = 'auto') => {
       // Clear existing timer
       if (autoSaveTimeoutRef.current) {
         clearTimeout(autoSaveTimeoutRef.current);
       }
 
-      // Save to optimized storage (uses memory cache + debounced writes)
+      // Save to optimized storage immediately (uses memory cache + debounced writes)
       optimizedStorage.saveScheduleData(
         currentMonthRef.current,
         newScheduleData,
@@ -280,6 +292,11 @@ export const useScheduleData = (
           currentMonthRef.current,
           newStaffMembers,
         );
+      }
+
+      // Log manual input saves for debugging
+      if (process.env.NODE_ENV === 'development' && source === 'manual') {
+        console.log('💾 Auto-save triggered by manual input');
       }
 
       // Set debounced auto-save timer (2 seconds)
@@ -364,8 +381,19 @@ export const useScheduleData = (
             }
 
             const saveResult = await onSaveSchedule(saveData);
+            
+            // Record successful save for monitoring
+            if (process.env.NODE_ENV === 'development') {
+              dataIntegrityMonitor.autoSaveMonitor.recordSave();
+              console.log('✅ Auto-save successful');
+            }
           } catch (error) {
             console.error("❌ Failed to save to database:", error);
+            
+            // Record failed save for monitoring
+            if (process.env.NODE_ENV === 'development') {
+              dataIntegrityMonitor.autoSaveMonitor.recordFailure(error);
+            }
           }
         }
       }, 2000);
@@ -375,7 +403,7 @@ export const useScheduleData = (
 
   // Update schedule with auto-save
   const updateSchedule = useCallback(
-    (newSchedule, staffForSave = null) => {
+    (newSchedule, staffForSave = null, source = 'auto') => {
       // Skip filtering if this is an initialization call (just pass through the schedule as-is)
       if (Object.keys(newSchedule).length > 0) {
         // Use flushSync to force immediate synchronous update
@@ -395,7 +423,7 @@ export const useScheduleData = (
           );
         }
 
-        scheduleAutoSave(newSchedule, staffToSave);
+        scheduleAutoSave(newSchedule, staffToSave, source);
         return;
       }
 
@@ -421,9 +449,30 @@ export const useScheduleData = (
     [scheduleAutoSave, supabaseScheduleData],
   );
 
-  // Update shift for specific staff and date
+  // Update shift for specific staff and date with enhanced validation
   const updateShift = useCallback(
     (staffId, dateKey, shiftValue) => {
+      // Comprehensive input validation
+      if (!dataValidation.isValidStaffId(staffId)) {
+        console.warn('⚠️ Invalid staffId in updateShift:', staffId);
+        return;
+      }
+
+      if (!dataValidation.isValidDateKey(dateKey)) {
+        console.warn('⚠️ Invalid dateKey in updateShift:', dateKey);
+        return;
+      }
+
+      if (!dataValidation.isValidShiftValue(shiftValue)) {
+        console.warn('⚠️ Invalid shiftValue in updateShift:', shiftValue);
+        return;
+      }
+
+      // Ensure staff exists in schedule structure
+      if (!schedule[staffId]) {
+        console.log(`✨ Manual Input: Creating new staff schedule for ${staffId}`);
+      }
+
       const newSchedule = {
         ...schedule,
         [staffId]: {
@@ -432,9 +481,32 @@ export const useScheduleData = (
         },
       };
 
-      updateSchedule(newSchedule);
+      // Validate the new schedule structure
+      const validationIssues = dataValidation.validateScheduleStructure(newSchedule);
+      if (validationIssues.length > 0) {
+        console.warn('⚠️ Schedule validation issues:', validationIssues);
+        // Continue anyway for minor issues
+      }
+
+      // Log manual input for debugging
+      if (process.env.NODE_ENV === 'development') {
+        console.log(`📝 Manual Input: ${staffId} → ${dateKey} = "${shiftValue}"`);
+        
+        // Monitor data persistence in development
+        setTimeout(() => {
+          dataIntegrityMonitor.checkManualInputPersistence(
+            currentMonthIndex, staffId, dateKey, shiftValue
+          ).then(result => {
+            if (result.issues.length > 0) {
+              console.warn('⚠️ Data persistence issues detected:', result);
+            }
+          });
+        }, 100);
+      }
+
+      updateSchedule(newSchedule, null, 'manual');
     },
-    [schedule, updateSchedule],
+    [schedule, updateSchedule, currentMonthIndex],
   );
 
   // Manual sync function to transfer localStorage data to database

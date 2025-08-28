@@ -13,6 +13,7 @@ import {
   monthPeriods,
   addNextPeriod,
   getCurrentMonthIndex,
+  findPeriodWithData,
 } from "../utils/dateUtils";
 import { getOrderedStaffMembers } from "../utils/staffUtils";
 import { generateStatistics } from "../utils/statisticsUtils";
@@ -34,6 +35,10 @@ import SettingsModal from "./settings/SettingsModal";
 // Temporary debug tester - REMOVE AFTER DEBUGGING
 import AIAssistantDebugTester from "./debug/AIAssistantDebugTester";
 
+// Manual input integration utilities (development only)
+import { manualInputTestSuite } from "../utils/manualInputTestSuite";
+import { dataIntegrityMonitor } from "../utils/dataIntegrityUtils";
+
 // Import custom hooks
 
 const ShiftScheduleEditor = ({
@@ -42,16 +47,25 @@ const ShiftScheduleEditor = ({
   onSaveSchedule,
   loadScheduleData,
 }) => {
-  // Main state - initialize with current month based on today's date
+  // Main state - initialize with period that has data, or current month
   const [currentMonthIndex, setCurrentMonthIndex] = useState(() => {
     try {
-      return getCurrentMonthIndex();
+      // First try to find a period with data, otherwise use current date
+      return findPeriodWithData(supabaseScheduleData);
     } catch (error) {
       console.warn(
-        "Failed to get current month index, defaulting to 0:",
+        "Failed to get period with data, defaulting to current month:",
         error,
       );
-      return 0;
+      try {
+        return getCurrentMonthIndex();
+      } catch (fallbackError) {
+        console.warn(
+          "Failed to get current month index, defaulting to 0:",
+          fallbackError,
+        );
+        return 0;
+      }
     }
   });
   const [currentScheduleId, setCurrentScheduleId] = useState(null);
@@ -146,30 +160,46 @@ const ShiftScheduleEditor = ({
     loadScheduleData,
   );
 
-  // Check if we're still loading - wait until both database and staff are ready
-  const isLoading = supabaseScheduleData === undefined || !hasLoadedFromDb;
+  // Re-evaluate period selection when Supabase data becomes available - ONE TIME ONLY
+  const hasEvaluatedPeriod = useRef(false);
+  useEffect(() => {
+    // Only evaluate once when Supabase data first becomes available
+    if (
+      supabaseScheduleData &&
+      supabaseScheduleData.schedule_data &&
+      !hasEvaluatedPeriod.current
+    ) {
+      const dataBasedPeriod = findPeriodWithData(supabaseScheduleData);
+
+      // Switch to data-based period if it's different from current and has meaningful data
+      if (dataBasedPeriod !== currentMonthIndex) {
+        console.log(
+          `🔄 Switching from period ${currentMonthIndex} to period ${dataBasedPeriod} (found meaningful Supabase data)`,
+        );
+        setCurrentMonthIndex(dataBasedPeriod);
+      }
+      hasEvaluatedPeriod.current = true; // Mark as evaluated to prevent re-evaluation
+    }
+  }, [supabaseScheduleData]); // Remove currentMonthIndex to prevent infinite loop
+
+  // Check if we're still loading - only show loading if Supabase is undefined (initial state)
+  // Once we have either data OR null (meaning no data), we can proceed
+  const isLoading = supabaseScheduleData === undefined;
 
   // Expose cleanup functions to global window for debugging (development only)
   useEffect(() => {
     if (process.env.NODE_ENV === "development") {
       window.cleanupAllPeriods = cleanupAllPeriods;
       window.fixStaffInconsistencies = fixStaffInconsistencies;
+      
+      // Manual input testing utilities
+      window.testManualInput = () => manualInputTestSuite.runCompleteTestSuite(
+        updateShift, schedule, staffMembers, currentMonthIndex
+      );
+      window.checkDataIntegrity = () => dataIntegrityMonitor.checkCrossPeriodConsistency();
+      window.getAutoSaveStats = () => dataIntegrityMonitor.autoSaveMonitor.getStats();
     }
-  }, [cleanupAllPeriods, fixStaffInconsistencies]);
-
-  // Calculate derived data
-  const orderedStaffMembers = useMemo(() => {
-    if (isLoading) {
-      return []; // Don't show anything while loading
-    }
-    // If database is empty (null) or no staff loaded, show empty for now
-    if (!staffMembers || staffMembers.length === 0) {
-      return [];
-    }
-
-    const ordered = getOrderedStaffMembers(staffMembers, dateRange);
-    return ordered;
-  }, [staffMembers, dateRange, isLoading]);
+  }, [cleanupAllPeriods, fixStaffInconsistencies, updateShift, schedule, staffMembers, currentMonthIndex]);
 
   // Check if we have any data at all (including localStorage as backup)
   const localStaffData = useMemo(() => {
@@ -182,6 +212,33 @@ const ShiftScheduleEditor = ({
       return [];
     }
   }, [currentMonthIndex]);
+
+  // Calculate derived data
+  const orderedStaffMembers = useMemo(() => {
+    if (isLoading) {
+      return []; // Don't show anything while loading
+    }
+    
+    // If we have staff members, use them
+    if (staffMembers && staffMembers.length > 0) {
+      const ordered = getOrderedStaffMembers(staffMembers, dateRange);
+      return ordered;
+    }
+
+    // If we have Supabase data with staff members, extract and use them
+    if (supabaseScheduleData && supabaseScheduleData.schedule_data && supabaseScheduleData.schedule_data._staff_members) {
+      const ordered = getOrderedStaffMembers(supabaseScheduleData.schedule_data._staff_members, dateRange);
+      return ordered;
+    }
+
+    // Fallback to localStorage staff data
+    if (localStaffData && localStaffData.length > 0) {
+      const ordered = getOrderedStaffMembers(localStaffData, dateRange);
+      return ordered;
+    }
+
+    return [];
+  }, [staffMembers, dateRange, isLoading, supabaseScheduleData, localStaffData, hasLoadedFromDb]);
 
   const hasAnyStaffData =
     (staffMembers && staffMembers.length > 0) ||
@@ -830,7 +887,7 @@ const ShiftScheduleEditor = ({
       />
 
       {/* Temporary debug tester - REMOVE AFTER DEBUGGING */}
-      {process.env.NODE_ENV === 'development' && (
+      {process.env.NODE_ENV === "development" && (
         <AIAssistantDebugTester
           scheduleData={schedule}
           staffMembers={staffMembers}

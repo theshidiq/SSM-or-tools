@@ -4,7 +4,9 @@
  */
 
 // Import TensorFlow.js for Web Worker
-importScripts('https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@latest/dist/tf.min.js');
+importScripts(
+  "https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@latest/dist/tf.min.js",
+);
 
 class MLWorkerEngine {
   constructor() {
@@ -21,15 +23,15 @@ class MLWorkerEngine {
   async initializeTensorFlow() {
     try {
       // Set TensorFlow backend for worker environment
-      if (typeof tf !== 'undefined') {
+      if (typeof tf !== "undefined") {
         await tf.ready();
-        console.log('[Worker] TensorFlow initialized successfully');
+        console.log("[Worker] TensorFlow initialized successfully");
         return true;
       } else {
-        throw new Error('TensorFlow not available in worker');
+        throw new Error("TensorFlow not available in worker");
       }
     } catch (error) {
-      console.error('[Worker] TensorFlow initialization failed:', error);
+      console.error("[Worker] TensorFlow initialization failed:", error);
       return false;
     }
   }
@@ -39,39 +41,38 @@ class MLWorkerEngine {
    */
   async processOperation(operation) {
     const { type, data, id } = operation;
-    
+
     try {
       let result;
-      
+
       switch (type) {
-        case 'PREDICT_BATCH':
+        case "PREDICT_BATCH":
           result = await this.handleBatchPrediction(data);
           break;
-        case 'TRAIN_MODEL':
+        case "TRAIN_MODEL":
           result = await this.handleModelTraining(data);
           break;
-        case 'FEATURE_GENERATION':
+        case "FEATURE_GENERATION":
           result = await this.handleFeatureGeneration(data);
           break;
         default:
           throw new Error(`Unknown operation type: ${type}`);
       }
-      
+
       // Send success response
       self.postMessage({
-        type: 'OPERATION_COMPLETE',
+        type: "OPERATION_COMPLETE",
         id,
         success: true,
-        result
+        result,
       });
-      
     } catch (error) {
       // Send error response
       self.postMessage({
-        type: 'OPERATION_COMPLETE',
+        type: "OPERATION_COMPLETE",
         id,
         success: false,
-        error: error.message
+        error: error.message,
       });
     }
   }
@@ -87,7 +88,7 @@ class MLWorkerEngine {
       }
 
       if (!this.model) {
-        throw new Error('No model available for prediction');
+        throw new Error("No model available for prediction");
       }
 
       const predictions = [];
@@ -96,7 +97,7 @@ class MLWorkerEngine {
       // Process features in batches with yielding
       for (let i = 0; i < features.length; i += BATCH_SIZE) {
         const batch = features.slice(i, i + BATCH_SIZE);
-        
+
         // Create tensor and predict
         const inputTensor = tf.tensor2d(batch);
         const prediction = this.model.predict(inputTensor);
@@ -114,7 +115,7 @@ class MLWorkerEngine {
             predictions: probs,
             predictedClass,
             confidence,
-            success: true
+            success: true,
           });
         }
 
@@ -124,13 +125,13 @@ class MLWorkerEngine {
 
         // Yield control periodically
         if (i > 0 && i % (BATCH_SIZE * 5) === 0) {
-          await new Promise(resolve => setTimeout(resolve, 1));
-          
+          await new Promise((resolve) => setTimeout(resolve, 1));
+
           // Send progress update
           const progress = Math.round((i / features.length) * 100);
           self.postMessage({
-            type: 'PROGRESS_UPDATE',
-            progress
+            type: "PROGRESS_UPDATE",
+            progress,
           });
         }
       }
@@ -138,11 +139,10 @@ class MLWorkerEngine {
       return {
         predictions,
         totalProcessed: features.length,
-        success: true
+        success: true,
       };
-
     } catch (error) {
-      console.error('[Worker] Batch prediction failed:', error);
+      console.error("[Worker] Batch prediction failed:", error);
       throw error;
     }
   }
@@ -154,34 +154,33 @@ class MLWorkerEngine {
     try {
       // Process feature generation with yielding
       const results = [];
-      
+
       for (let i = 0; i < featureData.length; i++) {
         const item = featureData[i];
-        
+
         // Generate features (simplified version)
         const features = this.generateBasicFeatures(item);
         results.push(features);
 
         // Yield every 50 items
         if (i > 0 && i % 50 === 0) {
-          await new Promise(resolve => setTimeout(resolve, 1));
-          
+          await new Promise((resolve) => setTimeout(resolve, 1));
+
           // Send progress update
           const progress = Math.round((i / featureData.length) * 100);
           self.postMessage({
-            type: 'PROGRESS_UPDATE',
-            progress
+            type: "PROGRESS_UPDATE",
+            progress,
           });
         }
       }
 
       return {
         features: results,
-        success: true
+        success: true,
       };
-
     } catch (error) {
-      console.error('[Worker] Feature generation failed:', error);
+      console.error("[Worker] Feature generation failed:", error);
       throw error;
     }
   }
@@ -200,7 +199,7 @@ class MLWorkerEngine {
    */
   async handleModelTraining({ trainingData, modelConfig }) {
     try {
-      console.log('[Worker] Starting model training...');
+      console.log("[Worker] Starting model training...");
       this.isTraining = true;
 
       const { features, labels, config } = trainingData;
@@ -211,29 +210,29 @@ class MLWorkerEngine {
           tf.layers.dense({
             inputShape: [features[0].length],
             units: 64,
-            activation: 'relu'
+            activation: "relu",
           }),
           tf.layers.dropout({ rate: 0.3 }),
           tf.layers.dense({
             units: 32,
-            activation: 'relu'
+            activation: "relu",
           }),
           tf.layers.dense({
             units: 5, // Number of shift classes
-            activation: 'softmax'
-          })
-        ]
+            activation: "softmax",
+          }),
+        ],
       });
 
       model.compile({
-        optimizer: 'adam',
-        loss: 'categoricalCrossentropy',
-        metrics: ['accuracy']
+        optimizer: "adam",
+        loss: "categoricalCrossentropy",
+        metrics: ["accuracy"],
       });
 
       // Convert data to tensors
       const xs = tf.tensor2d(features);
-      const ys = tf.oneHot(tf.tensor1d(labels, 'int32'), 5);
+      const ys = tf.oneHot(tf.tensor1d(labels, "int32"), 5);
 
       // Train with progress updates
       const history = await model.fit(xs, ys, {
@@ -242,16 +241,18 @@ class MLWorkerEngine {
         validationSplit: 0.2,
         callbacks: {
           onEpochEnd: (epoch, logs) => {
-            const progress = Math.round(((epoch + 1) / (config.epochs || 50)) * 100);
+            const progress = Math.round(
+              ((epoch + 1) / (config.epochs || 50)) * 100,
+            );
             self.postMessage({
-              type: 'TRAINING_PROGRESS',
+              type: "TRAINING_PROGRESS",
               progress,
               epoch: epoch + 1,
               loss: logs.loss,
-              accuracy: logs.acc
+              accuracy: logs.acc,
             });
-          }
-        }
+          },
+        },
       });
 
       // Clean up tensors
@@ -262,17 +263,16 @@ class MLWorkerEngine {
       this.model = model;
       this.isTraining = false;
 
-      console.log('[Worker] Model training completed');
+      console.log("[Worker] Model training completed");
 
       return {
         success: true,
         history: history.history,
-        modelTrained: true
+        modelTrained: true,
       };
-
     } catch (error) {
       this.isTraining = false;
-      console.error('[Worker] Model training failed:', error);
+      console.error("[Worker] Model training failed:", error);
       throw error;
     }
   }
@@ -282,18 +282,18 @@ class MLWorkerEngine {
    */
   async queueOperation(operation) {
     this.operationQueue.push(operation);
-    
+
     if (!this.processingOperation) {
       this.processingOperation = true;
-      
+
       while (this.operationQueue.length > 0) {
         const nextOperation = this.operationQueue.shift();
         await this.processOperation(nextOperation);
-        
+
         // Yield between operations
-        await new Promise(resolve => setTimeout(resolve, 1));
+        await new Promise((resolve) => setTimeout(resolve, 1));
       }
-      
+
       this.processingOperation = false;
     }
   }
@@ -303,58 +303,62 @@ class MLWorkerEngine {
 const mlEngine = new MLWorkerEngine();
 
 // Handle messages from main thread
-self.onmessage = async function(e) {
+self.onmessage = async function (e) {
   const { type, data, id } = e.data;
 
   switch (type) {
-    case 'INITIALIZE':
+    case "INITIALIZE":
       try {
         const initialized = await mlEngine.initializeTensorFlow();
         mlEngine.isInitialized = initialized;
-        
+
         self.postMessage({
-          type: 'INITIALIZATION_COMPLETE',
+          type: "INITIALIZATION_COMPLETE",
           success: initialized,
-          id
+          id,
         });
       } catch (error) {
         self.postMessage({
-          type: 'INITIALIZATION_COMPLETE',
+          type: "INITIALIZATION_COMPLETE",
           success: false,
           error: error.message,
-          id
+          id,
         });
       }
       break;
 
-    case 'QUEUE_OPERATION':
+    case "QUEUE_OPERATION":
       if (!mlEngine.isInitialized) {
         self.postMessage({
-          type: 'OPERATION_COMPLETE',
+          type: "OPERATION_COMPLETE",
           id,
           success: false,
-          error: 'Worker not initialized'
+          error: "Worker not initialized",
         });
         return;
       }
-      
-      await mlEngine.queueOperation({ type: data.operationType, data: data.operationData, id });
+
+      await mlEngine.queueOperation({
+        type: data.operationType,
+        data: data.operationData,
+        id,
+      });
       break;
 
-    case 'GET_STATUS':
+    case "GET_STATUS":
       self.postMessage({
-        type: 'STATUS_RESPONSE',
+        type: "STATUS_RESPONSE",
         status: {
           initialized: mlEngine.isInitialized,
           training: mlEngine.isTraining,
           queueLength: mlEngine.operationQueue.length,
-          processing: mlEngine.processingOperation
+          processing: mlEngine.processingOperation,
         },
-        id
+        id,
       });
       break;
 
-    case 'TERMINATE':
+    case "TERMINATE":
       // Clean up before termination
       if (mlEngine.model) {
         mlEngine.model.dispose();
@@ -364,14 +368,14 @@ self.onmessage = async function(e) {
 
     default:
       self.postMessage({
-        type: 'ERROR',
+        type: "ERROR",
         error: `Unknown message type: ${type}`,
-        id
+        id,
       });
   }
 };
 
 // Send ready signal
 self.postMessage({
-  type: 'WORKER_READY'
+  type: "WORKER_READY",
 });
