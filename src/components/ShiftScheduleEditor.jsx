@@ -19,10 +19,10 @@ import { getOrderedStaffMembers } from "../utils/staffUtils";
 import { generateStatistics } from "../utils/statisticsUtils";
 import { exportToCSV, printSchedule } from "../utils/exportUtils";
 
-// Import extracted components
-import { useScheduleData } from "../hooks/useScheduleData";
-import { useStaffManagement } from "../hooks/useStaffManagement";
-import { useSettingsData } from "../hooks/useSettingsData";
+// Import extracted components - Phase 3: Enhanced Hooks
+import { useScheduleDataEnhanced as useScheduleData } from "../hooks/useScheduleDataEnhanced";
+import { useStaffManagementEnhanced as useStaffManagement } from "../hooks/useStaffManagementEnhanced";
+import { useSettingsDataEnhanced as useSettingsData } from "../hooks/useSettingsDataEnhanced";
 import ErrorDisplay from "./schedule/ErrorDisplay";
 import StatisticsDashboard from "./schedule/StatisticsDashboard";
 import NavigationToolbar from "./schedule/NavigationToolbar";
@@ -118,21 +118,33 @@ const ShiftScheduleEditor = ({
     autosaveError,
     isAutosaveEnabled,
     setIsAutosaveEnabled,
-  } = useSettingsData();
+  } = useSettingsData(); // Phase 3: No parameters needed for enhanced settings hook
   const {
     schedule,
     dateRange,
+    staffMembersByMonth,
     setStaffMembersByMonth,
     updateSchedule,
     updateShift,
     scheduleAutoSave,
-  } = useScheduleData(
-    currentMonthIndex,
-    supabaseScheduleData,
     currentScheduleId,
     setCurrentScheduleId,
-    onSaveSchedule,
-  );
+    isConnected,
+    isLoading,
+    isSaving,
+    error: scheduleError,
+    connectionStatus,
+    cache,
+    offline,
+    conflicts,
+    getPerformanceMetrics,
+    features,
+    phase,
+  } = useScheduleData(currentMonthIndex, {
+    enableAdvancedCache: true,
+    enableOfflineSupport: true,
+    enableConflictResolution: true
+  }); // Phase 3: Enhanced schedule hook
 
   const {
     staffMembers,
@@ -154,11 +166,11 @@ const ShiftScheduleEditor = ({
     fixStaffInconsistencies,
     clearAndRefreshFromDatabase,
     isRefreshingFromDatabase,
-  } = useStaffManagement(
-    currentMonthIndex,
-    supabaseScheduleData,
-    loadScheduleData,
-  );
+  } = useStaffManagement(currentMonthIndex, {
+    enableAdvancedCache: true,
+    enableOfflineSupport: true,
+    enableConflictResolution: true
+  }); // Phase 3: Enhanced staff management hook
 
   // Re-evaluate period selection when Supabase data becomes available - ONE TIME ONLY
   const hasEvaluatedPeriod = useRef(false);
