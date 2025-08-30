@@ -12,6 +12,17 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - `npm run test:coverage` - Run tests with coverage report
 - `npm run test:ci` - Run tests in CI mode with coverage
 
+### Docker Development
+- **Production Deployment**: Application runs in Docker containers via NGINX
+- **Container Setup**: Multi-service architecture with Redis, AI servers, and load balancing
+- **Access URL**: http://localhost:80 (production) or http://localhost (direct access)
+- **Health Monitoring**: Container health checks for AI services and Redis
+- **Services**:
+  - `shift-schedule-nginx` - NGINX reverse proxy (ports 80/443)
+  - `shift-schedule-redis` - Redis cache (healthy)
+  - `shift-schedule-manager-ai-server-1` - AI processing server (unhealthy)
+  - `shift-schedule-manager-ai-server-2` - AI processing server (unhealthy)
+
 ### Code Quality
 - `npm run lint` - Run ESLint on src/ directory
 - `npm run lint:fix` - Auto-fix linting issues
@@ -196,3 +207,34 @@ function App() {
 - **Optimistic Updates**: Update UI immediately, sync with database
 - **Conflict Resolution**: Handle concurrent edits gracefully
 - **Offline Support**: Queue operations when offline, sync when reconnected
+
+## Browser Testing & Quality Assurance
+
+### Playwright MCP Integration
+The application includes Playwright MCP server integration for automated browser testing and verification:
+
+- **Live Browser Testing**: Direct browser interaction via Playwright MCP tools
+- **Real-time Verification**: Test application state and functionality in actual browser
+- **UI State Inspection**: Comprehensive page snapshots with accessibility tree
+- **Console Log Monitoring**: Real-time JavaScript console output tracking
+- **Network Monitoring**: HTTP request/response analysis
+- **Cross-browser Testing**: Support for Chrome, Firefox, Safari testing
+
+### Application Testing Results
+**Latest Browser Test Results** (Verified via Playwright):
+- ✅ **Application Loading**: Successfully loads on http://localhost:80
+- ✅ **Core Functionality**: Shift schedule table renders correctly
+- ✅ **Japanese Localization**: Proper display of Japanese text (調理場シフト表)
+- ✅ **Interactive Elements**: All buttons and controls are functional
+- ✅ **AI System Status**: AI features properly lazy-loaded and initialized
+- ✅ **Performance**: Fast initial load with lazy loading implementation
+- ✅ **Data Display**: Staff management and scheduling interface working
+- ✅ **Statistics Dashboard**: Analytics and reporting components functional
+
+### Browser Testing Capabilities
+- **Automated UI Testing**: Playwright can interact with all application elements
+- **Performance Monitoring**: Real-time bundle loading and rendering metrics
+- **Accessibility Verification**: Screen reader compatibility testing
+- **Mobile Responsiveness**: Touch interface and responsive design validation
+- **Error Detection**: JavaScript errors and console warnings monitoring
+- **User Flow Testing**: Complete workflow validation from login to data export

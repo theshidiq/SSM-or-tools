@@ -12,7 +12,7 @@ import { generateDateRange } from "../utils/dateUtils";
 // Lazy loading functions that only import when needed
 const loadAISystem = async () => {
   try {
-    console.log("🚀 Loading AI system modules...");
+    // Loading AI system modules
     
     const [
       { featureCacheManager },
@@ -33,14 +33,14 @@ const loadAISystem = async () => {
       configurationCache: configModule.configurationCache
     };
   } catch (error) {
-    console.warn("Failed to load AI system modules:", error);
+    console.warn("⚠️ Failed to load AI system modules:", error.message);
     return null;
   }
 };
 
 const loadEnhancedAISystem = async () => {
   try {
-    console.log("🚀 Loading enhanced AI system...");
+    // Loading enhanced AI system
     
     const [hybridModule, businessRuleModule, tensorFlowModule] = await Promise.all([
       import("../ai/hybrid/HybridPredictor"),
@@ -54,7 +54,7 @@ const loadEnhancedAISystem = async () => {
       TensorFlowScheduler: tensorFlowModule.TensorFlowScheduler
     };
   } catch (error) {
-    console.warn("Failed to load enhanced AI system:", error);
+    console.warn("⚠️ Failed to load enhanced AI system:", error.message);
     return null;
   }
 };
@@ -89,7 +89,7 @@ export const useAIAssistantLazy = (
   const fallbackSystem = useMemo(() => ({
     type: "fallback",
     generateSchedule: async () => {
-      console.log("📋 Using fallback schedule generation (rule-based)");
+      // Using fallback schedule generation (rule-based)
       
       // Simple rule-based schedule generation
       const newSchedule = { ...scheduleData };
@@ -164,14 +164,14 @@ export const useAIAssistantLazy = (
     
     const loadingPromise = (async () => {
       try {
-        console.log("🚀 Initializing lazy AI system...");
+        // Initializing lazy AI system
         setSystemType("loading");
         
         // Try to load enhanced system first
         if (enableEnhanced) {
           const enhancedSystem = await loadEnhancedAISystem();
           if (enhancedSystem) {
-            console.log("✅ Enhanced AI system loaded");
+            // Enhanced AI system loaded
             const system = {
               type: "enhanced",
               ...enhancedSystem,
@@ -189,7 +189,7 @@ export const useAIAssistantLazy = (
         // Fallback to basic system
         const basicSystem = await loadAISystem();
         if (basicSystem) {
-          console.log("✅ Basic AI system loaded");
+          // Basic AI system loaded
           const system = {
             type: "basic",
             ...basicSystem,
@@ -205,7 +205,7 @@ export const useAIAssistantLazy = (
         
         // Use fallback system if nothing else works
         if (fallbackMode) {
-          console.log("⚠️ Using fallback system (no AI loaded)");
+          // Using fallback system (no AI loaded)
           aiSystemRef.current = fallbackSystem;
           setSystemType("fallback");
           setIsInitialized(true);
@@ -260,7 +260,7 @@ export const useAIAssistantLazy = (
         throw new Error("AI system not available");
       }
       
-      console.log(`🤖 Generating predictions using ${system.type} system...`);
+      // Generating predictions using AI system
       
       if (system.generateSchedule) {
         const result = await system.generateSchedule({

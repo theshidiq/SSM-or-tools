@@ -83,7 +83,7 @@ export class TensorFlowScheduler {
     if (this.isInitialized) return true;
 
     try {
-      console.log("🚀 Initializing Enhanced TensorFlow ML Scheduler...");
+      // Initializing Enhanced TensorFlow ML Scheduler
       const startTime = Date.now();
 
       // Apply options
@@ -98,35 +98,25 @@ export class TensorFlowScheduler {
         throw new Error("TensorFlow initialization failed");
       }
 
-      // **PERFORMANCE ENHANCEMENT: Initialize ML Web Worker and Optimized Feature Manager**
+      // Initialize ML Web Worker and Optimized Feature Manager
       if (this.useWebWorker) {
         try {
-          // Initialize main ML worker
           this.workerInitialized = await mlWorkerManager.initializeWorker();
-          if (this.workerInitialized) {
-            console.log("⚡ ML Web Worker initialized - heavy operations will run off main thread");
-          } else {
-            console.warn("⚠️ ML Web Worker failed to initialize - using main thread fallback");
+          if (!this.workerInitialized) {
             this.workerFallbackMode = true;
           }
-
-          // Initialize optimized feature generation worker (separate for performance)
           await optimizedFeatureManager.initialize();
-          console.log("🚀 Optimized feature generation worker initialized - targeting <50ms per prediction");
         } catch (error) {
           console.warn("⚠️ Web Worker initialization error:", error.message);
           this.workerFallbackMode = true;
         }
       }
 
-      // **PHASE 2 ENHANCEMENT: Initialize Feature Cache Manager**
+      // Initialize Feature Cache Manager
       try {
-        console.log("⚡ Initializing feature cache manager for instant predictions...");
         // Cache will be invalidated on first use with actual data
-        console.log("✅ Feature cache manager ready - targeting <10ms cached predictions");
       } catch (cacheError) {
         console.warn("⚠️ Feature cache initialization warning:", cacheError.message);
-        // Cache is not critical for operation, continue without it
       }
 
       // Setup performance monitoring
@@ -136,7 +126,7 @@ export class TensorFlowScheduler {
       const loadResult = await this.loadModelWithVersionCheck();
 
       if (!loadResult.success) {
-        console.log("📦 Creating new optimized model...");
+        // Creating new optimized model
         try {
           this.model = createScheduleModel({
             ...MODEL_CONFIG.ARCHITECTURE,
@@ -149,17 +139,13 @@ export class TensorFlowScheduler {
             throw new Error("Failed to create TensorFlow model");
           }
 
-          console.log(
-            `✅ Model created with ${this.model.countParams()} parameters`,
-          );
+          // Model created successfully
           await this.saveModelVersion();
         } catch (error) {
           console.error("❌ Model creation failed:", error);
           // Create a simple fallback model
           this.model = this.createSimpleFallbackModel();
         }
-      } else {
-        console.log(`✅ Loaded model version ${loadResult.version}`);
       }
 
       // Initialize model metadata
@@ -188,7 +174,7 @@ export class TensorFlowScheduler {
     }
 
     if (this.isTraining) {
-      console.log("⏳ Training already in progress...");
+      // Training already in progress - skipping
       return null;
     }
 
@@ -198,7 +184,7 @@ export class TensorFlowScheduler {
       options,
     );
     if (!retrainingNeeded && !options.forceRetrain) {
-      console.log("🏃 Using existing trained model (no retraining needed)");
+      // Using existing trained model (no retraining needed)
       return {
         success: true,
         skipped: true,
@@ -210,7 +196,7 @@ export class TensorFlowScheduler {
     try {
       this.isTraining = true;
       const trainingStartTime = Date.now();
-      console.log("🎓 Starting enhanced ML model training...");
+      // Starting enhanced ML model training
 
       // Create model backup before training
       await this.createModelBackup("pre-training");
@@ -229,12 +215,7 @@ export class TensorFlowScheduler {
       const { allHistoricalData, allStaffMembers, dataQuality } =
         dataExtractionResult;
 
-      console.log(
-        `📚 Training data quality: ${(dataQuality.completeness * 100).toFixed(1)}%`,
-      );
-      console.log(
-        `👥 Staff members: ${allStaffMembers.length}, Data periods: ${Object.keys(allHistoricalData).length}`,
-      );
+      // Training data quality and staff information logged internally
 
       // Use current staff if provided, otherwise use historical staff
       const staffMembers =
@@ -242,7 +223,7 @@ export class TensorFlowScheduler {
           ? currentStaffMembers
           : allStaffMembers;
 
-      console.log(`🔄 Using ${staffMembers.length} staff members for training`);
+      // Using staff members for training
 
       // Enhanced training data preparation with validation
       const trainingDataResult = await this.prepareEnhancedTrainingData(
@@ -265,9 +246,7 @@ export class TensorFlowScheduler {
         metadata,
       } = trainingDataResult;
 
-      console.log(
-        `📊 Training samples: ${features.length}, Validation samples: ${validationFeatures?.length || 0}`,
-      );
+      // Training and validation samples prepared
 
       // Validate training data consistency
       const validationResult = this.validateTrainingData(
@@ -286,10 +265,7 @@ export class TensorFlowScheduler {
         console.warn("⚠️ Training data warnings:", validationResult.warnings);
       }
 
-      console.log(
-        "✅ Training data validation passed:",
-        validationResult.stats,
-      );
+      // Training data validation passed
 
       // Enhanced model training with adaptive parameters
       const trainingConfig = this.getOptimalTrainingConfig(
@@ -334,12 +310,7 @@ export class TensorFlowScheduler {
       });
 
       const trainingTime = Date.now() - trainingStartTime;
-      console.log(
-        `✅ Enhanced training complete! Accuracy: ${(finalMetrics.accuracy * 100).toFixed(1)}% (${trainingTime}ms)`,
-      );
-      console.log(
-        `📈 Data quality: ${(dataQuality.completeness * 100).toFixed(1)}%, Model version: ${this.modelVersion}`,
-      );
+      console.log(`✅ ML training complete: ${(finalMetrics.accuracy * 100).toFixed(1)}% accuracy`);
 
       MEMORY_UTILS.logMemoryUsage("After enhanced training");
 
@@ -379,7 +350,7 @@ export class TensorFlowScheduler {
    */
   async predictSchedule(currentSchedule, staffMembers, dateRange) {
     if (!this.isInitialized || !this.model) {
-      console.log("⚠️ Model not initialized, initializing...");
+      // Model not initialized, initializing
       await this.initialize();
     }
 
@@ -394,7 +365,7 @@ export class TensorFlowScheduler {
     // Check if model needs training
     const modelInfo = this.getModelInfo();
     if (!modelInfo || modelInfo.accuracy === 0) {
-      console.log("🎓 Model needs training, training on current data...");
+      // Model needs training, training on current data
       try {
         const trainingResult = await this.trainModel(staffMembers, {
           forceRetrain: false,
@@ -414,7 +385,7 @@ export class TensorFlowScheduler {
     }
 
     try {
-      console.log("🔮 Generating ML predictions for schedule...");
+      // Generating ML predictions for schedule
 
       // **PHASE 2 ENHANCEMENT: Initialize cache with current configuration**
       const cacheInvalidated = featureCacheManager.invalidateOnConfigChange(
@@ -423,20 +394,14 @@ export class TensorFlowScheduler {
         { dateRange: dateRange.map(d => d.toISOString()) }
       );
       
-      if (cacheInvalidated) {
-        console.log("🔄 Cache invalidated due to configuration changes");
-      }
+      // Cache invalidated if configuration changed
 
       // Filter out inactive staff members before processing
       const activeStaff = staffMembers.filter((staff) => {
         try {
           const isActive = isStaffActiveInCurrentPeriod(staff, dateRange);
 
-          if (!isActive) {
-            console.log(
-              `⏭️ Skipping inactive staff member: ${staff.name} (not active in current period)`,
-            );
-          }
+          // Skipping inactive staff members
 
           return isActive;
         } catch (error) {
@@ -449,9 +414,7 @@ export class TensorFlowScheduler {
         }
       });
 
-      console.log(
-        `👥 Processing predictions for ${activeStaff.length} active staff (filtered from ${staffMembers.length} total)`,
-      );
+      // Processing predictions for active staff members
 
       // Extract historical data for context
       const extractedData = extractAllDataForAI();
@@ -487,7 +450,7 @@ export class TensorFlowScheduler {
       
       // Add progress callback for UI updates
       const updateProgress = (progress) => {
-        console.log(`⚡ Progress: ${progress}% (${processedCount}/${totalPredictions})`);
+        // Progress tracking for UI updates
         // Dispatch custom event for UI progress updates
         if (typeof window !== 'undefined') {
           window.dispatchEvent(new CustomEvent('ml-progress', {
@@ -496,14 +459,12 @@ export class TensorFlowScheduler {
         }
       };
 
-      console.log(
-        `🔮 Starting ultra-responsive prediction processing for ${totalPredictions} predictions...`,
-      );
+      // Starting prediction processing for active staff
 
       // **ULTRA-PERFORMANCE FIX: Try batch processing first for massive speed improvement**
       if (!this.workerFallbackMode && totalPredictions > 10) {
         try {
-          console.log("🚀 Attempting batch feature generation for ultra-fast processing...");
+          // Attempting batch feature generation
           const batchResult = await this.processPredictionsBatch(
             activeStaff, 
             dateRange, 
@@ -514,7 +475,7 @@ export class TensorFlowScheduler {
           );
           
           if (batchResult.success) {
-            console.log(`✅ Batch processing completed ${batchResult.processedCount} predictions in ${batchResult.totalTime}ms`);
+            // Batch processing completed successfully
             return {
               success: true,
               predictions: batchResult.predictions,
@@ -536,14 +497,14 @@ export class TensorFlowScheduler {
       }
 
       // Fallback to individual processing for compatibility
-      console.log("🔄 Using individual prediction processing...");
+      // Using individual prediction processing
 
       // Process only active staff members with fully non-blocking chunked processing
       for (const staff of activeStaff) {
         predictions[staff.id] = {};
         predictionConfidence[staff.id] = {};
 
-        console.log(`👤 Processing ${staff.name}...`);
+        // Processing staff member predictions
 
         // **CRITICAL FIX: Process dates in smaller chunks with frequent yielding**
         for (
@@ -719,8 +680,7 @@ export class TensorFlowScheduler {
           }
         }
 
-        // **PERFORMANCE FIX: Smart yielding after each staff member**
-        console.log(`✅ Completed predictions for ${staff.name}`);
+        // Smart yielding after each staff member
         const progress = Math.round(
           (activeStaff.indexOf(staff) + 1) / activeStaff.length * 100,
         );
@@ -735,7 +695,7 @@ export class TensorFlowScheduler {
         });
       }
 
-      console.log("✅ ML predictions generated");
+      console.log("✅ ML predictions completed");
 
       // **PHASE 2 ENHANCEMENT: Start background precomputation for future requests**
       try {
@@ -745,21 +705,14 @@ export class TensorFlowScheduler {
           currentPeriodData,
           allHistoricalData
         );
-        console.log("🚀 Background feature precomputation started for future lightning-fast predictions");
+        // Background feature precomputation started
       } catch (precomputeError) {
         console.warn("⚠️ Background precomputation setup failed:", precomputeError.message);
         // Not critical for operation, continue without it
       }
 
       const modelAccuracy = this.getModelAccuracy();
-
-      console.log(
-        `✅ High-accuracy ML predictions generated (${(modelAccuracy * 100).toFixed(1)}% model accuracy)`,
-      );
-
-      // Log cache performance
       const cacheStats = featureCacheManager.getStats();
-      console.log(`📊 Cache performance: ${cacheStats.hit_rate} hit rate, ${cacheStats.cache_size} entries`);
 
       return {
         predictions,
@@ -1000,7 +953,7 @@ export class TensorFlowScheduler {
         }
       }
       
-      console.log(`🚀 Processing ${batchParams.length} predictions in batch mode...`);
+      // Processing predictions in batch mode
       
       // Process batch with progress updates
       const batchResult = await optimizedFeatureManager.generateFeaturesBatch(
@@ -1009,7 +962,7 @@ export class TensorFlowScheduler {
           if (updateProgress) {
             updateProgress(progress.percentage);
           }
-          console.log(`📊 Batch progress: ${progress.completed}/${progress.total} (${progress.percentage.toFixed(1)}%)`);
+          // Batch progress tracking
         }
       );
       
@@ -1048,7 +1001,7 @@ export class TensorFlowScheduler {
       }
       
       const totalTime = Date.now() - startTime;
-      console.log(`✅ Batch processing completed: ${processedCount} predictions in ${totalTime}ms (avg: ${(totalTime / processedCount).toFixed(1)}ms per prediction)`);
+      console.log(`✅ Batch processing completed: ${processedCount} predictions in ${totalTime}ms`);
       
       // Log performance summary
       optimizedFeatureManager.logPerformanceSummary();
@@ -1085,13 +1038,13 @@ export class TensorFlowScheduler {
       if (cacheResult.success) {
         const cacheTime = Date.now() - startTime;
         if (cacheTime < 10) {
-          console.log(`⚡ Cache hit for ${staff.name} on ${dateKey} (${cacheTime}ms)`);
+          // Cache hit for prediction
         }
         return cacheResult.features;
       }
 
       // Cache miss - generate features and cache them
-      console.log(`🔄 Cache miss for ${staff.name} on ${dateKey} - generating...`);
+      // Cache miss - generating features
 
       // Try using optimized web worker first
       if (!this.workerFallbackMode && optimizedFeatureManager) {
@@ -1484,7 +1437,7 @@ export class TensorFlowScheduler {
    */
   async updateModelWithFeedback(correctionData) {
     try {
-      console.log("📝 Processing model feedback for adaptive learning...");
+      // Processing model feedback for adaptive learning
 
       // Validate and process feedback data
       const processedFeedback = await this.processFeedbackData(correctionData);
@@ -1506,7 +1459,7 @@ export class TensorFlowScheduler {
       const shouldRetrain = await this.shouldPerformIncrementalUpdate();
 
       if (shouldRetrain) {
-        console.log("🔄 Performing incremental model update...");
+        // Performing incremental model update
         const retrainingResult = await this.performIncrementalRetraining();
 
         return {
@@ -1565,7 +1518,7 @@ export class TensorFlowScheduler {
    */
   async reset() {
     try {
-      console.log("🔄 Resetting TensorFlow scheduler...");
+      // Resetting TensorFlow scheduler
 
       // Stop any ongoing training
       this.isTraining = false;
@@ -1599,7 +1552,7 @@ export class TensorFlowScheduler {
       if (optimizedFeatureManager) {
         try {
           await optimizedFeatureManager.clearCache();
-          console.log("🚀 Optimized feature manager cache cleared");
+          // Optimized feature manager cache cleared
         } catch (error) {
           console.warn("⚠️ Failed to clear optimized feature manager cache:", error.message);
         }
@@ -1608,7 +1561,7 @@ export class TensorFlowScheduler {
       // **PHASE 2 ENHANCEMENT: Clear feature cache**
       try {
         featureCacheManager.clear();
-        console.log("⚡ Feature cache cleared");
+        // Feature cache cleared
       } catch (error) {
         console.warn("⚠️ Failed to clear feature cache:", error.message);
       }
@@ -1620,7 +1573,7 @@ export class TensorFlowScheduler {
       // Perform memory cleanup
       MEMORY_UTILS.cleanup();
 
-      console.log("✅ TensorFlow scheduler reset completed");
+      console.log("✅ ML scheduler reset completed");
     } catch (error) {
       console.error("❌ TensorFlow scheduler reset failed:", error);
       throw error;
@@ -1632,7 +1585,7 @@ export class TensorFlowScheduler {
    */
   dispose() {
     try {
-      console.log("🧹 Starting enhanced TensorFlow cleanup...");
+      // Starting enhanced TensorFlow cleanup
 
       // Dispose current model
       if (this.model) {
@@ -1664,7 +1617,7 @@ export class TensorFlowScheduler {
       // **PHASE 2 ENHANCEMENT: Dispose feature cache**
       try {
         featureCacheManager.dispose();
-        console.log("⚡ Feature cache disposed");
+        // Feature cache disposed
       } catch (error) {
         console.warn("⚠️ Failed to dispose feature cache:", error.message);
       }
@@ -1674,7 +1627,7 @@ export class TensorFlowScheduler {
 
       this.isInitialized = false;
 
-      console.log("✅ Enhanced TensorFlow ML Scheduler disposed successfully");
+      console.log("✅ ML Scheduler disposed successfully");
     } catch (error) {
       console.error("❌ Error during disposal:", error);
     }
@@ -1777,7 +1730,7 @@ export class TensorFlowScheduler {
       try {
         this.model = createScheduleModel();
         this.isInitialized = true;
-        console.log("✅ Recovery successful - created new model");
+        console.log("✅ Model recovery successful");
       } catch (retryError) {
         console.error("❌ Recovery failed:", retryError.message);
       }
@@ -1816,7 +1769,7 @@ export class TensorFlowScheduler {
    */
   async extractAndValidateTrainingData() {
     try {
-      console.log("🔍 Extracting and validating training data...");
+      // Extracting and validating training data
 
       const extractedData = extractAllDataForAI();
 
@@ -1900,13 +1853,7 @@ export class TensorFlowScheduler {
         validation: validationResults,
       };
 
-      console.log("✅ Training data validation completed:", {
-        periods: dataQuality.periods,
-        staff: dataQuality.staffCount,
-        activeStaff: dataQuality.activeStaffCount,
-        dataPoints: dataQuality.totalDataPoints,
-        completeness: `${dataQuality.completeness.toFixed(1)}%`,
-      });
+      // Training data validation completed
 
       return {
         success: true,
@@ -2043,7 +1990,7 @@ export class TensorFlowScheduler {
         validationData = [valXs, valYs];
       }
 
-      console.log("🔄 Starting enhanced neural network training...");
+      // Starting enhanced neural network training
 
       // Enhanced training with callbacks
       const history = await this.model.fit(xs, ys, {
@@ -2054,20 +2001,16 @@ export class TensorFlowScheduler {
         callbacks: {
           onEpochEnd: (epoch, logs) => {
             const progress = (((epoch + 1) / config.epochs) * 100).toFixed(1);
-            if (epoch % Math.max(1, Math.floor(config.epochs / 10)) === 0) {
-              console.log(
-                `📈 Progress: ${progress}% - Loss: ${logs.loss.toFixed(4)}, Accuracy: ${logs.acc.toFixed(4)}`,
-              );
-            }
+            // Training progress tracking
 
             // Early stopping if loss increases significantly
             if (epoch > 10 && logs.loss > 2.0) {
-              console.log("⚠️ Early stopping due to loss explosion");
+              console.warn("⚠️ Early stopping due to loss explosion");
               this.model.stopTraining = true;
             }
           },
           onTrainEnd: () => {
-            console.log("🎯 Enhanced training completed!");
+            // Enhanced training completed
           },
         },
       });
@@ -2144,7 +2087,7 @@ export class TensorFlowScheduler {
         this.modelBackups.delete(oldestKey);
       }
 
-      console.log(`💾 Model backup created: ${backupId}`);
+      // Model backup created successfully
     } catch (error) {
       console.warn("⚠️ Failed to create model backup:", error.message);
     }
@@ -2223,7 +2166,7 @@ export class TensorFlowScheduler {
     try {
       await MODEL_STORAGE.saveModel(this.model);
       await this.saveModelVersion();
-      console.log("💾 Enhanced model saved successfully");
+      // Enhanced model saved successfully
     } catch (error) {
       console.error("❌ Failed to save enhanced model:", error);
     }
@@ -2265,12 +2208,12 @@ export class TensorFlowScheduler {
    */
   async attemptModelRecovery(error) {
     try {
-      console.log("🔄 Attempting model recovery...");
+      // Attempting model recovery
 
       // Try to restore from backup
       if (this.modelBackups.size > 0) {
         const latestBackup = this.getLatestBackupInfo();
-        console.log(`🔄 Restoring from backup: ${latestBackup.reason}`);
+        // Restoring from backup
 
         // This would require implementing backup restoration
         // For now, we'll create a new model
@@ -2318,7 +2261,7 @@ export class TensorFlowScheduler {
       // Perform memory cleanup
       MEMORY_UTILS.cleanup();
 
-      console.log("🧹 Post-training cleanup completed");
+      // Post-training cleanup completed
     } catch (error) {
       console.warn("⚠️ Post-training cleanup failed:", error.message);
     }
@@ -2436,12 +2379,12 @@ export class TensorFlowScheduler {
             ? "fair"
             : "poor";
 
-    console.log(`📈 Data quality validation: ${qualityLevel} (${score}/100)`);
+    // Data quality validation completed
     if (issues.length > 0) {
-      console.log("❌ Issues:", issues);
+      console.warn("⚠️ Data validation issues:", issues.join("; "));
     }
-    if (warnings.length > 0) {
-      console.log("⚠️ Warnings:", warnings);
+    if (warnings.length > 0 && score < 60) {
+      console.warn("⚠️ Data quality warnings:", warnings.join("; "));
     }
 
     return {
@@ -2586,7 +2529,7 @@ export class TensorFlowScheduler {
    */
   createSimpleFallbackModel() {
     try {
-      console.log("🆘 Creating simple fallback model...");
+      // Creating simple fallback model
 
       const model = tf.sequential({
         layers: [
@@ -2611,7 +2554,7 @@ export class TensorFlowScheduler {
         metrics: ["accuracy"],
       });
 
-      console.log("✅ Fallback model created successfully");
+      // Fallback model created successfully
       return model;
     } catch (error) {
       console.error("❌ Even fallback model creation failed:", error);
@@ -2681,9 +2624,7 @@ export class TensorFlowScheduler {
         }
       }
 
-      console.log(
-        `📈 Data augmentation: added ${augmentedFeatures.length} synthetic samples`,
-      );
+      // Data augmentation completed
       return { features: augmentedFeatures, labels: augmentedLabels };
     }
 

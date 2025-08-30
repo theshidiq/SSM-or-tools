@@ -44,7 +44,7 @@ export class CSPSolver {
    * @param {Object} options - Initialization options
    */
   initialize(options = {}) {
-    console.log("⚡ Initializing CSP Solver...");
+    // Initializing CSP Solver
 
     try {
       // Set up constraint types
@@ -56,7 +56,7 @@ export class CSPSolver {
       }
 
       this.initialized = true;
-      console.log("✅ CSP Solver initialized successfully");
+      // CSP Solver initialized successfully
     } catch (error) {
       console.error("❌ CSP Solver initialization failed:", error);
       throw error;
@@ -119,7 +119,7 @@ export class CSPSolver {
       timeLimit = 30000, // 30 seconds
     } = params;
 
-    console.log("⚡ Generating schedule using CSP solver...");
+    // Generating schedule using CSP solver
 
     try {
       const startTime = Date.now();
@@ -149,8 +149,7 @@ export class CSPSolver {
         this.solutionStats.successfulSolutions++;
       }
 
-      console.log(`✅ CSP solving completed in ${solutionTime}ms`);
-      console.log(`📊 Solution found: ${solution.success ? "YES" : "NO"}`);
+      // CSP solving completed
 
       return {
         success: solution.success,

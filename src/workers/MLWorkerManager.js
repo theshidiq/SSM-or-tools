@@ -37,9 +37,7 @@ export class MLWorkerManager {
       const initResult = await this.sendMessage("INITIALIZE", {});
       this.initialized = initResult.success;
 
-      console.log(
-        `✅ ML Worker initialized: ${this.initialized ? "SUCCESS" : "FAILED"}`,
-      );
+      // ML Worker initialized
       return this.initialized;
     } catch (error) {
       console.warn("⚠️ ML Worker initialization failed:", error.message);
@@ -56,7 +54,7 @@ export class MLWorkerManager {
 
     switch (type) {
       case "WORKER_READY":
-        console.log("🚀 ML Worker is ready");
+        // ML Worker is ready
         break;
 
       case "INITIALIZATION_COMPLETE":
@@ -77,7 +75,7 @@ export class MLWorkerManager {
         break;
 
       case "ERROR":
-        console.error("🚨 ML Worker error:", error);
+        console.error("❌ ML Worker error:", error);
         this.resolveOperation(id, { success: false, error });
         break;
     }
@@ -87,7 +85,7 @@ export class MLWorkerManager {
    * Handle worker errors
    */
   handleWorkerError(error) {
-    console.error("🚨 ML Worker error:", error);
+    console.error("❌ ML Worker error:", error);
     this.initialized = false;
 
     // Reject all pending operations
@@ -310,7 +308,7 @@ export class MLWorkerManager {
       this.pendingOperations.clear();
       this.progressCallbacks.clear();
 
-      console.log("🛑 ML Worker terminated");
+      // ML Worker terminated
     }
   }
 
@@ -318,8 +316,6 @@ export class MLWorkerManager {
    * Restart the worker
    */
   async restart() {
-    console.log("🔄 Restarting ML Worker...");
-
     if (this.worker) {
       this.terminate();
     }

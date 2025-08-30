@@ -45,16 +45,14 @@ export class AutonomousEngine {
    * @returns {Promise<Object>} Initialization result
    */
   async initialize(config = {}) {
-    console.log(
-      "🚀 Initializing Autonomous Engine - Phase 4: Full Automation...",
-    );
+    // Initializing Autonomous Engine - Phase 4: Full Automation
 
     try {
       // Apply configuration
       this.autonomousConfig = { ...this.autonomousConfig, ...config };
 
       // Initialize underlying AI systems
-      console.log("🔧 Initializing Advanced Intelligence...");
+      // Initializing Advanced Intelligence
       const aiInitResult = await advancedIntelligence.initialize();
       if (!aiInitResult.success) {
         throw new Error(`AI initialization failed: ${aiInitResult.error}`);
@@ -67,7 +65,7 @@ export class AutonomousEngine {
       await this.startAutonomousOperation();
 
       this.initialized = true;
-      console.log("✅ Autonomous Engine initialized successfully");
+      console.log("✅ Autonomous Engine operational");
 
       return {
         success: true,
@@ -103,7 +101,7 @@ export class AutonomousEngine {
    * @private
    */
   async initializeAutonomousComponents() {
-    console.log("🔧 Initializing autonomous components...");
+    // Initializing autonomous components
 
     // Initialize self-healing system
     this.selfHealingSystem = {
@@ -131,7 +129,7 @@ export class AutonomousEngine {
       efficiencyWeight: 0.3,
     };
 
-    console.log("✅ Autonomous components initialized");
+    // Autonomous components initialized
   }
 
   /**
@@ -140,11 +138,11 @@ export class AutonomousEngine {
    */
   async startAutonomousOperation() {
     if (this.isAutonomous) {
-      console.log("⚠️ Autonomous operation already running");
+      // Autonomous operation already running
       return;
     }
 
-    console.log("🚀 Starting autonomous operation...");
+    // Starting autonomous operation
 
     // Start autonomous scheduler
     this.autonomousScheduler = setInterval(async () => {
@@ -170,7 +168,7 @@ export class AutonomousEngine {
     this.isAutonomous = true;
     this.operationalMetrics.lastHealthCheck = new Date();
 
-    console.log("✅ Autonomous operation started successfully");
+    console.log("✅ Autonomous operation started");
   }
 
   /**
@@ -179,18 +177,18 @@ export class AutonomousEngine {
    */
   async performAutonomousScheduling() {
     try {
-      console.log("🤖 Performing autonomous scheduling...");
+      // Performing autonomous scheduling
 
       // Extract current scheduling context
       const dataResult = extractAllDataForAI();
       if (!dataResult.success) {
-        console.log("⚠️ No scheduling data available for autonomous operation");
+        // No scheduling data available for autonomous operation
         return;
       }
 
       const { summary } = dataResult.data;
       if (summary.totalStaff === 0) {
-        console.log("⚠️ No staff data available for scheduling");
+        // No staff data available for scheduling
         return;
       }
 
@@ -209,7 +207,7 @@ export class AutonomousEngine {
           (24 * 60 * 60 * 1000),
       );
 
-      console.log("✅ Autonomous scheduling completed");
+      // Autonomous scheduling completed
     } catch (error) {
       console.error("❌ Autonomous scheduling failed:", error.message);
       await this.handleAutonomousFailure("scheduling", error);
@@ -295,9 +293,7 @@ export class AutonomousEngine {
    */
   async generateAutonomousSchedule(scheduleRequest) {
     try {
-      console.log(
-        `🎯 Generating autonomous schedule for: ${scheduleRequest.reason}`,
-      );
+      // Generating autonomous schedule
 
       // Use Advanced Intelligence for schedule generation
       const result = await advancedIntelligence.generateIntelligentSchedule({
@@ -308,9 +304,7 @@ export class AutonomousEngine {
       });
 
       if (result.success) {
-        console.log(
-          `✅ Autonomous schedule generated with ${result.analysis.intelligenceScore}% intelligence score`,
-        );
+        // Autonomous schedule generated successfully
 
         // Store in cache for future reference
         this.predictiveScheduler.scheduleCache.set(
@@ -328,9 +322,7 @@ export class AutonomousEngine {
           await this.applySelfHealing(result, scheduleRequest);
         }
       } else {
-        console.log(
-          "⚠️ Autonomous schedule generation failed, applying fallback",
-        );
+        // Autonomous schedule generation failed, applying fallback
         await this.handleAutonomousFailure(
           "generation",
           new Error(result.error),
@@ -349,7 +341,7 @@ export class AutonomousEngine {
    * @param {Object} request - Schedule request
    */
   async applySelfHealing(result, request) {
-    console.log("🔧 Applying self-healing to improve schedule quality...");
+    // Applying self-healing to improve schedule quality
 
     try {
       // Strategy 1: Reoptimize with different parameters
@@ -367,7 +359,7 @@ export class AutonomousEngine {
         reoptimizeResult.analysis.intelligenceScore >
           result.analysis.intelligenceScore
       ) {
-        console.log("✅ Self-healing successful - improved schedule quality");
+        // Self-healing successful - improved schedule quality
         this.operationalMetrics.autoCorrections++;
 
         this.selfHealingSystem.healingHistory.push({
@@ -381,7 +373,7 @@ export class AutonomousEngine {
         return reoptimizeResult;
       }
 
-      console.log("⚠️ Self-healing could not improve schedule quality");
+      // Self-healing could not improve schedule quality
       return result;
     } catch (error) {
       console.error("❌ Self-healing failed:", error.message);
@@ -412,17 +404,11 @@ export class AutonomousEngine {
 
       // Log health status
       if (overallHealth > 0.95) {
-        console.log(
-          `💚 System health excellent: ${(overallHealth * 100).toFixed(1)}%`,
-        );
+        // System health excellent
       } else if (overallHealth > 0.85) {
-        console.log(
-          `💛 System health good: ${(overallHealth * 100).toFixed(1)}%`,
-        );
+        // System health good
       } else {
-        console.log(
-          `❤️ System health needs attention: ${(overallHealth * 100).toFixed(1)}%`,
-        );
+        console.warn(`⚠️ System health needs attention: ${(overallHealth * 100).toFixed(1)}%`);
         await this.handleHealthIssues(healthStatus);
       }
 
@@ -616,7 +602,7 @@ export class AutonomousEngine {
    * @param {Object} healthStatus - Health status with issues
    */
   async handleHealthIssues(healthStatus) {
-    console.log("🔧 Handling system health issues...");
+    // Handling system health issues
 
     // Clean up cache if memory usage is high
     if (healthStatus.memory.score < 0.7) {
@@ -625,10 +611,10 @@ export class AutonomousEngine {
 
     // Restart AI engine if unhealthy
     if (healthStatus.aiEngine.score < 0.5) {
-      console.log("🔄 Attempting to reinitialize AI engine...");
+      // Attempting to reinitialize AI engine
       try {
         await advancedIntelligence.initialize();
-        console.log("✅ AI engine reinitialized successfully");
+        console.log("✅ AI engine reinitialized");
       } catch (error) {
         console.error("❌ AI engine reinitialization failed:", error.message);
       }
@@ -640,7 +626,7 @@ export class AutonomousEngine {
    * @private
    */
   async cleanupCache() {
-    console.log("🧹 Cleaning up prediction cache...");
+    // Cleaning up prediction cache
 
     const cacheEntries = Array.from(
       this.predictiveScheduler.scheduleCache.entries(),
@@ -657,7 +643,7 @@ export class AutonomousEngine {
       }
     });
 
-    console.log(`✅ Cleaned up ${cleanedCount} cache entries`);
+    // Cache cleanup completed
   }
 
   /**
@@ -665,7 +651,7 @@ export class AutonomousEngine {
    * @private
    */
   async performSelfImprovement() {
-    console.log("🎓 Performing self-improvement cycle...");
+    // Performing self-improvement cycle
 
     try {
       // Analyze recent performance
@@ -679,9 +665,7 @@ export class AutonomousEngine {
         await this.applyImprovement(improvement);
       }
 
-      console.log(
-        `✅ Self-improvement cycle completed - ${improvements.length} improvements applied`,
-      );
+      // Self-improvement cycle completed
     } catch (error) {
       console.error("❌ Self-improvement cycle failed:", error.message);
     }
@@ -752,18 +736,18 @@ export class AutonomousEngine {
    * @param {Object} improvement - Improvement to apply
    */
   async applyImprovement(improvement) {
-    console.log(`🔧 Applying improvement: ${improvement.description}`);
+    // Applying improvement
 
     switch (improvement.type) {
       case "ml_optimization":
         // Simulate ML model optimization
-        console.log("✅ ML models optimized");
+        // ML models optimized
         break;
 
       case "performance_optimization":
         // Simulate performance optimization
         await this.cleanupCache();
-        console.log("✅ Performance optimized");
+        // Performance optimized
         break;
 
       case "healing_enhancement":
@@ -772,11 +756,11 @@ export class AutonomousEngine {
           0.98,
           this.selfHealingSystem.detectionThreshold + 0.01,
         );
-        console.log("✅ Self-healing enhanced");
+        // Self-healing enhanced
         break;
 
       default:
-        console.log(`⚠️ Unknown improvement type: ${improvement.type}`);
+        console.warn(`⚠️ Unknown improvement type: ${improvement.type}`);
     }
   }
 
@@ -805,7 +789,7 @@ export class AutonomousEngine {
     try {
       switch (operation) {
         case "scheduling":
-          console.log("🔄 Attempting scheduling recovery...");
+          // Attempting scheduling recovery
           // Reduce scheduling frequency temporarily
           clearInterval(this.autonomousScheduler);
           this.autonomousScheduler = setInterval(async () => {
@@ -814,15 +798,15 @@ export class AutonomousEngine {
           break;
 
         case "generation":
-          console.log("🔄 Attempting generation recovery...");
+          // Attempting generation recovery
           // Use fallback generation strategy
           break;
 
         default:
-          console.log("🔄 Attempting general recovery...");
+          // Attempting general recovery
       }
 
-      console.log("✅ Recovery attempt completed");
+      // Recovery attempt completed
     } catch (recoveryError) {
       console.error("❌ Recovery failed:", recoveryError.message);
     }
@@ -833,11 +817,11 @@ export class AutonomousEngine {
    */
   async stopAutonomousOperation() {
     if (!this.isAutonomous) {
-      console.log("⚠️ Autonomous operation not running");
+      // Autonomous operation not running
       return;
     }
 
-    console.log("🛑 Stopping autonomous operation...");
+    // Stopping autonomous operation
 
     // Clear intervals
     if (this.autonomousScheduler) clearInterval(this.autonomousScheduler);
@@ -876,7 +860,7 @@ export class AutonomousEngine {
       throw new Error("Autonomous Engine not initialized");
     }
 
-    console.log("📊 Generating autonomous intelligence report...");
+    // Generating autonomous intelligence report
 
     const healthStatus = await this.performHealthCheck();
     const performanceAnalysis = await this.analyzeRecentPerformance();
@@ -917,7 +901,7 @@ export class AutonomousEngine {
         await this.generateAutonomousRecommendations(performanceAnalysis),
     };
 
-    console.log("✅ Autonomous intelligence report generated");
+    // Autonomous intelligence report generated
     return report;
   }
 
@@ -966,9 +950,7 @@ export class AutonomousEngine {
    * Emergency stop - immediately halt all autonomous operations
    */
   emergencyStop() {
-    console.log(
-      "🚨 EMERGENCY STOP - Halting all autonomous operations immediately",
-    );
+    console.warn("🚨 EMERGENCY STOP - Halting all autonomous operations immediately");
 
     this.stopAutonomousOperation();
     this.initialized = false;
@@ -978,7 +960,7 @@ export class AutonomousEngine {
       this.predictiveScheduler.scheduleCache.clear();
     }
 
-    console.log("🛑 Emergency stop completed - system is now in safe mode");
+    console.log("🛑 Emergency stop completed - system in safe mode");
   }
 }
 

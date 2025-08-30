@@ -62,7 +62,7 @@ class WorkerManager {
     try {
       // Check if Web Workers are supported
       if (!this.isWorkerSupported()) {
-        console.warn("🔄 Web Workers not supported, using fallback processor");
+        console.warn("⚠️ Web Workers not supported, using fallback processor");
         await this.initializeFallback(options);
         return { success: true, fallback: true };
       }
@@ -88,10 +88,7 @@ class WorkerManager {
         this.workerCapabilities = initResult.capabilities;
         this.performanceMetrics.workerInitTime = Date.now() - startTime;
 
-        console.log("✅ AI Worker initialized successfully:", {
-          initTime: this.performanceMetrics.workerInitTime + "ms",
-          capabilities: this.workerCapabilities,
-        });
+        // AI Worker initialized successfully
 
         return { success: true, capabilities: this.workerCapabilities };
       } else {
@@ -165,9 +162,7 @@ class WorkerManager {
       const maxProcessingTime = data.timeout || 30000; // 30 seconds default
       const emergencyTimeout = maxProcessingTime + 5000; // +5s for cleanup
 
-      console.log(
-        `🚀 Starting worker processing (timeout: ${maxProcessingTime}ms)...`,
-      );
+      // Starting worker processing
 
       // Set up processing timeout
       const timeoutPromise = new Promise((_, reject) => {
@@ -222,7 +217,7 @@ class WorkerManager {
       if (cancellationTimeout) clearTimeout(cancellationTimeout);
 
       const processingTime = Date.now() - startTime;
-      console.log(`✅ Worker processing completed in ${processingTime}ms`);
+      // Worker processing completed
 
       return {
         ...result,
@@ -287,7 +282,7 @@ class WorkerManager {
       return { success: false, reason: "No processing to cancel" };
     }
 
-    console.log("🛑 Initiating processing cancellation...");
+    // Initiating processing cancellation
 
     try {
       if (this.worker) {
@@ -307,7 +302,7 @@ class WorkerManager {
 
         try {
           await Promise.race([gracefulCancel, gracefulTimeout]);
-          console.log("✅ Graceful worker cancellation successful");
+          // Graceful worker cancellation successful
         } catch (gracefulError) {
           console.warn(
             "⚠️ Graceful cancellation failed, forcing emergency stop...",
@@ -398,13 +393,13 @@ class WorkerManager {
    * Emergency worker cancellation when normal cancellation fails
    */
   async emergencyWorkerCancellation() {
-    console.warn("🆘 Performing emergency worker cancellation...");
+    console.warn("⚠️ Performing emergency worker cancellation...");
 
     try {
       if (this.worker) {
         // Immediately terminate the worker
         this.worker.terminate();
-        console.log("⚡ Worker forcefully terminated");
+        // Worker forcefully terminated
 
         // Clear worker reference
         this.worker = null;

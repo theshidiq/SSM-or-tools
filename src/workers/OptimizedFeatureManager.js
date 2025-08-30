@@ -54,7 +54,7 @@ class OptimizedFeatureManager {
           id: initId,
         });
 
-        console.log("🚀 Initializing optimized feature generation worker...");
+        // Initializing optimized feature generation worker
       } catch (error) {
         console.error("❌ Failed to create feature generation worker:", error);
         reject(error);
@@ -163,7 +163,6 @@ class OptimizedFeatureManager {
     switch (type) {
       case "INIT_COMPLETE":
         this.isInitialized = true;
-        console.log("✅ Optimized feature generation worker initialized");
         request.resolve();
         this.pendingRequests.delete(id);
         break;
@@ -185,7 +184,6 @@ class OptimizedFeatureManager {
         break;
 
       case "CACHE_CLEARED":
-        console.log("🧹 Feature generation cache cleared");
         if (request.resolve) request.resolve();
         this.pendingRequests.delete(id);
         break;
@@ -278,22 +276,10 @@ class OptimizedFeatureManager {
    */
   logPerformanceSummary() {
     const stats = this.getPerformanceStats();
-
-    console.log("📊 Optimized Feature Generation Performance Summary:");
-    console.log(`  Total predictions: ${stats.totalPredictions}`);
-    console.log(`  Average time: ${stats.avgTime.toFixed(1)}ms`);
-    console.log(
-      `  Min time: ${stats.minTime === Infinity ? "N/A" : stats.minTime.toFixed(1)}ms`,
-    );
-    console.log(`  Max time: ${stats.maxTime.toFixed(1)}ms`);
-    console.log(
-      `  Under 50ms: ${stats.under50msCount}/${stats.totalPredictions} (${stats.under50msPercentage}%)`,
-    );
-
+    
+    // Performance tracking for optimization (only log warnings)
     if (stats.avgTime > 50) {
-      console.warn("⚠️ Average time exceeds 50ms target");
-    } else {
-      console.log("✅ Performance target achieved!");
+      console.warn("⚠️ Feature generation average time exceeds 50ms target:", `${stats.avgTime.toFixed(1)}ms`);
     }
   }
 
@@ -308,7 +294,6 @@ class OptimizedFeatureManager {
 
     this.pendingRequests.clear();
     this.isInitialized = false;
-    console.log("🧹 Optimized feature manager destroyed");
   }
 
   /**

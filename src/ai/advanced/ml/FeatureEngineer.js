@@ -47,7 +47,7 @@ export class FeatureEngineer {
    * @returns {Object} Initialization result
    */
   async initialize(config = {}) {
-    console.log("🔧 Initializing Feature Engineer...");
+    // Initializing Feature Engineer
 
     try {
       // Merge configuration
@@ -55,10 +55,7 @@ export class FeatureEngineer {
 
       this.initialized = true;
 
-      console.log("✅ Feature Engineer initialized");
-      console.log(
-        `Encoding: ${this.config.categoricalEncoding}, Scaling: ${this.config.numericalScaling}`,
-      );
+      // Feature Engineer initialized
 
       return {
         success: true,
@@ -85,7 +82,7 @@ export class FeatureEngineer {
       throw new Error("Feature Engineer not initialized");
     }
 
-    console.log("🔍 Extracting features from historical data...");
+    // Extracting features from historical data
 
     try {
       const startTime = Date.now();
@@ -124,10 +121,7 @@ export class FeatureEngineer {
       this.featureStats.extractionTime = extractionTime;
       this.featureStats.totalFeatures = this.featureNames.length;
 
-      console.log(`✅ Feature extraction completed in ${extractionTime}ms`);
-      console.log(
-        `📊 Extracted ${this.featureNames.length} features from ${features.length} samples`,
-      );
+      // Feature extraction completed
 
       return {
         success: true,
@@ -157,7 +151,7 @@ export class FeatureEngineer {
     const { staffMembers, dateRange, existingSchedule, seasonalContext } =
       params;
 
-    console.log("🎯 Extracting features for prediction...");
+    // Extracting features for prediction
 
     const features = [];
     const featureNames = [...this.featureNames]; // Use existing feature names
@@ -760,7 +754,7 @@ export class FeatureEngineer {
   async processFeatures(features, useExistingParams = false) {
     if (features.length === 0) return features;
 
-    console.log("⚙️ Processing extracted features...");
+    // Processing extracted features
 
     // Ensure all feature vectors have the same length
     const maxLength = Math.max(...features.map((f) => f.length));
@@ -1172,7 +1166,7 @@ export class FeatureEngineer {
    * @returns {Object} Reset result
    */
   async reset() {
-    console.log("🔄 Resetting Feature Engineer...");
+    // Resetting Feature Engineer
 
     try {
       this.initialized = false;
@@ -1190,7 +1184,7 @@ export class FeatureEngineer {
         extractionTime: 0,
       };
 
-      console.log("✅ Feature Engineer reset successfully");
+      // Feature Engineer reset successfully
 
       return {
         success: true,

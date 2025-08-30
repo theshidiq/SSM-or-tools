@@ -43,7 +43,7 @@ export class SimulatedAnnealing {
    * @param {Object} options - Initialization options
    */
   async initialize(options = {}) {
-    console.log("🔥 Initializing Enhanced Simulated Annealing...");
+    // Initializing Enhanced Simulated Annealing
 
     try {
       // Update parameters with ML-optimized defaults
@@ -75,10 +75,7 @@ export class SimulatedAnnealing {
       };
 
       this.initialized = true;
-      console.log("✅ Enhanced Simulated Annealing initialized successfully");
-      console.log(
-        `🌡️ Parameters: InitTemp=${this.parameters.initialTemperature}, CoolingRate=${this.parameters.coolingRate}, MaxIter=${this.parameters.maxIterations}`,
-      );
+      // Enhanced Simulated Annealing initialized successfully
     } catch (error) {
       console.error("❌ Simulated Annealing initialization failed:", error);
       throw error;
@@ -98,9 +95,7 @@ export class SimulatedAnnealing {
       throw new Error("Simulated Annealing not initialized");
     }
 
-    console.log(
-      `🔥 Starting enhanced simulated annealing for ${staffMembers.length} staff over ${dateRange.length} days...`,
-    );
+    // Starting enhanced simulated annealing
 
     try {
       const startTime = Date.now();
@@ -136,7 +131,7 @@ export class SimulatedAnnealing {
         acceptanceHistory: [],
       };
 
-      console.log(`🔥 Initial solution fitness: ${currentFitness.toFixed(2)}%`);
+      // Initial solution fitness calculated
 
       // Main annealing loop
       while (
@@ -184,15 +179,13 @@ export class SimulatedAnnealing {
               bestSolution = JSON.parse(JSON.stringify(neighborSolution));
               bestFitness = neighborFitness;
               stagnationCount = 0;
-              console.log(
-                `🎯 New best: ${bestFitness.toFixed(2)}% at iteration ${iteration}, temp=${temperature.toFixed(2)}`,
-              );
+              // New best fitness found
             }
           }
 
           // Early termination for excellent solutions
           if (bestFitness >= 98) {
-            console.log("🏆 Excellent fitness achieved, terminating annealing");
+            // Excellent fitness achieved, terminating annealing
             break;
           }
         }
@@ -238,9 +231,7 @@ export class SimulatedAnnealing {
           iteration % 100 === 0 ||
           temperature <= this.parameters.finalTemperature
         ) {
-          console.log(
-            `🔥 Iteration ${iteration}: Best=${bestFitness.toFixed(2)}%, Current=${currentFitness.toFixed(2)}%, Temp=${temperature.toFixed(2)}, AcceptRate=${(currentAcceptanceRate * 100).toFixed(1)}%`,
-          );
+          // Progress tracking during iteration
         }
 
         // Break if temperature is too low or excellent solution found
@@ -262,12 +253,7 @@ export class SimulatedAnnealing {
         totalMoves,
       );
 
-      console.log(
-        `✅ Annealing completed: ${bestFitness.toFixed(2)}% fitness in ${annealingTime}ms`,
-      );
-      console.log(
-        `📊 Final stats: ${iteration} iterations, ${((acceptedMoves / totalMoves) * 100).toFixed(1)}% acceptance rate`,
-      );
+      console.log(`✅ Annealing completed: ${bestFitness.toFixed(2)}% fitness in ${annealingTime}ms`);
 
       // Return in format expected by ScheduleGenerator
       return bestSolution;

@@ -232,39 +232,25 @@ export const getCurrentMonthIndex = () => {
   for (let i = 0; i < monthPeriods.length; i++) {
     const period = monthPeriods[i];
     if (todayUTC >= period.start && todayUTC <= period.end) {
-      console.log(
-        `📅 Current date (${todayUTC.toISOString().split("T")[0]}) falls in period ${i}: ${period.label}`,
-      );
       return i;
     }
   }
 
   // If today's date doesn't fall in any existing period, check if it's before the first period
   if (todayUTC < monthPeriods[0].start) {
-    console.log(
-      `📅 Current date is before all periods, defaulting to first period: ${monthPeriods[0].label}`,
-    );
     return 0;
   }
 
   // If today's date is after all periods, return the last period
-  console.log(
-    `📅 Current date is after all periods, defaulting to last period: ${monthPeriods[monthPeriods.length - 1].label}`,
-  );
   return monthPeriods.length - 1;
 };
 
 // Function to find period with data, prioritizing Supabase data over localStorage
 export const findPeriodWithData = (supabaseData = null) => {
-  console.log("🔍 findPeriodWithData called with data:", !!supabaseData);
-
   // First, check if Supabase data contains schedule data for any period
   if (supabaseData && supabaseData.schedule_data) {
     const { _staff_members, ...actualScheduleData } =
       supabaseData.schedule_data;
-
-    // DEBUG: Show basic data info
-    console.log(`📊 Checking ${Object.keys(actualScheduleData).length} staff members across ${monthPeriods.length} periods`);
 
     // Check each period to see if Supabase data has meaningful dates in that period's range
     for (let i = 0; i < monthPeriods.length; i++) {
@@ -291,18 +277,10 @@ export const findPeriodWithData = (supabaseData = null) => {
         return i;
       }
     }
-
-    // If no meaningful data found, log this for debugging
-    console.log(
-      "🔍 ❌ No meaningful schedule data found in any period, using date-based period",
-    );
-  } else {
-    console.log("🔍 No Supabase data available");
   }
 
   // Fallback to current date-based period
   const fallbackPeriod = getCurrentMonthIndex();
-  console.log(`🔍 Using fallback period: ${fallbackPeriod}`);
   return fallbackPeriod;
 };
 

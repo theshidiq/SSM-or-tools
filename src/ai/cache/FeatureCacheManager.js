@@ -38,9 +38,7 @@ class FeatureCacheManager {
     this.precomputeQueue = [];
     this.isPrecomputing = false;
 
-    console.log(
-      `🚀 FeatureCacheManager initialized - Session ID: ${this.metadata.session_id}`,
-    );
+    // FeatureCacheManager initialized for session-based feature caching
   }
 
   /**
@@ -121,10 +119,6 @@ class FeatureCacheManager {
     );
 
     if (this.configHash !== newConfigHash) {
-      console.log(
-        `🔄 Config change detected - invalidating feature cache (${this.cache.size} entries)`,
-      );
-
       this.cache.clear();
       this.configHash = newConfigHash;
       this.metadata.last_invalidation = Date.now();
@@ -139,7 +133,6 @@ class FeatureCacheManager {
       this.precomputeQueue = [];
       this.isPrecomputing = false;
 
-      console.log(`✅ Cache invalidated - new config hash: ${this.configHash}`);
       return true;
     }
 
@@ -292,13 +285,8 @@ class FeatureCacheManager {
     allHistoricalData,
   ) {
     if (this.isPrecomputing) {
-      console.log("📊 Background precomputation already running");
       return;
     }
-
-    console.log(
-      `🚀 Starting background feature precomputation for ${staffMembers.length} staff over ${dateRange.length} dates`,
-    );
 
     this.isPrecomputing = true;
     this.precomputeController = new AbortController();
@@ -325,9 +313,7 @@ class FeatureCacheManager {
       }
     }
 
-    console.log(
-      `📦 Queued ${this.precomputeQueue.length} features for background precomputation`,
-    );
+    // Queued features for background precomputation
 
     // Process queue during idle time
     await this.processPrecomputeQueue();
@@ -369,12 +355,6 @@ class FeatureCacheManager {
             if (result.success) {
               this.stats.background_precomputed++;
               processed++;
-
-              if (processed % 10 === 0) {
-                console.log(
-                  `📊 Background precomputed ${this.stats.background_precomputed} features (${this.precomputeQueue.length} remaining)`,
-                );
-              }
             }
           } catch (error) {
             console.warn("⚠️ Background precomputation error:", error.message);
@@ -394,9 +374,6 @@ class FeatureCacheManager {
         } else {
           // Precomputation complete
           this.isPrecomputing = false;
-          console.log(
-            `✅ Background precomputation completed - ${this.stats.background_precomputed} features cached`,
-          );
           this.logPerformanceStats();
         }
       } catch (error) {
@@ -423,7 +400,6 @@ class FeatureCacheManager {
     }
     this.precomputeQueue = [];
     this.isPrecomputing = false;
-    console.log("🛑 Background precomputation stopped");
   }
 
   /**
@@ -480,9 +456,6 @@ class FeatureCacheManager {
    * Clear cache (manual reset)
    */
   clear() {
-    console.log(
-      `🗑️ Manually clearing feature cache (${this.cache.size} entries)`,
-    );
     this.cache.clear();
     this.stopBackgroundPrecomputation();
     this.stats.cache_size = 0;
@@ -536,8 +509,6 @@ class FeatureCacheManager {
    * Dispose and cleanup resources
    */
   dispose() {
-    console.log("🧹 Disposing FeatureCacheManager...");
-
     this.stopBackgroundPrecomputation();
     this.clear();
 
@@ -545,8 +516,6 @@ class FeatureCacheManager {
     this.featureEngineer = null;
     this.stats = null;
     this.metadata = null;
-
-    console.log("✅ FeatureCacheManager disposed");
   }
 }
 
