@@ -23,7 +23,7 @@ function AppContent() {
     <div className="App">
       {/* Phase 1: Force load actual Supabase data for migration testing */}
       <ForceDataLoader onDataLoaded={setForceData} />
-      
+
       {/* NEW REAL-TIME VERSION - Phase 1 Implementation */}
       <ShiftScheduleEditorRealtime
         supabaseScheduleData={effectiveScheduleData}
@@ -34,10 +34,21 @@ function AppContent() {
       />
       {/* Debug info */}
       {process.env.NODE_ENV === "development" && (
-        <div style={{position: 'fixed', top: 10, right: 10, background: 'yellow', padding: '10px', fontSize: '12px'}}>
-          Force Data: {forceData ? 'LOADED' : 'NULL'}<br/>
-          Schedule Data: {scheduleData ? 'LOADED' : 'NULL'}<br/>
-          Effective: {effectiveScheduleData ? 'LOADED' : 'NULL'}
+        <div
+          style={{
+            position: "fixed",
+            top: 10,
+            right: 10,
+            background: "yellow",
+            padding: "10px",
+            fontSize: "12px",
+          }}
+        >
+          Force Data: {forceData ? "LOADED" : "NULL"}
+          <br />
+          Schedule Data: {scheduleData ? "LOADED" : "NULL"}
+          <br />
+          Effective: {effectiveScheduleData ? "LOADED" : "NULL"}
         </div>
       )}
       {/* Console Log Viewer - Only in development */}
