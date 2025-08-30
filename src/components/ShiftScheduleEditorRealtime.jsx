@@ -160,22 +160,10 @@ const ShiftScheduleEditorRealtime = ({
   useEffect(() => {
     if (process.env.NODE_ENV === "development") {
       // Set up manual input test capabilities
-      const testRunner = manualInputTestSuite(
-        updateShift,
-        schedule,
-        staffMembers,
-        currentMonthIndex,
-      );
+      const testRunner = manualInputTestSuite;
 
       // Set up data integrity monitoring
-      const integrityMonitor = dataIntegrityMonitor(
-        cleanupAllPeriods,
-        fixStaffInconsistencies,
-        updateShift,
-        schedule,
-        staffMembers,
-        currentMonthIndex,
-      );
+      const integrityMonitor = dataIntegrityMonitor;
 
       // Expose to window for debugging
       window.manualInputTestSuite = testRunner;

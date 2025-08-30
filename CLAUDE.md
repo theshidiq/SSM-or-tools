@@ -208,6 +208,36 @@ function App() {
 - **Conflict Resolution**: Handle concurrent edits gracefully
 - **Offline Support**: Queue operations when offline, sync when reconnected
 
+## Production Logging Guidelines
+
+### Console Log Management
+The application implements production-optimized console logging:
+
+**✅ Production-Ready Console Logs** (Post-Cleanup):
+- **Essential System Status**: Core initialization and error messages only
+- **Development Tools**: Available in development mode with `window.*` functions
+- **Error Preservation**: All error logging maintained for debugging
+- **Performance Focus**: Reduced from ~60 debug messages to ~20 essential logs
+
+### Logging Best Practices
+- **Error Logging**: Always preserve `console.error()` for debugging
+- **Info Logging**: Use sparingly for system status and user feedback
+- **Debug Logging**: Remove verbose debug output from production builds
+- **Performance Tracking**: Log only critical performance metrics
+- **User Actions**: Avoid logging sensitive user data or internal state
+
+### Debug vs Production Modes
+- **Development Mode**: Full debug output with test utilities exposed to `window`
+- **Production Mode**: Minimal logging focused on errors and system health
+- **Conditional Logging**: Use `process.env.NODE_ENV === 'development'` checks
+- **Dynamic Control**: Console logger with `exportConsoleLogs()` and `printLogSummary()`
+
+### Browser Testing Integration
+- **Playwright MCP**: Real-time console log monitoring during testing
+- **Log Analysis**: Automated detection of excessive debug output
+- **Performance Impact**: Monitor bundle size impact of logging code
+- **Quality Assurance**: Verify production logging levels meet performance requirements
+
 ## Browser Testing & Quality Assurance
 
 ### Playwright MCP Integration

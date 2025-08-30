@@ -83,8 +83,9 @@ class ConsoleLogger {
       this.logs = this.logs.slice(-this.maxLogs);
     }
 
-    // Auto-export critical errors
-    if (logEntry.level === "ERROR") {
+    // Auto-export critical errors (DISABLED to prevent runaway downloads)
+    // Use exportLogs() manually or window.exportConsoleLogs() when needed
+    if (false && logEntry.level === "ERROR") {
       this.exportLogs(`error-${Date.now()}.json`);
     }
   }
