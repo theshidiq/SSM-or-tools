@@ -80,7 +80,7 @@ export class RandomForestModel {
     return isBatch ? predictions : predictions[0];
   }
 
-  buildDecisionTree(features, labels) {
+  buildDecisionTree(_features, _labels) {
     // Simplified decision tree
     return {
       depth: Math.floor(Math.random() * this.maxDepth) + 1,
@@ -89,7 +89,7 @@ export class RandomForestModel {
     };
   }
 
-  predictWithTree(tree, sample) {
+  predictWithTree(_tree, _sample) {
     // Simplified prediction
     return Math.floor(Math.random() * 4); // Random class 0-3
   }

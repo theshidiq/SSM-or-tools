@@ -165,7 +165,7 @@ export class PredictionEngine {
 
       // Step 1: Analyze current state and constraints
       console.log("📊 Analyzing current state and constraints...");
-      const constraintAnalysis = await aiFoundation.validateConstraints(
+      const _constraintAnalysis = await aiFoundation.validateConstraints(
         existingSchedule,
         staffMembers,
         dateRange,

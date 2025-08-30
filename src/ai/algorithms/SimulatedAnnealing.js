@@ -93,7 +93,7 @@ export class SimulatedAnnealing {
    * @param {Object} options - Annealing options
    * @returns {Object} Generated schedule
    */
-  async anneal(workingSchedule, staffMembers, dateRange, options = {}) {
+  async anneal(workingSchedule, staffMembers, dateRange, _options = {}) {
     if (!this.initialized) {
       throw new Error("Simulated Annealing not initialized");
     }
@@ -377,7 +377,7 @@ export class SimulatedAnnealing {
    * @param {Object} stats - Current statistics
    * @returns {number} New temperature after reheating
    */
-  reheat(currentTemperature, stats) {
+  reheat(currentTemperature, _stats) {
     // Reheat to a fraction of initial temperature
     const reheatTemperature = this.parameters.initialTemperature * 0.3;
 

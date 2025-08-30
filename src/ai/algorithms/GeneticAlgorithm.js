@@ -5,11 +5,7 @@
  * Uses evolutionary computation to find optimal scheduling solutions.
  */
 
-import {
-  validateAllConstraints,
-  isOffDay,
-  isWorkingShift,
-} from "../constraints/ConstraintEngine";
+import { validateAllConstraints } from "../constraints/ConstraintEngine";
 
 /**
  * Genetic Algorithm for schedule optimization
@@ -416,7 +412,7 @@ export class GeneticAlgorithm {
     preserveFixed,
   ) {
     const population = [];
-    const possibleShifts = ["", "△", "◇", "×"];
+    const __possibleShifts = ["", "△", "◇", "×"];
 
     for (let i = 0; i < this.parameters.populationSize; i++) {
       const individual = {
@@ -789,7 +785,7 @@ export class GeneticAlgorithm {
    * @param {Array} dateRange - Date range
    */
   mutate(individual, staffMembers, dateRange) {
-    const possibleShifts = ["", "△", "◇", "×"];
+    const __possibleShifts = ["", "△", "◇", "×"];
     const mutationCount = Math.max(
       1,
       Math.floor(staffMembers.length * dateRange.length * 0.01),
@@ -807,7 +803,7 @@ export class GeneticAlgorithm {
 
       do {
         newShift =
-          possibleShifts[Math.floor(Math.random() * possibleShifts.length)];
+          __possibleShifts[Math.floor(Math.random() * __possibleShifts.length)];
       } while (newShift === currentShift);
 
       individual.schedule[randomStaff.id][dateKey] = newShift;
@@ -1022,7 +1018,7 @@ export class GeneticAlgorithm {
    * @param {Object} stats - Evolution statistics
    */
   enhancedMutate(individual, staffMembers, dateRange, stats) {
-    const possibleShifts = ["", "△", "◇", "×"];
+    const __possibleShifts = ["", "△", "◇", "×"];
 
     // Adaptive mutation intensity based on fitness and diversity
     let mutationIntensity = 0.02; // Base 2%
@@ -1052,7 +1048,7 @@ export class GeneticAlgorithm {
       // Smart mutation - prefer shifts that improve balance
       const newShift = this.selectSmartMutation(
         currentShift,
-        possibleShifts,
+        __possibleShifts,
         individual,
         randomStaff.id,
         dateKey,
@@ -1067,7 +1063,7 @@ export class GeneticAlgorithm {
    */
   selectSmartMutation(
     currentShift,
-    possibleShifts,
+    _possibleShifts,
     individual,
     staffId,
     dateKey,
@@ -1090,10 +1086,10 @@ export class GeneticAlgorithm {
       // High workload - prefer off days
       return Math.random() < 0.7
         ? "×"
-        : possibleShifts[Math.floor(Math.random() * possibleShifts.length)];
+        : _possibleShifts[Math.floor(Math.random() * _possibleShifts.length)];
     } else if (workloadRatio < 0.5) {
       // Low workload - avoid off days
-      const workingShifts = possibleShifts.filter((s) => s !== "×");
+      const workingShifts = _possibleShifts.filter((s) => s !== "×");
       return workingShifts[Math.floor(Math.random() * workingShifts.length)];
     }
 
@@ -1101,7 +1097,7 @@ export class GeneticAlgorithm {
     let newShift;
     do {
       newShift =
-        possibleShifts[Math.floor(Math.random() * possibleShifts.length)];
+        _possibleShifts[Math.floor(Math.random() * _possibleShifts.length)];
     } while (newShift === currentShift);
 
     return newShift;
@@ -1112,7 +1108,7 @@ export class GeneticAlgorithm {
    */
   generateDiverseIndividuals(staffMembers, dateRange, count) {
     const diverse = [];
-    const possibleShifts = ["", "△", "◇", "×"];
+    const __possibleShifts = ["", "△", "◇", "×"];
 
     for (let i = 0; i < count; i++) {
       const individual = {

@@ -47,7 +47,7 @@ export class LogisticRegressionModel {
       const binaryLabels = labels.map((label) => (label === cls ? 1 : 0));
 
       // Train binary classifier
-      const { weights, bias, accuracy } = await this.trainBinaryClassifier(
+      const { weights, bias, _accuracy } = await this.trainBinaryClassifier(
         features,
         binaryLabels,
         options,
@@ -74,7 +74,7 @@ export class LogisticRegressionModel {
     };
   }
 
-  async trainBinaryClassifier(features, binaryLabels, options) {
+  async trainBinaryClassifier(features, binaryLabels, _options) {
     const numFeatures = features[0].length;
     const weights = Array(numFeatures)
       .fill(0)

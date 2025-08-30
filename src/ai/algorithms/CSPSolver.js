@@ -8,10 +8,8 @@
 import {
   isOffDay,
   isEarlyShift,
-  isLateShift,
   isWorkingShift,
   getDayOfWeek,
-  isWeekday,
   STAFF_CONFLICT_GROUPS,
   PRIORITY_RULES,
   DAILY_LIMITS,
@@ -517,7 +515,11 @@ export class CSPSolver {
    * @param {string} assignedValue - Recently assigned value
    * @returns {Object} Propagation result
    */
-  propagateConstraints(problem, assignedVariable = null, assignedValue = null) {
+  propagateConstraints(
+    problem,
+    _assignedVariable = null,
+    _assignedValue = null,
+  ) {
     let changed = true;
     let iterations = 0;
     const maxIterations = 10;
@@ -606,14 +608,14 @@ export class CSPSolver {
     // Count assignments for this date
     let offCount = 0;
     let earlyCount = 0;
-    let workingCount = 0;
+    let _workingCount = 0;
 
     problem.variables.forEach((v) => {
       if (v.dateKey === dateKey && assignments.has(v.id)) {
         const assignedValue = assignments.get(v.id);
         if (isOffDay(assignedValue)) offCount++;
         else if (isEarlyShift(assignedValue)) earlyCount++;
-        if (isWorkingShift(assignedValue)) workingCount++;
+        if (isWorkingShift(assignedValue)) _workingCount++;
       }
     });
 

@@ -94,7 +94,7 @@ export class ModelEvaluator {
    * @param {Object} options - Evaluation options
    * @returns {Object} Evaluation results
    */
-  async evaluateModel(predictions, actualValues, options = {}) {
+  async evaluateModel(predictions, actualValues, _options = {}) {
     if (!this.initialized) {
       throw new Error("Model Evaluator not initialized");
     }
@@ -577,7 +577,7 @@ export class ModelEvaluator {
     schedule,
     staffMembers,
     dateRange,
-    constraints,
+    _constraints,
   ) {
     // Simplified constraint evaluation
     let violations = 0;
@@ -629,7 +629,7 @@ export class ModelEvaluator {
    * @param {Array} dateRange - Date range
    * @returns {number} Fairness score (0-100)
    */
-  async evaluateFairness(schedule, staffMembers, dateRange) {
+  async evaluateFairness(schedule, staffMembers, _dateRange) {
     const workDays = [];
 
     staffMembers.forEach((staff) => {
@@ -795,7 +795,7 @@ export class ModelEvaluator {
       const staffSchedule = schedule[staff.id] || {};
       let workDays = 0;
 
-      Object.entries(staffSchedule).forEach(([dateKey, shiftType]) => {
+      Object.entries(staffSchedule).forEach(([_dateKey, shiftType]) => {
         analysis.totalAssignments++;
 
         if (analysis.shiftDistribution[shiftType] !== undefined) {

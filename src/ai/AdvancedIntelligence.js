@@ -78,13 +78,13 @@ export class AdvancedIntelligence {
    * @returns {Object} Initialization result
    */
   async initialize(options = {}) {
-    console.log("🧠 Initializing Advanced Intelligence System Phase 3...");
+    // Initializing Advanced Intelligence System
 
     try {
       const startTime = Date.now();
 
       // Ensure prerequisite systems are initialized
-      console.log("📋 Ensuring prerequisite systems are ready...");
+      // Ensuring prerequisite systems are ready
       if (!aiFoundation.initialized) {
         const foundationResult = await aiFoundation.initialize();
         if (!foundationResult.success) {
@@ -104,35 +104,33 @@ export class AdvancedIntelligence {
       }
 
       // Initialize Phase 3 components
-      console.log("🤖 Initializing machine learning engine...");
+      // Initializing machine learning engine
       await this.mlEngine.initialize(options.mlEngine || {});
 
-      console.log("🗓️ Initializing seasonal analyzer...");
+      // Initializing seasonal analyzer
       await this.seasonalAnalyzer.initialize(options.seasonal || {});
 
-      console.log("⚡ Initializing real-time adjuster...");
+      // Initializing real-time adjuster
       await this.realTimeAdjuster.initialize(options.realTime || {});
 
-      console.log("🤖 Initializing hybrid ML + business rules system...");
+      // Initializing hybrid ML + business rules system
       await this.hybridPredictor.initialize(options.hybrid || {});
 
       // Setup component integration
       this.setupComponentIntegration();
 
       // Load and analyze historical data for ML training
-      console.log("📚 Training ML models from historical data...");
+      // Training ML models from historical data
       await this.trainFromHistoricalData();
 
       // Initialize real-time monitoring
-      console.log("🔄 Starting real-time monitoring...");
+      // Starting real-time monitoring
       this.startRealTimeMonitoring();
 
       this.initialized = true;
       const initTime = Date.now() - startTime;
 
-      console.log(
-        `✅ Advanced Intelligence System Phase 3 initialized successfully in ${initTime}ms`,
-      );
+      // System initialized successfully
 
       return {
         success: true,
@@ -183,7 +181,7 @@ export class AdvancedIntelligence {
    */
   setupComponentIntegration() {
     // TODO: Update for Phase 2 hybrid system
-    console.log("🔗 Setting up component integration...");
+    // Setting up component integration
     /*
     // Connect learning system to all other components
     this.learningSystem.addDataSource('mlEngine', this.mlEngine);
@@ -191,7 +189,7 @@ export class AdvancedIntelligence {
     this.learningSystem.addDataSource('realTimeAdjuster', this.realTimeAdjuster);
     */
     // Simplified integration for Phase 2
-    console.log("✅ Component integration completed (Phase 2 hybrid system)");
+    // Component integration completed
   }
 
   /**
@@ -219,7 +217,7 @@ export class AdvancedIntelligence {
           historicalData.data,
         );
 
-        console.log("✅ ML models trained successfully from historical data");
+        // ML models trained successfully
       }
     } catch (error) {
       console.error("❌ Historical data training failed:", error);
@@ -295,7 +293,7 @@ export class AdvancedIntelligence {
   /**
    * Calculate historical performance metrics
    */
-  calculateHistoricalPerformance(data) {
+  calculateHistoricalPerformance(_data) {
     const performance = {
       constraintViolations: [],
       fairnessScores: [],
@@ -321,7 +319,7 @@ export class AdvancedIntelligence {
       await this.performRealTimeAnalysis();
     }, this.config.realTime.monitoringInterval);
 
-    console.log("🔄 Real-time monitoring started");
+    // Real-time monitoring started
   }
 
   /**
@@ -377,15 +375,13 @@ export class AdvancedIntelligence {
       options = {},
     } = params;
 
-    console.log(
-      `🧠 Generating intelligent schedule with Phase 3 AI for period ${monthIndex}...`,
-    );
+    // Generating intelligent schedule
 
     try {
       const startTime = Date.now();
 
       // Step 1: Analyze seasonal context
-      console.log("🗓️ Analyzing seasonal patterns and context...");
+      // Analyzing seasonal patterns and context
       const seasonalAnalysis = await this.seasonalAnalyzer.analyzeCurrentSeason(
         {
           monthIndex,
@@ -395,7 +391,7 @@ export class AdvancedIntelligence {
       );
 
       // Step 2: Apply ML-powered prediction
-      console.log("🤖 Applying machine learning predictions...");
+      // Applying machine learning predictions
       const mlPredictions = await this.mlEngine.generateMLPredictions({
         staffMembers,
         dateRange,
@@ -405,7 +401,7 @@ export class AdvancedIntelligence {
       });
 
       // Step 3: Generate base schedule using Phase 2 engine
-      console.log("⚡ Generating base schedule with Phase 2 engine...");
+      // Generating base schedule
       const baseSchedule = await predictionEngine.generateSchedule({
         monthIndex,
         staffMembers,
@@ -421,7 +417,7 @@ export class AdvancedIntelligence {
       });
 
       // Step 4: Apply ML optimization
-      console.log("🎯 Applying machine learning optimization...");
+      // Applying machine learning optimization
       const mlOptimized = await this.mlEngine.optimizeWithML({
         schedule: baseSchedule.schedule,
         staffMembers,
@@ -431,7 +427,7 @@ export class AdvancedIntelligence {
       });
 
       // Step 5: Apply seasonal adaptations
-      console.log("🌟 Applying seasonal adaptations...");
+      // Applying seasonal adaptations
       const seasonallyAdapted =
         await this.seasonalAnalyzer.applySeasonalAdaptations({
           schedule: mlOptimized.schedule,
@@ -441,7 +437,7 @@ export class AdvancedIntelligence {
         });
 
       // Step 6: Generate comprehensive analysis
-      console.log("📊 Performing advanced analytics...");
+      // Performing advanced analytics
       const advancedAnalysis =
         await this.analyticsEngine.performAdvancedAnalysis({
           schedule: seasonallyAdapted.schedule,
@@ -452,7 +448,7 @@ export class AdvancedIntelligence {
         });
 
       // Step 7: Generate explanations
-      console.log("💡 Generating AI decision explanations...");
+      // Generating AI decision explanations
       const explanations =
         await this.explanationEngine.explainScheduleDecisions({
           schedule: seasonallyAdapted.schedule,
@@ -542,16 +538,10 @@ export class AdvancedIntelligence {
       const cacheKey = `intelligent-${monthIndex}-${staffMembers.length}-${dateRange.length}`;
       this.intelligentCache.set(cacheKey, result);
 
-      console.log(
-        `✅ Intelligent schedule generation completed in ${generationTime}ms`,
-      );
-      console.log(
-        `🧠 Intelligence score: ${result.analysis.intelligenceScore}%`,
-      );
-      console.log(`🤖 ML accuracy: ${result.analysis.mlAccuracy}%`);
-      console.log(
-        `🗓️ Seasonal adaptation: ${result.analysis.seasonalAdaptationScore}%`,
-      );
+      // Intelligent schedule generation completed
+      // Intelligence score calculated
+      // ML accuracy calculated
+      // Seasonal adaptation calculated
 
       return result;
     } catch (error) {
@@ -647,7 +637,7 @@ export class AdvancedIntelligence {
       // Improve future predictions
       await this.learningSystem.learnFromCorrections(corrections);
 
-      console.log(`📚 Learned from ${corrections.length} user corrections`);
+      // Learned from user corrections
     } catch (error) {
       console.error("❌ User correction capture failed:", error);
     }
@@ -721,7 +711,7 @@ export class AdvancedIntelligence {
    * Reset the Advanced Intelligence system
    */
   async reset() {
-    console.log("🔄 Resetting Advanced Intelligence System...");
+    // Resetting Advanced Intelligence System
 
     try {
       // Stop real-time monitoring
@@ -757,7 +747,7 @@ export class AdvancedIntelligence {
         adaptiveLearningScore: 0,
       };
 
-      console.log("✅ Advanced Intelligence System reset successfully");
+      // System reset successfully
 
       return {
         success: true,

@@ -425,7 +425,7 @@ export class RealTimeAdjuster {
   async getCurrentScheduleState() {
     try {
       // Try to get data from monitoring sources
-      for (const [sourceName, source] of this.monitoringSources) {
+      for (const [_sourceName, source] of this.monitoringSources) {
         if (source && typeof source.getCurrentScheduleState === "function") {
           const state = await source.getCurrentScheduleState();
           if (state && state.success) {
@@ -867,7 +867,11 @@ export class RealTimeAdjuster {
     return violations;
   }
 
-  async checkGroupRestrictions({ schedule, staffMembers, dateRange }) {
+  async checkGroupRestrictions({
+    schedule: _schedule,
+    staffMembers: _staffMembers,
+    dateRange: _dateRange,
+  }) {
     const violations = [];
 
     // Simplified group restriction checking
@@ -876,7 +880,11 @@ export class RealTimeAdjuster {
     return violations;
   }
 
-  async checkWorkloadImbalance({ schedule, staffMembers, dateRange }) {
+  async checkWorkloadImbalance({
+    schedule,
+    staffMembers,
+    dateRange: _dateRange,
+  }) {
     const violations = [];
 
     if (!staffMembers || staffMembers.length < 2) return violations;
@@ -1096,7 +1104,7 @@ export class RealTimeAdjuster {
     };
   }
 
-  async rebalanceWorkload(adjustment) {
+  async rebalanceWorkload(_adjustment) {
     console.log("⚖️ Rebalancing workload distribution");
 
     // Simplified workload rebalancing
@@ -1108,7 +1116,7 @@ export class RealTimeAdjuster {
     };
   }
 
-  async fillCoverageGap(adjustment) {
+  async fillCoverageGap(_adjustment) {
     console.log("🔳 Filling coverage gap");
 
     // Simplified coverage gap filling
@@ -1120,7 +1128,7 @@ export class RealTimeAdjuster {
     };
   }
 
-  async handleEmergencyShortage(adjustment) {
+  async handleEmergencyShortage(_adjustment) {
     console.log("🚨 Handling emergency shortage");
 
     // Simplified emergency shortage handling
@@ -1132,7 +1140,7 @@ export class RealTimeAdjuster {
     };
   }
 
-  async handleStaffUnavailability(adjustment) {
+  async handleStaffUnavailability(_adjustment) {
     console.log("👤 Handling staff unavailability");
 
     // Simplified staff unavailability handling

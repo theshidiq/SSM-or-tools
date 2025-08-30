@@ -9,7 +9,6 @@
 import { extractAllDataForAI } from "./utils/DataExtractor";
 import { performComprehensiveAnalysis } from "./core/DataAnalyzer";
 import { recognizePatternsForAllStaff } from "./core/PatternRecognizer";
-import { validateAllConstraints } from "./constraints/ConstraintEngine";
 import { StaffGroupManager } from "./models/StaffGroupModel";
 import { ConstraintManager } from "./models/ConstraintModel";
 import { PreferenceManager } from "./models/PreferenceModel";
@@ -33,8 +32,7 @@ export class AIFoundation {
    * @param {Object} options - Initialization options
    * @returns {Object} Initialization result
    */
-  async initialize(options = {}) {
-    console.log("🚀 Initializing AI Foundation System...");
+  async initialize(_options = {}) {
 
     try {
       const startTime = Date.now();
@@ -54,7 +52,6 @@ export class AIFoundation {
       };
 
       // Initialize data extraction and analysis
-      console.log("📊 Extracting and analyzing historical data...");
       const extractedData = extractAllDataForAI();
 
       if (!extractedData.success) {
@@ -74,7 +71,6 @@ export class AIFoundation {
       initResult.dataAnalysis = analysis.analysis.summary;
 
       // Initialize pattern recognition
-      console.log("🔍 Recognizing staff patterns...");
       const patternAnalysis = recognizePatternsForAllStaff(
         extractedData.data.staffProfiles,
       );
@@ -83,16 +79,12 @@ export class AIFoundation {
         // Create preferences from detected patterns
         const createdPreferences =
           this.preferenceManager.createPreferencesFromPatterns(patternAnalysis);
-        console.log(
-          `✅ Created ${createdPreferences.length} staff preferences from patterns`,
-        );
       }
 
       initResult.components.patternRecognizer = "initialized";
       initResult.components.preferenceManager = "initialized";
 
       // Initialize constraint validation
-      console.log("⚖️ Setting up constraint validation...");
       // Constraint manager is already initialized with default constraints
       initResult.components.constraintEngine = "initialized";
       initResult.components.staffGroupManager = "initialized";
@@ -103,9 +95,6 @@ export class AIFoundation {
       initResult.success = true;
 
       const initTime = Date.now() - startTime;
-      console.log(
-        `✅ AI Foundation System initialized successfully in ${initTime}ms`,
-      );
 
       return initResult;
     } catch (error) {
@@ -132,7 +121,7 @@ export class AIFoundation {
       );
     }
 
-    console.log(`📊 Analyzing schedule for period ${monthIndex}...`);
+    // Analyzing schedule
 
     try {
       // Extract fresh data
@@ -163,7 +152,7 @@ export class AIFoundation {
 
       this.lastAnalysis = analysis;
 
-      console.log("✅ Schedule analysis completed");
+      // Schedule analysis completed
       return analysis;
     } catch (error) {
       console.error("❌ Schedule analysis failed:", error);
@@ -185,7 +174,7 @@ export class AIFoundation {
       );
     }
 
-    console.log("⚖️ Validating schedule constraints...");
+    // Validating schedule constraints
 
     try {
       // Validate using constraint manager
@@ -225,9 +214,7 @@ export class AIFoundation {
         ],
       };
 
-      console.log(
-        `✅ Constraint validation completed: ${result.overallValid ? "VALID" : "VIOLATIONS FOUND"}`,
-      );
+      // Constraint validation completed
       return result;
     } catch (error) {
       console.error("❌ Constraint validation failed:", error);
@@ -249,7 +236,7 @@ export class AIFoundation {
       );
     }
 
-    console.log(`👤 Analyzing preferences for staff ${staffId}...`);
+    // Analyzing staff preferences
 
     try {
       const staffPreferences =
@@ -319,9 +306,7 @@ export class AIFoundation {
         ),
       };
 
-      console.log(
-        `✅ Staff preference analysis completed: ${result.satisfactionLevel}`,
-      );
+      // Staff preference analysis completed
       return result;
     } catch (error) {
       console.error("❌ Staff preference analysis failed:", error);
@@ -360,7 +345,7 @@ export class AIFoundation {
       );
     }
 
-    console.log("🎯 Generating optimization recommendations...");
+    // Generating optimization recommendations
 
     try {
       // Validate constraints first
@@ -448,9 +433,7 @@ export class AIFoundation {
       // Generate action plan
       recommendations.actionPlan = this.generateActionPlan(recommendations);
 
-      console.log(
-        `✅ Generated ${Object.values(recommendations.recommendations).flat().length} optimization recommendations`,
-      );
+      // Generated optimization recommendations
       return recommendations;
     } catch (error) {
       console.error("❌ Optimization recommendation generation failed:", error);
@@ -467,7 +450,7 @@ export class AIFoundation {
     const actionPlan = [];
 
     // Add critical actions first
-    recommendations.recommendations.critical.forEach((rec, index) => {
+    recommendations.recommendations.critical.forEach((rec, _index) => {
       actionPlan.push({
         step: actionPlan.length + 1,
         priority: "critical",
@@ -479,7 +462,7 @@ export class AIFoundation {
     });
 
     // Add high priority actions
-    recommendations.recommendations.high.slice(0, 3).forEach((rec, index) => {
+    recommendations.recommendations.high.slice(0, 3).forEach((rec, _index) => {
       actionPlan.push({
         step: actionPlan.length + 1,
         priority: "high",
@@ -491,16 +474,18 @@ export class AIFoundation {
     });
 
     // Add top medium priority actions
-    recommendations.recommendations.medium.slice(0, 2).forEach((rec, index) => {
-      actionPlan.push({
-        step: actionPlan.length + 1,
-        priority: "medium",
-        action: rec.description,
-        type: rec.type,
-        estimatedTime: "within_week",
-        impact: rec.expectedImpact,
+    recommendations.recommendations.medium
+      .slice(0, 2)
+      .forEach((rec, _index) => {
+        actionPlan.push({
+          step: actionPlan.length + 1,
+          priority: "medium",
+          action: rec.description,
+          type: rec.type,
+          estimatedTime: "within_week",
+          impact: rec.expectedImpact,
+        });
       });
-    });
 
     return actionPlan;
   }
@@ -559,7 +544,7 @@ export class AIFoundation {
    */
   importData(data) {
     try {
-      console.log("📥 Importing AI foundation data...");
+      // Importing AI foundation data
 
       // Import staff groups
       if (data.staffGroups) {
@@ -585,7 +570,7 @@ export class AIFoundation {
         this.lastAnalysis = data.lastAnalysis;
       }
 
-      console.log("✅ AI foundation data imported successfully");
+      // Data import completed
       return {
         success: true,
         message: "Data imported successfully",
@@ -606,7 +591,7 @@ export class AIFoundation {
    * @returns {Object} Reset result
    */
   reset() {
-    console.log("🔄 Resetting AI Foundation System...");
+    // Resetting AI Foundation System
 
     try {
       this.initialized = false;
@@ -617,7 +602,7 @@ export class AIFoundation {
       this.analysisHistory = [];
       this.initializationTime = null;
 
-      console.log("✅ AI Foundation System reset successfully");
+      // System reset completed
       return {
         success: true,
         message: "System reset successfully",
@@ -667,4 +652,3 @@ export { PreferenceManager } from "./models/PreferenceModel";
 export { extractAllDataForAI } from "./utils/DataExtractor";
 export { performComprehensiveAnalysis } from "./core/DataAnalyzer";
 export { recognizePatternsForAllStaff } from "./core/PatternRecognizer";
-export { validateAllConstraints } from "./constraints/ConstraintEngine";

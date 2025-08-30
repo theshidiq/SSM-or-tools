@@ -927,8 +927,8 @@ export class SeasonalAnalyzer {
       const averageDemand =
         dailyForecasts.reduce((sum, f) => sum + f.demandFactor, 0) /
         dailyForecasts.length;
-      const maxDemand = Math.max(...dailyForecasts.map((f) => f.demandFactor));
-      const minDemand = Math.min(...dailyForecasts.map((f) => f.demandFactor));
+      const _maxDemand = Math.max(...dailyForecasts.map((f) => f.demandFactor));
+      const _minDemand = Math.min(...dailyForecasts.map((f) => f.demandFactor));
 
       forecast.averageDemand = averageDemand;
       forecast.trend =
@@ -1325,7 +1325,7 @@ export class SeasonalAnalyzer {
     };
   }
 
-  calculateWeeklyPatterns(seasonalData) {
+  calculateWeeklyPatterns(_seasonalData) {
     // Simplified weekly pattern calculation
     return {
       averageWorkDaysPerWeek: 5.2,

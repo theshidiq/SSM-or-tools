@@ -182,10 +182,10 @@ const ShiftScheduleEditorRealtime = ({
       window.dataIntegrityMonitor = integrityMonitor;
       window.runPhase1TestSuite = runPhase1TestSuite;
 
-      console.log("🔧 Development tools initialized");
-      console.log("• window.manualInputTestSuite - Manual input testing");
-      console.log("• window.dataIntegrityMonitor - Data integrity checking");
-      console.log("• window.runPhase1TestSuite() - Phase 1 validation");
+      // Development tools initialized
+      // Manual input testing tools available
+      // Data integrity monitor available
+      // Phase 1 test suite available
 
       return () => {
         delete window.manualInputTestSuite;
@@ -197,18 +197,18 @@ const ShiftScheduleEditorRealtime = ({
 
   // Helper functions (placeholder implementations)
   const cleanupAllPeriods = useCallback(() => {
-    console.log("🧹 cleanupAllPeriods called - Phase 1 placeholder");
+    // cleanupAllPeriods placeholder
     return Promise.resolve();
   }, []);
 
   const fixStaffInconsistencies = useCallback(() => {
-    console.log("🔧 fixStaffInconsistencies called - Phase 1 placeholder");
+    // fixStaffInconsistencies placeholder
     return Promise.resolve();
   }, []);
 
   // Connection status check function
   const checkConnectionStatus = useCallback(() => {
-    console.log("🔍 Checking connection status...");
+    // Checking connection status
     return Promise.resolve({
       isConnected: isConnected,
       status: realtimeStatus.status,

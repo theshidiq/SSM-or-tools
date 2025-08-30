@@ -82,7 +82,7 @@ export class MLEngine {
    * @returns {Object} Initialization result
    */
   async initialize(options = {}) {
-    console.log("🤖 Initializing Machine Learning Engine...");
+    // Initializing Machine Learning Engine
 
     try {
       const startTime = Date.now();
@@ -107,7 +107,7 @@ export class MLEngine {
       this.initialized = true;
       const initTime = Date.now() - startTime;
 
-      console.log(`✅ ML Engine initialized in ${initTime}ms`);
+      // ML Engine initialized
 
       return {
         success: true,
@@ -133,7 +133,7 @@ export class MLEngine {
    */
   registerModel(name, model) {
     this.models.set(name, model);
-    console.log(`📝 Registered ML model: ${name}`);
+    // ML model registered
   }
 
   /**
@@ -143,7 +143,7 @@ export class MLEngine {
   activateModel(name) {
     if (this.models.has(name)) {
       this.activeModels.add(name);
-      console.log(`✅ Activated ML model: ${name}`);
+      // ML model activated
     } else {
       console.warn(`⚠️ Model not found: ${name}`);
     }
@@ -159,7 +159,7 @@ export class MLEngine {
       throw new Error("ML Engine not initialized");
     }
 
-    console.log("🧠 Training neural networks from historical data...");
+    // Training neural networks
 
     try {
       const startTime = Date.now();
@@ -181,9 +181,7 @@ export class MLEngine {
           ...this.config.neuralNetwork,
           onEpochEnd: (epoch, loss, accuracy) => {
             if (epoch % 10 === 0) {
-              console.log(
-                `Epoch ${epoch}: loss=${loss.toFixed(4)}, accuracy=${accuracy.toFixed(4)}`,
-              );
+      // Training accuracy logged
             }
           },
         },
@@ -192,10 +190,8 @@ export class MLEngine {
       const trainingTime = Date.now() - startTime;
       this.performance.trainingTime = trainingTime;
 
-      console.log(`✅ Neural network training completed in ${trainingTime}ms`);
-      console.log(
-        `🎯 Training accuracy: ${nnTrainingResult.accuracy.toFixed(4)}`,
-      );
+      // Neural network training completed
+      // Training accuracy logged
 
       return {
         success: true,
@@ -226,7 +222,7 @@ export class MLEngine {
       throw new Error("ML Engine not initialized");
     }
 
-    console.log("🌳 Training ensemble methods from historical data...");
+    // Training ensemble methods
 
     try {
       const startTime = Date.now();
@@ -247,21 +243,15 @@ export class MLEngine {
         {
           ...this.config.ensemble,
           onModelTrained: (modelName, accuracy) => {
-            console.log(
-              `✅ ${modelName} trained with accuracy: ${accuracy.toFixed(4)}`,
-            );
+      // Training accuracy logged
           },
         },
       );
 
       const trainingTime = Date.now() - startTime;
 
-      console.log(
-        `✅ Ensemble methods training completed in ${trainingTime}ms`,
-      );
-      console.log(
-        `🎯 Ensemble accuracy: ${ensembleTrainingResult.accuracy.toFixed(4)}`,
-      );
+      // Training accuracy logged
+      // Training accuracy logged
 
       return {
         success: true,
@@ -289,7 +279,7 @@ export class MLEngine {
    */
   async prepareTrainingData(historicalData) {
     try {
-      console.log("📊 Preparing training data...");
+      // Preparing training data
 
       // Extract features using feature engineer
       const featureExtractionResult =
@@ -319,9 +309,7 @@ export class MLEngine {
       this.features = featureExtractionResult.features;
       this.labels = labels;
 
-      console.log(
-        `✅ Training data prepared: ${featureExtractionResult.features.length} samples, ${featureExtractionResult.featureNames.length} features`,
-      );
+      // Training accuracy logged
 
       return {
         success: true,
@@ -354,9 +342,9 @@ export class MLEngine {
 
     if (historicalData.scheduleData) {
       Object.entries(historicalData.scheduleData).forEach(
-        ([monthKey, monthData]) => {
-          Object.entries(monthData).forEach(([staffId, staffSchedule]) => {
-            Object.entries(staffSchedule).forEach(([dateKey, shiftType]) => {
+        ([_monthKey, monthData]) => {
+          Object.entries(monthData).forEach(([_staffId, staffSchedule]) => {
+            Object.entries(staffSchedule).forEach(([_dateKey, shiftType]) => {
               // Create label based on shift type and context
               labels.push(this.encodeShiftType(shiftType));
             });
@@ -465,10 +453,10 @@ export class MLEngine {
       dateRange,
       existingSchedule,
       seasonalContext,
-      options = {},
+      _options = {},
     } = params;
 
-    console.log("🔮 Generating ML-powered predictions...");
+    // Generating ML-powered predictions
 
     try {
       const startTime = Date.now();
@@ -516,10 +504,8 @@ export class MLEngine {
       this.performance.predictionTime = predictionTime;
       this.performance.totalPredictions++;
 
-      console.log(`✅ ML predictions generated in ${predictionTime}ms`);
-      console.log(
-        `🎯 Prediction confidence: ${confidence.overall.toFixed(2)}%`,
-      );
+      // ML predictions generated
+      // Training accuracy logged
 
       return {
         success: true,
@@ -826,7 +812,7 @@ export class MLEngine {
     const { schedule, staffMembers, dateRange, predictions, seasonalContext } =
       params;
 
-    console.log("🎯 Optimizing schedule with machine learning...");
+    // Optimizing schedule with ML
 
     try {
       const startTime = Date.now();
@@ -886,7 +872,7 @@ export class MLEngine {
    * @param {Object} params - Parameters for suggestion generation
    * @returns {Object} Optimization suggestions
    */
-  async generateOptimizationSuggestions(params) {
+  async generateOptimizationSuggestions(_params) {
     const suggestions = {
       shiftSwaps: [],
       staffReassignments: [],
@@ -907,7 +893,7 @@ export class MLEngine {
    * @param {Object} suggestions - Optimization suggestions
    * @returns {Object} Optimized schedule
    */
-  async applyMLOptimizations(schedule, suggestions) {
+  async applyMLOptimizations(schedule, _suggestions) {
     // Create a copy of the schedule for optimization
     const optimizedSchedule = JSON.parse(JSON.stringify(schedule));
 
@@ -923,7 +909,7 @@ export class MLEngine {
    * @returns {Object} Update result
    */
   async updateFromFeedback(corrections) {
-    console.log("📚 Updating ML models from user feedback...");
+    // Updating ML models from feedback
 
     try {
       // Process corrections into training format
@@ -947,7 +933,7 @@ export class MLEngine {
       // Update performance metrics
       this.updatePerformanceFromFeedback(corrections);
 
-      console.log(`✅ Updated ${updateResults.size} models from user feedback`);
+      // Models updated from feedback
 
       return {
         success: true,
@@ -995,7 +981,7 @@ export class MLEngine {
    * @param {Object} correction - User correction
    * @returns {Array} Feature vector
    */
-  extractFeaturesFromCorrection(correction) {
+  extractFeaturesFromCorrection(_correction) {
     // This would extract relevant features based on the correction context
     // For now, return a basic feature vector
     return [0, 0, 0, 0]; // Placeholder
@@ -1044,7 +1030,7 @@ export class MLEngine {
    * @returns {Object} Reset result
    */
   async reset() {
-    console.log("🔄 Resetting ML Engine...");
+    // Resetting ML Engine
 
     try {
       // Reset models
@@ -1073,7 +1059,7 @@ export class MLEngine {
         correctPredictions: 0,
       };
 
-      console.log("✅ ML Engine reset successfully");
+      // ML Engine reset successfully
 
       return {
         success: true,

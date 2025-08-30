@@ -226,7 +226,7 @@ export class EnsembleModel {
       ];
 
       // Train models on training fold
-      const foldResults = await this.trainIndividualModels(
+      const _foldResults = await this.trainIndividualModels(
         trainFeatures,
         trainLabels,
         config,
@@ -649,7 +649,7 @@ export class EnsembleModel {
    */
   supportsIncrementalLearning() {
     // Check if any individual model supports incremental learning
-    for (const [modelName, model] of this.models) {
+    for (const [_modelName, model] of this.models) {
       if (
         model.supportsIncrementalLearning &&
         model.supportsIncrementalLearning()
@@ -754,7 +754,7 @@ export class EnsembleModel {
 
     try {
       // Reset individual models
-      for (const [modelName, model] of this.models) {
+      for (const [_modelName, model] of this.models) {
         if (model.reset) {
           await model.reset();
         }

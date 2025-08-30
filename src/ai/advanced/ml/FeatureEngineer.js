@@ -97,14 +97,14 @@ export class FeatureEngineer {
 
       // Extract features for each schedule entry
       if (historicalData.scheduleData) {
-        for (const [monthKey, monthData] of Object.entries(
+        for (const [_monthKey, monthData] of Object.entries(
           historicalData.scheduleData,
         )) {
-          for (const [staffId, staffSchedule] of Object.entries(monthData)) {
-            for (const [dateKey, shiftType] of Object.entries(staffSchedule)) {
+          for (const [_staffId, staffSchedule] of Object.entries(monthData)) {
+            for (const [_dateKey, shiftType] of Object.entries(staffSchedule)) {
               const sampleFeatures = await this.extractSampleFeatures({
-                staffId,
-                dateKey,
+                staffId: _staffId,
+                dateKey: _dateKey,
                 shiftType,
                 monthData,
                 staffSchedule,
@@ -352,7 +352,7 @@ export class FeatureEngineer {
    * @param {string} dateKey - Date key string
    * @returns {Array} Time features
    */
-  extractTimeFeatures(date, dateKey) {
+  extractTimeFeatures(date, _dateKey) {
     const features = [];
 
     // Day of week (0-6, Sunday = 0)
@@ -501,7 +501,7 @@ export class FeatureEngineer {
    * @param {string} staffId - Staff ID
    * @returns {Array} Workload features
    */
-  extractWorkloadFeatures(staffSchedule, monthData, staffId) {
+  extractWorkloadFeatures(staffSchedule, monthData, _staffId) {
     const features = [];
 
     // Monthly workload
@@ -579,7 +579,7 @@ export class FeatureEngineer {
    * @param {Object} historicalData - Historical data
    * @returns {Array} Seasonal features
    */
-  extractSeasonalFeatures(date, historicalData) {
+  extractSeasonalFeatures(date, _historicalData) {
     const features = [];
 
     // Season encoding (0-3 for spring, summer, fall, winter)
@@ -855,7 +855,7 @@ export class FeatureEngineer {
    * @param {boolean} useExistingParams - Use existing parameters
    * @returns {Array} Encoded features
    */
-  async applyCategoricalEncoding(features, useExistingParams) {
+  async applyCategoricalEncoding(features, _useExistingParams) {
     // For simplicity, return features as-is
     // In practice, would implement one-hot encoding for categorical features
     return features;
@@ -867,7 +867,7 @@ export class FeatureEngineer {
    * @param {string} scalingType - Scaling type
    * @returns {Object} Scaling parameters
    */
-  calculateScalingParameters(values, scalingType) {
+  calculateScalingParameters(values, _scalingType) {
     const validValues = values.filter((v) => !isNaN(v) && isFinite(v));
 
     if (validValues.length === 0) {
@@ -1072,7 +1072,7 @@ export class FeatureEngineer {
       : 0;
   }
 
-  getStaffGroupMemberships(staffId, historicalData) {
+  getStaffGroupMemberships(_staffId, _historicalData) {
     // Simplified - would check actual group memberships
     return []; // Return array of group IDs
   }
@@ -1139,13 +1139,13 @@ export class FeatureEngineer {
     return 0.5; // Weekday normal
   }
 
-  getDayOffPreference(staffId, dayOfWeek, historicalData) {
+  getDayOffPreference(_staffId, dayOfWeek, _historicalData) {
     // Simplified preference calculation
     if (dayOfWeek === 0) return 0.8; // Sunday preference
     return 0.2; // Other days
   }
 
-  getShiftTypePreference(staffId, dayOfWeek, historicalData) {
+  getShiftTypePreference(_staffId, dayOfWeek, _historicalData) {
     // Simplified shift preferences [early, normal, late]
     if (dayOfWeek === 0) return [0.6, 0.3, 0.1]; // Sunday prefer early
     return [0.2, 0.6, 0.2]; // Other days prefer normal

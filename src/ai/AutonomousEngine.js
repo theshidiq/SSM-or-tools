@@ -188,7 +188,7 @@ export class AutonomousEngine {
         return;
       }
 
-      const { staffProfiles, summary } = dataResult.data;
+      const { summary } = dataResult.data;
       if (summary.totalStaff === 0) {
         console.log("⚠️ No staff data available for scheduling");
         return;
@@ -226,7 +226,7 @@ export class AutonomousEngine {
 
     // Check for upcoming periods that need schedules
     const currentDate = new Date();
-    const forecastDate = new Date(
+    const _forecastDate = new Date(
       currentDate.getTime() +
         this.predictiveScheduler.forecastHorizon * 24 * 60 * 60 * 1000,
     );
@@ -276,7 +276,7 @@ export class AutonomousEngine {
     let filledCells = 0;
 
     Object.values(scheduleData).forEach((staffSchedule) => {
-      Object.entries(staffSchedule).forEach(([date, shift]) => {
+      Object.entries(staffSchedule).forEach(([_date, shift]) => {
         totalCells++;
         if (shift && shift.trim() !== "") {
           filledCells++;
@@ -560,7 +560,7 @@ export class AutonomousEngine {
 
     try {
       // Perform a lightweight operation to measure response
-      const status = advancedIntelligence.getSystemStatus();
+      const _status = advancedIntelligence.getSystemStatus();
       return Date.now() - startTime;
     } catch (error) {
       return Date.now() - startTime; // Return time even if operation failed

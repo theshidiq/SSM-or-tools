@@ -36,7 +36,7 @@ const loadErrorHandler = async () => {
 // Enhanced lazy import for production-ready hybrid AI system fallback
 const loadEnhancedAISystem = async () => {
   try {
-    console.log("🚀 Loading enhanced hybrid AI system...");
+    // Loading enhanced hybrid AI system
 
     // Load hybrid system components with proper webpack imports
     const { HybridPredictor } = await import(
@@ -60,10 +60,6 @@ const loadEnhancedAISystem = async () => {
       isEnhanced: true,
     };
   } catch (error) {
-    console.log(
-      "⚠️ Enhanced AI system not available, attempting fallback...",
-      error.message,
-    );
 
     // Fallback to legacy system with proper webpack imports
     try {
@@ -84,7 +80,7 @@ const loadEnhancedAISystem = async () => {
         fallback: true,
       };
     } catch (fallbackError) {
-      console.log("❌ Both enhanced and legacy AI systems unavailable");
+      // AI systems unavailable
       return null;
     }
   }
@@ -121,7 +117,7 @@ export const useAIAssistant = (
   useEffect(() => {
     const initializeConfigurationSystem = async () => {
       try {
-        console.log("🚀 Initializing AI configuration system (lazy)...");
+        // Initializing AI configuration system
         setConfigurationStatus("initializing");
 
         // Lazy load modules in background to prevent blocking
@@ -134,7 +130,7 @@ export const useAIAssistant = (
 
             // Set up cache change listener (non-blocking)
             configurationCache.addChangeListener((changedType) => {
-              console.log(`🔄 Configuration changed: ${changedType}`);
+              // Configuration changed
               setConfigurationStatus("updated");
 
               // Notify AI system of the change
@@ -160,11 +156,11 @@ export const useAIAssistant = (
             // Set up legacy cache invalidation listener (for backwards compatibility)
             configInvalidationUnsubscribe.current =
               constraintEngine.onConfigurationCacheInvalidated(() => {
-                console.log("🔄 Legacy configuration update detected");
+                // Legacy configuration update detected
                 configurationCache.forceRefresh().catch(console.error);
               });
 
-            console.log("🎯 AI configuration system listeners ready");
+            // AI configuration system ready
 
             // Initialize cache asynchronously in background (non-blocking)
             if (typeof requestIdleCallback !== "undefined") {
@@ -172,13 +168,7 @@ export const useAIAssistant = (
                 async () => {
                   try {
                     if (!configurationCache.isHealthy()) {
-                      console.log(
-                        "📦 Pre-loading system configurations in background...",
-                      );
                       await configurationCache.initialize();
-                      console.log(
-                        "✅ Configuration cache ready - AI will use instant access",
-                      );
                     }
                     setConfigurationStatus("ready");
                   } catch (error) {
@@ -195,13 +185,7 @@ export const useAIAssistant = (
               setTimeout(async () => {
                 try {
                   if (!configurationCache.isHealthy()) {
-                    console.log(
-                      "📦 Pre-loading system configurations in background...",
-                    );
                     await configurationCache.initialize();
-                    console.log(
-                      "✅ Configuration cache ready - AI will use instant access",
-                    );
                   }
                   setConfigurationStatus("ready");
                 } catch (error) {
@@ -258,16 +242,10 @@ export const useAIAssistant = (
           now - performanceMonitor.current.lastCleanup;
 
         if (memory.numTensors > 100 && timeSinceLastCleanup > 30000) {
-          console.log(
-            `⚠️ High tensor count detected (${memory.numTensors}), performing cleanup...`,
-          );
           try {
             const beforeCleanup = memory.numTensors;
             window.tf.disposeVariables();
             const afterMemory = window.tf.memory();
-            console.log(
-              `🧼 Cleaned up ${beforeCleanup - afterMemory.numTensors} tensors`,
-            );
             performanceMonitor.current.tensorCleanupCount++;
             performanceMonitor.current.lastCleanup = now;
           } catch (error) {
@@ -296,9 +274,6 @@ export const useAIAssistant = (
       setIsProcessing(true);
       const startTime = Date.now();
 
-      console.log(
-        "🚀 Initializing main-thread hybrid AI system with business rule compliance...",
-      );
       const aiSystem = await loadEnhancedAISystem();
 
       if (aiSystem && aiSystem.isEnhanced) {
@@ -324,12 +299,9 @@ export const useAIAssistant = (
         setSystemHealth(hybridPredictor.getDetailedStatus());
         setIsInitialized(true);
 
-        console.log(
-          `✅ Enhanced AI system initialized in ${Date.now() - startTime}ms (business rule compliant)`,
-        );
       } else if (aiSystem && aiSystem.fallback) {
         // Legacy system fallback
-        console.log("🔄 Falling back to legacy AI system...");
+        // Falling back to legacy AI system
 
         await aiSystem.autonomousEngine.initialize({
           scheduleGenerationInterval: 60000,
@@ -369,9 +341,6 @@ export const useAIAssistant = (
   // Emergency prediction fallback with basic business rule compliance
   const performEmergencyPredictionWithRules = useCallback(
     async (scheduleData, staffMembers) => {
-      console.log(
-        "🆘 Performing emergency prediction with basic rule compliance...",
-      );
 
       try {
         const newSchedule = JSON.parse(JSON.stringify(scheduleData));
@@ -472,9 +441,6 @@ export const useAIAssistant = (
     const startTime = Date.now();
 
     try {
-      console.log(
-        "🎯 Starting AI prediction with strict business rule enforcement...",
-      );
 
       // **PHASE 2 ENHANCEMENT: Invalidate feature cache on configuration changes**
       try {
@@ -491,13 +457,7 @@ export const useAIAssistant = (
         );
 
         if (cacheInvalidated) {
-          console.log(
-            "⚡ Feature cache invalidated due to configuration changes - will rebuild during predictions",
-          );
         } else {
-          console.log(
-            "⚡ Feature cache is valid - predictions will benefit from cache hits",
-          );
         }
 
         // Log cache health status
@@ -506,9 +466,6 @@ export const useAIAssistant = (
           cacheHealth.status !== "excellent" &&
           cacheHealth.issues.length > 0
         ) {
-          console.log(
-            `📊 Cache health: ${cacheHealth.status} (${cacheHealth.issues.join(", ")})`,
-          );
         }
       } catch (cacheError) {
         console.warn("⚠️ Cache invalidation check failed:", cacheError.message);
@@ -543,9 +500,6 @@ export const useAIAssistant = (
 
       // Method 1: Enhanced hybrid system (main thread with non-blocking yielding)
       if (systemType === "enhanced" && aiSystemRef.current) {
-        console.log(
-          "🤖 Using enhanced hybrid AI system with business rule validation...",
-        );
         result = await processWithEnhancedSystemNonBlocking(
           processingData,
           progressCallback,
@@ -553,7 +507,7 @@ export const useAIAssistant = (
         );
       } else {
         // Method 2: Legacy or basic fallback with yielding
-        console.log("🔄 Using legacy AI processing with yielding...");
+        // Using legacy AI processing
         result = await processWithLegacySystemNonBlocking(
           processingData,
           progressCallback,
@@ -620,9 +574,6 @@ export const useAIAssistant = (
 
       // Try emergency recovery
       if (recoveryAttempts < 2 && !error.message.includes("timeout")) {
-        console.log(
-          "🆘 Attempting emergency recovery with business rule compliance...",
-        );
 
         const emergencyResult = await performEmergencyPredictionWithRules(
           scheduleData,
@@ -679,9 +630,6 @@ export const useAIAssistant = (
         canCancel: false,
       };
 
-      console.log(
-        "🎯 Processing with enhanced system (main-thread with yielding + business rules)...",
-      );
 
       const ENHANCED_TIMEOUT = processingData.timeout || 20000;
       let isTimedOut = false;
@@ -739,9 +687,6 @@ export const useAIAssistant = (
         canCancel: false,
       };
 
-      console.log(
-        "📚 Processing with legacy system (non-blocking with yielding + basic rules)...",
-      );
 
       if (progressCallback) {
         progressCallback({
@@ -804,7 +749,7 @@ export const useAIAssistant = (
   // Emergency worker fallback when even enhanced system fails
   const performEmergencyWorkerFallback = useCallback(
     async (processingData, progressCallback) => {
-      console.log("🆘 Performing emergency worker fallback...");
+      // Performing emergency worker fallback
 
       if (progressCallback) {
         progressCallback({
@@ -935,9 +880,6 @@ export const useAIAssistant = (
     }
 
     const processingInfo = currentProcessingRef.current;
-    console.log(
-      `🛑 Cancelling ${processingInfo.type} main-thread processing...`,
-    );
 
     try {
       // Main-thread processing: just clear state (processing will check and stop)
@@ -945,7 +887,7 @@ export const useAIAssistant = (
       setProcessingProgress(null);
       currentProcessingRef.current = null;
 
-      console.log("✅ Main-thread processing cancelled successfully");
+      // Processing cancelled successfully
       return {
         success: true,
         method: "main_thread_cancel",
@@ -1081,11 +1023,8 @@ export const useAIAssistant = (
       };
 
       try {
-        console.log("🔄 Starting non-blocking processing with yielding...");
+        // Starting non-blocking processing
         const result = await processingFn(yieldFunction);
-        console.log(
-          `✅ Non-blocking processing completed with ${yieldCount} yields`,
-        );
         return result;
       } catch (error) {
         console.warn(
@@ -1109,9 +1048,6 @@ export const useAIAssistant = (
       historicalData,
       yieldFn,
     ) => {
-      console.log(
-        "🚀 Starting comprehensive AI analysis with historical data and business rules...",
-      );
 
       const workShifts = ["○", "△", "▽", ""];
       const restShifts = ["×"];
@@ -1203,9 +1139,6 @@ export const useAIAssistant = (
         baseAccuracy + historyBonus + existingDataBonus + ruleComplianceBonus,
       );
 
-      console.log(
-        `✅ AI Analysis with Rules Complete: ${filledCells} cells filled with ${accuracy}% confidence`,
-      );
 
       return {
         success: filledCells > 0,
@@ -1371,7 +1304,7 @@ export const useAIAssistant = (
   const resetSystem = useCallback(async () => {
     const system = aiSystemRef.current;
 
-    console.log("🔄 Starting comprehensive main-thread system reset...");
+    // Starting system reset
 
     try {
       // Reset error tracking
@@ -1388,7 +1321,7 @@ export const useAIAssistant = (
         const tensorCount = window.tf.memory().numTensors;
         window.tf.disposeVariables();
         performanceMonitor.current.tensorCleanupCount++;
-        console.log(`🧼 Cleaned up ${tensorCount} tensors`);
+        // Tensors cleaned up
       }
 
       // Reset system components
@@ -1406,7 +1339,7 @@ export const useAIAssistant = (
       performanceMonitor.current.processingTimes = [];
       performanceMonitor.current.yieldOperations = 0;
 
-      console.log("✅ Main-thread system reset completed successfully");
+      // System reset completed
       return {
         success: true,
         message: "システムを完全にリセットしました（メインスレッド）",
@@ -1508,7 +1441,7 @@ export const useAIAssistant = (
     configurationStatus,
     refreshConfiguration: async () => {
       try {
-        console.log("🔄 Refreshing AI configuration...");
+        // Refreshing AI configuration
 
         // Lazy load constraint engine
         const constraintEngine = await loadConstraintEngine();
@@ -1591,9 +1524,6 @@ const analyzeAndFillScheduleWithHistory = async (
   currentMonthIndex,
   historicalData,
 ) => {
-  console.log(
-    "🚀 Starting comprehensive AI analysis with historical data from all periods...",
-  );
 
   const workShifts = ["○", "△", "▽", ""];
   const restShifts = ["×"];
@@ -1670,9 +1600,6 @@ const analyzeAndFillScheduleWithHistory = async (
     baseAccuracy + historyBonus + existingDataBonus,
   );
 
-  console.log(
-    `✅ AI Analysis Complete: ${filledCells} cells filled with ${accuracy}% confidence`,
-  );
 
   return {
     success: filledCells > 0,
