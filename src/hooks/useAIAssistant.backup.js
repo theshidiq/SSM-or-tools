@@ -8,19 +8,19 @@
 import { useState, useCallback, useRef, useEffect } from "react";
 import { optimizedStorage } from "../utils/storageUtils";
 import { generateDateRange } from "../utils/dateUtils";
-import {
-  onConfigurationCacheInvalidated,
-  refreshAllConfigurations,
-} from "../ai/constraints/ConstraintEngine";
-import { configurationCache } from "../ai/cache/ConfigurationCacheManager";
+// Lazy imports to prevent bundling AI code in main chunk
+const loadConstraintEngine = async () => {
+  const module = await import("../ai/constraints/ConstraintEngine");
+  return {
+    onConfigurationCacheInvalidated: module.onConfigurationCacheInvalidated,
+    refreshAllConfigurations: module.refreshAllConfigurations,
+  };
+};
 
-// Enhanced imports for production-ready AI system
-let aiErrorHandler = null;
-try {
-  ({ aiErrorHandler } = require("../ai/utils/ErrorHandler"));
-} catch (error) {
-  console.log("⚠️ Enhanced error handler not available");
-}
+const loadConfigurationCache = async () => {
+  const module = await import("../ai/cache/ConfigurationCacheManager");
+  return module.configurationCache;
+};
 
 // Enhanced lazy import for production-ready hybrid AI system
 const loadEnhancedAISystem = async () => {
@@ -105,10 +105,11 @@ export const useAIAssistant = (
 
   // Set up configuration change monitoring and cache initialization
   useEffect(() => {
-    const initializeConfigurationSystem = () => {
+    const initializeConfigurationSystem = async () => {
       try {
         console.log("🚀 Initializing AI configuration system...");
 
+        const configurationCache = await loadConfigurationCache();
         // Set up cache change listener immediately (non-blocking)
         configurationCache.addChangeListener((changedType) => {
           console.log(`🔄 Configuration changed: ${changedType}`);
@@ -183,13 +184,24 @@ export const useAIAssistant = (
     };
 
     // Set up legacy cache invalidation listener (for backwards compatibility)
-    configInvalidationUnsubscribe.current = onConfigurationCacheInvalidated(
-      () => {
-        console.log("🔄 Legacy configuration update detected");
-        // Refresh the new cache system
-        configurationCache.forceRefresh().catch(console.error);
-      },
-    );
+    const setupLegacyListener = async () => {
+      try {
+        const constraintEngine = await loadConstraintEngine();
+        const configurationCache = await loadConfigurationCache();
+        
+        configInvalidationUnsubscribe.current = constraintEngine.onConfigurationCacheInvalidated(
+          () => {
+            console.log("🔄 Legacy configuration update detected");
+            // Refresh the new cache system
+            configurationCache.forceRefresh().catch(console.error);
+          },
+        );
+      } catch (error) {
+        console.warn("⚠️ Failed to setup legacy configuration listener:", error);
+      }
+    };
+    
+    setupLegacyListener();
 
     // Initialize the configuration system (non-blocking)
     initializeConfigurationSystem();
@@ -990,7 +1002,8 @@ export const useAIAssistant = (
     refreshConfiguration: async () => {
       try {
         console.log("🔄 Refreshing AI configuration...");
-        await refreshAllConfigurations();
+        const constraintEngine = await loadConstraintEngine();
+        await constraintEngine.refreshAllConfigurations();
         setConfigurationStatus("refreshed");
 
         // Force AI system to refresh if it supports it

@@ -12,7 +12,6 @@
 import { useState, useCallback, useRef, useEffect } from "react";
 import { optimizedStorage } from "../utils/storageUtils";
 import { generateDateRange } from "../utils/dateUtils";
-import { featureCacheManager } from "../ai/cache/FeatureCacheManager.js";
 import { useServerAIIntegration } from "./useServerAIIntegration";
 
 // Lazy imports for client-side fallback
@@ -27,6 +26,11 @@ const loadConstraintEngine = async () => {
 const loadConfigurationCache = async () => {
   const module = await import("../ai/cache/ConfigurationCacheManager");
   return module.configurationCache;
+};
+
+const loadFeatureCacheManager = async () => {
+  const module = await import("../ai/cache/FeatureCacheManager");
+  return module.featureCacheManager;
 };
 
 const loadEnhancedAISystem = async () => {
@@ -305,6 +309,7 @@ export const useAIAssistantEnhanced = (
 
       // Invalidate feature cache if needed
       try {
+        const featureCacheManager = await loadFeatureCacheManager();
         const dateRange = generateDateRange(currentMonthIndex);
         const cacheInvalidated = featureCacheManager.invalidateOnConfigChange(
           staffMembers,

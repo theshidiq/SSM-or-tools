@@ -6,21 +6,32 @@
  */
 
 import { useCallback, useEffect, useState } from "react";
-import { configurationCache } from "../ai/cache/ConfigurationCacheManager";
+
+// Lazy import to prevent bundling AI code in main chunk
+const loadConfigurationCache = async () => {
+  const module = await import("../ai/cache/ConfigurationCacheManager");
+  return module.configurationCache;
+};
 
 export const useConfigurationCache = () => {
   const [cacheStatus, setCacheStatus] = useState("unknown");
   const [metrics, setMetrics] = useState(null);
 
   // Get cache health status
-  const getCacheStatus = useCallback(() => {
-    if (!configurationCache.isHealthy()) {
-      setCacheStatus("initializing");
-    } else {
-      setCacheStatus("ready");
-    }
+  const getCacheStatus = useCallback(async () => {
+    try {
+      const configurationCache = await loadConfigurationCache();
+      if (!configurationCache.isHealthy()) {
+        setCacheStatus("initializing");
+      } else {
+        setCacheStatus("ready");
+      }
 
-    setMetrics(configurationCache.getMetrics());
+      setMetrics(configurationCache.getMetrics());
+    } catch (error) {
+      console.warn("⚠️ Failed to get cache status:", error);
+      setCacheStatus("error");
+    }
   }, []);
 
   // Refresh cache when settings change
@@ -31,6 +42,7 @@ export const useConfigurationCache = () => {
         `🔄 Refreshing configuration cache${settingType ? ` for ${settingType}` : ""}...`,
       );
 
+      const configurationCache = await loadConfigurationCache();
       await configurationCache.refreshCache(settingType);
 
       setCacheStatus("ready");
@@ -49,6 +61,7 @@ export const useConfigurationCache = () => {
       setCacheStatus("force-refreshing");
       console.log("🚀 Force refreshing configuration cache...");
 
+      const configurationCache = await loadConfigurationCache();
       await configurationCache.forceRefresh();
 
       setCacheStatus("ready");
@@ -62,8 +75,9 @@ export const useConfigurationCache = () => {
   }, []);
 
   // Get cached configuration
-  const getConfiguration = useCallback((type = "full") => {
+  const getConfiguration = useCallback(async (type = "full") => {
     try {
+      const configurationCache = await loadConfigurationCache();
       return configurationCache.getConfiguration(type);
     } catch (error) {
       console.error(`❌ Failed to get ${type} configuration:`, error);
@@ -72,8 +86,14 @@ export const useConfigurationCache = () => {
   }, []);
 
   // Check if cache is ready
-  const isCacheReady = useCallback(() => {
-    return configurationCache.isHealthy();
+  const isCacheReady = useCallback(async () => {
+    try {
+      const configurationCache = await loadConfigurationCache();
+      return configurationCache.isHealthy();
+    } catch (error) {
+      console.warn("⚠️ Failed to check cache readiness:", error);
+      return false;
+    }
   }, []);
 
   // Initialize cache status on mount
@@ -90,7 +110,7 @@ export const useConfigurationCache = () => {
     // Status
     cacheStatus,
     metrics,
-    isCacheReady: isCacheReady(),
+    isCacheReady,
 
     // Actions
     refreshCache,

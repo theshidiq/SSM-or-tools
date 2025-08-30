@@ -23,7 +23,11 @@ import {
 } from "lucide-react";
 import { monthPeriods } from "../../utils/dateUtils";
 import { useAIAssistant } from "../../hooks/useAIAssistant";
-import AIAssistantModal from "../ai/AIAssistantModal";
+import { useAIAssistantLazy } from "../../hooks/useAIAssistantLazy";
+import { Suspense } from 'react';
+import ErrorBoundary from '../ui/ErrorBoundary';
+import { AILoadingSpinner } from '../ui/LoadingStates';
+import { LazyAIAssistantModal } from '../lazy/LazyAIComponents';
 
 const NavigationToolbar = ({
   currentMonthIndex,
@@ -47,9 +51,35 @@ const NavigationToolbar = ({
   updateSchedule,
   // Settings props
   onShowSettings,
+  // AI loading props
+  aiEnabled = false,
+  onEnableAI,
 }) => {
   const [showAIModal, setShowAIModal] = useState(false);
 
+  // Use lazy AI assistant when AI is enabled, fallback to regular when not
+  const regularAI = useAIAssistant(
+    scheduleData,
+    staffMembers,
+    currentMonthIndex,
+    updateSchedule,
+  );
+  
+  const lazyAI = useAIAssistantLazy(
+    scheduleData,
+    staffMembers,
+    currentMonthIndex,
+    updateSchedule,
+    {
+      autoInitialize: aiEnabled,
+      enableEnhanced: true,
+      fallbackMode: true
+    }
+  );
+  
+  // Choose which AI system to use
+  const ai = aiEnabled ? lazyAI : regularAI;
+  
   const {
     isInitialized,
     isProcessing,
@@ -61,22 +91,21 @@ const NavigationToolbar = ({
     systemHealth,
     isEnhanced,
     isMLReady,
-  } = useAIAssistant(
-    scheduleData,
-    staffMembers,
-    currentMonthIndex,
-    updateSchedule,
-  );
+  } = ai;
 
-  // Initialize AI on first render
+  // Initialize AI on first render when AI is enabled
   useEffect(() => {
-    if (!isInitialized) {
+    if (aiEnabled && !isInitialized) {
       initializeAI();
     }
-  }, [isInitialized, initializeAI]);
+  }, [aiEnabled, isInitialized, initializeAI]);
 
   const handleAIClick = () => {
-    setShowAIModal(true);
+    if (aiEnabled) {
+      setShowAIModal(true);
+    } else if (onEnableAI) {
+      onEnableAI();
+    }
   };
   // Keyboard navigation for period switching
   useEffect(() => {
@@ -362,14 +391,26 @@ const NavigationToolbar = ({
         </div>
       </div>
 
-      {/* AI Assistant Modal */}
-      <AIAssistantModal
-        isOpen={showAIModal}
-        onClose={() => setShowAIModal(false)}
-        onAutoFillSchedule={generateAIPredictions || autoFillSchedule}
-        isProcessing={isProcessing}
-        systemStatus={getSystemStatus && getSystemStatus()}
-      />
+      {/* AI Assistant Modal - Lazy loaded when AI is enabled */}
+      {aiEnabled && (
+        <ErrorBoundary 
+          userFriendlyMessage="AI Assistant failed to load. Core functionality remains available."
+          onDisableFeature={() => {
+            setShowAIModal(false);
+            if (onEnableAI) onEnableAI(false);
+          }}
+        >
+          <Suspense fallback={showAIModal ? <AILoadingSpinner message="Loading AI Assistant..." /> : null}>
+            <LazyAIAssistantModal
+              isOpen={showAIModal}
+              onClose={() => setShowAIModal(false)}
+              onAutoFillSchedule={generateAIPredictions || autoFillSchedule}
+              isProcessing={isProcessing}
+              systemStatus={getSystemStatus && getSystemStatus()}
+            />
+          </Suspense>
+        </ErrorBoundary>
+      )}
     </div>
   );
 };

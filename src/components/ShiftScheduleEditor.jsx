@@ -32,8 +32,17 @@ import StaffEditModal from "./schedule/StaffEditModal";
 import StatusModal from "./common/StatusModal";
 import SettingsModal from "./settings/SettingsModal";
 
-// Temporary debug tester - REMOVE AFTER DEBUGGING
-import AIAssistantDebugTester from "./debug/AIAssistantDebugTester";
+// Lazy loaded AI features for better performance
+import { Suspense, useState as useAIState, useCallback as useAICallback } from 'react';
+import ErrorBoundary from './ui/ErrorBoundary';
+import { AILoadingSpinner, DebugToolsLoading, FeatureLoadingProgress } from './ui/LoadingStates';
+import { 
+  LazyAIAssistantDebugTester, 
+  aiFeatureLoader, 
+  AI_FEATURES,
+  getAIFeatureDefinitions,
+  checkAIFeatureSupport
+} from './lazy/LazyAIComponents';
 
 // Manual input integration utilities (development only)
 import { manualInputTestSuite } from "../utils/manualInputTestSuite";
@@ -74,6 +83,13 @@ const ShiftScheduleEditor = ({
 
   // UI state
   const [showDropdown, setShowDropdown] = useState(null);
+  
+  // AI Features state
+  const [aiEnabled, setAIEnabled] = useAIState(false);
+  const [aiLoading, setAILoading] = useAIState(false);
+  const [aiSupported, setAISupported] = useAIState(() => checkAIFeatureSupport());
+  const [aiLoadingProgress, setAILoadingProgress] = useAIState(null);
+  const [aiFeatureError, setAIFeatureError] = useAIState(null);
 
   // Wrapper for setShowDropdown
   const setShowDropdownDebug = (value) => {
@@ -96,6 +112,48 @@ const ShiftScheduleEditor = ({
   });
   const [showSettingsModal, setShowSettingsModal] = useState(false);
 
+  // AI Feature loading
+  const enableAIFeatures = useAICallback(async () => {
+    if (!aiSupported) {
+      setAIFeatureError('AI features are not supported in this browser');
+      return;
+    }
+    
+    if (aiEnabled) return; // Already enabled
+    
+    setAILoading(true);
+    setAIFeatureError(null);
+    
+    try {
+      const features = getAIFeatureDefinitions();
+      
+      // Set up progress listener
+      const removeListener = aiFeatureLoader.addProgressListener(setAILoadingProgress);
+      
+      // Load AI features
+      await aiFeatureLoader.loadFeatures(features);
+      
+      // Cleanup
+      removeListener();
+      setAILoadingProgress(null);
+      setAIEnabled(true);
+      
+      console.log('✅ AI features loaded successfully');
+    } catch (error) {
+      console.error('❌ Failed to load AI features:', error);
+      setAIFeatureError('Failed to load AI features: ' + error.message);
+      setAILoadingProgress(null);
+    } finally {
+      setAILoading(false);
+    }
+  }, [aiSupported, aiEnabled]);
+  
+  const disableAIFeatures = useAICallback(() => {
+    setAIEnabled(false);
+    setAIFeatureError(null);
+    console.log('🔌 AI features disabled');
+  }, []);
+  
   // Refs - removed unused newColumnInputRef
 
   // Custom hooks
@@ -620,6 +678,8 @@ const ShiftScheduleEditor = ({
         scheduleData={schedule}
         staffMembers={staffMembers}
         updateSchedule={updateSchedule}
+        aiEnabled={aiEnabled}
+        onEnableAI={enableAIFeatures}
       />
 
       {/* Schedule View - Table or Card */}
@@ -898,14 +958,106 @@ const ShiftScheduleEditor = ({
         onToggleAutosave={setIsAutosaveEnabled}
       />
 
-      {/* Temporary debug tester - REMOVE AFTER DEBUGGING */}
-      {process.env.NODE_ENV === "development" && (
-        <AIAssistantDebugTester
-          scheduleData={schedule}
-          staffMembers={staffMembers}
-          currentMonthIndex={currentMonthIndex}
-          updateSchedule={updateSchedule}
-        />
+      {/* AI Features Control */}
+      {!aiEnabled && !aiLoading && (
+        <div className="fixed bottom-4 right-4 z-50">
+          <div className="bg-white border border-blue-200 rounded-lg shadow-lg p-4 max-w-sm">
+            <div className="flex items-center space-x-2 mb-3">
+              <div className="text-blue-600">
+                <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+                  <path d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+              </div>
+              <h3 className="font-medium text-gray-900">AI Features Available</h3>
+            </div>
+            <p className="text-sm text-gray-600 mb-3">
+              Enable AI-powered schedule optimization, debug tools, and advanced analytics.
+            </p>
+            <div className="flex space-x-2">
+              <button
+                onClick={enableAIFeatures}
+                disabled={!aiSupported}
+                className={`px-3 py-2 text-sm font-medium rounded ${
+                  aiSupported 
+                    ? 'bg-blue-600 text-white hover:bg-blue-700' 
+                    : 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                }`}
+              >
+                Enable AI Features
+              </button>
+              <button
+                onClick={() => setAIEnabled(null)} // Hide the prompt
+                className="px-3 py-2 text-sm text-gray-600 hover:text-gray-800"
+              >
+                Maybe Later
+              </button>
+            </div>
+            {!aiSupported && (
+              <div className="mt-2 text-xs text-red-600">
+                AI features require a modern browser with ES2020+ support
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+      
+      {/* AI Loading Progress */}
+      {aiLoading && aiLoadingProgress && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <FeatureLoadingProgress
+            features={aiLoadingProgress.features || []}
+            currentFeature={aiLoadingProgress.currentFeature}
+            progress={aiLoadingProgress.progress || 0}
+          />
+        </div>
+      )}
+      
+      {/* AI Feature Error */}
+      {aiFeatureError && (
+        <div className="fixed top-4 left-1/2 transform -translate-x-1/2 z-50">
+          <div className="bg-red-50 border border-red-200 rounded-lg p-4 max-w-md">
+            <div className="flex items-center space-x-2 mb-2">
+              <div className="text-red-600">
+                <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                  <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                </svg>
+              </div>
+              <div className="text-sm font-medium text-red-800">AI Feature Error</div>
+            </div>
+            <div className="text-sm text-red-700 mb-3">{aiFeatureError}</div>
+            <div className="flex space-x-2">
+              <button
+                onClick={() => setAIFeatureError(null)}
+                className="px-3 py-1 text-sm bg-red-600 text-white rounded hover:bg-red-700"
+              >
+                Dismiss
+              </button>
+              <button
+                onClick={enableAIFeatures}
+                className="px-3 py-1 text-sm bg-gray-300 text-gray-700 rounded hover:bg-gray-400"
+              >
+                Retry
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      
+      {/* Lazy loaded AI debug tester - Development only */}
+      {process.env.NODE_ENV === "development" && aiEnabled && (
+        <ErrorBoundary 
+          userFriendlyMessage="Debug tools failed to load. Core functionality remains available."
+          onDisableFeature={disableAIFeatures}
+        >
+          <Suspense fallback={<DebugToolsLoading />}>
+            <LazyAIAssistantDebugTester
+              scheduleData={schedule}
+              staffMembers={staffMembers}
+              currentMonthIndex={currentMonthIndex}
+              updateSchedule={updateSchedule}
+            />
+          </Suspense>
+        </ErrorBoundary>
       )}
     </div>
   );

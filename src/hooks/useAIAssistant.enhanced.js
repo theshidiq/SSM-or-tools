@@ -8,15 +8,29 @@
 import { useState, useCallback, useRef, useEffect } from "react";
 import { optimizedStorage } from "../utils/storageUtils";
 import { generateDateRange } from "../utils/dateUtils";
-import {
-  onConfigurationCacheInvalidated,
-  refreshAllConfigurations,
-} from "../ai/constraints/ConstraintEngine";
-import { configurationCache } from "../ai/cache/ConfigurationCacheManager";
+// Lazy imports to prevent bundling AI code in main chunk
+const loadConstraintEngine = async () => {
+  const module = await import("../ai/constraints/ConstraintEngine");
+  return {
+    onConfigurationCacheInvalidated: module.onConfigurationCacheInvalidated,
+    refreshAllConfigurations: module.refreshAllConfigurations,
+  };
+};
 
-// Import WorkerManager and ErrorHandler
-import { getWorkerManager } from "../ai/performance/WorkerManager";
-import { aiErrorHandler } from "../ai/utils/ErrorHandler";
+const loadConfigurationCache = async () => {
+  const module = await import("../ai/cache/ConfigurationCacheManager");
+  return module.configurationCache;
+};
+
+const loadWorkerManager = async () => {
+  const module = await import("../ai/performance/WorkerManager");
+  return module.getWorkerManager;
+};
+
+const loadAIErrorHandler = async () => {
+  const module = await import("../ai/utils/ErrorHandler");
+  return module.aiErrorHandler;
+};
 
 // Enhanced lazy import for production-ready hybrid AI system fallback
 const loadEnhancedAISystem = async () => {
@@ -100,10 +114,11 @@ export const useAIAssistant = (
 
   // Set up configuration change monitoring and cache initialization
   useEffect(() => {
-    const initializeConfigurationSystem = () => {
+    const initializeConfigurationSystem = async () => {
       try {
         console.log("🚀 Initializing AI configuration system...");
 
+        const configurationCache = await loadConfigurationCache();
         // Set up cache change listener immediately (non-blocking)
         configurationCache.addChangeListener((changedType) => {
           console.log(`🔄 Configuration changed: ${changedType}`);
@@ -176,12 +191,23 @@ export const useAIAssistant = (
     };
 
     // Set up legacy cache invalidation listener (for backwards compatibility)
-    configInvalidationUnsubscribe.current = onConfigurationCacheInvalidated(
-      () => {
-        console.log("🔄 Legacy configuration update detected");
-        configurationCache.forceRefresh().catch(console.error);
-      },
-    );
+    const setupLegacyListener = async () => {
+      try {
+        const constraintEngine = await loadConstraintEngine();
+        const configurationCache = await loadConfigurationCache();
+        
+        configInvalidationUnsubscribe.current = constraintEngine.onConfigurationCacheInvalidated(
+          () => {
+            console.log("🔄 Legacy configuration update detected");
+            configurationCache.forceRefresh().catch(console.error);
+          },
+        );
+      } catch (error) {
+        console.warn("⚠️ Failed to setup legacy configuration listener:", error);
+      }
+    };
+    
+    setupLegacyListener();
 
     initializeConfigurationSystem();
 
@@ -253,7 +279,8 @@ export const useAIAssistant = (
       const startTime = Date.now();
 
       // Try to initialize WorkerManager first (preferred method)
-      if (getWorkerManager) {
+      try {
+        const getWorkerManager = await loadWorkerManager();
         console.log("🚀 Initializing worker-based AI system...");
 
         try {
@@ -291,6 +318,12 @@ export const useAIAssistant = (
           );
           performanceMonitor.current.fallbackUsage++;
         }
+      } catch (workerLoadError) {
+        console.warn(
+          "⚠️ Worker manager loading failed, trying enhanced system:",
+          workerLoadError,
+        );
+        performanceMonitor.current.fallbackUsage++;
       }
 
       // Fallback to enhanced hybrid system
@@ -1103,7 +1136,8 @@ export const useAIAssistant = (
     refreshConfiguration: async () => {
       try {
         console.log("🔄 Refreshing AI configuration...");
-        await refreshAllConfigurations();
+        const constraintEngine = await loadConstraintEngine();
+        await constraintEngine.refreshAllConfigurations();
         setConfigurationStatus("refreshed");
 
         const system = aiSystemRef.current;
