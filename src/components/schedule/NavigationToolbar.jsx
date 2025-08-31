@@ -1,33 +1,25 @@
-import React, { useEffect, useState, useRef } from "react";
+import React, { useEffect, useState, useRef, useMemo, Suspense } from "react";
 import {
   Download,
   Calendar,
   Users,
-  UserPlus,
-  FileText,
   Table,
   Printer,
-  BarChart3,
   ChevronLeft,
   ChevronRight,
   Settings,
-  Plus,
   Trash2,
-  Edit,
   Maximize,
   Sparkles,
   TableProperties,
-  X,
-  Grid,
   Eye,
 } from "lucide-react";
-import { monthPeriods } from "../../utils/dateUtils";
+import { monthPeriods, addNextPeriod } from "../../utils/dateUtils";
 import { useAIAssistant } from "../../hooks/useAIAssistant";
 import { useAIAssistantLazy } from "../../hooks/useAIAssistantLazy";
-import { Suspense } from 'react';
-import ErrorBoundary from '../ui/ErrorBoundary';
-import { AILoadingSpinner } from '../ui/LoadingStates';
-import { LazyAIAssistantModal } from '../lazy/LazyAIComponents';
+import ErrorBoundary from "../ui/ErrorBoundary";
+import { AILoadingSpinner } from "../ui/LoadingStates";
+import { LazyAIAssistantModal } from "../lazy/LazyAIComponents";
 
 const NavigationToolbar = ({
   currentMonthIndex,
@@ -56,8 +48,66 @@ const NavigationToolbar = ({
   onEnableAI,
 }) => {
   const [showAIModal, setShowAIModal] = useState(false);
-  const [currentYear, setCurrentYear] = useState(2025);
   const monthPickerRef = useRef(null);
+
+  // Get available years from monthPeriods (and allow one year ahead for expansion)
+  const availableYears = useMemo(() => {
+    const years = new Set();
+    monthPeriods.forEach((period) => {
+      years.add(period.start.getFullYear());
+    });
+    
+    // Add next year as available for expansion
+    const maxYear = Math.max(...Array.from(years));
+    years.add(maxYear + 1);
+    
+    return Array.from(years).sort();
+  }, []);
+
+  // Set initial year to first available year or current selected period year
+  const [currentYear, setCurrentYear] = useState(() => {
+    const selectedPeriod = monthPeriods[currentMonthIndex];
+    return selectedPeriod ? selectedPeriod.start.getFullYear() : availableYears[0] || 2025;
+  });
+
+  // Track if user is manually navigating years to prevent automatic resets
+  const [isManualYearNavigation, setIsManualYearNavigation] = useState(false);
+
+  // Filter periods by selected year, and create periods if none exist
+  const periodsForCurrentYear = useMemo(() => {
+    const existingPeriods = monthPeriods
+      .map((period, index) => ({ ...period, originalIndex: index }))
+      .filter((period) => period.start.getFullYear() === currentYear);
+      
+    // If no periods exist for this year and it's the next year after the last available year, create them
+    if (existingPeriods.length === 0) {
+      const existingYears = new Set();
+      monthPeriods.forEach((period) => {
+        existingYears.add(period.start.getFullYear());
+      });
+      const maxExistingYear = Math.max(...Array.from(existingYears));
+      
+      if (currentYear === maxExistingYear + 1) {
+        // Auto-create periods for the next year by adding periods one by one
+        let periodsAdded = 0;
+        while (periodsAdded < 6) { // Create 6 periods (typical for a year)
+          const lastPeriod = monthPeriods[monthPeriods.length - 1];
+          if (!lastPeriod || lastPeriod.start.getFullYear() >= currentYear) {
+            break; // Stop if we've reached the target year
+          }
+          addNextPeriod();
+          periodsAdded++;
+        }
+        
+        // Return newly created periods for the current year
+        return monthPeriods
+          .map((period, index) => ({ ...period, originalIndex: index }))
+          .filter((period) => period.start.getFullYear() === currentYear);
+      }
+    }
+    
+    return existingPeriods;
+  }, [currentYear]);
 
   // Use lazy AI assistant when AI is enabled, fallback to regular when not
   const regularAI = useAIAssistant(
@@ -101,6 +151,29 @@ const NavigationToolbar = ({
       initializeAI();
     }
   }, [aiEnabled, isInitialized, initializeAI]);
+
+  // Update year when month selection changes (but not during manual year navigation)
+  useEffect(() => {
+    if (!isManualYearNavigation) {
+      const selectedPeriod = monthPeriods[currentMonthIndex];
+      if (selectedPeriod) {
+        const selectedYear = selectedPeriod.start.getFullYear();
+        if (selectedYear !== currentYear) {
+          setCurrentYear(selectedYear);
+        }
+      }
+    }
+  }, [currentMonthIndex, currentYear, isManualYearNavigation]);
+
+  // Reset manual navigation flag when a period is actually selected
+  useEffect(() => {
+    if (isManualYearNavigation) {
+      const selectedPeriod = monthPeriods[currentMonthIndex];
+      if (selectedPeriod && selectedPeriod.start.getFullYear() === currentYear) {
+        setIsManualYearNavigation(false);
+      }
+    }
+  }, [currentMonthIndex, currentYear, isManualYearNavigation]);
 
   const handleAIClick = () => {
     if (aiEnabled) {
@@ -218,8 +291,19 @@ const NavigationToolbar = ({
                 {/* Year Navigation */}
                 <div className="flex items-center justify-between mb-4 pb-3 border-b border-gray-200">
                   <button
-                    onClick={() => setCurrentYear(currentYear - 1)}
-                    className="flex items-center justify-center w-8 h-8 rounded-full hover:bg-gray-100 text-gray-600 hover:text-gray-800"
+                    onClick={() => {
+                      const currentIndex = availableYears.indexOf(currentYear);
+                      if (currentIndex > 0) {
+                        setIsManualYearNavigation(true);
+                        setCurrentYear(availableYears[currentIndex - 1]);
+                      }
+                    }}
+                    disabled={availableYears.indexOf(currentYear) <= 0}
+                    className={`flex items-center justify-center w-8 h-8 rounded-full text-gray-600 ${
+                      availableYears.indexOf(currentYear) <= 0 
+                        ? 'text-gray-300 cursor-not-allowed' 
+                        : 'hover:bg-gray-100 hover:text-gray-800'
+                    }`}
                     title="Previous year"
                   >
                     <ChevronLeft size={16} />
@@ -228,8 +312,19 @@ const NavigationToolbar = ({
                     {currentYear}年
                   </span>
                   <button
-                    onClick={() => setCurrentYear(currentYear + 1)}
-                    className="flex items-center justify-center w-8 h-8 rounded-full hover:bg-gray-100 text-gray-600 hover:text-gray-800"
+                    onClick={() => {
+                      const currentIndex = availableYears.indexOf(currentYear);
+                      if (currentIndex < availableYears.length - 1) {
+                        setIsManualYearNavigation(true);
+                        setCurrentYear(availableYears[currentIndex + 1]);
+                      }
+                    }}
+                    disabled={availableYears.indexOf(currentYear) >= availableYears.length - 1}
+                    className={`flex items-center justify-center w-8 h-8 rounded-full text-gray-600 ${
+                      availableYears.indexOf(currentYear) >= availableYears.length - 1 
+                        ? 'text-gray-300 cursor-not-allowed' 
+                        : 'hover:bg-gray-100 hover:text-gray-800'
+                    }`}
                     title="Next year"
                   >
                     <ChevronRight size={16} />
@@ -238,22 +333,28 @@ const NavigationToolbar = ({
 
                 {/* Month Periods Grid */}
                 <div className="grid grid-cols-2 gap-2">
-                  {monthPeriods.map((period, index) => (
-                    <button
-                      key={index}
-                      onClick={() => {
-                        onMonthChange(index);
-                        setShowMonthPicker(false);
-                      }}
-                      className={`text-center px-3 py-2 rounded-md text-sm font-medium transition-colors duration-200 ${
-                        index === currentMonthIndex
-                          ? "bg-blue-100 text-blue-700 border border-blue-300"
-                          : "text-gray-700 hover:bg-gray-50 border border-gray-200"
-                      }`}
-                    >
-                      {period.label}
-                    </button>
-                  ))}
+                  {periodsForCurrentYear.length > 0 ? (
+                    periodsForCurrentYear.map((period) => (
+                      <button
+                        key={period.originalIndex}
+                        onClick={() => {
+                          onMonthChange(period.originalIndex);
+                          setShowMonthPicker(false);
+                        }}
+                        className={`text-center px-3 py-2 rounded-md text-sm font-medium transition-colors duration-200 ${
+                          period.originalIndex === currentMonthIndex
+                            ? "bg-blue-100 text-blue-700 border border-blue-300"
+                            : "text-gray-700 hover:bg-gray-50 border border-gray-200"
+                        }`}
+                      >
+                        {period.label}
+                      </button>
+                    ))
+                  ) : (
+                    <div className="col-span-2 text-center text-gray-500 py-4">
+                      No periods available for {currentYear}
+                    </div>
+                  )}
                 </div>
               </div>
             )}
