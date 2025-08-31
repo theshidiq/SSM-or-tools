@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useRef } from "react";
 import {
   Download,
   Calendar,
@@ -56,6 +56,8 @@ const NavigationToolbar = ({
   onEnableAI,
 }) => {
   const [showAIModal, setShowAIModal] = useState(false);
+  const [currentYear, setCurrentYear] = useState(2025);
+  const monthPickerRef = useRef(null);
 
   // Use lazy AI assistant when AI is enabled, fallback to regular when not
   const regularAI = useAIAssistant(
@@ -149,6 +151,24 @@ const NavigationToolbar = ({
       document.removeEventListener("keydown", handleKeyDown);
     };
   }, [currentMonthIndex, onMonthChange, showMonthPicker]);
+
+  // Handle outside click to close month picker
+  useEffect(() => {
+    const handleOutsideClick = (event) => {
+      if (monthPickerRef.current && !monthPickerRef.current.contains(event.target)) {
+        setShowMonthPicker(false);
+      }
+    };
+
+    if (showMonthPicker) {
+      document.addEventListener("mousedown", handleOutsideClick);
+    }
+
+    return () => {
+      document.removeEventListener("mousedown", handleOutsideClick);
+    };
+  }, [showMonthPicker, setShowMonthPicker]);
+
   return (
     <div className="toolbar-section mb-6">
       <div className="w-4/5 mx-auto flex items-center bg-white p-4 rounded-lg border border-gray-200 shadow-sm">
@@ -178,7 +198,7 @@ const NavigationToolbar = ({
           </button>
 
           {/* Month Picker */}
-          <div className="relative">
+          <div className="relative" ref={monthPickerRef}>
             <button
               onClick={() => setShowMonthPicker(!showMonthPicker)}
               className="month-picker flex items-center px-3 py-2 h-10 text-sm font-medium rounded-lg border border-gray-300 bg-white hover:border-gray-400 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-all duration-200"
@@ -189,12 +209,34 @@ const NavigationToolbar = ({
                 className="text-gray-600 hover:text-gray-800 mr-1"
               />
               <span className="text-gray-700 hover:text-gray-900 text-center">
-                {monthPeriods[currentMonthIndex]?.label || "Period"}
+                {monthPeriods[currentMonthIndex]?.label || "Period"} {currentYear}年
               </span>
             </button>
 
             {showMonthPicker && (
-              <div className="month-picker absolute top-12 left-0 bg-white border border-gray-300 rounded-lg shadow-xl z-[9999] min-w-[300px] p-3">
+              <div className="month-picker absolute top-12 left-0 bg-white border border-gray-300 rounded-lg shadow-xl z-[9999] min-w-[320px] p-4">
+                {/* Year Navigation */}
+                <div className="flex items-center justify-between mb-4 pb-3 border-b border-gray-200">
+                  <button
+                    onClick={() => setCurrentYear(currentYear - 1)}
+                    className="flex items-center justify-center w-8 h-8 rounded-full hover:bg-gray-100 text-gray-600 hover:text-gray-800"
+                    title="Previous year"
+                  >
+                    <ChevronLeft size={16} />
+                  </button>
+                  <span className="text-lg font-semibold text-gray-800">
+                    {currentYear}年
+                  </span>
+                  <button
+                    onClick={() => setCurrentYear(currentYear + 1)}
+                    className="flex items-center justify-center w-8 h-8 rounded-full hover:bg-gray-100 text-gray-600 hover:text-gray-800"
+                    title="Next year"
+                  >
+                    <ChevronRight size={16} />
+                  </button>
+                </div>
+
+                {/* Month Periods Grid */}
                 <div className="grid grid-cols-2 gap-2">
                   {monthPeriods.map((period, index) => (
                     <button
@@ -298,13 +340,13 @@ const NavigationToolbar = ({
             className={`flex items-center px-3 py-2 h-10 text-sm font-medium rounded-lg border transition-all duration-200 ${
               isProcessing
                 ? "border-yellow-400 bg-yellow-50 animate-pulse"
-                : isEnhanced && isMLReady && isMLReady()
+                : isEnhanced && isMLReady && typeof isMLReady === 'function' && isMLReady()
                   ? "border-violet-400 bg-violet-50 hover:bg-violet-100"
                   : "border-gray-300 bg-white hover:border-gray-400"
             } focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-violet-500`}
             title={`${
               isEnhanced
-                ? isMLReady && isMLReady()
+                ? isMLReady && typeof isMLReady === 'function' && isMLReady()
                   ? "ハイブリッドAI (ML準備完了)"
                   : "ハイブリッドAI (ML初期化中)"
                 : "AI Assistant"

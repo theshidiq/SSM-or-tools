@@ -31,8 +31,6 @@ import StaffEditModal from "./schedule/StaffEditModal";
 import StatusModal from "./common/StatusModal";
 import SettingsModal from "./settings/SettingsModal";
 
-// Temporary debug tester - REMOVE AFTER DEBUGGING
-import AIAssistantDebugTester from "./debug/AIAssistantDebugTester";
 
 // Manual input integration utilities (development only)
 import { manualInputTestSuite } from "../utils/manualInputTestSuite";
@@ -66,6 +64,7 @@ const ShiftScheduleEditorRealtime = ({
   const [editingNames, setEditingNames] = useState({});
   const [justEnteredEditMode, setJustEnteredEditMode] = useState(false);
   const [customText, setCustomText] = useState("");
+  const [aiEnabled, setAiEnabled] = useState(false);
 
   // Modal states
   const [deleteModal, setDeleteModal] = useState({
@@ -125,28 +124,20 @@ const ShiftScheduleEditorRealtime = ({
     setEditingStaffData,
     createNewStaff,
     editStaffName,
-    editStaffInfo,
     deleteStaff,
-    addStaffMember,
-    localStaffData,
+    addStaff: addStaffMember,
+    updateStaff: editStaffInfo,
   } = useStaffManagement(
-    staffMembersByMonth[currentMonthIndex] || [],
     currentMonthIndex,
-    updateSchedule,
-    schedule,
-    staffMembersByMonth,
-    setStaffMembersByMonth,
-    scheduleAutoSave,
+    null, // supabaseScheduleData - using real-time hook instead
+    null, // loadScheduleData - using real-time hook instead
   );
 
-  // Error state - combine all possible errors
-  const combinedError = externalError || supabaseError || settingsError || autosaveError;
-  const [error, setError] = useState(combinedError);
+  // Alias for compatibility with existing code
+  const localStaffData = staffMembers;
 
-  // Update error when any error changes
-  useEffect(() => {
-    setError(combinedError);
-  }, [combinedError]);
+  // Error state - combine all possible errors
+  const error = externalError || supabaseError || settingsError || autosaveError;
 
   // Real-time status indicator
   const realtimeStatus = useMemo(() => {
@@ -259,53 +250,28 @@ const ShiftScheduleEditorRealtime = ({
     printSchedule();
   }, []);
 
-  // Real-time connection status display
-  const ConnectionStatus = () => (
-    <div className="fixed top-2 right-2 z-50">
-      <div className={`px-3 py-1 rounded-full text-xs font-medium ${
-        realtimeStatus.status === 'connected' 
-          ? 'bg-green-100 text-green-800 border border-green-200'
-          : realtimeStatus.status === 'saving'
-          ? 'bg-blue-100 text-blue-800 border border-blue-200'
-          : realtimeStatus.status === 'loading'
-          ? 'bg-yellow-100 text-yellow-800 border border-yellow-200'
-          : 'bg-red-100 text-red-800 border border-red-200'
-      }`}>
-        <div className="flex items-center gap-1">
-          <div className={`w-2 h-2 rounded-full ${
-            realtimeStatus.status === 'connected' 
-              ? 'bg-green-500'
-              : realtimeStatus.status === 'saving'
-              ? 'bg-blue-500 animate-pulse'
-              : realtimeStatus.status === 'loading'
-              ? 'bg-yellow-500 animate-pulse'
-              : 'bg-red-500'
-          }`} />
-          <span>{realtimeStatus.message}</span>
-        </div>
-      </div>
-    </div>
-  );
+  // Add new column handler
+  const addNewColumn = useCallback(() => {
+    // Add a new staff member - trigger the staff modal
+    setIsAddingNewStaff(true);
+    setShowStaffEditModal(true);
+    setEditingStaffData(null);
+  }, [setIsAddingNewStaff, setShowStaffEditModal, setEditingStaffData]);
+
+  // AI enable handler
+  const handleEnableAI = useCallback((enabled = true) => {
+    setAiEnabled(enabled);
+    console.log(`AI ${enabled ? 'enabled' : 'disabled'}`);
+  }, []);
+
 
   return (
     <div className="container mx-auto p-6 bg-gray-50 min-h-screen">
-      {/* Real-time Connection Status */}
-      <ConnectionStatus />
-
-      {/* Phase 1 Real-time Badge */}
-      {process.env.NODE_ENV === 'development' && (
-        <div className="fixed top-10 right-2 z-40">
-          <div className="bg-purple-100 text-purple-800 border border-purple-200 px-3 py-1 rounded-full text-xs font-medium">
-            Phase 1: Real-time
-          </div>
-        </div>
-      )}
 
       {/* Error Display */}
       {error && (
         <ErrorDisplay
           error={error}
-          onClear={() => setError(null)}
           context="ShiftScheduleEditorRealtime"
         />
       )}
@@ -327,17 +293,31 @@ const ShiftScheduleEditorRealtime = ({
       <NavigationToolbar
         currentMonthIndex={currentMonthIndex}
         onMonthChange={handleMonthChange}
-        onNextPeriod={handleNextPeriod}
-        onPrevPeriod={handlePrevPeriod}
         showMonthPicker={showMonthPicker}
         setShowMonthPicker={setShowMonthPicker}
-        onExportCSV={handleExportCSV}
-        onPrint={handlePrint}
         editingColumn={editingColumn}
         setEditingColumn={setEditingColumn}
         setJustEnteredEditMode={setJustEnteredEditMode}
+        addNewColumn={addNewColumn}
+        setShowStaffEditModal={setShowStaffEditModal}
+        handleExport={handleExportCSV}
+        handlePrint={handlePrint}
+        handleAddTable={() => {
+          // Add next period and switch to it
+          const newPeriodIndex = addNextPeriod();
+          setCurrentMonthIndex(newPeriodIndex);
+        }}
+        handleDeletePeriod={() => {
+          console.log("Delete period functionality not implemented yet");
+        }}
         viewMode={viewMode}
-        setViewMode={setViewMode}
+        onViewModeChange={setViewMode}
+        scheduleData={schedule}
+        staffMembers={staffMembers}
+        updateSchedule={updateSchedule}
+        onShowSettings={() => setShowSettingsModal(true)}
+        aiEnabled={aiEnabled}
+        onEnableAI={handleEnableAI}
       />
 
       {/* Main Content */}
@@ -390,26 +370,29 @@ const ShiftScheduleEditorRealtime = ({
 
       {/* Modals */}
       <StaffEditModal
-        isOpen={showStaffEditModal}
-        onClose={() => {
-          setShowStaffEditModal(false);
-          setSelectedStaffForEdit(null);
-          setEditingStaffData(null);
-          setIsAddingNewStaff(false);
+        showStaffEditModal={showStaffEditModal}
+        setShowStaffEditModal={setShowStaffEditModal}
+        isAddingNewStaff={isAddingNewStaff}
+        setIsAddingNewStaff={setIsAddingNewStaff}
+        selectedStaffForEdit={selectedStaffForEdit}
+        setSelectedStaffForEdit={setSelectedStaffForEdit}
+        editingStaffData={editingStaffData}
+        setEditingStaffData={setEditingStaffData}
+        staffMembers={staffMembers || []}
+        dateRange={dateRange || []}
+        handleCreateStaff={createNewStaff}
+        updateStaff={editStaffInfo}
+        deleteStaff={deleteStaff}
+        schedule={schedule || {}}
+        updateSchedule={updateSchedule}
+        setStaffMembersByMonth={setStaffMembersByMonth}
+        currentMonthIndex={currentMonthIndex}
+        scheduleAutoSave={scheduleAutoSave}
+        clearAndRefreshFromDatabase={() => {
+          // Real-time version doesn't need this function as data is automatically synced
+          console.log("Real-time version - data auto-synced");
         }}
-        staffData={editingStaffData}
-        onSave={(updatedStaff) => {
-          if (isAddingNewStaff) {
-            createNewStaff(updatedStaff);
-          } else {
-            editStaffInfo(selectedStaffForEdit, updatedStaff);
-          }
-          setShowStaffEditModal(false);
-          setSelectedStaffForEdit(null);
-          setEditingStaffData(null);
-          setIsAddingNewStaff(false);
-        }}
-        isAddingNew={isAddingNewStaff}
+        isRefreshingFromDatabase={isSupabaseLoading}
       />
 
       <StatusModal
@@ -439,17 +422,6 @@ const ShiftScheduleEditorRealtime = ({
         onToggleAutosave={setIsAutosaveEnabled}
       />
 
-      {/* Development Debug Tools */}
-      {process.env.NODE_ENV === "development" && (
-        <>
-          <AIAssistantDebugTester />
-          <div className="fixed bottom-4 left-4 text-xs bg-white border rounded p-2 shadow">
-            <div>🔄 Real-time: {isConnected ? "Connected" : "Disconnected"}</div>
-            <div>💾 Auto-save: {isSaving ? "Active" : "Idle"}</div>
-            <div>📊 Data: {Object.keys(schedule).length} staff</div>
-          </div>
-        </>
-      )}
     </div>
   );
 };

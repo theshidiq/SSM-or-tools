@@ -23,20 +23,7 @@ export const LazyEnhancedAIAssistantModal = lazy(() =>
   })
 );
 
-// Lazy load debug components
-export const LazyAIAssistantDebugTester = lazy(() => 
-  import('../debug/AIAssistantDebugTester.jsx').catch(error => {
-    console.warn('Failed to load AI Debug Tester:', error);
-    return { default: () => null };
-  })
-);
 
-export const LazyConsoleLogViewer = lazy(() => 
-  import('../debug/ConsoleLogViewer.jsx').catch(error => {
-    console.warn('Failed to load Console Log Viewer:', error);
-    return { default: () => null };
-  })
-);
 
 // Lazy load performance monitoring components  
 export const LazyPerformanceMonitor = lazy(() => 
@@ -260,8 +247,6 @@ export const getAIFeatureDefinitions = () => [
 export default {
   LazyAIAssistantModal,
   LazyEnhancedAIAssistantModal,
-  LazyAIAssistantDebugTester,
-  LazyConsoleLogViewer,
   LazyPerformanceMonitor,
   LazyVirtualizedScheduleTable,
   aiFeatureLoader,

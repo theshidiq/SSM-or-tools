@@ -37,7 +37,6 @@ import { Suspense, useState as useAIState, useCallback as useAICallback } from '
 import ErrorBoundary from './ui/ErrorBoundary';
 import { AILoadingSpinner, DebugToolsLoading, FeatureLoadingProgress } from './ui/LoadingStates';
 import { 
-  LazyAIAssistantDebugTester, 
   aiFeatureLoader, 
   AI_FEATURES,
   getAIFeatureDefinitions,
@@ -1041,23 +1040,6 @@ const ShiftScheduleEditor = ({
             </div>
           </div>
         </div>
-      )}
-      
-      {/* Lazy loaded AI debug tester - Development only */}
-      {process.env.NODE_ENV === "development" && aiEnabled && (
-        <ErrorBoundary 
-          userFriendlyMessage="Debug tools failed to load. Core functionality remains available."
-          onDisableFeature={disableAIFeatures}
-        >
-          <Suspense fallback={<DebugToolsLoading />}>
-            <LazyAIAssistantDebugTester
-              scheduleData={schedule}
-              staffMembers={staffMembers}
-              currentMonthIndex={currentMonthIndex}
-              updateSchedule={updateSchedule}
-            />
-          </Suspense>
-        </ErrorBoundary>
       )}
     </div>
   );
