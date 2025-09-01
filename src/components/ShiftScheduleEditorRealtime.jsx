@@ -11,6 +11,7 @@ import { shiftSymbols, getAvailableShifts } from "../constants/shiftConstants";
 import {
   monthPeriods,
   addNextPeriod,
+  deletePeriod,
   getCurrentMonthIndex,
   findPeriodWithData,
 } from "../utils/dateUtils";
@@ -250,6 +251,116 @@ const ShiftScheduleEditorRealtime = ({
     printSchedule();
   }, []);
 
+  // Delete period handlers
+  const handleDeletePeriod = useCallback(() => {
+    const periodLabel =
+      monthPeriods[currentMonthIndex]?.label || "current period";
+
+    // Check if we can delete this period
+    if (monthPeriods.length <= 1) {
+      setDeleteModal({
+        isOpen: true,
+        type: "error",
+        title: "Cannot Delete Period",
+        message: "Cannot delete the last remaining period. At least one period must exist in the system.",
+      });
+      return;
+    }
+
+    // Show confirmation modal for complete period deletion
+    setDeleteModal({
+      isOpen: true,
+      type: "confirm",
+      title: "Delete Entire Period",
+      message: `Are you sure you want to completely delete the period "${periodLabel}"? This will permanently remove the entire period table from the system, including all schedule data and staff assignments for this period. This action cannot be undone.`,
+    });
+  }, [currentMonthIndex]);
+
+  const confirmDeletePeriod = useCallback(async () => {
+    const periodToDeleteLabel = monthPeriods[currentMonthIndex]?.label || "current period";
+    
+    // Show loading modal
+    setDeleteModal({
+      isOpen: true,
+      type: "loading",
+      title: "Deleting Period",
+      message: `Please wait while we delete the period "${periodToDeleteLabel}"...`,
+    });
+
+    try {
+      // Step 1: Delete the period from the system
+      const deletionResult = deletePeriod(currentMonthIndex);
+      
+      if (!deletionResult.success) {
+        throw new Error(deletionResult.error);
+      }
+
+      // Step 2: Navigate to a valid remaining period
+      const newCurrentIndex = deletionResult.suggestedNavigationIndex;
+      console.log(`🔄 Navigating to period ${newCurrentIndex} after deletion`);
+      
+      // Force update the current month index to trigger re-render with new period
+      setCurrentMonthIndex(newCurrentIndex);
+
+      // Step 3: Clear any cached data for the deleted period
+      try {
+        // Clear localStorage cache for the deleted period if it exists
+        const savedScheduleByMonth = JSON.parse(localStorage.getItem("schedule-by-month-data") || "{}");
+        const savedStaffByMonth = JSON.parse(localStorage.getItem("staff-by-month-data") || "{}");
+        
+        // Remove data for periods that are now out of range due to deletion
+        Object.keys(savedScheduleByMonth).forEach(key => {
+          const periodIndex = parseInt(key);
+          if (periodIndex >= monthPeriods.length) {
+            delete savedScheduleByMonth[key];
+          }
+        });
+        
+        Object.keys(savedStaffByMonth).forEach(key => {
+          const periodIndex = parseInt(key);
+          if (periodIndex >= monthPeriods.length) {
+            delete savedStaffByMonth[key];
+          }
+        });
+        
+        localStorage.setItem("schedule-by-month-data", JSON.stringify(savedScheduleByMonth));
+        localStorage.setItem("staff-by-month-data", JSON.stringify(savedStaffByMonth));
+      } catch (cacheError) {
+        console.warn("Failed to clean up cached data after period deletion:", cacheError);
+      }
+
+      // Simulate some processing time for visual feedback
+      await new Promise((resolve) => setTimeout(resolve, 500));
+
+      // Show success modal
+      setDeleteModal({
+        isOpen: true,
+        type: "success",
+        title: "Period Deleted Successfully!",
+        message: `The period "${deletionResult.deletedPeriod.label}" has been completely removed from the system. Navigated to "${monthPeriods[newCurrentIndex]?.label}".`,
+      });
+    } catch (error) {
+      console.error("❌ Failed to delete period:", error);
+
+      // Show error modal
+      setDeleteModal({
+        isOpen: true,
+        type: "error",
+        title: "Deletion Failed",
+        message: `Failed to delete period: ${error.message}`,
+      });
+    }
+  }, [currentMonthIndex]);
+
+  const closeDeleteModal = useCallback(() => {
+    setDeleteModal({
+      isOpen: false,
+      type: "confirm",
+      title: "",
+      message: "",
+    });
+  }, []);
+
   // Add new column handler
   const addNewColumn = useCallback(() => {
     // Add a new staff member - trigger the staff modal
@@ -307,9 +418,7 @@ const ShiftScheduleEditorRealtime = ({
           const newPeriodIndex = addNextPeriod();
           setCurrentMonthIndex(newPeriodIndex);
         }}
-        handleDeletePeriod={() => {
-          console.log("Delete period functionality not implemented yet");
-        }}
+        handleDeletePeriod={handleDeletePeriod}
         viewMode={viewMode}
         onViewModeChange={setViewMode}
         scheduleData={schedule}
@@ -397,11 +506,14 @@ const ShiftScheduleEditorRealtime = ({
 
       <StatusModal
         isOpen={deleteModal.isOpen}
-        onClose={() => setDeleteModal({ ...deleteModal, isOpen: false })}
-        type={deleteModal.type}
+        onClose={closeDeleteModal}
+        onConfirm={confirmDeletePeriod}
         title={deleteModal.title}
         message={deleteModal.message}
-        onConfirm={() => setDeleteModal({ ...deleteModal, isOpen: false })}
+        type={deleteModal.type}
+        confirmText={deleteModal.type === "confirm" ? "Delete Period" : "Delete"}
+        cancelText="Cancel"
+        autoCloseDelay={deleteModal.type === "success" ? 2000 : null}
       />
 
       <SettingsModal

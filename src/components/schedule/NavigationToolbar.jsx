@@ -503,7 +503,7 @@ const NavigationToolbar = ({
           <button
             onClick={handleDeletePeriod}
             className="flex items-center px-3 py-2 h-10 text-sm font-medium rounded-lg border border-gray-300 bg-white hover:border-gray-400 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500 transition-all duration-200"
-            title={`Delete ${monthPeriods[currentMonthIndex]?.label || "current period"} data`}
+            title={`Delete entire ${monthPeriods[currentMonthIndex]?.label || "current period"} table`}
           >
             <Trash2
               size={16}

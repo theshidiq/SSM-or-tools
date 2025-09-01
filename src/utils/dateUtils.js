@@ -284,6 +284,51 @@ export const findPeriodWithData = (supabaseData = null) => {
   return fallbackPeriod;
 };
 
+// Function to delete a specific period
+export const deletePeriod = (periodIndex) => {
+  try {
+    // Validate period index
+    if (periodIndex < 0 || periodIndex >= monthPeriods.length) {
+      console.error(`Invalid period index: ${periodIndex}. Available: 0-${monthPeriods.length - 1}`);
+      return { success: false, error: "Invalid period index" };
+    }
+
+    // Prevent deletion if it's the only period
+    if (monthPeriods.length <= 1) {
+      console.error("Cannot delete the last remaining period");
+      return { success: false, error: "Cannot delete the last remaining period" };
+    }
+
+    // Get period info for logging
+    const periodToDelete = monthPeriods[periodIndex];
+    console.log(`🗑️ Deleting period ${periodIndex}: ${periodToDelete.label}`);
+
+    // Remove the period from array
+    monthPeriods.splice(periodIndex, 1);
+
+    // Save updated periods to localStorage
+    savePeriods(monthPeriods);
+
+    console.log(`✅ Period deleted successfully. Remaining periods: ${monthPeriods.length}`);
+    
+    // Return success with navigation info
+    let suggestedIndex = periodIndex;
+    if (suggestedIndex >= monthPeriods.length) {
+      suggestedIndex = monthPeriods.length - 1; // Go to last period if deleted period was at end
+    }
+
+    return { 
+      success: true, 
+      deletedPeriod: periodToDelete,
+      newPeriodCount: monthPeriods.length,
+      suggestedNavigationIndex: suggestedIndex
+    };
+  } catch (error) {
+    console.error("Failed to delete period:", error);
+    return { success: false, error: error.message };
+  }
+};
+
 // Function to reset periods to defaults (useful for testing or admin functions)
 export const resetPeriodsToDefault = () => {
   try {
