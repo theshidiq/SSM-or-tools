@@ -93,8 +93,9 @@ module.exports = {
         }
       },
       fontFamily: {
-        sans: ['Inter', 'system-ui', 'sans-serif'],
-        mono: ['JetBrains Mono', 'Menlo', 'Monaco', 'monospace'],
+        sans: ['Plus Jakarta Sans', 'Noto Sans JP', 'system-ui', 'sans-serif'],
+        mono: ['IBM Plex Mono', 'Menlo', 'Monaco', 'monospace'],
+        serif: ['Lora', 'serif'],
       },
       fontSize: {
         'xs': ['0.75rem', { lineHeight: '1rem' }],
@@ -119,11 +120,11 @@ module.exports = {
         md: "calc(var(--radius) - 2px)",
         sm: "calc(var(--radius) - 4px)",
         'none': '0',
-        DEFAULT: '0.3rem',
-        'xl': '0.3rem',
-        '2xl': '0.3rem',
-        '3xl': '0.3rem',
-        'full': '0.3rem',
+        DEFAULT: '0rem',
+        'xl': '0rem',
+        '2xl': '0rem',
+        '3xl': '0rem',
+        'full': '9999px',
       },
       boxShadow: {
         'sm': '0 1px 2px 0 rgb(0 0 0 / 0.05)',

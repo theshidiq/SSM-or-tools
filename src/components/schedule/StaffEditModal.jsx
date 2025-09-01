@@ -310,13 +310,13 @@ const StaffEditModal = ({
         }
       }}
     >
-      <DialogContent className="max-w-4xl max-h-[80vh] overflow-y-auto">
+      <DialogContent className="max-w-4xl max-h-[80vh] overflow-y-auto bg-background border-border shadow-2xl">
         {/* Loading overlay for database refresh */}
         {isRefreshingFromDatabase && (
-          <div className="absolute inset-0 bg-white bg-opacity-90 flex items-center justify-center z-50 rounded-lg">
+          <div className="absolute inset-0 bg-background flex items-center justify-center z-50 rounded-lg">
             <div className="text-center">
-              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500 mx-auto mb-3"></div>
-              <p className="text-gray-600 text-sm">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto mb-3"></div>
+              <p className="text-muted-foreground text-sm">
                 Refreshing data from database...
               </p>
             </div>
@@ -333,7 +333,7 @@ const StaffEditModal = ({
           {/* Left Panel - Staff List */}
           <div className="space-y-4">
             <div className="flex items-center justify-between">
-              <h3 className="text-lg font-semibold text-gray-700">
+              <h3 className="text-lg font-semibold text-card-foreground">
                 スタッフ一覧
               </h3>
               <Button
@@ -389,7 +389,7 @@ const StaffEditModal = ({
 
           {/* Right Panel - Staff Form */}
           <div className="space-y-4">
-            <h3 className="text-lg font-semibold text-gray-700">
+            <h3 className="text-lg font-semibold text-card-foreground">
               {isAddingNewStaff
                 ? "スタッフ追加"
                 : selectedStaffForEdit
