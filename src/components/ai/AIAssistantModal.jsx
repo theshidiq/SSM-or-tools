@@ -19,6 +19,19 @@ import {
   Target,
 } from "lucide-react";
 
+// ShadCN UI Components
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "../ui/dialog";
+import { Button } from "../ui/button";
+import { Badge } from "../ui/badge";
+import { Progress } from "../ui/progress";
+import { Card, CardContent, CardHeader, CardTitle } from "../ui/card";
+
 const AIAssistantModal = ({
   isOpen,
   onClose,
@@ -54,43 +67,37 @@ const AIAssistantModal = ({
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[9999]">
-      <div className="bg-white rounded-lg shadow-xl w-[500px] max-h-[600px] overflow-hidden">
-        {/* Header */}
-        <div className="bg-gradient-to-r from-violet-600 to-purple-600 text-white p-4 flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <Sparkles size={20} className="text-yellow-300" />
-            <h2 className="text-lg font-medium">AI アシスタント</h2>
-          </div>
-          <button
-            onClick={onClose}
-            className="text-white hover:text-gray-200 transition-colors"
-          >
-            <X size={20} />
-          </button>
-        </div>
+    <Dialog open={isOpen} onOpenChange={onClose}>
+      <DialogContent className="max-w-[500px] max-h-[600px] overflow-hidden">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2 text-violet-600">
+            <Sparkles size={20} className="text-yellow-500" />
+            AI アシスタント
+          </DialogTitle>
+          <DialogDescription>
+            スケジュールの自動生成とAI最適化
+          </DialogDescription>
+        </DialogHeader>
 
-        {/* Header divider */}
-        <div className="border-b border-gray-200"></div>
-
-        {/* Content */}
-        <div className="p-4 max-h-[500px] overflow-y-auto">
-          <div className="space-y-4">
-            {/* System Status Display */}
-            {systemStatus && systemStatus.type === "enhanced" && (
-              <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mb-4">
+        <div className="max-h-[500px] overflow-y-auto space-y-4">
+          {/* System Status Display */}
+          {systemStatus && systemStatus.type === "enhanced" && (
+            <Card>
+              <CardContent className="p-3">
                 <div className="flex items-center gap-2 mb-1">
-                  <Brain size={16} className="text-blue-600" />
-                  <span className="text-sm font-medium text-blue-900">
+                  <Brain size={16} className="text-primary" />
+                  <Badge variant="secondary">
                     ハイブリッドAIシステム (
                     {systemStatus.initialized ? "初期化済み" : "初期化中"})
-                  </span>
+                  </Badge>
                 </div>
-                <div className="text-xs text-blue-700">
+                <div className="text-xs text-muted-foreground">
                   MLモデル:{" "}
-                  {systemStatus.health?.mlModel?.ready
-                    ? "準備完了"
-                    : "トレーニング必要"}
+                  <Badge variant={systemStatus.health?.mlModel?.ready ? "default" : "outline"}>
+                    {systemStatus.health?.mlModel?.ready
+                      ? "準備完了"
+                      : "トレーニング必要"}
+                  </Badge>
                   {systemStatus.health?.mlModel?.accuracy > 0 && (
                     <span>
                       {" "}
@@ -100,8 +107,9 @@ const AIAssistantModal = ({
                     </span>
                   )}
                 </div>
-              </div>
-            )}
+              </CardContent>
+            </Card>
+          )}
 
             {/* Training Progress */}
             {isProcessing && trainingProgress && (
@@ -314,7 +322,6 @@ const AIAssistantModal = ({
                 )}
               </div>
             )}
-          </div>
         </div>
 
         {/* Footer */}
@@ -336,8 +343,8 @@ const AIAssistantModal = ({
               </div>
             )}
         </div>
-      </div>
-    </div>
+      </DialogContent>
+    </Dialog>
   );
 };
 

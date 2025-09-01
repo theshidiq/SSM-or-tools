@@ -1,104 +1,146 @@
 import React from "react";
-import { BarChart3, FileText } from "lucide-react";
+import { BarChart3, FileText, TrendingUp } from "lucide-react";
 import { getOrderedStaffMembers } from "../../utils/staffUtils";
 import { calculateWorkloadPercentage } from "../../utils/statisticsUtils";
+
+// ShadCN UI components
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../ui/card";
+import { Badge } from "../ui/badge";
+import { Progress } from "../ui/progress";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../ui/table";
+import { Separator } from "../ui/separator";
 
 const StatisticsDashboard = ({ statistics, staffMembers, dateRange }) => {
   const orderedStaffMembers = getOrderedStaffMembers(staffMembers, dateRange);
 
   return (
-    <div className="statistics-section w-4/5 mx-auto">
-      <div className="bg-gradient-to-r from-gray-50 to-blue-50 p-6 rounded-lg border border-gray-200 shadow-sm mb-6">
-        <h2 className="text-xl font-bold text-gray-800 mb-6 flex items-center gap-2">
-          <BarChart3 size={24} />
-          統計・分析 (Statistics & Analytics)
-        </h2>
+    <div className="space-y-6">
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2 japanese-text">
+            <BarChart3 size={24} />
+            統計・分析 (Statistics & Analytics)
+          </CardTitle>
+          <CardDescription>
+            スタッフ別勤務パターンと負荷分析
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
 
-        {/* Staff Work Patterns Table */}
-        <div className="bg-white p-6 rounded-lg border border-gray-200 shadow-sm">
-          <h3 className="text-lg font-bold text-gray-800 mb-4 flex items-center gap-2">
-            <FileText size={20} />
-            スタッフ別勤務パターン詳細 (Detailed Staff Work Patterns)
-          </h3>
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="bg-gray-50">
-                  <th className="text-left p-3 font-medium text-gray-700">
-                    スタッフ (Staff)
-                  </th>
-                  <th className="text-center p-3 font-medium text-gray-600">
-                    ○ Normal
-                  </th>
-                  <th className="text-center p-3 font-medium text-blue-600">
-                    △ Early
-                  </th>
-                  <th className="text-center p-3 font-medium text-red-600">
-                    × Off
-                  </th>
-                  <th className="text-center p-3 font-medium text-yellow-600">
-                    ★ Holiday
-                  </th>
-                  <th className="text-center p-3 font-medium text-green-600">
-                    Total
-                  </th>
-                  <th className="text-center p-3 font-medium text-purple-600">
-                    Workload
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {orderedStaffMembers.map((staff) => {
-                  const staffStats = statistics.staffStats[staff.id];
-                  const workloadPercentage = calculateWorkloadPercentage(
-                    staffStats,
-                    dateRange.length,
-                  );
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2 text-lg japanese-text">
+                <FileText size={20} />
+                スタッフ別勤務パターン詳細
+              </CardTitle>
+              <CardDescription>
+                各スタッフの勤務状況と負荷割合
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="overflow-x-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead className="japanese-text">
+                        スタッフ (Staff)
+                      </TableHead>
+                      <TableHead className="text-center">
+                        <Badge variant="outline">○ Normal</Badge>
+                      </TableHead>
+                      <TableHead className="text-center">
+                        <Badge variant="outline" className="text-blue-600 border-blue-600">
+                          △ Early
+                        </Badge>
+                      </TableHead>
+                      <TableHead className="text-center">
+                        <Badge variant="outline" className="text-destructive border-destructive">
+                          × Off
+                        </Badge>
+                      </TableHead>
+                      <TableHead className="text-center">
+                        <Badge variant="outline" className="text-yellow-600 border-yellow-600">
+                          ★ Holiday
+                        </Badge>
+                      </TableHead>
+                      <TableHead className="text-center">
+                        <Badge variant="outline" className="text-green-600 border-green-600">
+                          Total
+                        </Badge>
+                      </TableHead>
+                      <TableHead className="text-center">
+                        <Badge variant="outline" className="text-purple-600 border-purple-600">
+                          <TrendingUp size={12} className="mr-1" />
+                          Workload
+                        </Badge>
+                      </TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {orderedStaffMembers.map((staff) => {
+                      const staffStats = statistics.staffStats[staff.id];
+                      const workloadPercentage = calculateWorkloadPercentage(
+                        staffStats,
+                        dateRange.length,
+                      );
 
-                  // Calculate total: triangle=0.5, cross=1, stars=1
-                  const total =
-                    (staffStats?.early || 0) * 0.5 +
-                    (staffStats?.off || 0) * 1 +
-                    (staffStats?.holiday || 0) * 1;
+                      // Calculate total: triangle=0.5, cross=1, stars=1
+                      const total =
+                        (staffStats?.early || 0) * 0.5 +
+                        (staffStats?.off || 0) * 1 +
+                        (staffStats?.holiday || 0) * 1;
 
-                  return (
-                    <tr
-                      key={staff.id}
-                      className="border-t border-gray-200 hover:bg-gray-50"
-                    >
-                      <td className="p-3 font-medium text-gray-800">
-                        {staffStats?.name || staff.name}
-                      </td>
-                      <td className="p-3 text-center text-gray-600 font-medium">
-                        {staffStats?.normal || 0}
-                      </td>
-                      <td className="p-3 text-center text-blue-600 font-medium">
-                        {staffStats?.early || 0}
-                      </td>
-                      <td className="p-3 text-center text-red-600 font-medium">
-                        {staffStats?.off || 0}
-                      </td>
-                      <td className="p-3 text-center text-yellow-600 font-medium">
-                        {staffStats?.holiday || 0}
-                      </td>
-                      <td className="p-3 text-center text-green-600 font-medium">
-                        {total}
-                      </td>
-                      <td className="p-3 text-center">
-                        <div className="flex items-center justify-center">
-                          <div className="bg-purple-100 text-purple-800 px-2 py-1 rounded-full text-xs font-medium">
-                            {workloadPercentage}%
-                          </div>
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      </div>
+                      return (
+                        <TableRow key={staff.id}>
+                          <TableCell className="font-medium japanese-text">
+                            {staffStats?.name || staff.name}
+                          </TableCell>
+                          <TableCell className="text-center">
+                            <Badge variant="secondary">
+                              {staffStats?.normal || 0}
+                            </Badge>
+                          </TableCell>
+                          <TableCell className="text-center">
+                            <Badge variant="secondary" className="text-blue-600">
+                              {staffStats?.early || 0}
+                            </Badge>
+                          </TableCell>
+                          <TableCell className="text-center">
+                            <Badge variant="secondary" className="text-destructive">
+                              {staffStats?.off || 0}
+                            </Badge>
+                          </TableCell>
+                          <TableCell className="text-center">
+                            <Badge variant="secondary" className="text-yellow-600">
+                              {staffStats?.holiday || 0}
+                            </Badge>
+                          </TableCell>
+                          <TableCell className="text-center">
+                            <Badge variant="secondary" className="text-green-600">
+                              {total}
+                            </Badge>
+                          </TableCell>
+                          <TableCell className="text-center">
+                            <div className="flex items-center justify-center space-x-2">
+                              <Progress 
+                                value={workloadPercentage} 
+                                className="w-16 h-2" 
+                              />
+                              <Badge variant="outline" className="text-purple-600 border-purple-600">
+                                {workloadPercentage}%
+                              </Badge>
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })}
+                  </TableBody>
+                </Table>
+              </div>
+            </CardContent>
+          </Card>
+        </CardContent>
+      </Card>
     </div>
   );
 };

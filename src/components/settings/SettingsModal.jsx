@@ -1,6 +1,24 @@
 import React, { useState, useEffect, useRef } from "react";
 import { X, RotateCcw, AlertTriangle, Check } from "lucide-react";
 
+// ShadCN UI Components
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "../ui/dialog";
+import { Button } from "../ui/button";
+import { Badge } from "../ui/badge";
+import { Separator } from "../ui/separator";
+import { Alert, AlertDescription } from "../ui/alert";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "../ui/tabs";
+import { Switch } from "../ui/switch";
+import { Label } from "../ui/label";
+import { Card, CardContent, CardHeader, CardTitle } from "../ui/card";
+import { toast } from "sonner";
+
 // Import tab components
 import { useSettingsCache } from "../../hooks/useConfigurationCache";
 import StaffGroupsTab from "./tabs/StaffGroupsTab";
@@ -182,84 +200,56 @@ const SettingsModal = ({
   if (!isVisible) return null;
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[10000] p-4">
-      <div
-        ref={modalRef}
-        className={`bg-white rounded-xl w-full max-w-6xl h-[90vh] flex flex-col shadow-2xl transform transition-all duration-300 ${
-          isOpen ? "scale-100 opacity-100" : "scale-95 opacity-0"
-        }`}
-      >
-        {/* Header */}
-        <div className="flex items-center justify-between p-6 border-b border-gray-200 bg-gradient-to-r from-blue-50 to-indigo-50">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-blue-600 rounded-lg flex items-center justify-center">
-              <span className="text-white font-bold text-lg">⚙️</span>
+    <Dialog open={isOpen} onOpenChange={onClose}>
+      <DialogContent className="max-w-6xl max-h-[90vh] flex flex-col">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-3">
+            <div className="w-8 h-8 bg-blue-500 rounded-lg flex items-center justify-center text-white font-bold">
+              ⚙️
             </div>
-            <div>
-              <h2 className="text-2xl font-bold text-gray-800">
-                System Settings
-              </h2>
-              <p className="text-gray-600 text-sm">
-                Configure ML models and business rules • Changes are saved
-                automatically
-              </p>
-            </div>
-          </div>
-
-          <div className="flex items-center gap-2">
-            <button
-              onClick={() => {
-                onClose();
-              }}
-              className="p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
-              title="Close (Esc)"
-            >
-              <X size={20} />
-            </button>
-          </div>
-        </div>
+            <span className="japanese-text text-xl font-bold">Settings & Configuration</span>
+            <Badge variant="secondary" className="japanese-text">設定</Badge>
+          </DialogTitle>
+          <DialogDescription>
+            Configure ML models, business rules, and system settings
+          </DialogDescription>
+        </DialogHeader>
 
         {/* Error Display */}
         {error && (
-          <div className="mx-6 mt-4 p-4 bg-red-50 border border-red-200 rounded-lg flex items-start gap-3">
-            <AlertTriangle
-              size={20}
-              className="text-red-600 flex-shrink-0 mt-0.5"
-            />
-            <div className="flex-1">
-              <p className="text-red-800 font-medium">Configuration Error</p>
-              <p className="text-red-700 text-sm mt-1">{error}</p>
-            </div>
-          </div>
+          <Alert variant="destructive" className="mx-4">
+            <AlertTriangle size={20} />
+            <AlertDescription>
+              <strong>Configuration Error:</strong> {error}
+            </AlertDescription>
+          </Alert>
         )}
 
-        {/* Tab Navigation */}
-        <div className="px-6 py-4 border-b border-gray-200 bg-gray-50">
-          <nav aria-label="Settings navigation">
-            <div className="flex space-x-1" role="tablist">
-              {TABS.map((tab, index) => (
-                <TabButton
-                  key={tab.id}
-                  id={tab.id}
-                  label={tab.label}
-                  icon={tab.icon}
-                  isActive={activeTab === tab.id}
-                  onClick={() => setActiveTab(tab.id)}
-                  hasErrors={
-                    validationErrors[tab.id] &&
-                    Object.keys(validationErrors[tab.id]).length > 0
-                  }
-                  keyboardShortcut={`Ctrl+${index + 1}`}
-                />
-              ))}
-            </div>
-          </nav>
-        </div>
-
-        {/* Tab Content */}
-        <div className="flex-1 overflow-hidden">
-          <div className="h-full overflow-y-auto">{renderTabContent()}</div>
-        </div>
+        <Tabs value={activeTab} onValueChange={setActiveTab} className="flex-1 flex flex-col">
+          <TabsList className="mx-4 mb-4">
+            {TABS.map((tab, index) => (
+              <TabsTrigger 
+                key={tab.id} 
+                value={tab.id}
+                className="flex items-center gap-2"
+              >
+                <span>{tab.icon}</span>
+                {tab.label}
+                {validationErrors[tab.id] && Object.keys(validationErrors[tab.id]).length > 0 && (
+                  <Badge variant="destructive" className="ml-2 text-xs">!</Badge>
+                )}
+              </TabsTrigger>
+            ))}
+          </TabsList>
+          
+          <div className="flex-1 overflow-hidden px-4">
+            {TABS.map(tab => (
+              <TabsContent key={tab.id} value={tab.id} className="h-full overflow-y-auto mt-0">
+                {renderTabContent(tab.id)}
+              </TabsContent>
+            ))}
+          </div>
+        </Tabs>
 
         {/* Footer */}
         <div className="flex items-center justify-between px-6 py-4 border-t border-gray-200 bg-gray-50">
@@ -292,39 +282,35 @@ const SettingsModal = ({
 
             {/* Autosave Toggle */}
             {onToggleAutosave && (
-              <label className="flex items-center gap-2 text-sm">
-                <input
-                  type="checkbox"
+              <div className="flex items-center space-x-2">
+                <Switch
+                  id="autosave"
                   checked={isAutosaveEnabled}
-                  onChange={(e) => onToggleAutosave(e.target.checked)}
-                  className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                  onCheckedChange={onToggleAutosave}
                 />
-                <span className="text-gray-700">Auto-save</span>
-              </label>
+                <Label htmlFor="autosave" className="text-sm">Auto-save</Label>
+              </div>
             )}
 
-            <button
+            <Button
               onClick={handleReset}
-              className="flex items-center px-3 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-gray-500 transition-colors"
+              variant="outline"
+              size="sm"
+              className="flex items-center gap-2"
               title="Reset to Defaults"
             >
-              <RotateCcw size={16} className="mr-1.5" />
+              <RotateCcw size={16} />
               Reset
-            </button>
+            </Button>
           </div>
 
           <div className="flex items-center gap-3">
-            <button
-              onClick={() => {
-                onClose();
-              }}
-              className="px-6 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors"
-            >
+            <Button onClick={onClose}>
               Done
-            </button>
+            </Button>
           </div>
         </div>
-      </div>
+      </DialogContent>
 
       {/* Reset Confirmation Modal - Moved outside to prevent z-index issues */}
       {resetConfirmation && (
@@ -340,7 +326,7 @@ const SettingsModal = ({
           isLoading={isResetting}
         />
       )}
-    </div>
+    </Dialog>
   );
 };
 

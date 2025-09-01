@@ -14,6 +14,15 @@ import {
   TableProperties,
   Eye,
 } from "lucide-react";
+
+// ShadCN UI components
+import { Button } from "../ui/button";
+import { Card, CardContent } from "../ui/card";
+import { Tabs, TabsList, TabsTrigger } from "../ui/tabs";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "../ui/dropdown-menu";
+import { Separator } from "../ui/separator";
+import { Badge } from "../ui/badge";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "../ui/tooltip";
 import { monthPeriods, addNextPeriod } from "../../utils/dateUtils";
 import { useAIAssistant } from "../../hooks/useAIAssistant";
 import { useAIAssistantLazy } from "../../hooks/useAIAssistantLazy";
@@ -243,296 +252,284 @@ const NavigationToolbar = ({
   }, [showMonthPicker, setShowMonthPicker]);
 
   return (
-    <div className="toolbar-section mb-6">
-      <div className="w-4/5 mx-auto flex items-center bg-white p-4 rounded-lg border border-gray-200 shadow-sm">
-        {/* Left Side - Month Navigation */}
-        <div className="flex items-center gap-3">
-          {/* Previous Month Button */}
-          <button
-            onClick={() => {
-              onMonthChange(currentMonthIndex - 1);
-            }}
-            disabled={currentMonthIndex <= 0}
-            className={`flex items-center px-3 py-2 h-10 text-sm font-medium rounded-lg border transition-all duration-200 ${
-              currentMonthIndex <= 0
-                ? "border-gray-200 bg-gray-50 text-gray-400 cursor-not-allowed"
-                : "border-gray-300 bg-white hover:border-gray-400"
-            }`}
-            title="Previous period (← Left Arrow)"
-          >
-            <ChevronLeft
-              size={16}
-              className={
-                currentMonthIndex <= 0
-                  ? "text-gray-400"
-                  : "text-gray-600 hover:text-gray-800"
-              }
-            />
-          </button>
-
-          {/* Month Picker */}
-          <div className="relative" ref={monthPickerRef}>
-            <button
-              onClick={() => setShowMonthPicker(!showMonthPicker)}
-              className="month-picker flex items-center px-3 py-2 h-10 text-sm font-medium rounded-lg border border-gray-300 bg-white hover:border-gray-400 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-all duration-200"
-              title="Select month (Use ← → arrow keys to navigate periods)"
-            >
-              <Calendar
-                size={16}
-                className="text-gray-600 hover:text-gray-800 mr-1"
-              />
-              <span className="text-gray-700 hover:text-gray-900 text-center">
-                {monthPeriods[currentMonthIndex]?.label || "Period"} {currentYear}年
-              </span>
-            </button>
-
-            {showMonthPicker && (
-              <div className="month-picker absolute top-12 left-0 bg-white border border-gray-300 rounded-lg shadow-xl z-[9999] min-w-[320px] p-4">
-                {/* Year Navigation */}
-                <div className="flex items-center justify-between mb-4 pb-3 border-b border-gray-200">
-                  <button
-                    onClick={() => {
-                      const currentIndex = availableYears.indexOf(currentYear);
-                      if (currentIndex > 0) {
-                        setIsManualYearNavigation(true);
-                        setCurrentYear(availableYears[currentIndex - 1]);
-                      }
-                    }}
-                    disabled={availableYears.indexOf(currentYear) <= 0}
-                    className={`flex items-center justify-center w-8 h-8 rounded-full text-gray-600 ${
-                      availableYears.indexOf(currentYear) <= 0 
-                        ? 'text-gray-300 cursor-not-allowed' 
-                        : 'hover:bg-gray-100 hover:text-gray-800'
-                    }`}
-                    title="Previous year"
+    <TooltipProvider>
+      <Card className="mb-6">
+        <CardContent className="p-4">
+          <div className="flex flex-col lg:flex-row lg:items-center gap-4">
+            {/* Left Side - Month Navigation */}
+            <div className="flex items-center gap-2">
+              {/* Previous Month Button */}
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => onMonthChange(currentMonthIndex - 1)}
+                    disabled={currentMonthIndex <= 0}
                   >
                     <ChevronLeft size={16} />
-                  </button>
-                  <span className="text-lg font-semibold text-gray-800">
-                    {currentYear}年
-                  </span>
-                  <button
-                    onClick={() => {
-                      const currentIndex = availableYears.indexOf(currentYear);
-                      if (currentIndex < availableYears.length - 1) {
-                        setIsManualYearNavigation(true);
-                        setCurrentYear(availableYears[currentIndex + 1]);
-                      }
-                    }}
-                    disabled={availableYears.indexOf(currentYear) >= availableYears.length - 1}
-                    className={`flex items-center justify-center w-8 h-8 rounded-full text-gray-600 ${
-                      availableYears.indexOf(currentYear) >= availableYears.length - 1 
-                        ? 'text-gray-300 cursor-not-allowed' 
-                        : 'hover:bg-gray-100 hover:text-gray-800'
-                    }`}
-                    title="Next year"
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p>Previous period (← Left Arrow)</p>
+                </TooltipContent>
+              </Tooltip>
+
+              {/* Month Picker */}
+              <div className="relative" ref={monthPickerRef}>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      variant="outline"
+                      onClick={() => setShowMonthPicker(!showMonthPicker)}
+                      className="h-10 gap-2"
+                    >
+                      <Calendar size={16} />
+                      <span className="japanese-text">
+                        {monthPeriods[currentMonthIndex]?.label || "Period"} {currentYear}年
+                      </span>
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    <p>Select month (Use ← → arrow keys to navigate periods)</p>
+                  </TooltipContent>
+                </Tooltip>
+
+                {showMonthPicker && (
+                  <Card className="absolute top-12 left-0 min-w-[320px] z-50 shadow-lg">
+                    <CardContent className="p-4">
+                      {/* Year Navigation */}
+                      <div className="flex items-center justify-between mb-4 pb-3">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => {
+                            const currentIndex = availableYears.indexOf(currentYear);
+                            if (currentIndex > 0) {
+                              setIsManualYearNavigation(true);
+                              setCurrentYear(availableYears[currentIndex - 1]);
+                            }
+                          }}
+                          disabled={availableYears.indexOf(currentYear) <= 0}
+                        >
+                          <ChevronLeft size={16} />
+                        </Button>
+                        <span className="text-lg font-semibold japanese-text">
+                          {currentYear}年
+                        </span>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => {
+                            const currentIndex = availableYears.indexOf(currentYear);
+                            if (currentIndex < availableYears.length - 1) {
+                              setIsManualYearNavigation(true);
+                              setCurrentYear(availableYears[currentIndex + 1]);
+                            }
+                          }}
+                          disabled={availableYears.indexOf(currentYear) >= availableYears.length - 1}
+                        >
+                          <ChevronRight size={16} />
+                        </Button>
+                      </div>
+                      <Separator className="mb-4" />
+                      {/* Month Periods Grid */}
+                      <div className="grid grid-cols-2 gap-2">
+                        {periodsForCurrentYear.length > 0 ? (
+                          periodsForCurrentYear.map((period) => (
+                            <Button
+                              key={period.originalIndex}
+                              variant={period.originalIndex === currentMonthIndex ? "default" : "outline"}
+                              size="sm"
+                              onClick={() => {
+                                onMonthChange(period.originalIndex);
+                                setShowMonthPicker(false);
+                              }}
+                              className="japanese-text"
+                            >
+                              {period.label}
+                            </Button>
+                          ))
+                        ) : (
+                          <div className="col-span-2 text-center text-muted-foreground py-4">
+                            No periods available for {currentYear}
+                          </div>
+                        )}
+                      </div>
+                    </CardContent>
+                  </Card>
+                )}
+              </div>
+
+              {/* Next Month Button */}
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => onMonthChange(currentMonthIndex + 1)}
+                    disabled={currentMonthIndex >= monthPeriods.length - 1}
                   >
                     <ChevronRight size={16} />
-                  </button>
-                </div>
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p>Next period (→ Right Arrow)</p>
+                </TooltipContent>
+              </Tooltip>
+            </div>
 
-                {/* Month Periods Grid */}
-                <div className="grid grid-cols-2 gap-2">
-                  {periodsForCurrentYear.length > 0 ? (
-                    periodsForCurrentYear.map((period) => (
-                      <button
-                        key={period.originalIndex}
-                        onClick={() => {
-                          onMonthChange(period.originalIndex);
-                          setShowMonthPicker(false);
-                        }}
-                        className={`text-center px-3 py-2 rounded-md text-sm font-medium transition-colors duration-200 ${
-                          period.originalIndex === currentMonthIndex
-                            ? "bg-blue-100 text-blue-700 border border-blue-300"
-                            : "text-gray-700 hover:bg-gray-50 border border-gray-200"
-                        }`}
-                      >
-                        {period.label}
-                      </button>
-                    ))
-                  ) : (
-                    <div className="col-span-2 text-center text-gray-500 py-4">
-                      No periods available for {currentYear}
-                    </div>
-                  )}
-                </div>
-              </div>
-            )}
+            <Separator orientation="vertical" className="h-8 mx-4" />
+
+            {/* View Mode Toggle */}
+            <Tabs value={viewMode} onValueChange={onViewModeChange} className="w-auto">
+              <TabsList className="grid w-full grid-cols-2">
+                <TabsTrigger value="table" className="flex items-center gap-2 japanese-text">
+                  <Table size={16} />
+                  エディター
+                </TabsTrigger>
+                <TabsTrigger value="card" className="flex items-center gap-2 japanese-text">
+                  <Eye size={16} />
+                  ビュー
+                </TabsTrigger>
+              </TabsList>
+            </Tabs>
+
+            <Separator orientation="vertical" className="h-8 mx-4" />
+
+            {/* Action Buttons Section */}
+            <div className="flex flex-wrap items-center gap-2">
+              {/* Fullscreen Toggle */}
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      if (!document.fullscreenElement) {
+                        document.documentElement.requestFullscreen();
+                      } else {
+                        document.exitFullscreen();
+                      }
+                    }}
+                  >
+                    <Maximize size={16} />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p>Toggle fullscreen</p>
+                </TooltipContent>
+              </Tooltip>
+
+              {/* AI Assistant */}
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant={isEnhanced ? "secondary" : "outline"}
+                    size="sm"
+                    onClick={handleAIClick}
+                    disabled={isProcessing}
+                    className={isProcessing ? "animate-pulse" : ""}
+                  >
+                    <Sparkles 
+                      size={16} 
+                      className={isProcessing ? "animate-spin" : ""}
+                    />
+                    {isEnhanced && (
+                      <Badge variant="secondary" className="ml-2 text-xs">
+                        AI+
+                      </Badge>
+                    )}
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p className="japanese-text">
+                    {isEnhanced
+                      ? isMLReady && typeof isMLReady === 'function' && isMLReady()
+                        ? "ハイブリッドAI (ML準備完了)"
+                        : "ハイブリッドAI (ML初期化中)"
+                      : "AI Assistant"}
+                  </p>
+                </TooltipContent>
+              </Tooltip>
+
+              {/* Add Table */}
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button variant="outline" size="sm" onClick={handleAddTable}>
+                    <TableProperties size={16} className="text-teal-600" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p>Add Next Period Table</p>
+                </TooltipContent>
+              </Tooltip>
+
+              {/* Manage Staff */}
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button variant="outline" size="sm" onClick={() => setShowStaffEditModal(true)}>
+                    <Users size={16} className="text-purple-600" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p>Manage Staff</p>
+                </TooltipContent>
+              </Tooltip>
+
+              {/* Settings */}
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button variant="outline" size="sm" onClick={onShowSettings}>
+                    <Settings size={16} className="text-blue-600" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p>Settings - Configure ML models and business rules</p>
+                </TooltipContent>
+              </Tooltip>
+
+              {/* Delete Current Period */}
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button variant="outline" size="sm" onClick={handleDeletePeriod}>
+                    <Trash2 size={16} className="text-destructive" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p className="japanese-text">
+                    Delete entire {monthPeriods[currentMonthIndex]?.label || "current period"} table
+                  </p>
+                </TooltipContent>
+              </Tooltip>
+
+              {/* Export CSV */}
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button variant="outline" size="sm" onClick={handleExport}>
+                    <Download size={16} className="text-green-600" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p>Export CSV</p>
+                </TooltipContent>
+              </Tooltip>
+
+              {/* Print */}
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button variant="outline" size="sm" onClick={handlePrint}>
+                    <Printer size={16} />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p>Print</p>
+                </TooltipContent>
+              </Tooltip>
+            </div>
           </div>
-
-          {/* Next Month Button */}
-          <button
-            onClick={() => {
-              onMonthChange(currentMonthIndex + 1);
-            }}
-            disabled={currentMonthIndex >= monthPeriods.length - 1}
-            className={`flex items-center px-3 py-2 h-10 text-sm font-medium rounded-lg border transition-all duration-200 ${
-              currentMonthIndex >= monthPeriods.length - 1
-                ? "border-gray-200 bg-gray-50 text-gray-400 cursor-not-allowed"
-                : "border-gray-300 bg-white hover:border-gray-400"
-            }`}
-            title="Next period (→ Right Arrow)"
-          >
-            <ChevronRight
-              size={16}
-              className={
-                currentMonthIndex >= monthPeriods.length - 1
-                  ? "text-gray-400"
-                  : "text-gray-600 hover:text-gray-800"
-              }
-            />
-          </button>
-        </div>
-
-        {/* Separator */}
-        <div className="h-8 w-px bg-gray-300 mx-6"></div>
-
-        {/* View Mode Toggle */}
-        <div className="flex items-center gap-1 bg-gray-100 rounded-lg p-1">
-          <button
-            onClick={() => onViewModeChange("table")}
-            className={`flex items-center px-3 py-1.5 text-sm font-medium rounded-md transition-all duration-200 ${
-              viewMode === "table"
-                ? "bg-white text-gray-900 shadow-sm border border-gray-200"
-                : "text-gray-600 hover:text-gray-900"
-            }`}
-            title="Editor (エディター)"
-          >
-            <Table size={16} className="mr-1.5" />
-            エディター
-          </button>
-          <button
-            onClick={() => onViewModeChange("card")}
-            className={`flex items-center px-3 py-1.5 text-sm font-medium rounded-md transition-all duration-200 ${
-              viewMode === "card"
-                ? "bg-white text-gray-900 shadow-sm border border-gray-200"
-                : "text-gray-600 hover:text-gray-900"
-            }`}
-            title="View (ビュー)"
-          >
-            <Eye size={16} className="mr-1.5" />
-            ビュー
-          </button>
-        </div>
-
-        {/* Separator */}
-        <div className="h-8 w-px bg-gray-300 mx-6"></div>
-
-        {/* Action Buttons Section */}
-        <div className="flex items-center gap-2">
-          {/* Fullscreen Toggle */}
-          <button
-            onClick={() => {
-              if (!document.fullscreenElement) {
-                document.documentElement.requestFullscreen();
-              } else {
-                document.exitFullscreen();
-              }
-            }}
-            className="flex items-center px-3 py-2 h-10 text-sm font-medium rounded-lg border border-gray-300 bg-white hover:border-gray-400 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500 transition-all duration-200"
-            title="Toggle fullscreen"
-          >
-            <Maximize size={16} className="text-gray-600 hover:text-gray-700" />
-          </button>
-
-          {/* AI Assistant */}
-          <button
-            onClick={handleAIClick}
-            className={`flex items-center px-3 py-2 h-10 text-sm font-medium rounded-lg border transition-all duration-200 ${
-              isProcessing
-                ? "border-yellow-400 bg-yellow-50 animate-pulse"
-                : isEnhanced && isMLReady && typeof isMLReady === 'function' && isMLReady()
-                  ? "border-violet-400 bg-violet-50 hover:bg-violet-100"
-                  : "border-gray-300 bg-white hover:border-gray-400"
-            } focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-violet-500`}
-            title={`${
-              isEnhanced
-                ? isMLReady && typeof isMLReady === 'function' && isMLReady()
-                  ? "ハイブリッドAI (ML準備完了)"
-                  : "ハイブリッドAI (ML初期化中)"
-                : "AI Assistant"
-            }`}
-            disabled={isProcessing}
-          >
-            <Sparkles
-              size={16}
-              className={`${
-                isProcessing
-                  ? "text-yellow-600 animate-spin"
-                  : isEnhanced
-                    ? "text-violet-600 hover:text-violet-700"
-                    : "text-gray-600 hover:text-gray-700"
-              }`}
-            />
-          </button>
-
-          {/* Add Table */}
-          <button
-            onClick={handleAddTable}
-            className="flex items-center px-3 py-2 h-10 text-sm font-medium rounded-lg border border-gray-300 bg-white hover:border-gray-400 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500 transition-all duration-200"
-            title="Add Next Period Table"
-          >
-            <TableProperties
-              size={16}
-              className="text-teal-600 hover:text-teal-700"
-            />
-          </button>
-
-          {/* Manage Staff */}
-          <button
-            onClick={() => setShowStaffEditModal(true)}
-            className="flex items-center px-3 py-2 h-10 text-sm font-medium rounded-lg border border-gray-300 bg-white hover:border-gray-400 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500 transition-all duration-200"
-            title="Manage Staff"
-          >
-            <Users
-              size={16}
-              className="text-purple-600 hover:text-purple-700"
-            />
-          </button>
-
-          {/* Settings */}
-          <button
-            onClick={onShowSettings}
-            className="flex items-center px-3 py-2 h-10 text-sm font-medium rounded-lg border border-gray-300 bg-white hover:border-gray-400 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-all duration-200"
-            title="Settings - Configure ML models and business rules"
-          >
-            <Settings size={16} className="text-blue-600 hover:text-blue-700" />
-          </button>
-
-          {/* Delete Current Period */}
-          <button
-            onClick={handleDeletePeriod}
-            className="flex items-center px-3 py-2 h-10 text-sm font-medium rounded-lg border border-gray-300 bg-white hover:border-gray-400 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500 transition-all duration-200"
-            title={`Delete entire ${monthPeriods[currentMonthIndex]?.label || "current period"} table`}
-          >
-            <Trash2
-              size={16}
-              className="text-orange-600 hover:text-orange-700"
-            />
-          </button>
-
-          {/* Export CSV */}
-          <button
-            onClick={handleExport}
-            className="flex items-center px-3 py-2 h-10 text-sm font-medium rounded-lg border border-gray-300 bg-white hover:border-gray-400 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500 transition-all duration-200"
-            title="Export CSV"
-          >
-            <Download
-              size={16}
-              className="text-green-600 hover:text-green-700"
-            />
-          </button>
-
-          {/* Print */}
-          <button
-            onClick={handlePrint}
-            className="flex items-center px-3 py-2 h-10 text-sm font-medium rounded-lg border border-gray-300 bg-white hover:border-gray-400 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500 transition-all duration-200"
-            title="Print"
-          >
-            <Printer size={16} className="text-gray-600 hover:text-gray-700" />
-          </button>
-        </div>
-      </div>
+        </CardContent>
+      </Card>
 
       {/* AI Assistant Modal - Lazy loaded when AI is enabled */}
       {aiEnabled && (
@@ -554,7 +551,7 @@ const NavigationToolbar = ({
           </Suspense>
         </ErrorBoundary>
       )}
-    </div>
+    </TooltipProvider>
   );
 };
 

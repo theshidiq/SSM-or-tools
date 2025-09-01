@@ -6,6 +6,12 @@ import React, {
   useRef,
 } from "react";
 
+// ShadCN UI components
+import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
+import { Badge } from "./ui/badge";
+import { Alert, AlertDescription } from "./ui/alert";
+import { Separator } from "./ui/separator";
+
 // Import extracted utilities and constants
 import { shiftSymbols, getAvailableShifts } from "../constants/shiftConstants";
 import {
@@ -377,28 +383,48 @@ const ShiftScheduleEditorRealtime = ({
 
 
   return (
-    <div className="container mx-auto p-6 bg-gray-50 min-h-screen">
+    <div className="min-h-screen bg-background p-4 md:p-6">
+      <div className="mx-auto max-w-7xl">
 
-      {/* Error Display */}
-      {error && (
-        <ErrorDisplay
-          error={error}
-          context="ShiftScheduleEditorRealtime"
-        />
-      )}
+        {/* Error Display */}
+        {error && (
+          <Alert className="mb-6" variant="destructive">
+            <AlertDescription>
+              エラーが発生しました: {error?.message || error}
+            </AlertDescription>
+          </Alert>
+        )}
 
-      {/* Header with real-time info */}
-      <div className="mb-6">
-        <div className="flex justify-between items-center mb-4">
-          <h1 className="text-3xl font-bold text-gray-900">
-            シフト管理システム
-          </h1>
-          <div className="flex items-center gap-4 text-sm text-gray-600">
-            <span>Schedule ID: {currentScheduleId?.substring(0, 8)}...</span>
-            {isSaving && <span className="text-blue-600 animate-pulse">Auto-saving...</span>}
-          </div>
-        </div>
-      </div>
+        {/* Header with real-time info */}
+        <Card className="mb-6">
+          <CardHeader>
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+              <div>
+                <CardTitle className="text-2xl md:text-3xl font-bold japanese-text">
+                  シフト管理システム
+                </CardTitle>
+                <p className="text-sm text-muted-foreground mt-1">
+                  Japanese Restaurant Shift Schedule Manager
+                </p>
+              </div>
+              <div className="flex flex-col sm:items-end gap-2">
+                <div className="flex items-center gap-2">
+                  <Badge variant={isConnected ? "default" : "secondary"}>
+                    {realtimeStatus.status === "connected" && "リアルタイム"}
+                    {realtimeStatus.status === "saving" && "保存中..."}
+                    {realtimeStatus.status === "loading" && "読み込み中..."}
+                    {realtimeStatus.status === "disconnected" && "オフライン"}
+                  </Badge>
+                </div>
+                {currentScheduleId && (
+                  <span className="text-xs text-muted-foreground font-mono">
+                    ID: {currentScheduleId.substring(0, 8)}...
+                  </span>
+                )}
+              </div>
+            </div>
+          </CardHeader>
+        </Card>
 
       {/* Navigation Toolbar */}
       <NavigationToolbar
@@ -466,16 +492,16 @@ const ShiftScheduleEditorRealtime = ({
         />
       )}
 
-      {/* Statistics Dashboard */}
-      <div className="statistics-section mt-8">
-        <StatisticsDashboard
-          statistics={statistics}
-          staffMembers={orderedStaffMembers}
-          schedule={schedule}
-          dateRange={dateRange}
-          currentMonthIndex={currentMonthIndex}
-        />
-      </div>
+        {/* Statistics Dashboard */}
+        <div className="mt-8">
+          <StatisticsDashboard
+            statistics={statistics}
+            staffMembers={orderedStaffMembers}
+            schedule={schedule}
+            dateRange={dateRange}
+            currentMonthIndex={currentMonthIndex}
+          />
+        </div>
 
       {/* Modals */}
       <StaffEditModal
@@ -534,6 +560,7 @@ const ShiftScheduleEditorRealtime = ({
         onToggleAutosave={setIsAutosaveEnabled}
       />
 
+      </div>
     </div>
   );
 };

@@ -2,6 +2,31 @@ import React, { useEffect, useRef } from "react";
 import { X } from "lucide-react";
 import { isDateWithinWorkPeriod } from "../../utils/dateUtils";
 
+// ShadCN UI Components
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "../ui/dialog";
+import { Button } from "../ui/button";
+import { Input } from "../ui/input";
+import { Label } from "../ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "../ui/select";
+import { Card, CardContent, CardHeader, CardTitle } from "../ui/card";
+import { Badge } from "../ui/badge";
+import { Separator } from "../ui/separator";
+import { RadioGroup, RadioGroupItem } from "../ui/radio-group";
+import { toast } from "sonner";
+
 const StaffEditModal = ({
   showStaffEditModal,
   setShowStaffEditModal,
@@ -274,11 +299,10 @@ const StaffEditModal = ({
   };
 
   return (
-    <div
-      className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[9999]"
-      onClick={(e) => {
-        if (e.target === e.currentTarget) {
-          // Only close if clicking the overlay itself, not its children
+    <Dialog
+      open={showStaffEditModal}
+      onOpenChange={(open) => {
+        if (!open) {
           setIsUserEditing(false);
           setShowStaffEditModal(false);
           setSelectedStaffForEdit(null);
@@ -286,12 +310,7 @@ const StaffEditModal = ({
         }
       }}
     >
-      <div
-        className="bg-white rounded-lg p-6 w-full max-w-4xl mx-4 h-[65vh] overflow-y-auto relative"
-        onClick={(e) => {
-          e.stopPropagation(); // Prevent overlay click handler
-        }}
-      >
+      <DialogContent className="max-w-4xl max-h-[80vh] overflow-y-auto">
         {/* Loading overlay for database refresh */}
         {isRefreshingFromDatabase && (
           <div className="absolute inset-0 bg-white bg-opacity-90 flex items-center justify-center z-50 rounded-lg">
@@ -303,20 +322,12 @@ const StaffEditModal = ({
             </div>
           </div>
         )}
-        <div className="flex items-center justify-between mb-6">
-          <h2 className="text-xl font-bold text-gray-800">スタッフ管理</h2>
-          <button
-            onClick={() => {
-              setIsUserEditing(false);
-              setShowStaffEditModal(false);
-              setSelectedStaffForEdit(null);
-              setIsAddingNewStaff(false);
-            }}
-            className="text-gray-500 hover:text-gray-700"
-          >
-            <X size={24} />
-          </button>
-        </div>
+        <DialogHeader>
+          <DialogTitle className="text-xl font-bold">スタッフ管理</DialogTitle>
+          <DialogDescription>
+            スタッフの追加、編集、削除を行います。
+          </DialogDescription>
+        </DialogHeader>
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           {/* Left Panel - Staff List */}
@@ -325,12 +336,12 @@ const StaffEditModal = ({
               <h3 className="text-lg font-semibold text-gray-700">
                 スタッフ一覧
               </h3>
-              <button
+              <Button
                 onClick={startAddingNew}
-                className="px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2 transition-colors"
+                className="bg-green-500 hover:bg-green-600"
               >
                 新規追加
-              </button>
+              </Button>
             </div>
 
             <div className="space-y-2 max-h-[50vh] overflow-y-auto">
@@ -343,32 +354,34 @@ const StaffEditModal = ({
                   );
 
                 return (
-                  <div
+                  <Card
                     key={staff.id}
                     onClick={() => handleStaffSelect(staff)}
-                    className={`p-3 border rounded-lg cursor-pointer transition-all ${
+                    className={`cursor-pointer transition-all ${
                       selectedStaffForEdit?.id === staff.id
-                        ? "border-blue-500 bg-blue-50"
-                        : "border-gray-200 hover:border-gray-300 hover:bg-gray-50"
+                        ? "border-primary bg-primary/10"
+                        : "hover:bg-accent"
                     } ${!isActive ? "opacity-60" : ""}`}
                   >
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <div className="font-medium text-gray-800">
-                          {staff.name}
+                    <CardContent className="p-3">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <div className="font-medium">
+                            {staff.name}
+                          </div>
+                          <div className="text-sm text-muted-foreground flex items-center gap-2">
+                            <span>{staff.position}</span> • <Badge variant="outline">{staff.status}</Badge>
+                            {!isActive && (
+                              <Badge variant="destructive">期間外</Badge>
+                            )}
+                          </div>
                         </div>
-                        <div className="text-sm text-gray-600">
-                          {staff.position} • {staff.status}
-                          {!isActive && (
-                            <span className=" text-orange-600"> (期間外)</span>
-                          )}
-                        </div>
+                        {selectedStaffForEdit?.id === staff.id && (
+                          <div className="w-3 h-3 bg-primary rounded-full"></div>
+                        )}
                       </div>
-                      {selectedStaffForEdit?.id === staff.id && (
-                        <div className="w-3 h-3 bg-blue-500 rounded-full"></div>
-                      )}
-                    </div>
-                  </div>
+                    </CardContent>
+                  </Card>
                 );
               })}
             </div>
@@ -387,11 +400,12 @@ const StaffEditModal = ({
             {(isAddingNewStaff || selectedStaffForEdit) && (
               <form key={formKey} onSubmit={handleSubmit} className="space-y-4">
                 {/* Name Field */}
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    名前 <span className="text-red-500">*</span>
-                  </label>
-                  <input
+                <div className="space-y-2">
+                  <Label htmlFor="staff-name">
+                    名前 <span className="text-destructive">*</span>
+                  </Label>
+                  <Input
+                    id="staff-name"
                     ref={nameInputRef}
                     type="text"
                     value={safeEditingStaffData.name}
@@ -401,18 +415,18 @@ const StaffEditModal = ({
                         name: e.target.value,
                       }))
                     }
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                     required
                     placeholder="スタッフ名を入力"
                   />
                 </div>
 
                 {/* Position Field */}
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                <div className="space-y-2">
+                  <Label htmlFor="staff-position">
                     職位
-                  </label>
-                  <input
+                  </Label>
+                  <Input
+                    id="staff-position"
                     type="text"
                     value={safeEditingStaffData.position}
                     onChange={(e) =>
@@ -421,292 +435,261 @@ const StaffEditModal = ({
                         position: e.target.value,
                       }))
                     }
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                     placeholder="例: Server, Kitchen, Manager"
                   />
                 </div>
 
                 {/* Status Field */}
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    雇用形態 <span className="text-red-500">*</span>
-                  </label>
-                  <div className="flex items-center gap-6">
-                    <label className="flex items-center">
-                      <input
-                        type="radio"
-                        name="status"
-                        value="社員"
-                        checked={safeEditingStaffData.status === "社員"}
-                        onChange={(e) =>
-                          updateEditingStaffData((prev) => ({
-                            ...prev,
-                            status: e.target.value,
-                          }))
-                        }
-                        className="mr-2 text-blue-600 focus:ring-blue-500"
-                        required
-                      />
-                      <span className="text-sm text-gray-700">社員</span>
-                    </label>
-                    <label className="flex items-center">
-                      <input
-                        type="radio"
-                        name="status"
-                        value="派遣"
-                        checked={safeEditingStaffData.status === "派遣"}
-                        onChange={(e) => {
-                          const currentYear = new Date().getFullYear();
-                          updateEditingStaffData((prev) => ({
-                            ...prev,
-                            status: e.target.value,
-                            // If 派遣 is selected, set both periods to current year
-                            startPeriod: {
-                              ...prev.startPeriod,
-                              year: currentYear,
-                            },
-                            endPeriod: {
-                              ...prev.endPeriod,
-                              year: currentYear,
-                            },
-                          }));
-                        }}
-                        className="mr-2 text-blue-600 focus:ring-blue-500"
-                        required
-                      />
-                      <span className="text-sm text-gray-700">派遣</span>
-                    </label>
-                    <label className="flex items-center">
-                      <input
-                        type="radio"
-                        name="status"
-                        value="パート"
-                        checked={safeEditingStaffData.status === "パート"}
-                        onChange={(e) => {
-                          const currentYear = new Date().getFullYear();
-                          updateEditingStaffData((prev) => ({
-                            ...prev,
-                            status: e.target.value,
-                            // If パート is selected, set both periods to current year
-                            startPeriod: {
-                              ...prev.startPeriod,
-                              year: currentYear,
-                            },
-                            endPeriod: {
-                              ...prev.endPeriod,
-                              year: currentYear,
-                            },
-                          }));
-                        }}
-                        className="mr-2 text-blue-600 focus:ring-blue-500"
-                        required
-                      />
-                      <span className="text-sm text-gray-700">パート</span>
-                    </label>
-                  </div>
+                <div className="space-y-2">
+                  <Label>
+                    雇用形態 <span className="text-destructive">*</span>
+                  </Label>
+                  <RadioGroup
+                    value={safeEditingStaffData.status}
+                    onValueChange={(value) => {
+                      const currentYear = new Date().getFullYear();
+                      updateEditingStaffData((prev) => ({
+                        ...prev,
+                        status: value,
+                        // If 派遣 or パート is selected, set both periods to current year
+                        ...(value === "派遣" || value === "パート" ? {
+                          startPeriod: {
+                            ...prev.startPeriod,
+                            year: currentYear,
+                          },
+                          endPeriod: {
+                            ...prev.endPeriod,
+                            year: currentYear,
+                          },
+                        } : {})
+                      }));
+                    }}
+                    className="flex flex-row space-x-6"
+                  >
+                    <div className="flex items-center space-x-2">
+                      <RadioGroupItem value="社員" id="status-employee" />
+                      <Label htmlFor="status-employee">社員</Label>
+                    </div>
+                    <div className="flex items-center space-x-2">
+                      <RadioGroupItem value="派遣" id="status-dispatch" />
+                      <Label htmlFor="status-dispatch">派遣</Label>
+                    </div>
+                    <div className="flex items-center space-x-2">
+                      <RadioGroupItem value="パート" id="status-part" />
+                      <Label htmlFor="status-part">パート</Label>
+                    </div>
+                  </RadioGroup>
                 </div>
 
                 {/* Start Period */}
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                <div className="space-y-2">
+                  <Label>
                     開始期間
-                  </label>
+                  </Label>
                   <div className="grid grid-cols-3 gap-2">
-                    <select
-                      value={safeEditingStaffData.startPeriod?.year || ""}
-                      onChange={(e) =>
+                    <Select
+                      value={safeEditingStaffData.startPeriod?.year?.toString() || ""}
+                      onValueChange={(value) =>
                         updateEditingStaffData((prev) => ({
                           ...prev,
                           startPeriod: {
                             ...prev.startPeriod,
-                            year: e.target.value
-                              ? parseInt(e.target.value)
-                              : null,
+                            year: value ? parseInt(value) : null,
                           },
                         }))
                       }
-                      className="px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                     >
-                      <option value="">年</option>
-                      {Array.from({ length: 5 }, (_, i) => {
-                        const currentYear = new Date().getFullYear();
-                        const year = currentYear - 4 + i; // Start from 4 years ago, go up to current year
-                        return (
-                          <option key={year} value={year}>
-                            {year}
-                          </option>
-                        );
-                      })}
-                    </select>
-                    <select
-                      value={safeEditingStaffData.startPeriod?.month || ""}
-                      onChange={(e) =>
+                      <SelectTrigger>
+                        <SelectValue placeholder="年" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {Array.from({ length: 5 }, (_, i) => {
+                          const currentYear = new Date().getFullYear();
+                          const year = currentYear - 4 + i;
+                          return (
+                            <SelectItem key={year} value={year.toString()}>
+                              {year}
+                            </SelectItem>
+                          );
+                        })}
+                      </SelectContent>
+                    </Select>
+                    <Select
+                      value={safeEditingStaffData.startPeriod?.month?.toString() || ""}
+                      onValueChange={(value) =>
                         updateEditingStaffData((prev) => ({
                           ...prev,
                           startPeriod: {
                             ...prev.startPeriod,
-                            month: e.target.value
-                              ? parseInt(e.target.value)
-                              : null,
+                            month: value ? parseInt(value) : null,
                           },
                         }))
                       }
-                      className="px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                     >
-                      <option value="">月</option>
-                      {Array.from({ length: 12 }, (_, i) => (
-                        <option key={i + 1} value={i + 1}>
-                          {i + 1}
-                        </option>
-                      ))}
-                    </select>
-                    <select
-                      value={safeEditingStaffData.startPeriod?.day || ""}
-                      onChange={(e) =>
+                      <SelectTrigger>
+                        <SelectValue placeholder="月" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {Array.from({ length: 12 }, (_, i) => (
+                          <SelectItem key={i + 1} value={(i + 1).toString()}>
+                            {i + 1}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <Select
+                      value={safeEditingStaffData.startPeriod?.day?.toString() || ""}
+                      onValueChange={(value) =>
                         updateEditingStaffData((prev) => ({
                           ...prev,
                           startPeriod: {
                             ...prev.startPeriod,
-                            day: e.target.value
-                              ? parseInt(e.target.value)
-                              : null,
+                            day: value ? parseInt(value) : null,
                           },
                         }))
                       }
-                      className="px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                     >
-                      <option value="">日</option>
-                      {Array.from({ length: 31 }, (_, i) => (
-                        <option key={i + 1} value={i + 1}>
-                          {i + 1}
-                        </option>
-                      ))}
-                    </select>
+                      <SelectTrigger>
+                        <SelectValue placeholder="日" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {Array.from({ length: 31 }, (_, i) => (
+                          <SelectItem key={i + 1} value={(i + 1).toString()}>
+                            {i + 1}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                   </div>
                 </div>
 
                 {/* End Period */}
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                <div className="space-y-2">
+                  <Label>
                     終了期間
-                  </label>
+                  </Label>
                   <div className="grid grid-cols-3 gap-2">
-                    <select
-                      value={safeEditingStaffData.endPeriod?.year || ""}
-                      onChange={(e) =>
+                    <Select
+                      value={safeEditingStaffData.endPeriod?.year?.toString() || ""}
+                      onValueChange={(value) =>
                         updateEditingStaffData((prev) => ({
                           ...prev,
-                          endPeriod: e.target.value
+                          endPeriod: value
                             ? {
                                 ...prev.endPeriod,
-                                year: parseInt(e.target.value),
+                                year: parseInt(value),
                               }
                             : null,
                         }))
                       }
-                      className="px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                     >
-                      <option value="">年</option>
-                      {Array.from({ length: 2 }, (_, i) => {
-                        const year = new Date().getFullYear() + i;
-                        return (
-                          <option key={year} value={year}>
-                            {year}
-                          </option>
-                        );
-                      })}
-                    </select>
-                    <select
-                      value={safeEditingStaffData.endPeriod?.month || ""}
-                      onChange={(e) =>
+                      <SelectTrigger>
+                        <SelectValue placeholder="年" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {Array.from({ length: 2 }, (_, i) => {
+                          const year = new Date().getFullYear() + i;
+                          return (
+                            <SelectItem key={year} value={year.toString()}>
+                              {year}
+                            </SelectItem>
+                          );
+                        })}
+                      </SelectContent>
+                    </Select>
+                    <Select
+                      value={safeEditingStaffData.endPeriod?.month?.toString() || ""}
+                      onValueChange={(value) =>
                         updateEditingStaffData((prev) => ({
                           ...prev,
                           endPeriod:
-                            prev.endPeriod || e.target.value
+                            prev.endPeriod || value
                               ? {
                                   ...prev.endPeriod,
-                                  month: e.target.value
-                                    ? parseInt(e.target.value)
-                                    : null,
+                                  month: value ? parseInt(value) : null,
                                 }
                               : null,
                         }))
                       }
-                      className="px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                     >
-                      <option value="">月</option>
-                      {Array.from({ length: 12 }, (_, i) => (
-                        <option key={i + 1} value={i + 1}>
-                          {i + 1}
-                        </option>
-                      ))}
-                    </select>
-                    <select
-                      value={safeEditingStaffData.endPeriod?.day || ""}
-                      onChange={(e) =>
+                      <SelectTrigger>
+                        <SelectValue placeholder="月" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {Array.from({ length: 12 }, (_, i) => (
+                          <SelectItem key={i + 1} value={(i + 1).toString()}>
+                            {i + 1}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <Select
+                      value={safeEditingStaffData.endPeriod?.day?.toString() || ""}
+                      onValueChange={(value) =>
                         updateEditingStaffData((prev) => ({
                           ...prev,
                           endPeriod:
-                            prev.endPeriod || e.target.value
+                            prev.endPeriod || value
                               ? {
                                   ...prev.endPeriod,
-                                  day: e.target.value
-                                    ? parseInt(e.target.value)
-                                    : null,
+                                  day: value ? parseInt(value) : null,
                                 }
                               : null,
                         }))
                       }
-                      className="px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                     >
-                      <option value="">日</option>
-                      {Array.from({ length: 31 }, (_, i) => (
-                        <option key={i + 1} value={i + 1}>
-                          {i + 1}
-                        </option>
-                      ))}
-                    </select>
+                      <SelectTrigger>
+                        <SelectValue placeholder="日" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {Array.from({ length: 31 }, (_, i) => (
+                          <SelectItem key={i + 1} value={(i + 1).toString()}>
+                            {i + 1}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                   </div>
                 </div>
 
                 {/* Action Buttons */}
                 <div className="flex gap-3 pt-4 border-t">
-                  <button
+                  <Button
                     type="button"
+                    variant="secondary"
                     onClick={() => {
                       setIsUserEditing(false);
                       setSelectedStaffForEdit(null);
                       setIsAddingNewStaff(false);
                     }}
-                    className="px-4 py-2 bg-gray-300 text-gray-700 rounded-lg hover:bg-gray-400 focus:outline-none focus:ring-2 focus:ring-gray-500 focus:ring-offset-2 transition-colors"
                   >
                     キャンセル
-                  </button>
+                  </Button>
 
                   {selectedStaffForEdit && !isAddingNewStaff && (
-                    <button
+                    <Button
                       type="button"
+                      variant="destructive"
                       onClick={() => handleDeleteStaff(selectedStaffForEdit.id)}
-                      className="px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2 transition-colors"
                     >
                       削除
-                    </button>
+                    </Button>
                   )}
 
-                  <button
+                  <Button
                     type="button"
                     onClick={handleSubmit}
-                    className="flex-1 px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 transition-colors"
+                    className="flex-1"
                   >
                     {isAddingNewStaff ? "追加" : "更新"}
-                  </button>
+                  </Button>
                 </div>
               </form>
             )}
           </div>
         </div>
-      </div>
-    </div>
+      </DialogContent>
+    </Dialog>
   );
 };
 

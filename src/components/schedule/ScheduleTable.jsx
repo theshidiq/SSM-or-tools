@@ -10,6 +10,15 @@ import {
   Clipboard,
   MousePointer2,
 } from "lucide-react";
+
+// ShadCN UI components
+import { Card, CardContent, CardHeader, CardTitle } from "../ui/card";
+import { Button } from "../ui/button";
+import { Badge } from "../ui/badge";
+import { Separator } from "../ui/separator";
+import { Table, TableBody, TableCell, TableFooter, TableHead, TableHeader, TableRow } from "../ui/table";
+import { Input } from "../ui/input";
+import { toast } from "sonner";
 import {
   shiftSymbols,
   getAvailableShifts,
@@ -566,7 +575,14 @@ const ScheduleTable = ({
   const handleDragFillEnd = useCallback((event) => {}, []);
 
   return (
-    <div className="relative">
+    <Card className="overflow-hidden">
+      <CardHeader>
+        <CardTitle className="japanese-text">
+          シフトスケジュール編集
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="p-0">
+        <div className="relative">
       {/* Bulk Operations Toolbar - Bottom positioned with slide up animation */}
       {showBulkToolbar && (
         <div
@@ -679,29 +695,29 @@ const ScheduleTable = ({
           e.currentTarget.focus();
         }}
       >
-        <table
+        <Table
           className="shift-table w-full text-sm"
           style={{ minWidth: `${40 + orderedStaffMembers.length * 40}px` }}
         >
           {/* Sticky Header Row: Staff Names as Column Headers */}
-          <thead>
-            <tr>
-              <th
-                className="bg-gray-600 text-white min-w-[40px] border-r-2 border-gray-400 sticky left-0"
+          <TableHeader>
+            <TableRow>
+              <TableHead
+                className="bg-primary text-primary-foreground min-w-[40px] border-r-2 border-border sticky left-0"
                 style={{ zIndex: 400, width: "40px" }}
               >
                 <div className="flex items-center justify-center gap-1 py-0.5">
                   <span className="text-xs font-medium">日付</span>
                 </div>
-              </th>
+              </TableHead>
 
               {/* Staff Column Headers */}
               {orderedStaffMembers.map((staff, staffIndex) => {
                 if (!staff) return null;
                 return (
-                  <th
+                  <TableHead
                     key={staff.id}
-                    className={`bg-gray-600 text-white text-center relative border-r border-gray-400 cursor-pointer hover:bg-gray-500 ${
+                    className={`bg-primary text-primary-foreground text-center relative border-r border-border cursor-pointer hover:bg-primary/80 ${
                       staffIndex === orderedStaffMembers.length - 1
                         ? "border-r-2"
                         : ""
@@ -721,18 +737,20 @@ const ScheduleTable = ({
                     <div className="flex flex-col items-center justify-center py-1 px-1 h-full">
                       {/* Delete Button (only visible in delete mode) */}
                       {editingColumn === "delete-mode" && (
-                        <button
+                        <Button
+                          variant="destructive"
+                          size="sm"
                           onClick={() => handleDeleteStaff(staff.id)}
-                          className="absolute -top-1 -right-1 w-4 h-4 bg-red-500 hover:bg-red-600 text-white rounded-full flex items-center justify-center z-10 transition-colors duration-200"
+                          className="absolute -top-1 -right-1 w-4 h-4 p-0 rounded-full z-10"
                           title={`Delete ${staff.name}`}
                         >
                           <Trash2 size={8} />
-                        </button>
+                        </Button>
                       )}
 
                       {/* Staff Name (editable in edit-name mode) */}
                       {editingColumn === "edit-name-mode" ? (
-                        <input
+                        <Input
                           type="text"
                           value={
                             editingNames[staff.id] !== undefined
@@ -748,8 +766,7 @@ const ScheduleTable = ({
                               handleNameSubmit(staff.id);
                             }
                           }}
-                          className="w-full text-center text-xs bg-white text-black border border-gray-300 rounded px-1 py-0.5"
-                          style={{ minHeight: "20px" }}
+                          className="w-full text-center text-xs h-5 px-1"
                           autoFocus={editingSpecificColumn === staff.id}
                         />
                       ) : (
@@ -775,23 +792,23 @@ const ScheduleTable = ({
                         </span>
                       )}
                     </div>
-                  </th>
+                  </TableHead>
                 );
               })}
-            </tr>
-          </thead>
+            </TableRow>
+          </TableHeader>
 
           {/* Table Body: Date Rows */}
-          <tbody>
+          <TableBody>
             {dateRange.map((date, dateIndex) => {
               const dateKey = date.toISOString().split("T")[0];
               const isWeekend = date.getDay() === 0 || date.getDay() === 6;
 
               return (
-                <tr key={dateKey} className="hover:bg-gray-50">
+                <TableRow key={dateKey} className="hover:bg-muted/50">
                   {/* Date Cell (Sticky Left Column) */}
-                  <td
-                    className="text-center font-medium border-r-2 border-gray-300 sticky left-0 bg-white cursor-pointer hover:bg-gray-50"
+                  <TableCell
+                    className="text-center font-medium border-r-2 border-border sticky left-0 bg-background cursor-pointer hover:bg-muted/50"
                     style={{
                       minWidth: "40px",
                       width: "40px",
@@ -815,7 +832,7 @@ const ScheduleTable = ({
                         {format(date, "E", { locale: ja })}
                       </div>
                     </div>
-                  </td>
+                  </TableCell>
 
                   {/* Staff Shift Cells */}
                   {orderedStaffMembers.map((staff, staffIndex) => {
@@ -828,17 +845,17 @@ const ScheduleTable = ({
                     const isActiveForDate = isDateWithinWorkPeriod(date, staff);
 
                     return (
-                      <td
+                      <TableCell
                         key={staff.id}
-                        className={`text-center border-r border-gray-200 relative ${
+                        className={`text-center border-r border-border relative ${
                           staffIndex === orderedStaffMembers.length - 1
-                            ? "border-r-2 border-gray-300"
+                            ? "border-r-2 border-border"
                             : ""
                         } ${
                           cellValue === "late"
                             ? "bg-purple-200 hover:bg-purple-300"
-                            : "hover:bg-blue-50"
-                        } ${!isActiveForDate ? "bg-gray-100" : ""}`}
+                            : "hover:bg-accent"
+                        } ${!isActiveForDate ? "bg-muted" : ""}`}
                         style={{
                           minWidth: "40px",
                           width: "40px",
@@ -847,18 +864,19 @@ const ScheduleTable = ({
                           padding: "0",
                         }}
                       >
-                        <button
-                          className={`w-full h-full flex items-center justify-center transition-all duration-200 relative ${
+                        <Button
+                          variant="ghost"
+                          className={`w-full h-full flex items-center justify-center p-0 transition-all duration-200 relative ${
                             !isActiveForDate
-                              ? "cursor-not-allowed text-gray-400"
-                              : "cursor-pointer hover:bg-blue-100"
+                              ? "cursor-not-allowed text-muted-foreground"
+                              : "cursor-pointer hover:bg-accent"
                           } ${
                             isCellSelected(staff.id, dateKey)
-                              ? "bg-blue-200 hover:bg-blue-300"
+                              ? "bg-accent hover:bg-accent/80"
                               : ""
                           } ${
                             isCellFocused(staff.id, dateKey)
-                              ? "ring-2 ring-blue-500 ring-inset"
+                              ? "ring-2 ring-ring ring-inset"
                               : ""
                           }`}
                           onClick={(e) => {
@@ -956,24 +974,24 @@ const ScheduleTable = ({
                             }
                             return null;
                           })()}
-                        </button>
-                      </td>
+                        </Button>
+                      </TableCell>
                     );
                   })}
-                </tr>
+                </TableRow>
               );
             })}
-          </tbody>
+          </TableBody>
 
           {/* Day Off Count Footer */}
-          <tfoot>
-            <tr className="bg-yellow-100 border-t-2 border-gray-400">
-              <td
-                className="text-center font-bold text-xs border-r-2 border-gray-300 sticky left-0 bg-yellow-100 py-2"
+          <TableFooter>
+            <TableRow className="bg-yellow-100 border-t-2 border-border">
+              <TableCell
+                className="text-center font-bold text-xs border-r-2 border-border sticky left-0 bg-yellow-100 py-2"
                 style={{ zIndex: 300, color: "#dc2626" }}
               >
                 休日数
-              </td>
+              </TableCell>
               {orderedStaffMembers.map((staff, staffIndex) => {
                 if (!staff) return null;
 
@@ -1006,9 +1024,9 @@ const ScheduleTable = ({
                 });
 
                 return (
-                  <td
+                  <TableCell
                     key={staff.id}
-                    className={`text-center font-bold text-xs border-r border-gray-300 bg-yellow-100 py-2 ${
+                    className={`text-center font-bold text-xs border-r border-border bg-yellow-100 py-2 ${
                       staffIndex === orderedStaffMembers.length - 1
                         ? "border-r-2"
                         : ""
@@ -1023,12 +1041,12 @@ const ScheduleTable = ({
                     {dayOffCount % 1 === 0
                       ? dayOffCount
                       : dayOffCount.toFixed(1)}
-                  </td>
+                  </TableCell>
                 );
               })}
-            </tr>
-          </tfoot>
-        </table>
+            </TableRow>
+          </TableFooter>
+        </Table>
       </div>
 
       {/* Context Menu */}
@@ -1074,7 +1092,9 @@ const ScheduleTable = ({
           </button>
         </div>
       )}
-    </div>
+        </div>
+      </CardContent>
+    </Card>
   );
 };
 
