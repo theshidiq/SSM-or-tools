@@ -96,10 +96,11 @@ const ShiftScheduleEditorRealtime = ({
   // Ensure currentMonthIndex stays in bounds when periods change (e.g., after deletion)
   useEffect(() => {
     if (!periodsLoading && realtimePeriods.length > 0) {
-      if (currentMonthIndex >= realtimePeriods.length) {
-        const newIndex = Math.max(0, realtimePeriods.length - 1);
+      // Check if currentMonthIndex is out of bounds (negative or too high)
+      if (currentMonthIndex < 0 || currentMonthIndex >= realtimePeriods.length) {
+        const newIndex = Math.max(0, Math.min(currentMonthIndex, realtimePeriods.length - 1));
         setCurrentMonthIndex(newIndex);
-        console.log(`🔄 Period index out of bounds after deletion, adjusted to ${newIndex} (${realtimePeriods[newIndex]?.label})`);
+        console.log(`🔄 Period index out of bounds (${currentMonthIndex}), adjusted to ${newIndex} (${realtimePeriods[newIndex]?.label})`);
       }
     } else if (!periodsLoading && realtimePeriods.length === 0) {
       // No periods available, set to 0 but UI should show empty state
@@ -282,8 +283,23 @@ const ShiftScheduleEditorRealtime = ({
 
   // Delete period handlers
   const handleDeletePeriod = useCallback(() => {
-    const periodLabel =
-      realtimePeriods[currentMonthIndex]?.label || "current period";
+    // Validate currentMonthIndex before accessing period
+    if (!realtimePeriods || realtimePeriods.length === 0) {
+      setDeleteModal({
+        isOpen: true,
+        type: "error",
+        title: "No Periods Available",
+        message: "No periods available to delete. Please create a period first using the 'Add Table' button.",
+      });
+      return;
+    }
+    
+    let indexToCheck = currentMonthIndex;
+    if (indexToCheck < 0 || indexToCheck >= realtimePeriods.length) {
+      indexToCheck = Math.max(0, Math.min(currentMonthIndex, realtimePeriods.length - 1));
+    }
+    
+    const periodLabel = realtimePeriods[indexToCheck]?.label || "current period";
 
     // Allow deletion of all periods now - user can recreate with "Add Table"
     const warningMessage = realtimePeriods.length <= 1 
@@ -300,7 +316,29 @@ const ShiftScheduleEditorRealtime = ({
   }, [currentMonthIndex, realtimePeriods]);
 
   const confirmDeletePeriod = useCallback(async () => {
-    const periodToDeleteLabel = realtimePeriods[currentMonthIndex]?.label || "current period";
+    // CRITICAL: Validate currentMonthIndex before any deletion attempt
+    if (!realtimePeriods || realtimePeriods.length === 0) {
+      setDeleteModal({
+        isOpen: true,
+        type: "error",
+        title: "Deletion Failed",
+        message: "No periods available to delete.",
+      });
+      return;
+    }
+    
+    // Ensure currentMonthIndex is within bounds before proceeding
+    let indexToDelete = currentMonthIndex;
+    if (indexToDelete < 0 || indexToDelete >= realtimePeriods.length) {
+      // Auto-adjust to valid range
+      indexToDelete = Math.max(0, Math.min(currentMonthIndex, realtimePeriods.length - 1));
+      console.warn(`⚠️ Adjusted deletion index from ${currentMonthIndex} to ${indexToDelete} (available: 0-${realtimePeriods.length - 1})`);
+      
+      // Update the state immediately to prevent future issues
+      setCurrentMonthIndex(indexToDelete);
+    }
+    
+    const periodToDeleteLabel = realtimePeriods[indexToDelete]?.label || `period ${indexToDelete}`;
     
     // Show loading modal
     setDeleteModal({
@@ -311,9 +349,9 @@ const ShiftScheduleEditorRealtime = ({
     });
 
     try {
-      // Step 1: Delete the period from the system
+      // Step 1: Delete the period from the system using validated index
       // Pass realtimePeriods to avoid race condition with periodsCache
-      const deletionResult = await deletePeriod(currentMonthIndex, realtimePeriods);
+      const deletionResult = await deletePeriod(indexToDelete, realtimePeriods);
       
       if (!deletionResult.success) {
         throw new Error(deletionResult.error);
@@ -365,7 +403,7 @@ const ShiftScheduleEditorRealtime = ({
       const successMessage = deletionResult.isEmpty
         ? `The period "${deletionResult.deletedPeriod.label}" has been deleted. All periods have been removed. Use the "Add Table" button to create new periods.`
         : `The period "${deletionResult.deletedPeriod.label}" has been completely removed from the system.${
-            realtimePeriods[deletionResult.suggestedNavigationIndex] 
+            deletionResult.suggestedNavigationIndex >= 0 && deletionResult.suggestedNavigationIndex < realtimePeriods.length && realtimePeriods[deletionResult.suggestedNavigationIndex] 
               ? ` Navigated to "${realtimePeriods[deletionResult.suggestedNavigationIndex].label}".` 
               : ""
           }`;
