@@ -1,0 +1,22 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Reset Periods Migration</title>
+</head>
+<body>
+    <h1>Reset Periods Migration</h1>
+    <button onclick="resetMigration()">Reset Migration Flag</button>
+    <div id="status"></div>
+    
+    <script>
+        function resetMigration() {
+            // Clear migration flag
+            localStorage.removeItem('periods_migrated_to_supabase');
+            localStorage.removeItem('periods_ever_initialized');
+            localStorage.removeItem('shift_manager_periods');
+            
+            document.getElementById('status').innerHTML = '✅ Migration flags cleared. Please refresh the main app.';
+        }
+    </script>
+</body>
+</html>

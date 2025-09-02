@@ -23,7 +23,8 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { Separator } from "../ui/separator";
 import { Badge } from "../ui/badge";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "../ui/tooltip";
-import { monthPeriods, addNextPeriod } from "../../utils/dateUtils";
+import { addNextPeriod } from "../../utils/dateUtils";
+import { usePeriodsRealtime } from "../../hooks/usePeriodsRealtime";
 import { useAIAssistant } from "../../hooks/useAIAssistant";
 import { useAIAssistantLazy } from "../../hooks/useAIAssistantLazy";
 import ErrorBoundary from "../ui/ErrorBoundary";
@@ -59,24 +60,36 @@ const NavigationToolbar = ({
   const [showAIModal, setShowAIModal] = useState(false);
   const monthPickerRef = useRef(null);
 
+  // Use real-time periods hook
+  const { periods: monthPeriods, isLoading: periodsLoading } = usePeriodsRealtime();
+
   // Get available years from monthPeriods (and allow one year ahead for expansion)
   const availableYears = useMemo(() => {
     const years = new Set();
-    monthPeriods.forEach((period) => {
-      years.add(period.start.getFullYear());
-    });
     
-    // Add next year as available for expansion
-    const maxYear = Math.max(...Array.from(years));
-    years.add(maxYear + 1);
+    if (monthPeriods && monthPeriods.length > 0) {
+      monthPeriods.forEach((period) => {
+        years.add(period.start.getFullYear());
+      });
+      
+      // Add next year as available for expansion
+      const maxYear = Math.max(...Array.from(years));
+      years.add(maxYear + 1);
+    } else {
+      // Default to current year if no periods yet
+      years.add(new Date().getFullYear());
+    }
     
     return Array.from(years).sort();
-  }, []);
+  }, [monthPeriods]);
 
   // Set initial year to current selected period year
   const [currentYear, setCurrentYear] = useState(() => {
-    const selectedPeriod = monthPeriods[currentMonthIndex];
-    return selectedPeriod ? selectedPeriod.start.getFullYear() : availableYears[0] || 2025;
+    if (monthPeriods && monthPeriods.length > 0) {
+      const selectedPeriod = monthPeriods[currentMonthIndex];
+      return selectedPeriod ? selectedPeriod.start.getFullYear() : monthPeriods[0].start.getFullYear();
+    }
+    return new Date().getFullYear();
   });
 
   // Track if user is manually navigating years to prevent automatic resets
@@ -84,7 +97,7 @@ const NavigationToolbar = ({
 
   // Update current year when monthIndex changes to ensure calendar shows correct year
   useEffect(() => {
-    if (!isManualYearNavigation) {
+    if (!isManualYearNavigation && monthPeriods && monthPeriods.length > 0) {
       const selectedPeriod = monthPeriods[currentMonthIndex];
       if (selectedPeriod) {
         const newYear = selectedPeriod.start.getFullYear();
@@ -94,7 +107,7 @@ const NavigationToolbar = ({
         }
       }
     }
-  }, [currentMonthIndex, currentYear, isManualYearNavigation]);
+  }, [currentMonthIndex, currentYear, isManualYearNavigation, monthPeriods]);
 
   // Note: Removed automatic period creation - users add periods manually via "Add Table" button
 
@@ -143,7 +156,7 @@ const NavigationToolbar = ({
 
   // Update year when month selection changes (but not during manual year navigation)
   useEffect(() => {
-    if (!isManualYearNavigation) {
+    if (!isManualYearNavigation && monthPeriods && monthPeriods.length > 0) {
       const selectedPeriod = monthPeriods[currentMonthIndex];
       if (selectedPeriod) {
         const selectedYear = selectedPeriod.start.getFullYear();
@@ -152,17 +165,17 @@ const NavigationToolbar = ({
         }
       }
     }
-  }, [currentMonthIndex, currentYear, isManualYearNavigation]);
+  }, [currentMonthIndex, currentYear, isManualYearNavigation, monthPeriods]);
 
   // Reset manual navigation flag when a period is actually selected
   useEffect(() => {
-    if (isManualYearNavigation) {
+    if (isManualYearNavigation && monthPeriods && monthPeriods.length > 0) {
       const selectedPeriod = monthPeriods[currentMonthIndex];
       if (selectedPeriod && selectedPeriod.start.getFullYear() === currentYear) {
         setIsManualYearNavigation(false);
       }
     }
-  }, [currentMonthIndex, currentYear, isManualYearNavigation]);
+  }, [currentMonthIndex, currentYear, isManualYearNavigation, monthPeriods]);
 
   const handleAIClick = (e) => {
     e.preventDefault();
@@ -180,9 +193,15 @@ const NavigationToolbar = ({
   // Debug function to check periods (you can call this from browser console)
   if (typeof window !== 'undefined') {
     window.checkPeriods = () => {
-      console.log('📅 Current periods:', monthPeriods.map((p, i) => `${i}: ${p.label} (${p.start.getFullYear()})`));
-      console.log('📊 Total periods:', monthPeriods.length);
-      console.log('📆 Years represented:', [...new Set(monthPeriods.map(p => p.start.getFullYear()))].sort());
+      if (monthPeriods && monthPeriods.length > 0) {
+        console.log('📅 Current periods:', monthPeriods.map((p, i) => `${i}: ${p.label} (${p.start.getFullYear()})`));
+        console.log('📊 Total periods:', monthPeriods.length);
+        console.log('📆 Years represented:', [...new Set(monthPeriods.map(p => p.start.getFullYear()))].sort());
+        console.log('🔄 Loading state:', periodsLoading);
+      } else {
+        console.log('📅 No periods available or still loading');
+        console.log('🔄 Loading state:', periodsLoading);
+      }
     };
   }
   // Keyboard navigation for period switching
@@ -213,7 +232,7 @@ const NavigationToolbar = ({
       } else if (event.key === "ArrowRight") {
         event.preventDefault();
         // Navigate to next period if possible
-        if (currentMonthIndex < monthPeriods.length - 1) {
+        if (monthPeriods && currentMonthIndex < monthPeriods.length - 1) {
           onMonthChange(currentMonthIndex + 1);
         }
       }

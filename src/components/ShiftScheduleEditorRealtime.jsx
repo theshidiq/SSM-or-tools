@@ -21,6 +21,7 @@ import {
   getCurrentMonthIndex,
   findPeriodWithData,
 } from "../utils/dateUtils";
+import { usePeriodsRealtime } from "../hooks/usePeriodsRealtime";
 import { getOrderedStaffMembers } from "../utils/staffUtils";
 import { generateStatistics } from "../utils/statisticsUtils";
 import { exportToCSV, printSchedule } from "../utils/exportUtils";
@@ -50,15 +51,8 @@ const ShiftScheduleEditorRealtime = ({
   onSaveSchedule: legacyOnSaveSchedule, // Legacy prop - not used
   loadScheduleData: legacyLoadScheduleData, // Legacy prop - not used
 }) => {
-  // Main state - initialize with current month
-  const [currentMonthIndex, setCurrentMonthIndex] = useState(() => {
-    try {
-      return getCurrentMonthIndex();
-    } catch (error) {
-      console.warn("Failed to get current month index, defaulting to 0:", error);
-      return 0;
-    }
-  });
+  // Main state - initialize with 0, will be updated when periods load
+  const [currentMonthIndex, setCurrentMonthIndex] = useState(0);
 
   const [viewMode, setViewMode] = useState("table"); // 'table' or 'card'
 
@@ -81,6 +75,23 @@ const ShiftScheduleEditorRealtime = ({
     message: "",
   });
   const [showSettingsModal, setShowSettingsModal] = useState(false);
+
+  // Period management hook
+  const { periods: realtimePeriods, isLoading: periodsLoading } = usePeriodsRealtime();
+
+  // Initialize current month index when periods are loaded
+  useEffect(() => {
+    if (!periodsLoading && realtimePeriods.length > 0) {
+      try {
+        const correctIndex = getCurrentMonthIndex(realtimePeriods);
+        setCurrentMonthIndex(correctIndex);
+        console.log(`📅 Set initial period index to ${correctIndex} (${realtimePeriods[correctIndex]?.label})`);
+      } catch (error) {
+        console.warn("Failed to get current month index, using 0:", error);
+        setCurrentMonthIndex(0);
+      }
+    }
+  }, [periodsLoading, realtimePeriods]);
 
   // Custom hooks - NEW REAL-TIME VERSION
   const {
@@ -381,6 +392,19 @@ const ShiftScheduleEditorRealtime = ({
     console.log(`AI ${enabled ? 'enabled' : 'disabled'}`);
   }, []);
 
+
+  // Show loading state while periods are being loaded
+  if (periodsLoading || realtimePeriods.length === 0) {
+    return (
+      <div className="min-h-screen bg-background p-4 md:p-6 flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto mb-4"></div>
+          <h3 className="text-lg font-semibold mb-2">Loading periods...</h3>
+          <p className="text-sm text-muted-foreground">Setting up schedule periods...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-background p-4 md:p-6">
