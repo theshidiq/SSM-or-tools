@@ -50,6 +50,9 @@ const savePeriods = (periods) => {
       PERIODS_STORAGE_KEY,
       JSON.stringify(serializedPeriods),
     );
+    
+    // Mark that user has had periods initialized (for deletion tracking)
+    localStorage.setItem('periods_ever_initialized', 'true');
   } catch (error) {
     console.warn("Failed to save periods to localStorage:", error);
   }
@@ -60,7 +63,17 @@ const loadPeriods = () => {
   try {
     const stored = localStorage.getItem(PERIODS_STORAGE_KEY);
     if (!stored) {
-      return [...defaultMonthPeriods];
+      // CRITICAL FIX: Only create default periods on first-time use
+      // Check if this is truly first launch vs periods being deleted
+      const hasEverHadPeriods = localStorage.getItem('periods_ever_initialized');
+      if (!hasEverHadPeriods) {
+        // First time user - create default periods and mark as initialized
+        localStorage.setItem('periods_ever_initialized', 'true');
+        return [...defaultMonthPeriods];
+      } else {
+        // User has deleted periods - respect their choice and return empty
+        return [];
+      }
     }
 
     const serializedPeriods = JSON.parse(stored);
@@ -71,7 +84,9 @@ const loadPeriods = () => {
     }));
   } catch (error) {
     console.warn("Failed to load periods from localStorage:", error);
-    return [...defaultMonthPeriods];
+    // On error, also respect if periods were intentionally deleted
+    const hasEverHadPeriods = localStorage.getItem('periods_ever_initialized');
+    return hasEverHadPeriods ? [] : [...defaultMonthPeriods];
   }
 };
 
@@ -152,6 +167,12 @@ export const addNextPeriod = () => {
 
 // Generate date range based on current month index
 export const generateDateRange = (monthIndex) => {
+  // Handle case where no periods exist
+  if (monthPeriods.length === 0) {
+    console.warn("No periods available - returning empty date range");
+    return [];
+  }
+
   // Bounds check for monthIndex
   if (
     monthIndex < 0 ||
@@ -159,13 +180,19 @@ export const generateDateRange = (monthIndex) => {
     monthPeriods[monthIndex] === undefined
   ) {
     monthIndex = 0;
+    if (monthPeriods.length === 0) {
+      return []; // Still empty, return empty array
+    }
   }
 
   const period = monthPeriods[monthIndex];
   if (!period || !period.start || !period.end) {
     console.error(`Invalid period for monthIndex ${monthIndex}:`, period);
-    // Fallback to first available period
-    const _fallbackPeriod = monthPeriods[0];
+    // If we have no valid periods, return empty array
+    if (monthPeriods.length === 0) {
+      return [];
+    }
+    // Try first period as fallback
     return generateDateRange(0);
   }
 
@@ -223,6 +250,11 @@ export const isDateWithinWorkPeriod = (date, staff) => {
 
 // Function to get the current month index based on today's date
 export const getCurrentMonthIndex = () => {
+  // Handle case where no periods exist
+  if (monthPeriods.length === 0) {
+    return 0; // Default to 0 when no periods exist
+  }
+
   const today = new Date();
   const todayUTC = new Date(
     Date.UTC(today.getFullYear(), today.getMonth(), today.getDate()),
@@ -237,7 +269,7 @@ export const getCurrentMonthIndex = () => {
   }
 
   // If today's date doesn't fall in any existing period, check if it's before the first period
-  if (todayUTC < monthPeriods[0].start) {
+  if (monthPeriods.length > 0 && todayUTC < monthPeriods[0].start) {
     return 0;
   }
 
@@ -247,6 +279,12 @@ export const getCurrentMonthIndex = () => {
 
 // Function to find period with data, prioritizing Supabase data over localStorage
 export const findPeriodWithData = (supabaseData = null) => {
+  // Handle case where no periods exist
+  if (monthPeriods.length === 0) {
+    console.warn("No periods available for finding data");
+    return 0; // Return 0 for empty state
+  }
+
   // First, check if Supabase data contains schedule data for any period
   if (supabaseData && supabaseData.schedule_data) {
     const { _staff_members, ...actualScheduleData } =
@@ -293,12 +331,6 @@ export const deletePeriod = (periodIndex) => {
       return { success: false, error: "Invalid period index" };
     }
 
-    // Prevent deletion if it's the only period
-    if (monthPeriods.length <= 1) {
-      console.error("Cannot delete the last remaining period");
-      return { success: false, error: "Cannot delete the last remaining period" };
-    }
-
     // Get period info for logging
     const periodToDelete = monthPeriods[periodIndex];
     console.log(`🗑️ Deleting period ${periodIndex}: ${periodToDelete.label}`);
@@ -306,14 +338,17 @@ export const deletePeriod = (periodIndex) => {
     // Remove the period from array
     monthPeriods.splice(periodIndex, 1);
 
-    // Save updated periods to localStorage
+    // Save updated periods to localStorage (even if empty)
     savePeriods(monthPeriods);
 
     console.log(`✅ Period deleted successfully. Remaining periods: ${monthPeriods.length}`);
     
     // Return success with navigation info
     let suggestedIndex = periodIndex;
-    if (suggestedIndex >= monthPeriods.length) {
+    if (monthPeriods.length === 0) {
+      // No periods left - this is allowed now
+      suggestedIndex = 0;
+    } else if (suggestedIndex >= monthPeriods.length) {
       suggestedIndex = monthPeriods.length - 1; // Go to last period if deleted period was at end
     }
 
@@ -321,7 +356,8 @@ export const deletePeriod = (periodIndex) => {
       success: true, 
       deletedPeriod: periodToDelete,
       newPeriodCount: monthPeriods.length,
-      suggestedNavigationIndex: suggestedIndex
+      suggestedNavigationIndex: suggestedIndex,
+      isEmpty: monthPeriods.length === 0
     };
   } catch (error) {
     console.error("Failed to delete period:", error);

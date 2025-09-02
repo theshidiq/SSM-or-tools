@@ -234,12 +234,9 @@ const ShiftScheduleEditorRealtime = ({
   const handleNextPeriod = useCallback(() => {
     if (currentMonthIndex < monthPeriods.length - 1) {
       handleMonthChange(currentMonthIndex + 1);
-    } else {
-      const newPeriod = addNextPeriod();
-      if (newPeriod.success) {
-        handleMonthChange(currentMonthIndex + 1);
-      }
     }
+    // REMOVED: Automatic period creation when reaching end
+    // Users must now explicitly use "Add Table" button to create periods
   }, [currentMonthIndex, handleMonthChange]);
 
   const handlePrevPeriod = useCallback(() => {
@@ -262,23 +259,17 @@ const ShiftScheduleEditorRealtime = ({
     const periodLabel =
       monthPeriods[currentMonthIndex]?.label || "current period";
 
-    // Check if we can delete this period
-    if (monthPeriods.length <= 1) {
-      setDeleteModal({
-        isOpen: true,
-        type: "error",
-        title: "Cannot Delete Period",
-        message: "Cannot delete the last remaining period. At least one period must exist in the system.",
-      });
-      return;
-    }
+    // Allow deletion of all periods now - user can recreate with "Add Table"
+    const warningMessage = monthPeriods.length <= 1 
+      ? `Are you sure you want to delete the last period "${periodLabel}"? This will remove all schedule data. You can recreate periods using the "Add Table" button.`
+      : `Are you sure you want to completely delete the period "${periodLabel}"? This will permanently remove the entire period table from the system, including all schedule data and staff assignments for this period. This action cannot be undone.`;
 
     // Show confirmation modal for complete period deletion
     setDeleteModal({
       isOpen: true,
       type: "confirm",
       title: "Delete Entire Period",
-      message: `Are you sure you want to completely delete the period "${periodLabel}"? This will permanently remove the entire period table from the system, including all schedule data and staff assignments for this period. This action cannot be undone.`,
+      message: warningMessage,
     });
   }, [currentMonthIndex]);
 
@@ -301,16 +292,21 @@ const ShiftScheduleEditorRealtime = ({
         throw new Error(deletionResult.error);
       }
 
-      // Step 2: Navigate to a valid remaining period
-      const newCurrentIndex = deletionResult.suggestedNavigationIndex;
-      console.log(`🔄 Navigating to period ${newCurrentIndex} after deletion`);
-      
-      // Force update the current month index to trigger re-render with new period
-      setCurrentMonthIndex(newCurrentIndex);
+      // Step 2: Handle navigation based on remaining periods
+      if (deletionResult.isEmpty) {
+        // All periods deleted - set to index 0 but with no valid period
+        console.log(`🔄 All periods deleted - UI will show empty state`);
+        setCurrentMonthIndex(0);
+      } else {
+        // Navigate to a valid remaining period
+        const newCurrentIndex = deletionResult.suggestedNavigationIndex;
+        console.log(`🔄 Navigating to period ${newCurrentIndex} after deletion`);
+        setCurrentMonthIndex(newCurrentIndex);
+      }
 
-      // Step 3: Clear any cached data for the deleted period
+      // Step 3: Clear any cached data for deleted periods
       try {
-        // Clear localStorage cache for the deleted period if it exists
+        // Clear localStorage cache for periods that no longer exist
         const savedScheduleByMonth = JSON.parse(localStorage.getItem("schedule-by-month-data") || "{}");
         const savedStaffByMonth = JSON.parse(localStorage.getItem("staff-by-month-data") || "{}");
         
@@ -338,12 +334,16 @@ const ShiftScheduleEditorRealtime = ({
       // Simulate some processing time for visual feedback
       await new Promise((resolve) => setTimeout(resolve, 500));
 
-      // Show success modal
+      // Show success modal with appropriate message
+      const successMessage = deletionResult.isEmpty
+        ? `The period "${deletionResult.deletedPeriod.label}" has been deleted. All periods have been removed. Use the "Add Table" button to create new periods.`
+        : `The period "${deletionResult.deletedPeriod.label}" has been completely removed from the system. Navigated to "${monthPeriods[deletionResult.suggestedNavigationIndex]?.label}".`;
+
       setDeleteModal({
         isOpen: true,
         type: "success",
         title: "Period Deleted Successfully!",
-        message: `The period "${deletionResult.deletedPeriod.label}" has been completely removed from the system. Navigated to "${monthPeriods[newCurrentIndex]?.label}".`,
+        message: successMessage,
       });
     } catch (error) {
       console.error("❌ Failed to delete period:", error);
@@ -410,9 +410,12 @@ const ShiftScheduleEditorRealtime = ({
         handleExport={handleExportCSV}
         handlePrint={handlePrint}
         handleAddTable={() => {
-          // Add next period and switch to it
+          // Only add next period when user explicitly clicks the button
+          // This prevents automatic period creation
           const newPeriodIndex = addNextPeriod();
-          setCurrentMonthIndex(newPeriodIndex);
+          if (typeof newPeriodIndex === 'number' && newPeriodIndex >= 0) {
+            setCurrentMonthIndex(newPeriodIndex);
+          }
         }}
         handleDeletePeriod={handleDeletePeriod}
         viewMode={viewMode}

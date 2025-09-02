@@ -73,7 +73,7 @@ const NavigationToolbar = ({
     return Array.from(years).sort();
   }, []);
 
-  // Set initial year to first available year or current selected period year
+  // Set initial year to current selected period year
   const [currentYear, setCurrentYear] = useState(() => {
     const selectedPeriod = monthPeriods[currentMonthIndex];
     return selectedPeriod ? selectedPeriod.start.getFullYear() : availableYears[0] || 2025;
@@ -82,41 +82,21 @@ const NavigationToolbar = ({
   // Track if user is manually navigating years to prevent automatic resets
   const [isManualYearNavigation, setIsManualYearNavigation] = useState(false);
 
-  // Filter periods by selected year, and create periods if none exist
-  const periodsForCurrentYear = useMemo(() => {
-    const existingPeriods = monthPeriods
-      .map((period, index) => ({ ...period, originalIndex: index }))
-      .filter((period) => period.start.getFullYear() === currentYear);
-      
-    // If no periods exist for this year and it's the next year after the last available year, create them
-    if (existingPeriods.length === 0) {
-      const existingYears = new Set();
-      monthPeriods.forEach((period) => {
-        existingYears.add(period.start.getFullYear());
-      });
-      const maxExistingYear = Math.max(...Array.from(existingYears));
-      
-      if (currentYear === maxExistingYear + 1) {
-        // Auto-create periods for the next year by adding periods one by one
-        let periodsAdded = 0;
-        while (periodsAdded < 6) { // Create 6 periods (typical for a year)
-          const lastPeriod = monthPeriods[monthPeriods.length - 1];
-          if (!lastPeriod || lastPeriod.start.getFullYear() >= currentYear) {
-            break; // Stop if we've reached the target year
-          }
-          addNextPeriod();
-          periodsAdded++;
+  // Update current year when monthIndex changes to ensure calendar shows correct year
+  useEffect(() => {
+    if (!isManualYearNavigation) {
+      const selectedPeriod = monthPeriods[currentMonthIndex];
+      if (selectedPeriod) {
+        const newYear = selectedPeriod.start.getFullYear();
+        if (newYear !== currentYear) {
+          console.log(`📅 Updating calendar year to ${newYear} for period: ${selectedPeriod.label}`);
+          setCurrentYear(newYear);
         }
-        
-        // Return newly created periods for the current year
-        return monthPeriods
-          .map((period, index) => ({ ...period, originalIndex: index }))
-          .filter((period) => period.start.getFullYear() === currentYear);
       }
     }
-    
-    return existingPeriods;
-  }, [currentYear]);
+  }, [currentMonthIndex, currentYear, isManualYearNavigation]);
+
+  // Note: Removed automatic period creation - users add periods manually via "Add Table" button
 
   // Use lazy AI assistant when AI is enabled, fallback to regular when not
   const regularAI = useAIAssistant(
@@ -196,6 +176,15 @@ const NavigationToolbar = ({
       onEnableAI(true);
     }
   };
+
+  // Debug function to check periods (you can call this from browser console)
+  if (typeof window !== 'undefined') {
+    window.checkPeriods = () => {
+      console.log('📅 Current periods:', monthPeriods.map((p, i) => `${i}: ${p.label} (${p.start.getFullYear()})`));
+      console.log('📊 Total periods:', monthPeriods.length);
+      console.log('📆 Years represented:', [...new Set(monthPeriods.map(p => p.start.getFullYear()))].sort());
+    };
+  }
   // Keyboard navigation for period switching
   useEffect(() => {
     const handleKeyDown = (event) => {
@@ -301,7 +290,7 @@ const NavigationToolbar = ({
                 </Tooltip>
 
                 {showMonthPicker && (
-                  <Card className="absolute top-12 left-0 min-w-[320px] z-50 shadow-lg">
+                  <Card className="absolute top-12 left-0 min-w-[320px] z-[9999] shadow-lg">
                     <CardContent className="p-4">
                       {/* Year Navigation */}
                       <div className="flex items-center justify-between mb-4 pb-3">
@@ -338,16 +327,16 @@ const NavigationToolbar = ({
                         </Button>
                       </div>
                       <Separator className="mb-4" />
-                      {/* Month Periods Grid */}
-                      <div className="grid grid-cols-2 gap-2">
-                        {periodsForCurrentYear.length > 0 ? (
-                          periodsForCurrentYear.map((period) => (
+                      {/* Month Periods Grid - Show all available periods */}
+                      <div className="grid grid-cols-2 gap-2 max-h-64 overflow-y-auto">
+                        {monthPeriods.length > 0 ? (
+                          monthPeriods.map((period, index) => (
                             <Button
-                              key={period.originalIndex}
-                              variant={period.originalIndex === currentMonthIndex ? "default" : "outline"}
+                              key={index}
+                              variant={index === currentMonthIndex ? "default" : "outline"}
                               size="sm"
                               onClick={() => {
-                                onMonthChange(period.originalIndex);
+                                onMonthChange(index);
                                 setShowMonthPicker(false);
                               }}
                               className="japanese-text"
@@ -357,7 +346,7 @@ const NavigationToolbar = ({
                           ))
                         ) : (
                           <div className="col-span-2 text-center text-muted-foreground py-4">
-                            No periods available for {currentYear}
+                            No periods available
                           </div>
                         )}
                       </div>
