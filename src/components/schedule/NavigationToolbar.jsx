@@ -226,13 +226,13 @@ const NavigationToolbar = ({
       if (event.key === "ArrowLeft") {
         event.preventDefault();
         // Navigate to previous period if possible
-        if (currentMonthIndex > 0) {
+        if (monthPeriods && monthPeriods.length > 0 && currentMonthIndex > 0) {
           onMonthChange(currentMonthIndex - 1);
         }
       } else if (event.key === "ArrowRight") {
         event.preventDefault();
         // Navigate to next period if possible
-        if (monthPeriods && currentMonthIndex < monthPeriods.length - 1) {
+        if (monthPeriods && monthPeriods.length > 0 && currentMonthIndex < monthPeriods.length - 1) {
           onMonthChange(currentMonthIndex + 1);
         }
       }
@@ -245,7 +245,7 @@ const NavigationToolbar = ({
     return () => {
       document.removeEventListener("keydown", handleKeyDown);
     };
-  }, [currentMonthIndex, onMonthChange, showMonthPicker]);
+  }, [currentMonthIndex, onMonthChange, showMonthPicker, monthPeriods]);
 
   // Handle outside click to close month picker
   useEffect(() => {
@@ -278,7 +278,7 @@ const NavigationToolbar = ({
                     variant="outline"
                     size="sm"
                     onClick={() => onMonthChange(currentMonthIndex - 1)}
-                    disabled={currentMonthIndex <= 0}
+                    disabled={currentMonthIndex <= 0 || monthPeriods.length === 0}
                   >
                     <ChevronLeft size={16} />
                   </Button>
@@ -299,7 +299,9 @@ const NavigationToolbar = ({
                     >
                       <Calendar size={16} />
                       <span className="japanese-text">
-                        {currentYear}年 {monthPeriods[currentMonthIndex]?.label || "Period"}
+                        {currentYear}年 {monthPeriods && monthPeriods.length > 0 && monthPeriods[currentMonthIndex] 
+                          ? monthPeriods[currentMonthIndex].label 
+                          : periodsLoading ? "Loading..." : "No Periods"}
                       </span>
                     </Button>
                   </TooltipTrigger>
@@ -381,7 +383,7 @@ const NavigationToolbar = ({
                     variant="outline"
                     size="sm"
                     onClick={() => onMonthChange(currentMonthIndex + 1)}
-                    disabled={currentMonthIndex >= monthPeriods.length - 1}
+                    disabled={currentMonthIndex >= monthPeriods.length - 1 || monthPeriods.length === 0}
                   >
                     <ChevronRight size={16} />
                   </Button>

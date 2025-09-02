@@ -459,14 +459,29 @@ export const findPeriodWithData = (supabaseData = null) => {
 };
 
 // Function to delete a specific period
-export const deletePeriod = async (periodIndex) => {
+export const deletePeriod = async (periodIndex, realtimePeriods = null) => {
   try {
     await initializePeriodsCache(); // Ensure cache is initialized
     
-    // Validate period index
-    if (periodIndex < 0 || periodIndex >= periodsCache.length) {
-      console.error(`Invalid period index: ${periodIndex}. Available: 0-${periodsCache.length - 1}`);
+    // Use real-time periods if provided (to avoid race conditions), fallback to cache
+    const periodsToUse = realtimePeriods || periodsCache;
+    
+    // Validate period index against the most current period data
+    if (periodIndex < 0 || periodIndex >= periodsToUse.length) {
+      console.error(`Invalid period index: ${periodIndex}. Available: 0-${Math.max(0, periodsToUse.length - 1)}`);
       return { success: false, error: "Invalid period index" };
+    }
+    
+    // Ensure cache is also synchronized before proceeding
+    if (periodsToUse !== periodsCache) {
+      // Refresh cache to match real-time data
+      await refreshPeriodsCache();
+      
+      // Double-check bounds with refreshed cache
+      if (periodIndex >= periodsCache.length) {
+        console.error(`Period index ${periodIndex} is still out of bounds after cache refresh. Available: 0-${Math.max(0, periodsCache.length - 1)}`);
+        return { success: false, error: "Invalid period index after refresh" };
+      }
     }
 
     // Get period info for logging
@@ -505,6 +520,9 @@ export const deletePeriod = async (periodIndex) => {
     } else if (suggestedIndex >= periodsCache.length) {
       suggestedIndex = periodsCache.length - 1; // Go to last period if deleted period was at end
     }
+    
+    // Ensure suggested index is within bounds
+    suggestedIndex = Math.max(0, Math.min(suggestedIndex, periodsCache.length - 1));
 
     return { 
       success: true, 
