@@ -297,7 +297,7 @@ const ShiftScheduleEditorRealtime = ({
 
     try {
       // Step 1: Delete the period from the system
-      const deletionResult = deletePeriod(currentMonthIndex);
+      const deletionResult = await deletePeriod(currentMonthIndex);
       
       if (!deletionResult.success) {
         throw new Error(deletionResult.error);
@@ -433,12 +433,16 @@ const ShiftScheduleEditorRealtime = ({
         setShowStaffEditModal={setShowStaffEditModal}
         handleExport={handleExportCSV}
         handlePrint={handlePrint}
-        handleAddTable={() => {
+        handleAddTable={async () => {
           // Only add next period when user explicitly clicks the button
           // This prevents automatic period creation
-          const newPeriodIndex = addNextPeriod();
-          if (typeof newPeriodIndex === 'number' && newPeriodIndex >= 0) {
-            setCurrentMonthIndex(newPeriodIndex);
+          try {
+            const newPeriodIndex = await addNextPeriod();
+            if (typeof newPeriodIndex === 'number' && newPeriodIndex >= 0) {
+              setCurrentMonthIndex(newPeriodIndex);
+            }
+          } catch (error) {
+            console.error('Failed to add next period:', error);
           }
         }}
         handleDeletePeriod={handleDeletePeriod}

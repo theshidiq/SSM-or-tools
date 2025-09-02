@@ -443,10 +443,20 @@ const ShiftScheduleEditor = ({
     }
   };
 
-  const handleAddTable = () => {
-    // Add next period and switch to it
-    const newPeriodIndex = addNextPeriod();
-    setCurrentMonthIndex(newPeriodIndex);
+  const handleAddTable = async () => {
+    try {
+      // Add next period and switch to it
+      const newPeriodIndex = await addNextPeriod();
+      setCurrentMonthIndex(newPeriodIndex);
+      console.log(`✅ Successfully added new period and navigated to index ${newPeriodIndex}`);
+    } catch (error) {
+      console.error('Failed to add new period:', error);
+      setError({
+        message: `Failed to add new period: ${error.message}`,
+        type: 'error',
+        details: 'Please try again or check your connection.'
+      });
+    }
   };
 
   const handleDeletePeriod = () => {
