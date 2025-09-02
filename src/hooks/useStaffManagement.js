@@ -8,7 +8,19 @@ import {
 } from "../utils/staffUtils";
 import { optimizedStorage, performanceMonitor } from "../utils/storageUtils";
 import { defaultStaffMembersArray } from "../constants/staffConstants";
-import { generateDateRange } from "../utils/dateUtils";
+import { generateDateRange, monthPeriods } from "../utils/dateUtils";
+
+// Helper function to safely generate date ranges only when periods are available
+const safeGenerateDateRange = (monthIndex) => {
+  try {
+    if (monthPeriods && monthPeriods.length > 0) {
+      return generateDateRange(monthIndex);
+    }
+    return []; // Return empty array while periods are loading
+  } catch (error) {
+    return []; // Return empty array if periods not ready
+  }
+};
 
 // Keep legacy function for backward compatibility during transition
 const loadFromLocalStorage = (key) => {
@@ -152,7 +164,7 @@ export const useStaffManagement = (
                 periodStaff.length > 0
               ) {
                 // Check each staff member to see if they should be active in current period
-                const currentDateRange = generateDateRange(currentMonthIndex);
+                const currentDateRange = safeGenerateDateRange(currentMonthIndex);
                 const activeInheritedStaff = periodStaff.filter((staff) => {
                   if (!staff) return false;
 
@@ -248,7 +260,7 @@ export const useStaffManagement = (
                 Array.isArray(laterPeriodStaff) &&
                 laterPeriodStaff.length > 0
               ) {
-                const currentDateRange = generateDateRange(currentMonthIndex);
+                const currentDateRange = safeGenerateDateRange(currentMonthIndex);
 
                 laterPeriodStaff.forEach((staff) => {
                   if (!staff) return;
@@ -305,7 +317,7 @@ export const useStaffManagement = (
           periodStaff.length > 0
         ) {
           // Check each staff member to see if they should be active in current period
-          const currentDateRange = generateDateRange(currentMonthIndex);
+          const currentDateRange = safeGenerateDateRange(currentMonthIndex);
           const activeInheritedStaff = periodStaff.filter((staff) => {
             if (!staff) return false;
 
@@ -438,7 +450,7 @@ export const useStaffManagement = (
       if (newStaff.startPeriod) {
         try {
           for (let i = 0; i < currentMonthIndex; i++) {
-            const periodDateRange = generateDateRange(i);
+            const periodDateRange = safeGenerateDateRange(i);
             const shouldBeActiveInPeriod = isStaffActiveInCurrentPeriod(
               newStaff,
               periodDateRange,
@@ -633,7 +645,7 @@ export const useStaffManagement = (
       if (newStaff.startPeriod) {
         try {
           for (let i = 0; i < currentMonthIndex; i++) {
-            const periodDateRange = generateDateRange(i);
+            const periodDateRange = safeGenerateDateRange(i);
             const shouldBeActiveInPeriod = isStaffActiveInCurrentPeriod(
               newStaff,
               periodDateRange,

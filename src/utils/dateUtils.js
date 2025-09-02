@@ -295,7 +295,11 @@ export const addNextPeriod = async () => {
 export const generateDateRange = (monthIndex) => {
   // Handle case where no periods exist or cache not initialized
   if (!cacheInitialized || periodsCache.length === 0) {
-    console.warn("No periods available - returning empty date range");
+    // Only warn once during development, not repeatedly
+    if (process.env.NODE_ENV === 'development' && !window._dateUtilsWarningShown) {
+      console.warn("No periods available - returning empty date range (periods still loading from database)");
+      window._dateUtilsWarningShown = true;
+    }
     return [];
   }
 

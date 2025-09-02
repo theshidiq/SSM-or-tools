@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { flushSync } from "react-dom";
-import { generateDateRange } from "../utils/dateUtils";
+import { generateDateRange, monthPeriods } from "../utils/dateUtils";
 import {
   initializeSchedule,
   migrateScheduleData,
@@ -33,10 +33,10 @@ export const useScheduleDataRealtime = (
 
   // Local state for immediate UI updates
   const [schedule, setSchedule] = useState(() => {
-    // Initialize with empty schedule structure
+    // Initialize with empty schedule structure - will be populated when periods load
     return initializeSchedule(
       defaultStaffMembersArray,
-      generateDateRange(currentMonthIndex)
+      [] // Start with empty date range, will be updated when periods load
     );
   });
   
@@ -48,9 +48,21 @@ export const useScheduleDataRealtime = (
   const currentMonthRef = useRef(currentMonthIndex);
   currentMonthRef.current = currentMonthIndex;
 
-  // Generate date range for current month
+  // Helper function to safely generate date ranges
+  const safeGenerateDateRange = (monthIndex) => {
+    try {
+      if (monthPeriods && monthPeriods.length > 0) {
+        return generateDateRange(monthIndex);
+      }
+      return []; // Return empty array while periods are loading
+    } catch (error) {
+      return []; // Return empty array if periods not ready
+    }
+  };
+
+  // Generate date range for current month - only when periods are available
   const dateRange = useMemo(() => {
-    return generateDateRange(currentMonthIndex);
+    return safeGenerateDateRange(currentMonthIndex);
   }, [currentMonthIndex]);
 
   // Mutation for optimistic schedule updates
@@ -259,7 +271,7 @@ export const useScheduleDataRealtime = (
       }
 
       // Initialize new schedule with appropriate staff
-      const newSchedule = initializeSchedule(staffToUse, generateDateRange(currentMonthIndex));
+      const newSchedule = initializeSchedule(staffToUse, safeGenerateDateRange(currentMonthIndex));
       setSchedule(newSchedule);
       
       if (staffToUse !== defaultStaffMembersArray) {
@@ -318,6 +330,16 @@ export const useScheduleDataRealtime = (
     },
     [updateScheduleMutation]
   );
+
+  // Update schedule when periods are loaded (if schedule is still empty)
+  useEffect(() => {
+    const currentDateRange = safeGenerateDateRange(currentMonthIndex);
+    if (currentDateRange.length > 0 && (!schedule || Object.keys(schedule).length === 0)) {
+      // Periods are now loaded but schedule is still empty - reinitialize
+      const newSchedule = initializeSchedule(defaultStaffMembersArray, currentDateRange);
+      setSchedule(newSchedule);
+    }
+  }, [monthPeriods, currentMonthIndex, schedule]);
 
   return {
     // Schedule data

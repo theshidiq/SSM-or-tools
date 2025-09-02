@@ -299,7 +299,7 @@ const NavigationToolbar = ({
                     >
                       <Calendar size={16} />
                       <span className="japanese-text">
-                        {monthPeriods[currentMonthIndex]?.label || "Period"} {currentYear}年
+                        {currentYear}年 {monthPeriods[currentMonthIndex]?.label || "Period"}
                       </span>
                     </Button>
                   </TooltipTrigger>
