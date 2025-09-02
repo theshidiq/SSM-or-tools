@@ -16,13 +16,6 @@ import { Separator } from '../ui/separator';
 
 const Sidebar = ({ currentView, onViewChange }) => {
   const menuItems = [
-    { 
-      id: 'quick-create', 
-      label: 'Quick Create', 
-      icon: Plus, 
-      type: 'button',
-      className: 'bg-blue-600 text-white hover:bg-blue-700'
-    },
     { id: 'schedule', label: 'Schedule', icon: Calendar, type: 'nav' },
     { id: 'dashboard', label: 'Dashboard', icon: BarChart3, type: 'nav' },
     { id: 'staff', label: 'Staff', icon: Users, type: 'nav' },
@@ -37,29 +30,14 @@ const Sidebar = ({ currentView, onViewChange }) => {
   ];
 
   return (
-    <div className="w-64 h-screen bg-white border-r border-gray-200 flex flex-col">
+    <div className="w-64 h-screen bg-sidebar border-r border-sidebar-border flex flex-col">
       {/* Header Section */}
-      <div className="p-6 border-b border-gray-200">
-        {/* System Title and Description */}
+      <div className="p-6 border-b border-sidebar-border">
+        {/* System Title */}
         <div className="mb-4">
-          <div className="tracking-tight text-2xl md:text-3xl font-bold japanese-text">
-            シフト管理システム
+          <div className="tracking-tight text-2xl md:text-3xl font-bold japanese-text text-sidebar-foreground">
+            湖南荘
           </div>
-          <p className="text-sm text-muted-foreground mt-1">
-            Japanese Restaurant Shift Schedule Manager
-          </p>
-        </div>
-        
-        {/* Status and ID */}
-        <div className="flex flex-col gap-2">
-          <div className="flex items-center gap-2">
-            <Badge className="border-transparent bg-primary text-primary-foreground hover:bg-primary/80">
-              リアルタイム
-            </Badge>
-          </div>
-          <span className="text-xs text-muted-foreground font-mono">
-            ID: 502c037b...
-          </span>
         </div>
       </div>
 
@@ -68,7 +46,7 @@ const Sidebar = ({ currentView, onViewChange }) => {
         <div className="p-4">
           {/* Quick Create Button */}
           <Button 
-            className="w-full mb-4 bg-blue-600 text-white hover:bg-blue-700 justify-start gap-2"
+            className="w-full mb-4 bg-sidebar-primary text-sidebar-primary-foreground hover:bg-sidebar-primary/90 justify-start gap-2 transition-all duration-200"
             onClick={() => onViewChange?.('create')}
           >
             <Plus size={16} />
@@ -77,7 +55,7 @@ const Sidebar = ({ currentView, onViewChange }) => {
 
           {/* Main Navigation */}
           <nav className="space-y-1">
-            {menuItems.slice(1).map((item) => {
+            {menuItems.map((item) => {
               const Icon = item.icon;
               const isActive = currentView === item.id;
               
@@ -85,13 +63,13 @@ const Sidebar = ({ currentView, onViewChange }) => {
                 <button
                   key={item.id}
                   onClick={() => onViewChange?.(item.id)}
-                  className={`w-full flex items-center gap-3 px-3 py-2 rounded-md text-sm transition-colors ${
+                  className={`group w-full flex items-center gap-3 px-3 py-2.5 rounded-md text-sm font-medium transition-all duration-200 ${
                     isActive 
-                      ? 'bg-gray-100 text-gray-900 font-medium' 
-                      : 'text-gray-700 hover:bg-gray-50 hover:text-gray-900'
+                      ? 'bg-sidebar-accent text-sidebar-accent-foreground shadow-sm' 
+                      : 'text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground'
                   }`}
                 >
-                  <Icon size={16} />
+                  <Icon size={16} className="transition-transform duration-200 group-hover:scale-105" />
                   {item.label}
                 </button>
               );
@@ -102,20 +80,27 @@ const Sidebar = ({ currentView, onViewChange }) => {
 
           {/* Documents Section */}
           <div className="mb-4">
-            <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">
+            <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-3 px-1">
               Documents
             </h3>
             <nav className="space-y-1">
-              {documentItems.map((item) => (
-                <button
-                  key={item.id}
-                  onClick={() => onViewChange?.(item.id)}
-                  className="w-full flex items-center gap-3 px-3 py-2 rounded-md text-sm text-gray-700 hover:bg-gray-50 hover:text-gray-900 transition-colors"
-                >
-                  <FileText size={16} />
-                  {item.label}
-                </button>
-              ))}
+              {documentItems.map((item) => {
+                const isActive = currentView === item.id;
+                return (
+                  <button
+                    key={item.id}
+                    onClick={() => onViewChange?.(item.id)}
+                    className={`group w-full flex items-center gap-3 px-3 py-2.5 rounded-md text-sm font-medium transition-all duration-200 ${
+                      isActive 
+                        ? 'bg-sidebar-accent text-sidebar-accent-foreground shadow-sm' 
+                        : 'text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground'
+                    }`}
+                  >
+                    <FileText size={16} className="transition-transform duration-200 group-hover:scale-105" />
+                    {item.label}
+                  </button>
+                );
+              })}
             </nav>
           </div>
 
@@ -123,29 +108,42 @@ const Sidebar = ({ currentView, onViewChange }) => {
 
           {/* Utility Items */}
           <nav className="space-y-1">
-            <button className="w-full flex items-center gap-3 px-3 py-2 rounded-md text-sm text-gray-700 hover:bg-gray-50 hover:text-gray-900 transition-colors">
-              <Search size={16} />
+            <button className="group w-full flex items-center gap-3 px-3 py-2.5 rounded-md text-sm font-medium text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground transition-all duration-200">
+              <Search size={16} className="transition-transform duration-200 group-hover:scale-105" />
               Search
             </button>
-            <button className="w-full flex items-center gap-3 px-3 py-2 rounded-md text-sm text-gray-700 hover:bg-gray-50 hover:text-gray-900 transition-colors">
-              <HelpCircle size={16} />
+            <button className="group w-full flex items-center gap-3 px-3 py-2.5 rounded-md text-sm font-medium text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground transition-all duration-200">
+              <HelpCircle size={16} className="transition-transform duration-200 group-hover:scale-105" />
               Get Help
             </button>
           </nav>
         </div>
       </div>
 
-      {/* User Section */}
-      <div className="p-4 border-t border-gray-200">
-        <div className="flex items-center gap-3">
-          <div className="w-8 h-8 rounded-full bg-blue-600 flex items-center justify-center text-white text-sm font-medium">
+      {/* Status and User Section */}
+      <div className="p-4 border-t border-sidebar-border">
+        {/* Status and ID */}
+        <div className="flex flex-col gap-2 mb-4">
+          <div className="flex items-center gap-2">
+            <Badge className="border-transparent bg-sidebar-primary text-sidebar-primary-foreground hover:bg-sidebar-primary/90 transition-all duration-200">
+              リアルタイム
+            </Badge>
+          </div>
+          <span className="text-xs text-muted-foreground font-mono">
+            ID: 502c037b...
+          </span>
+        </div>
+        
+        {/* User Profile */}
+        <div className="group flex items-center gap-3 p-2 rounded-md hover:bg-sidebar-accent transition-all duration-200 cursor-pointer">
+          <div className="w-8 h-8 rounded-full bg-sidebar-primary flex items-center justify-center text-sidebar-primary-foreground text-sm font-medium">
             CN
           </div>
           <div className="flex-1 min-w-0">
-            <div className="text-sm font-medium text-gray-900">shadcn</div>
-            <div className="text-xs text-gray-500 truncate">m@example.com</div>
+            <div className="text-sm font-medium text-sidebar-foreground group-hover:text-sidebar-accent-foreground transition-colors duration-200">shadcn</div>
+            <div className="text-xs text-muted-foreground truncate">m@example.com</div>
           </div>
-          <ChevronDown size={16} className="text-gray-400" />
+          <ChevronDown size={16} className="text-muted-foreground group-hover:text-sidebar-accent-foreground transition-all duration-200" />
         </div>
       </div>
     </div>
