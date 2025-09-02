@@ -184,11 +184,16 @@ const NavigationToolbar = ({
     }
   }, [currentMonthIndex, currentYear, isManualYearNavigation]);
 
-  const handleAIClick = () => {
-    if (aiEnabled) {
-      setShowAIModal(true);
-    } else if (onEnableAI) {
-      onEnableAI();
+  const handleAIClick = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    
+    // Always show modal immediately to avoid timing issues
+    setShowAIModal(true);
+    
+    // Enable AI if not already enabled
+    if (!aiEnabled && onEnableAI) {
+      onEnableAI(true);
     }
   };
   // Keyboard navigation for period switching
@@ -435,11 +440,6 @@ const NavigationToolbar = ({
                       size={16} 
                       className={isProcessing ? "animate-spin" : ""}
                     />
-                    {isEnhanced && (
-                      <Badge variant="secondary" className="ml-2 text-xs">
-                        AI+
-                      </Badge>
-                    )}
                   </Button>
                 </TooltipTrigger>
                 <TooltipContent>
@@ -531,8 +531,8 @@ const NavigationToolbar = ({
         </CardContent>
       </Card>
 
-      {/* AI Assistant Modal - Lazy loaded when AI is enabled */}
-      {aiEnabled && (
+      {/* AI Assistant Modal - Show when AI is enabled OR when modal is requested */}
+      {(aiEnabled || showAIModal) && (
         <ErrorBoundary 
           userFriendlyMessage="AI Assistant failed to load. Core functionality remains available."
           onDisableFeature={() => {
