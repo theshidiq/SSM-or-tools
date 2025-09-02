@@ -575,14 +575,7 @@ const ScheduleTable = ({
   const handleDragFillEnd = useCallback((event) => {}, []);
 
   return (
-    <Card className="overflow-hidden">
-      <CardHeader>
-        <CardTitle className="japanese-text">
-          シフトスケジュール編集
-        </CardTitle>
-      </CardHeader>
-      <CardContent className="p-0">
-        <div className="relative">
+    <div className="relative">
       {/* Bulk Operations Toolbar - Bottom positioned with slide up animation */}
       {showBulkToolbar && (
         <div
@@ -652,30 +645,9 @@ const ScheduleTable = ({
         </div>
       )}
 
-      {/* Table Header with Title and Legend */}
-      <div className="w-4/5 mx-auto mb-4">
-        <div className="bg-white border border-gray-200 rounded-t-lg px-6 py-4 border-b-0">
-          <div className="flex items-center justify-between">
-            <h2 className="text-lg font-semibold text-gray-900">
-              調理場シフト表
-            </h2>
-            <div className="flex items-center space-x-4 text-sm text-gray-600">
-              <div className="flex items-center space-x-1">
-                <div className="w-3 h-3 bg-blue-200 rounded border border-blue-300"></div>
-                <span>早番(△)</span>
-              </div>
-              <div className="flex items-center space-x-1">
-                <div className="w-3 h-3 bg-red-200 rounded border border-red-300"></div>
-                <span>休み(×)</span>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-
       <div
         ref={tableRef}
-        className="table-container w-4/5 mx-auto overflow-auto border border-gray-200 rounded-b-lg shadow-sm mb-6"
+        className="table-container overflow-auto"
         style={{ maxHeight: "calc(100vh - 110px)" }}
         tabIndex={0}
         onMouseUp={() => {
@@ -700,14 +672,14 @@ const ScheduleTable = ({
           style={{ minWidth: `${40 + orderedStaffMembers.length * 40}px` }}
         >
           {/* Sticky Header Row: Staff Names as Column Headers */}
-          <TableHeader>
+          <TableHeader className="sticky top-0 z-50">
             <TableRow>
               <TableHead
-                className="bg-primary text-primary-foreground min-w-[40px] border-r-2 border-border sticky left-0"
+                className="bg-primary text-primary-foreground min-w-[40px] border-r-2 border-border sticky left-0 font-bold hover:text-white"
                 style={{ zIndex: 400, width: "40px" }}
               >
                 <div className="flex items-center justify-center gap-1 py-0.5">
-                  <span className="text-xs font-medium">日付</span>
+                  <span className="text-xs font-bold">日付</span>
                 </div>
               </TableHead>
 
@@ -717,7 +689,7 @@ const ScheduleTable = ({
                 return (
                   <TableHead
                     key={staff.id}
-                    className={`bg-primary text-primary-foreground text-center relative border-r border-border cursor-pointer hover:bg-primary/80 ${
+                    className={`bg-primary text-primary-foreground text-center relative border-r border-border cursor-pointer font-bold hover:bg-primary/80 hover:text-white ${
                       staffIndex === orderedStaffMembers.length - 1
                         ? "border-r-2"
                         : ""
@@ -771,7 +743,7 @@ const ScheduleTable = ({
                         />
                       ) : (
                         <span
-                          className="text-sm font-medium cursor-pointer hover:bg-gray-500 px-1 py-0.5 rounded transition-colors duration-200"
+                          className="text-sm font-bold cursor-pointer px-1 py-0.5 rounded transition-colors duration-200"
                           style={{
                             fontSize: "14px",
                             lineHeight: "16px",
@@ -1092,9 +1064,7 @@ const ScheduleTable = ({
           </button>
         </div>
       )}
-        </div>
-      </CardContent>
-    </Card>
+    </div>
   );
 };
 

@@ -395,36 +395,6 @@ const ShiftScheduleEditorRealtime = ({
           </Alert>
         )}
 
-        {/* Header with real-time info */}
-        <Card className="mb-6">
-          <CardHeader>
-            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-              <div>
-                <CardTitle className="text-2xl md:text-3xl font-bold japanese-text">
-                  シフト管理システム
-                </CardTitle>
-                <p className="text-sm text-muted-foreground mt-1">
-                  Japanese Restaurant Shift Schedule Manager
-                </p>
-              </div>
-              <div className="flex flex-col sm:items-end gap-2">
-                <div className="flex items-center gap-2">
-                  <Badge variant={isConnected ? "default" : "secondary"}>
-                    {realtimeStatus.status === "connected" && "リアルタイム"}
-                    {realtimeStatus.status === "saving" && "保存中..."}
-                    {realtimeStatus.status === "loading" && "読み込み中..."}
-                    {realtimeStatus.status === "disconnected" && "オフライン"}
-                  </Badge>
-                </div>
-                {currentScheduleId && (
-                  <span className="text-xs text-muted-foreground font-mono">
-                    ID: {currentScheduleId.substring(0, 8)}...
-                  </span>
-                )}
-              </div>
-            </div>
-          </CardHeader>
-        </Card>
 
       {/* Navigation Toolbar */}
       <NavigationToolbar

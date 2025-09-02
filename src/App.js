@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import ShiftScheduleEditorRealtime from "./components/ShiftScheduleEditorRealtime.jsx";
 import ForceDataLoader from "./components/ForceDataLoader.jsx";
+import DashboardLayout from "./components/layout/DashboardLayout.jsx";
 import { useSupabase } from "./hooks/useSupabase.js";
 import { RestaurantProvider } from "./contexts/RestaurantContext";
 
@@ -19,7 +20,7 @@ function AppContent() {
   const effectiveScheduleData = forceData || scheduleData;
 
   return (
-    <div className="App">
+    <DashboardLayout>
       {/* Phase 1: Force load actual Supabase data for migration testing */}
       <ForceDataLoader onDataLoaded={setForceData} />
 
@@ -31,7 +32,7 @@ function AppContent() {
         onSaveSchedule={saveScheduleData}
         loadScheduleData={loadScheduleData}
       />
-    </div>
+    </DashboardLayout>
   );
 }
 
