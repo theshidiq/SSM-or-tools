@@ -53,6 +53,7 @@ const ShiftScheduleEditorRealtime = ({
 }) => {
   // Main state - initialize with 0, will be updated when periods load
   const [currentMonthIndex, setCurrentMonthIndex] = useState(0);
+  const [shouldNavigateToLatest, setShouldNavigateToLatest] = useState(false);
 
   const [viewMode, setViewMode] = useState("table"); // 'table' or 'card'
 
@@ -96,6 +97,15 @@ const ShiftScheduleEditorRealtime = ({
   // Ensure currentMonthIndex stays in bounds when periods change (e.g., after deletion)
   useEffect(() => {
     if (!periodsLoading && realtimePeriods.length > 0) {
+      // Check if we should navigate to the latest period after adding
+      if (shouldNavigateToLatest) {
+        const latestIndex = realtimePeriods.length - 1;
+        setCurrentMonthIndex(latestIndex);
+        setShouldNavigateToLatest(false);
+        console.log(`📅 Navigated to newly added period: ${realtimePeriods[latestIndex]?.label}`);
+        return;
+      }
+      
       // Check if currentMonthIndex is out of bounds (negative or too high)
       if (currentMonthIndex < 0 || currentMonthIndex >= realtimePeriods.length) {
         const newIndex = Math.max(0, Math.min(currentMonthIndex, realtimePeriods.length - 1));
@@ -107,7 +117,7 @@ const ShiftScheduleEditorRealtime = ({
       setCurrentMonthIndex(0);
       console.log('🔄 No periods available, set index to 0');
     }
-  }, [currentMonthIndex, realtimePeriods, periodsLoading]);
+  }, [currentMonthIndex, realtimePeriods, periodsLoading, shouldNavigateToLatest]);
 
   // Custom hooks - NEW REAL-TIME VERSION
   const {
@@ -497,7 +507,9 @@ const ShiftScheduleEditorRealtime = ({
           try {
             const newPeriodIndex = await addNextPeriod();
             if (typeof newPeriodIndex === 'number' && newPeriodIndex >= 0) {
-              setCurrentMonthIndex(newPeriodIndex);
+              // Signal that we want to navigate to the latest period when it becomes available
+              setShouldNavigateToLatest(true);
+              console.log(`🔄 Added new period at index ${newPeriodIndex}, will navigate when real-time sync completes...`);
             }
           } catch (error) {
             console.error('Failed to add next period:', error);
