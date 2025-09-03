@@ -147,6 +147,9 @@ const initializePeriodsCache = async () => {
   
   periodsCache = await loadPeriodsFromSupabase();
   cacheInitialized = true;
+  
+  // Note: cleanup will be available after function declaration below
+  
   return periodsCache;
 };
 
@@ -155,6 +158,66 @@ export const refreshPeriodsCache = async () => {
   periodsCache = await loadPeriodsFromSupabase();
   cacheInitialized = true;
   return periodsCache;
+};
+
+// Function to clean up duplicate periods
+export const cleanupDuplicatePeriods = async () => {
+  try {
+    await initializePeriodsCache();
+    
+    // Find duplicates by date range
+    const seen = new Map();
+    const duplicates = [];
+    
+    periodsCache.forEach((period) => {
+      const startDate = new Date(period.start).toISOString().split('T')[0];
+      const endDate = new Date(period.end).toISOString().split('T')[0];
+      const dateKey = `${startDate}-${endDate}`;
+      
+      if (seen.has(dateKey)) {
+        // This is a duplicate - mark for deletion
+        duplicates.push(period);
+      } else {
+        seen.set(dateKey, period);
+      }
+    });
+    
+    if (duplicates.length === 0) {
+      console.log('✅ No duplicate periods found');
+      return { removed: 0, remaining: periodsCache.length };
+    }
+    
+    console.log(`🔄 Found ${duplicates.length} duplicate periods, removing...`);
+    
+    // Remove duplicates from database
+    let removedCount = 0;
+    for (const duplicate of duplicates) {
+      if (duplicate.id) {
+        try {
+          const { error } = await supabase.rpc('delete_period', {
+            period_id: duplicate.id
+          });
+          
+          if (error) throw error;
+          removedCount++;
+          console.log(`✅ Removed duplicate period: ${duplicate.label}`);
+        } catch (error) {
+          console.error(`Failed to remove duplicate period ${duplicate.label}:`, error);
+        }
+      }
+    }
+    
+    // Refresh cache after cleanup
+    await refreshPeriodsCache();
+    
+    const result = { removed: removedCount, remaining: periodsCache.length };
+    console.log(`✅ Cleanup complete: removed ${removedCount} duplicates, ${periodsCache.length} periods remaining`);
+    return result;
+    
+  } catch (error) {
+    console.error('Failed to cleanup duplicate periods:', error);
+    return { removed: 0, remaining: periodsCache.length, error: error.message };
+  }
 };
 
 // Function to get periods (for compatibility)
@@ -200,6 +263,11 @@ export const monthPeriods = new Proxy([], {
 // Initialize cache on module load
 initializePeriodsCache();
 
+// Expose cleanup function to window for manual use (development only)
+if (typeof window !== 'undefined' && process.env.NODE_ENV === 'development') {
+  window.cleanupDuplicatePeriods = cleanupDuplicatePeriods;
+}
+
 // Function to add next period
 export const addNextPeriod = async () => {
   await initializePeriodsCache(); // Ensure cache is initialized
@@ -222,6 +290,23 @@ export const addNextPeriod = async () => {
   nextEndDate.setUTCMonth(nextEndDate.getUTCMonth() + 1);
   nextEndDate.setUTCDate(nextEndDate.getUTCDate() - 1);
   nextEndDate.setUTCHours(0, 0, 0, 0); // Ensure midnight UTC
+
+  // Check for duplicate periods before creating
+  const nextStartDateString = nextStartDate.toISOString().split('T')[0];
+  const nextEndDateString = nextEndDate.toISOString().split('T')[0];
+  
+  const existingPeriod = periodsCache.find(period => {
+    const existingStart = new Date(period.start).toISOString().split('T')[0];
+    const existingEnd = new Date(period.end).toISOString().split('T')[0];
+    return existingStart === nextStartDateString && existingEnd === nextEndDateString;
+  });
+  
+  if (existingPeriod) {
+    console.warn(`⚠️ Period already exists: ${existingPeriod.label} (${nextStartDateString} to ${nextEndDateString})`);
+    // Return the index of the existing period instead of creating duplicate
+    const existingIndex = periodsCache.findIndex(p => p === existingPeriod);
+    return existingIndex;
+  }
 
   // Generate label based on months
   const startMonth = nextStartDate.getUTCMonth() + 1;
@@ -262,8 +347,8 @@ export const addNextPeriod = async () => {
   try {
     // Add period to Supabase
     const { data, error } = await supabase.rpc('add_period', {
-      p_start_date: nextStartDate.toISOString().split('T')[0],
-      p_end_date: nextEndDate.toISOString().split('T')[0],
+      p_start_date: nextStartDateString,
+      p_end_date: nextEndDateString,
       p_label: label
     });
 
