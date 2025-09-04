@@ -13,7 +13,8 @@ import { dataValidation } from "../utils/dataIntegrityUtils";
 
 export const useScheduleDataRealtime = (
   currentMonthIndex,
-  initialScheduleId = null
+  initialScheduleId = null,
+  totalPeriods = 0
 ) => {
   const queryClient = useQueryClient();
   
@@ -210,6 +211,24 @@ export const useScheduleDataRealtime = (
 
   // Load and migrate data from Supabase when available
   useEffect(() => {
+    // Skip if currentMonthIndex is invalid (negative)
+    if (currentMonthIndex < 0) {
+      console.log(`⚠️ Skipping data load for negative period index: ${currentMonthIndex}`);
+      return;
+    }
+    
+    // Skip if we have explicit totalPeriods count and index exceeds it
+    if (totalPeriods > 0 && currentMonthIndex >= totalPeriods) {
+      console.log(`⚠️ Skipping data load for period index ${currentMonthIndex} >= totalPeriods ${totalPeriods}`);
+      return;
+    }
+    
+    // Additional safety check: skip if index seems unreasonably high (prevents loading deleted periods)
+    if (currentMonthIndex > 20) { // No restaurant should have more than 20 periods
+      console.log(`⚠️ Skipping data load for unreasonably high period index: ${currentMonthIndex}`);
+      return;
+    }
+    
     if (supabaseScheduleData && supabaseScheduleData.schedule_data) {
       const { _staff_members, ...actualScheduleData } = supabaseScheduleData.schedule_data;
 
@@ -224,8 +243,8 @@ export const useScheduleDataRealtime = (
         migratedStaffMembers
       );
 
-      // Only update if we have meaningful data
-      if (migratedStaffMembers.length > 0 || Object.keys(migratedScheduleData).length > 0) {
+      // Only update if we have meaningful data AND valid period index
+      if ((migratedStaffMembers.length > 0 || Object.keys(migratedScheduleData).length > 0) && currentMonthIndex >= 0) {
         console.log(`🔄 Loading period ${currentMonthIndex} from Supabase real-time`);
         
         // Update staff members
@@ -251,7 +270,7 @@ export const useScheduleDataRealtime = (
         }
       }
     }
-  }, [supabaseScheduleData, currentMonthIndex]);
+  }, [supabaseScheduleData, currentMonthIndex, totalPeriods]);
 
   // Handle month switching with staff preservation
   useEffect(() => {

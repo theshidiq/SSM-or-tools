@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { supabase } from "../utils/supabase";
-import { refreshPeriodsCache } from "../utils/dateUtils";
+import { refreshPeriodsCache, synchronizePeriodsCache } from "../utils/dateUtils";
 
 export const usePeriodsRealtime = () => {
   const [periods, setPeriods] = useState([]);
@@ -27,8 +27,9 @@ export const usePeriodsRealtime = () => {
 
       setPeriods(formattedPeriods);
       
-      // Also refresh the dateUtils cache
-      await refreshPeriodsCache();
+      // Synchronize the dateUtils cache with our fresh data
+      synchronizePeriodsCache(formattedPeriods);
+      console.log(`🔄 Synchronized dateUtils cache with ${formattedPeriods.length} periods`);
       
     } catch (err) {
       console.error('Failed to load periods:', err);
@@ -124,11 +125,15 @@ export const usePeriodsRealtime = () => {
         },
         (payload) => {
           console.log('🔄 Periods table changed:', payload.eventType, payload.new?.label || payload.old?.label);
-          // Reload periods immediately when changes are detected
-          // Use setTimeout to ensure the database transaction is committed
+          // For DELETE events, reload immediately to prevent stale cache issues
+          // For INSERT/UPDATE events, use small delay to ensure DB consistency
+          const isDelete = payload.eventType === 'DELETE';
+          const delay = isDelete ? 10 : 50; // Very fast response for deletions to prevent race conditions
+          
           setTimeout(() => {
+            console.log(`🔄 Reloading periods after ${delay}ms delay (${payload.eventType} event)`);
             loadPeriods();
-          }, 100); // Small delay to ensure DB consistency
+          }, delay);
         }
       )
       .subscribe();

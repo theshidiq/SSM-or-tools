@@ -155,8 +155,22 @@ const initializePeriodsCache = async () => {
 
 // Function to refresh periods cache
 export const refreshPeriodsCache = async () => {
-  periodsCache = await loadPeriodsFromSupabase();
+  console.log('🔄 Refreshing dateUtils periods cache from database...');
+  const freshPeriods = await loadPeriodsFromSupabase();
+  console.log(`📊 Loaded ${freshPeriods.length} periods from database:`, freshPeriods.map(p => p.label));
+  periodsCache = freshPeriods;
   cacheInitialized = true;
+  return periodsCache;
+};
+
+// Function to synchronize cache with external periods data
+export const synchronizePeriodsCache = (externalPeriods) => {
+  if (Array.isArray(externalPeriods)) {
+    console.log(`🔄 Synchronizing dateUtils cache with external data (${externalPeriods.length} periods)`);
+    periodsCache = [...externalPeriods]; // Create a copy to avoid reference issues
+    cacheInitialized = true;
+    return periodsCache;
+  }
   return periodsCache;
 };
 
@@ -611,8 +625,22 @@ export const deletePeriod = async (periodIndex, realtimePeriods = null) => {
         console.log(`✅ Period deleted from database: ${periodToDelete.label}`);
       }
       
-      // Refresh cache from database
+      // Force immediate cache refresh from database
       await refreshPeriodsCache();
+      
+      // Verify the deleted period is actually gone from the cache
+      const stillExists = periodsCache.find(p => p.id === periodToDelete.id);
+      if (!stillExists) {
+        console.log(`✅ Period successfully removed from cache after database refresh`);
+      } else {
+        console.warn(`⚠️ Period still exists in cache after refresh - forcing manual removal`);
+        // Force remove from cache if database refresh didn't work
+        const indexToRemove = periodsCache.findIndex(p => p.id === periodToDelete.id);
+        if (indexToRemove >= 0) {
+          periodsCache.splice(indexToRemove, 1);
+          console.log(`✅ Period forcibly removed from cache at index ${indexToRemove}`);
+        }
+      }
       
     } catch (error) {
       console.error('Failed to delete period from database:', error);
@@ -622,7 +650,9 @@ export const deletePeriod = async (periodIndex, realtimePeriods = null) => {
       console.log(`⚠️ Period deleted from cache only: ${periodToDelete.label} (database failed)`);
     }
 
+    // Report the CURRENT cache length after refresh
     console.log(`✅ Period deleted successfully. Remaining periods: ${periodsCache.length}`);
+    console.log(`📊 Current periods in cache:`, periodsCache.map(p => p.label));
     
     // Return success with navigation info
     let suggestedIndex = periodIndex;
@@ -633,14 +663,19 @@ export const deletePeriod = async (periodIndex, realtimePeriods = null) => {
       suggestedIndex = periodsCache.length - 1; // Go to last period if deleted period was at end
     }
     
-    // Ensure suggested index is within bounds
+    // Ensure suggested index is within bounds and validate against current cache state
     suggestedIndex = Math.max(0, Math.min(suggestedIndex, periodsCache.length - 1));
+    
+    // Final validation: ensure suggestedIndex doesn't exceed available periods
+    const finalSuggestedIndex = periodsCache.length === 0 ? 0 : suggestedIndex;
+    
+    console.log(`🔄 Navigation suggestion: index ${finalSuggestedIndex} of ${periodsCache.length} remaining periods`);
 
     return { 
       success: true, 
       deletedPeriod: periodToDelete,
       newPeriodCount: periodsCache.length,
-      suggestedNavigationIndex: suggestedIndex,
+      suggestedNavigationIndex: finalSuggestedIndex,
       isEmpty: periodsCache.length === 0
     };
   } catch (error) {

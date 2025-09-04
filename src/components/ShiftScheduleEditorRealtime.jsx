@@ -163,9 +163,11 @@ const ShiftScheduleEditorRealtime = ({
       
       // Check if currentMonthIndex is out of bounds (negative or too high)
       if (currentMonthIndex < 0 || currentMonthIndex >= realtimePeriods.length) {
-        const newIndex = Math.max(0, Math.min(currentMonthIndex, realtimePeriods.length - 1));
-        setCurrentMonthIndex(newIndex);
-        console.log(`🔄 Period index out of bounds (${currentMonthIndex}), adjusted to ${newIndex} (${realtimePeriods[newIndex]?.label})`);
+        const newIndex = realtimePeriods.length === 0 ? 0 : Math.max(0, Math.min(currentMonthIndex, realtimePeriods.length - 1));
+        if (newIndex !== currentMonthIndex) {
+          setCurrentMonthIndex(newIndex);
+          console.log(`🔄 Period index out of bounds (${currentMonthIndex}), adjusted to ${newIndex}${realtimePeriods[newIndex] ? ` (${realtimePeriods[newIndex].label})` : ' (no periods available)'}`);
+        }
       }
     } else if (!periodsLoading && realtimePeriods.length === 0) {
       // No periods available, set to 0 but UI should show empty state
@@ -198,7 +200,7 @@ const ShiftScheduleEditorRealtime = ({
     isLoading: isSupabaseLoading,
     isSaving,
     error: supabaseError,
-  } = useScheduleDataRealtime(currentMonthIndex);
+  } = useScheduleDataRealtime(currentMonthIndex, null, realtimePeriods.length);
 
   // Settings hook (unchanged)
   const {
@@ -431,19 +433,31 @@ const ShiftScheduleEditorRealtime = ({
         throw new Error(deletionResult.error);
       }
 
-      // Step 2: Handle navigation based on remaining periods
+      // Step 2: Force immediate synchronization of periods cache
+      await forcePeriodsRefresh();
+      console.log(`🔄 Forced periods refresh - now have ${realtimePeriods.length} periods`);
+      
+      // Step 3: Handle navigation based on remaining periods
       if (deletionResult.isEmpty) {
         // All periods deleted - set to index 0 but with no valid period
         console.log(`🔄 All periods deleted - UI will show empty state`);
         setCurrentMonthIndex(0);
       } else {
-        // Navigate to a valid remaining period
-        const newCurrentIndex = deletionResult.suggestedNavigationIndex;
-        console.log(`🔄 Navigating to period ${newCurrentIndex} after deletion`);
+        // Navigate to a valid remaining period, but ensure it's within the updated bounds
+        const updatedPeriodCount = realtimePeriods.length;
+        let newCurrentIndex = deletionResult.suggestedNavigationIndex;
+        
+        // Double-check bounds against the most current period count
+        if (newCurrentIndex >= updatedPeriodCount) {
+          newCurrentIndex = Math.max(0, updatedPeriodCount - 1);
+          console.log(`⚠️ Adjusted navigation index from ${deletionResult.suggestedNavigationIndex} to ${newCurrentIndex} (max available: ${updatedPeriodCount - 1})`);
+        }
+        
+        console.log(`🔄 Navigating to period ${newCurrentIndex} after deletion (${updatedPeriodCount} periods available)`);
         setCurrentMonthIndex(newCurrentIndex);
       }
 
-      // Step 3: Clear any cached data for deleted periods
+      // Step 4: Clear any cached data for deleted periods
       try {
         // Clear localStorage cache for periods that no longer exist
         const savedScheduleByMonth = JSON.parse(localStorage.getItem("schedule-by-month-data") || "{}");
