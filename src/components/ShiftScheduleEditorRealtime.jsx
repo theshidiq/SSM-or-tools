@@ -53,7 +53,10 @@ const ShiftScheduleEditorRealtime = ({
 }) => {
   // Main state - initialize with 0, will be updated when periods load
   const [currentMonthIndex, setCurrentMonthIndex] = useState(0);
-  const [shouldNavigateToLatest, setShouldNavigateToLatest] = useState(false);
+  const [pendingNavigationToPeriod, setPendingNavigationToPeriod] = useState(null);
+  
+  // Ref to track navigation timeout
+  const navigationTimeoutRef = useRef(null);
 
   const [viewMode, setViewMode] = useState("table"); // 'table' or 'card'
 
@@ -78,7 +81,7 @@ const ShiftScheduleEditorRealtime = ({
   const [showSettingsModal, setShowSettingsModal] = useState(false);
 
   // Period management hook
-  const { periods: realtimePeriods, isLoading: periodsLoading } = usePeriodsRealtime();
+  const { periods: realtimePeriods, isLoading: periodsLoading, forceRefresh: forcePeriodsRefresh } = usePeriodsRealtime();
 
   // Initialize current month index when periods are loaded
   useEffect(() => {
@@ -94,16 +97,68 @@ const ShiftScheduleEditorRealtime = ({
     }
   }, [periodsLoading, realtimePeriods]);
 
-  // Ensure currentMonthIndex stays in bounds when periods change (e.g., after deletion)
+  // Handle navigation to newly added period and bounds checking
   useEffect(() => {
     if (!periodsLoading && realtimePeriods.length > 0) {
-      // Check if we should navigate to the latest period after adding
-      if (shouldNavigateToLatest) {
-        const latestIndex = realtimePeriods.length - 1;
-        setCurrentMonthIndex(latestIndex);
-        setShouldNavigateToLatest(false);
-        console.log(`📅 Navigated to newly added period: ${realtimePeriods[latestIndex]?.label}`);
-        return;
+      // Check if we need to navigate to a specific period after adding
+      if (pendingNavigationToPeriod) {
+        // Clear any existing timeout
+        if (navigationTimeoutRef.current) {
+          clearTimeout(navigationTimeoutRef.current);
+          navigationTimeoutRef.current = null;
+        }
+
+        // Find the period by matching the label and dates
+        const targetPeriodIndex = realtimePeriods.findIndex(period => {
+          return period.label === pendingNavigationToPeriod.label &&
+                 period.start.toISOString().split('T')[0] === pendingNavigationToPeriod.start.toISOString().split('T')[0] &&
+                 period.end.toISOString().split('T')[0] === pendingNavigationToPeriod.end.toISOString().split('T')[0];
+        });
+
+        if (targetPeriodIndex >= 0) {
+          setCurrentMonthIndex(targetPeriodIndex);
+          setPendingNavigationToPeriod(null);
+          console.log(`📅 Navigated to newly added period: ${realtimePeriods[targetPeriodIndex]?.label} (index ${targetPeriodIndex})`);
+          return;
+        } else {
+          // Period not found yet, keep waiting for real-time sync with timeout fallback
+          console.log(`⏳ Waiting for newly added period '${pendingNavigationToPeriod.label}' to sync from database...`);
+          console.log(`🔍 Currently have ${realtimePeriods.length} periods, looking for: ${pendingNavigationToPeriod.start.toISOString().split('T')[0]} to ${pendingNavigationToPeriod.end.toISOString().split('T')[0]}`);
+          
+          // Set a timeout to fallback to last period if sync doesn't complete
+          navigationTimeoutRef.current = setTimeout(async () => {
+            console.warn(`⚠️ Timeout waiting for period '${pendingNavigationToPeriod.label}' - trying force refresh before fallback`);
+            
+            // Try one last force refresh before giving up
+            try {
+              await forcePeriodsRefresh();
+              
+              // Check again after force refresh
+              const targetPeriodIndexAfterRefresh = realtimePeriods.findIndex(period => {
+                return period.label === pendingNavigationToPeriod.label &&
+                       period.start.toISOString().split('T')[0] === pendingNavigationToPeriod.start.toISOString().split('T')[0] &&
+                       period.end.toISOString().split('T')[0] === pendingNavigationToPeriod.end.toISOString().split('T')[0];
+              });
+
+              if (targetPeriodIndexAfterRefresh >= 0) {
+                setCurrentMonthIndex(targetPeriodIndexAfterRefresh);
+                setPendingNavigationToPeriod(null);
+                console.log(`✅ Found period after force refresh: ${realtimePeriods[targetPeriodIndexAfterRefresh]?.label} (index ${targetPeriodIndexAfterRefresh})`);
+                return;
+              }
+            } catch (error) {
+              console.error('Force refresh failed:', error);
+            }
+            
+            // Still not found, fallback to last period
+            const fallbackIndex = realtimePeriods.length - 1;
+            setCurrentMonthIndex(fallbackIndex);
+            setPendingNavigationToPeriod(null);
+            console.log(`📅 Fallback navigation to index ${fallbackIndex} (${realtimePeriods[fallbackIndex]?.label})`);
+          }, 10000); // Increased to 10 second timeout for better real-time sync support
+          
+          return;
+        }
       }
       
       // Check if currentMonthIndex is out of bounds (negative or too high)
@@ -117,7 +172,16 @@ const ShiftScheduleEditorRealtime = ({
       setCurrentMonthIndex(0);
       console.log('🔄 No periods available, set index to 0');
     }
-  }, [currentMonthIndex, realtimePeriods, periodsLoading, shouldNavigateToLatest]);
+  }, [currentMonthIndex, realtimePeriods, periodsLoading, pendingNavigationToPeriod]);
+
+  // Clean up navigation timeout on unmount
+  useEffect(() => {
+    return () => {
+      if (navigationTimeoutRef.current) {
+        clearTimeout(navigationTimeoutRef.current);
+      }
+    };
+  }, []);
 
   // Custom hooks - NEW REAL-TIME VERSION
   const {
@@ -505,11 +569,86 @@ const ShiftScheduleEditorRealtime = ({
           // Only add next period when user explicitly clicks the button
           // This prevents automatic period creation
           try {
+            // First, get the expected period info before adding
+            const currentPeriods = realtimePeriods;
+            const lastPeriod = currentPeriods[currentPeriods.length - 1];
+            
+            if (!lastPeriod) {
+              console.error("Cannot add next period - no valid last period found");
+              return;
+            }
+
+            // Calculate the expected new period info
+            const lastEndDate = new Date(lastPeriod.end);
+            const nextStartDate = new Date(lastEndDate);
+            nextStartDate.setUTCDate(nextStartDate.getUTCDate() + 1);
+            nextStartDate.setUTCHours(0, 0, 0, 0);
+
+            const nextEndDate = new Date(nextStartDate);
+            nextEndDate.setUTCMonth(nextEndDate.getUTCMonth() + 1);
+            nextEndDate.setUTCDate(nextEndDate.getUTCDate() - 1);
+            nextEndDate.setUTCHours(0, 0, 0, 0);
+
+            // Generate expected label
+            const startMonth = nextStartDate.getUTCMonth() + 1;
+            const endMonth = nextEndDate.getUTCMonth() + 1;
+            const monthNames = ["", "1月", "2月", "3月", "4月", "5月", "6月", "7月", "8月", "9月", "10月", "11月", "12月"];
+            const expectedLabel = `${monthNames[startMonth]}・${monthNames[endMonth]}`;
+
+            const expectedPeriod = {
+              label: expectedLabel,
+              start: nextStartDate,
+              end: nextEndDate
+            };
+
+            console.log(`🔄 Adding new period: ${expectedLabel} (${nextStartDate.toISOString().split('T')[0]} to ${nextEndDate.toISOString().split('T')[0]})`);
+
             const newPeriodIndex = await addNextPeriod();
             if (typeof newPeriodIndex === 'number' && newPeriodIndex >= 0) {
-              // Signal that we want to navigate to the latest period when it becomes available
-              setShouldNavigateToLatest(true);
-              console.log(`🔄 Added new period at index ${newPeriodIndex}, will navigate when real-time sync completes...`);
+              // Check if the period already exists in current real-time periods
+              const existingPeriodIndex = realtimePeriods.findIndex(period => {
+                return period.label === expectedLabel &&
+                       period.start.toISOString().split('T')[0] === expectedPeriod.start.toISOString().split('T')[0] &&
+                       period.end.toISOString().split('T')[0] === expectedPeriod.end.toISOString().split('T')[0];
+              });
+
+              if (existingPeriodIndex >= 0) {
+                // Period already available in real-time data - navigate immediately
+                setCurrentMonthIndex(existingPeriodIndex);
+                console.log(`📅 Navigated immediately to existing period: ${expectedLabel} (index ${existingPeriodIndex})`);
+              } else {
+                // Immediately add to local periods to prevent race condition with real-time sync
+                const newPeriodFormatted = {
+                  id: Date.now(), // Temporary ID, will be updated by real-time sync
+                  start: expectedPeriod.start,
+                  end: expectedPeriod.end,
+                  label: expectedPeriod.label,
+                };
+                
+                console.log(`📅 Immediately adding and navigating to new period: ${expectedLabel}`);
+                
+                // Update forcePeriodsRefresh to include the new period immediately
+                try {
+                  await forcePeriodsRefresh();
+                  
+                  // Find the new period index after refresh
+                  const newPeriodIndex = realtimePeriods.findIndex(period => 
+                    period.label === expectedPeriod.label &&
+                    period.start.toISOString().split('T')[0] === expectedPeriod.start.toISOString().split('T')[0]
+                  );
+                  
+                  if (newPeriodIndex >= 0) {
+                    setCurrentMonthIndex(newPeriodIndex);
+                    console.log(`✅ Successfully navigated to new period: ${expectedLabel} (index ${newPeriodIndex})`);
+                  } else {
+                    console.log(`⚠️ Period not found after refresh, falling back to pending navigation`);
+                    setPendingNavigationToPeriod(expectedPeriod);
+                  }
+                } catch (error) {
+                  console.error('Failed to force refresh after adding period:', error);
+                  setPendingNavigationToPeriod(expectedPeriod);
+                }
+              }
             }
           } catch (error) {
             console.error('Failed to add next period:', error);

@@ -348,26 +348,29 @@ const NavigationToolbar = ({
                         </Button>
                       </div>
                       <Separator className="mb-4" />
-                      {/* Month Periods Grid - Show all available periods */}
+                      {/* Month Periods Grid - Show periods for current year */}
                       <div className="grid grid-cols-2 gap-2 max-h-64 overflow-y-auto">
                         {monthPeriods.length > 0 ? (
-                          monthPeriods.map((period, index) => (
-                            <Button
-                              key={index}
-                              variant={index === currentMonthIndex ? "default" : "outline"}
-                              size="sm"
-                              onClick={() => {
-                                onMonthChange(index);
-                                setShowMonthPicker(false);
-                              }}
-                              className="japanese-text"
-                            >
-                              {period.label}
-                            </Button>
-                          ))
+                          monthPeriods
+                            .map((period, index) => ({ period, originalIndex: index }))
+                            .filter(({ period }) => period.start.getFullYear() === currentYear)
+                            .map(({ period, originalIndex }) => (
+                              <Button
+                                key={originalIndex}
+                                variant={originalIndex === currentMonthIndex ? "default" : "outline"}
+                                size="sm"
+                                onClick={() => {
+                                  onMonthChange(originalIndex);
+                                  setShowMonthPicker(false);
+                                }}
+                                className="japanese-text"
+                              >
+                                {period.label}
+                              </Button>
+                            ))
                         ) : (
                           <div className="col-span-2 text-center text-muted-foreground py-4">
-                            No periods available
+                            No periods available for {currentYear}
                           </div>
                         )}
                       </div>

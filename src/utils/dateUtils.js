@@ -354,11 +354,38 @@ export const addNextPeriod = async () => {
 
     if (error) throw error;
 
-    // Refresh cache from database
-    await refreshPeriodsCache();
+    console.log(`✅ Added new period to database: ${label}`);
 
-    console.log(`✅ Added new period: ${label} (saved to database)`);
-    return periodsCache.length - 1; // Return the new period index
+    // Refresh cache from database with retry logic
+    let retryCount = 0;
+    const maxRetries = 3;
+    
+    while (retryCount < maxRetries) {
+      await refreshPeriodsCache();
+      
+      // Check if the new period is now in the cache
+      const newPeriodExists = periodsCache.find(period => {
+        const periodStart = new Date(period.start).toISOString().split('T')[0];
+        const periodEnd = new Date(period.end).toISOString().split('T')[0];
+        return periodStart === nextStartDateString && 
+               periodEnd === nextEndDateString && 
+               period.label === label;
+      });
+      
+      if (newPeriodExists) {
+        console.log(`✅ Period ${label} confirmed in cache after ${retryCount + 1} attempts`);
+        return periodsCache.length - 1; // Return the new period index
+      }
+      
+      retryCount++;
+      if (retryCount < maxRetries) {
+        console.log(`⏳ Period ${label} not yet in cache, retry ${retryCount}/${maxRetries} after 200ms...`);
+        await new Promise(resolve => setTimeout(resolve, 200));
+      }
+    }
+
+    console.warn(`⚠️ Period ${label} added to database but not confirmed in cache after ${maxRetries} attempts`);
+    return periodsCache.length - 1; // Return best guess index
     
   } catch (error) {
     console.error('Failed to add period to database:', error);

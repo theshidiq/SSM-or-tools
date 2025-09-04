@@ -123,9 +123,12 @@ export const usePeriodsRealtime = () => {
           table: 'periods',
         },
         (payload) => {
-          console.log('🔄 Periods table changed:', payload.eventType);
-          // Reload periods whenever the table changes
-          loadPeriods();
+          console.log('🔄 Periods table changed:', payload.eventType, payload.new?.label || payload.old?.label);
+          // Reload periods immediately when changes are detected
+          // Use setTimeout to ensure the database transaction is committed
+          setTimeout(() => {
+            loadPeriods();
+          }, 100); // Small delay to ensure DB consistency
         }
       )
       .subscribe();
@@ -168,6 +171,10 @@ export const usePeriodsRealtime = () => {
 
     // Utilities
     clearError: () => setError(null),
+    forceRefresh: () => {
+      console.log('🔄 Forcing period refresh...');
+      return loadPeriods();
+    }
   };
 };
 
