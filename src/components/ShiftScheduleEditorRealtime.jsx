@@ -201,6 +201,11 @@ const ShiftScheduleEditorRealtime = ({
     isSaving,
     error: supabaseError,
   } = useScheduleDataRealtime(currentMonthIndex, null, realtimePeriods.length);
+  
+  // Debug logging for period sync issues
+  useEffect(() => {
+    console.log(`🔍 ShiftScheduleEditor state: currentMonthIndex=${currentMonthIndex}, realtimePeriods.length=${realtimePeriods.length}`);
+  }, [currentMonthIndex, realtimePeriods.length]);
 
   // Settings hook (unchanged)
   const {

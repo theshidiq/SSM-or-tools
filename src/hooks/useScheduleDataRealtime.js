@@ -211,15 +211,17 @@ export const useScheduleDataRealtime = (
 
   // Load and migrate data from Supabase when available
   useEffect(() => {
+    console.log(`🔍 useScheduleDataRealtime effect: currentMonthIndex=${currentMonthIndex}, totalPeriods=${totalPeriods}`);
+    
     // Skip if currentMonthIndex is invalid (negative)
     if (currentMonthIndex < 0) {
-      console.log(`⚠️ Skipping data load for negative period index: ${currentMonthIndex}`);
+      console.log(`⚠️ BLOCKED: Negative period index: ${currentMonthIndex}`);
       return;
     }
     
     // Skip if we have explicit totalPeriods count and index exceeds it
     if (totalPeriods > 0 && currentMonthIndex >= totalPeriods) {
-      console.log(`⚠️ Skipping data load for period index ${currentMonthIndex} >= totalPeriods ${totalPeriods}`);
+      console.log(`⚠️ BLOCKED: Period index ${currentMonthIndex} >= totalPeriods ${totalPeriods}`);
       return;
     }
     

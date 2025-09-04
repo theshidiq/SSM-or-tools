@@ -63,7 +63,7 @@ const NavigationToolbar = ({
   // Use real-time periods hook
   const { periods: monthPeriods, isLoading: periodsLoading } = usePeriodsRealtime();
 
-  // Get available years from monthPeriods (and allow one year ahead for expansion)
+  // Get available years from monthPeriods (only years with actual periods)
   const availableYears = useMemo(() => {
     const years = new Set();
     
@@ -71,10 +71,7 @@ const NavigationToolbar = ({
       monthPeriods.forEach((period) => {
         years.add(period.start.getFullYear());
       });
-      
-      // Add next year as available for expansion
-      const maxYear = Math.max(...Array.from(years));
-      years.add(maxYear + 1);
+      // Note: Removed automatic next year addition - only show years with actual periods
     } else {
       // Default to current year if no periods yet
       years.add(new Date().getFullYear());
@@ -108,6 +105,16 @@ const NavigationToolbar = ({
       }
     }
   }, [currentMonthIndex, currentYear, isManualYearNavigation, monthPeriods]);
+  
+  // Auto-navigate away from years with no periods
+  useEffect(() => {
+    if (availableYears.length > 0 && !availableYears.includes(currentYear)) {
+      const firstAvailableYear = availableYears[0];
+      console.log(`📅 Auto-navigating from empty year ${currentYear} to ${firstAvailableYear}`);
+      setCurrentYear(firstAvailableYear);
+      setIsManualYearNavigation(false);
+    }
+  }, [availableYears, currentYear]);
 
   // Note: Removed automatic period creation - users add periods manually via "Add Table" button
 
