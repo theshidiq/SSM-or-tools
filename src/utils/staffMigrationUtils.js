@@ -154,16 +154,27 @@ export const transformStaffDataForDatabase = (localStaffData) => {
  * Generate a ULID-format UUID for staff members
  */
 const generateStaffUUID = () => {
-  // Generate ULID-style UUID: 01HHHHHHH-HHHH-HHHH-HHHH-HHHHHHHHHHHH
-  // Where H represents hexadecimal characters
-  const timestamp = Date.now();
-  const timestampHex = timestamp.toString(16).padStart(12, '0');
+  // Generate proper UUID v4 format: XXXXXXXX-XXXX-4XXX-YXXX-XXXXXXXXXXXX
+  // Where X=random hex, Y=8,9,A,B
+  const randomHex = (length) => {
+    const chars = '0123456789abcdef';
+    let result = '';
+    for (let i = 0; i < length; i++) {
+      result += chars[Math.floor(Math.random() * 16)];
+    }
+    return result;
+  };
   
-  // Generate random hex characters for the rest
-  const randomPart = () => Math.random().toString(16).substr(2, 4);
+  // Generate UUID v4 format
+  const uuid = [
+    randomHex(8),
+    randomHex(4),
+    '4' + randomHex(3), // Version 4
+    ['8','9','a','b'][Math.floor(Math.random()*4)] + randomHex(3), // Variant bits
+    randomHex(12)
+  ].join('-');
   
-  // Format: 01TTTTTT-TTTT-4XXX-YXXX-XXXXXXXXXXXX (where T=timestamp, X=random, Y=8,9,A,B)
-  return `01${timestampHex.substr(0,6)}-${timestampHex.substr(6,4)}-4${randomPart().substr(0,3)}-${['8','9','a','b'][Math.floor(Math.random()*4)]}${randomPart().substr(0,3)}-${randomPart()}${randomPart()}${randomPart()}`.toLowerCase();
+  return uuid;
 };
 
 /**
