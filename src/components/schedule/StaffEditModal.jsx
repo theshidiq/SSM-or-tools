@@ -502,7 +502,7 @@ const StaffEditModal = ({
                       <SelectTrigger>
                         <SelectValue placeholder="年" />
                       </SelectTrigger>
-                      <SelectContent>
+                      <SelectContent className="z-[70000]">
                         {Array.from({ length: 5 }, (_, i) => {
                           const currentYear = new Date().getFullYear();
                           const year = currentYear - 4 + i;
@@ -529,7 +529,7 @@ const StaffEditModal = ({
                       <SelectTrigger>
                         <SelectValue placeholder="月" />
                       </SelectTrigger>
-                      <SelectContent>
+                      <SelectContent className="z-[70000]">
                         {Array.from({ length: 12 }, (_, i) => (
                           <SelectItem key={i + 1} value={(i + 1).toString()}>
                             {i + 1}
@@ -552,7 +552,7 @@ const StaffEditModal = ({
                       <SelectTrigger>
                         <SelectValue placeholder="日" />
                       </SelectTrigger>
-                      <SelectContent>
+                      <SelectContent className="z-[70000]">
                         {Array.from({ length: 31 }, (_, i) => (
                           <SelectItem key={i + 1} value={(i + 1).toString()}>
                             {i + 1}
@@ -586,7 +586,7 @@ const StaffEditModal = ({
                       <SelectTrigger>
                         <SelectValue placeholder="年" />
                       </SelectTrigger>
-                      <SelectContent>
+                      <SelectContent className="z-[70000]">
                         {Array.from({ length: 2 }, (_, i) => {
                           const year = new Date().getFullYear() + i;
                           return (
@@ -615,7 +615,7 @@ const StaffEditModal = ({
                       <SelectTrigger>
                         <SelectValue placeholder="月" />
                       </SelectTrigger>
-                      <SelectContent>
+                      <SelectContent className="z-[70000]">
                         {Array.from({ length: 12 }, (_, i) => (
                           <SelectItem key={i + 1} value={(i + 1).toString()}>
                             {i + 1}
@@ -641,7 +641,7 @@ const StaffEditModal = ({
                       <SelectTrigger>
                         <SelectValue placeholder="日" />
                       </SelectTrigger>
-                      <SelectContent>
+                      <SelectContent className="z-[70000]">
                         {Array.from({ length: 31 }, (_, i) => (
                           <SelectItem key={i + 1} value={(i + 1).toString()}>
                             {i + 1}
