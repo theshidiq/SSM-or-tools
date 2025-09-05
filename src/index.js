@@ -36,8 +36,24 @@ if (process.env.NODE_ENV === "development") {
       const { configService } = await import("./services/ConfigurationService");
       return configService.getSettings();
     },
+    // Phase 4: Staff Migration Test Utilities
+    staffMigration: async () => {
+      const { quickTests } = await import("./utils/testMigration");
+      return quickTests;
+    },
   };
   console.log("🔧 Debug utilities available: window.debugConfig (async)");
+  
+  // Phase 4: Staff Migration Test Utilities - Direct access
+  import("./utils/testMigration").then(({ quickTests }) => {
+    window.migrationTest = quickTests;
+    console.log("🚀 Staff migration test utilities available: window.migrationTest");
+    console.log("   • migrationTest.dryRun() - Test migration without changes");
+    console.log("   • migrationTest.migrate() - Perform actual migration");
+    console.log("   • migrationTest.createData() - Create sample localStorage data");
+    console.log("   • migrationTest.check() - Check localStorage status");
+    console.log("   • migrationTest.cleanup() - Clear test data");
+  });
 }
 
 const root = ReactDOM.createRoot(document.getElementById("root"));

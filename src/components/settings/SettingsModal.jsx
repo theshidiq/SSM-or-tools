@@ -25,6 +25,7 @@ import StaffGroupsTab from "./tabs/StaffGroupsTab";
 import DailyLimitsTab from "./tabs/DailyLimitsTab";
 import PriorityRulesTab from "./tabs/PriorityRulesTab";
 import MLParametersTab from "./tabs/MLParametersTab";
+import DataMigrationTab from "./tabs/DataMigrationTab";
 
 // Import shared components
 import TabButton from "./shared/TabButton";
@@ -37,6 +38,7 @@ const TABS = [
   { id: "daily-limits", label: "Daily Limits", icon: "📅" },
   { id: "priority-rules", label: "Priority Rules", icon: "⭐" },
   { id: "ml-parameters", label: "ML Parameters", icon: "🤖" },
+  { id: "data-migration", label: "Data Migration", icon: "🔄" },
 ];
 
 const SettingsModal = ({
@@ -188,6 +190,8 @@ const SettingsModal = ({
         return <PriorityRulesTab {...commonProps} />;
       case "ml-parameters":
         return <MLParametersTab {...commonProps} />;
+      case "data-migration":
+        return <DataMigrationTab />;
       default:
         return (
           <div className="p-8 text-center text-gray-500">
