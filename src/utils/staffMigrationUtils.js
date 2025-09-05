@@ -151,6 +151,22 @@ export const transformStaffDataForDatabase = (localStaffData) => {
 };
 
 /**
+ * Generate a ULID-format UUID for staff members
+ */
+const generateStaffUUID = () => {
+  // Generate ULID-style UUID: 01HHHHHHH-HHHH-HHHH-HHHH-HHHHHHHHHHHH
+  // Where H represents hexadecimal characters
+  const timestamp = Date.now();
+  const timestampHex = timestamp.toString(16).padStart(12, '0');
+  
+  // Generate random hex characters for the rest
+  const randomPart = () => Math.random().toString(16).substr(2, 4);
+  
+  // Format: 01TTTTTT-TTTT-4XXX-YXXX-XXXXXXXXXXXX (where T=timestamp, X=random, Y=8,9,A,B)
+  return `01${timestampHex.substr(0,6)}-${timestampHex.substr(6,4)}-4${randomPart().substr(0,3)}-${['8','9','a','b'][Math.floor(Math.random()*4)]}${randomPart().substr(0,3)}-${randomPart()}${randomPart()}${randomPart()}`.toLowerCase();
+};
+
+/**
  * Transform a single staff member from localStorage format to database format
  */
 const transformStaffMember = (staff, index) => {
@@ -158,8 +174,13 @@ const transformStaffMember = (staff, index) => {
     return null;
   }
   
-  // Generate ID if not present
-  const id = staff.id || staff.staffId || `migrated-${Date.now()}-${index}`;
+  // Generate proper ULID-format ID if not present or if existing ID is invalid
+  let id = staff.id || staff.staffId;
+  
+  // Validate existing ID format - should be ULID style or standard UUID
+  if (!id || (!id.match(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i) && !id.startsWith('01'))) {
+    id = generateStaffUUID();
+  }
   
   // Transform date periods
   const transformPeriod = (period) => {

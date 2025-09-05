@@ -205,8 +205,8 @@ const SettingsModal = ({
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="max-w-6xl max-h-[90vh] flex flex-col">
-        <DialogHeader>
+      <DialogContent className="max-w-6xl max-h-[90vh] h-[90vh] flex flex-col overflow-hidden">
+        <DialogHeader className="flex-shrink-0">
           <DialogTitle className="flex items-center gap-3">
             <div className="w-8 h-8 bg-blue-500 rounded-lg flex items-center justify-center text-white font-bold">
               ⚙️
@@ -229,8 +229,8 @@ const SettingsModal = ({
           </Alert>
         )}
 
-        <Tabs value={activeTab} onValueChange={setActiveTab} className="flex-1 flex flex-col">
-          <TabsList className="mx-4 mb-4">
+        <Tabs value={activeTab} onValueChange={setActiveTab} className="flex-1 flex flex-col min-h-0">
+          <TabsList className="mx-4 mb-4 flex-shrink-0">
             {TABS.map((tab, index) => (
               <TabsTrigger 
                 key={tab.id} 
@@ -246,9 +246,9 @@ const SettingsModal = ({
             ))}
           </TabsList>
           
-          <div className="flex-1 overflow-hidden px-4">
+          <div className="flex-1 min-h-0 overflow-hidden px-4">
             {TABS.map(tab => (
-              <TabsContent key={tab.id} value={tab.id} className="h-full overflow-y-auto mt-0">
+              <TabsContent key={tab.id} value={tab.id} className="h-full overflow-y-auto mt-0 data-[state=active]:flex data-[state=active]:flex-col">
                 {renderTabContent(tab.id)}
               </TabsContent>
             ))}
@@ -256,7 +256,7 @@ const SettingsModal = ({
         </Tabs>
 
         {/* Footer */}
-        <div className="flex items-center justify-between px-6 py-4 border-t border-gray-200 bg-gray-50">
+        <div className="flex items-center justify-between px-6 py-4 border-t border-gray-200 bg-gray-50 flex-shrink-0">
           <div className="flex items-center gap-4">
             {/* Autosave Status */}
             {isAutoSaving && (
