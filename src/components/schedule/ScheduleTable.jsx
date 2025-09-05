@@ -53,6 +53,11 @@ const ScheduleTable = ({
   currentMonthIndex,
   scheduleAutoSave,
   editStaffName,
+  // Offline queue state for visual feedback
+  pendingCells = new Set(),
+  hasPendingChanges = false,
+  isConnected = true,
+  offlineQueue = [],
 }) => {
   // Prepare date keys for selection hook
   const dateKeys = dateRange.map((date) => date.toISOString().split("T")[0]);
@@ -92,6 +97,12 @@ const ScheduleTable = ({
   const [contextMenu, setContextMenu] = useState(null); // { x, y, cellKey }
   // Show bulk toolbar only when more than one cell is selected
   const showBulkToolbar = selectedCells.size > 1;
+
+  // Utility function to check if a cell has pending changes
+  const isCellPending = useCallback((staffId, dateKey) => {
+    const cellKey = `${staffId}_${dateKey}`;
+    return pendingCells.has(cellKey);
+  }, [pendingCells]);
 
   // Track drag state to prevent accidental drag selection
   const [isDragging, setIsDragging] = useState(false);
@@ -576,6 +587,31 @@ const ScheduleTable = ({
 
   return (
     <div className="relative">
+      {/* Connection and Queue Status Indicator */}
+      {(!isConnected || hasPendingChanges) && (
+        <div className="mb-2 flex items-center gap-2 px-3 py-2 bg-yellow-50 border-l-4 border-yellow-400 rounded-r-md">
+          {!isConnected && (
+            <div className="flex items-center gap-2 text-red-600">
+              <div className="w-2 h-2 bg-red-500 rounded-full animate-pulse"></div>
+              <span className="text-sm font-medium">オフライン</span>
+            </div>
+          )}
+          {hasPendingChanges && (
+            <div className="flex items-center gap-2 text-orange-600">
+              <div className="w-2 h-2 bg-orange-500 rounded-full animate-pulse"></div>
+              <span className="text-sm font-medium">
+                保存待ち: {offlineQueue.length}件
+              </span>
+            </div>
+          )}
+          {!isConnected && hasPendingChanges && (
+            <span className="text-xs text-gray-600">
+              接続復旧時に自動保存されます
+            </span>
+          )}
+        </div>
+      )}
+      
       {/* Bulk Operations Toolbar - Bottom positioned with slide up animation */}
       {showBulkToolbar && (
         <div
@@ -815,6 +851,7 @@ const ScheduleTable = ({
                     const cellKey = getCellKey(staff.id, dateKey);
                     const cellValue = schedule[staff.id]?.[dateKey] || "";
                     const isActiveForDate = isDateWithinWorkPeriod(date, staff);
+                    const isPending = isCellPending(staff.id, dateKey);
 
                     return (
                       <TableCell
@@ -849,6 +886,10 @@ const ScheduleTable = ({
                           } ${
                             isCellFocused(staff.id, dateKey)
                               ? "ring-2 ring-ring ring-inset"
+                              : ""
+                          } ${
+                            isPending
+                              ? "ring-2 ring-orange-400 ring-inset bg-orange-50 hover:bg-orange-100"
                               : ""
                           }`}
                           onClick={(e) => {
@@ -924,6 +965,13 @@ const ScheduleTable = ({
                             isActiveForDate && (
                               <div className="absolute top-0 right-0 w-2 h-2 bg-blue-500 rounded-full transform translate-x-1 -translate-y-1"></div>
                             )}
+                            
+                          {/* Pending changes indicator */}
+                          {isPending && isActiveForDate && (
+                            <div className="absolute bottom-0 left-0 w-3 h-3 bg-orange-400 rounded-full transform -translate-x-1 translate-y-1 flex items-center justify-center">
+                              <div className="w-1.5 h-1.5 bg-white rounded-full animate-pulse"></div>
+                            </div>
+                          )}
 
                           {/* Period labels for all staff start/end dates */}
                           {(() => {

@@ -277,6 +277,12 @@ export const useScheduleDataEnhanced = (currentMonthIndex, options = {}) => {
     isSaving: realtimeHook.isSaving,
     error: realtimeHook.error,
 
+    // Offline queue state (from Phase 1 Realtime hook)
+    offlineQueue: realtimeHook.offlineQueue,
+    pendingCells: realtimeHook.pendingCells,
+    hasPendingChanges: realtimeHook.hasPendingChanges,
+    retryQueuedChanges: realtimeHook.retryQueuedChanges,
+
     // Phase 2 Features
     cache: enableAdvancedCache ? cacheHook : null,
     offline: enableOfflineSupport ? offlineHook : null,

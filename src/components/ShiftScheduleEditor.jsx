@@ -198,6 +198,11 @@ const ShiftScheduleEditor = ({
     getPerformanceMetrics,
     features,
     phase,
+    // Offline queue state
+    offlineQueue,
+    pendingCells,
+    hasPendingChanges,
+    retryQueuedChanges,
   } = useScheduleData(currentMonthIndex, {
     enableAdvancedCache: true,
     enableOfflineSupport: true,
@@ -748,6 +753,11 @@ const ShiftScheduleEditor = ({
           currentMonthIndex={currentMonthIndex}
           scheduleAutoSave={scheduleAutoSave}
           editStaffName={editStaffName}
+          // Offline queue state for visual feedback
+          pendingCells={pendingCells}
+          hasPendingChanges={hasPendingChanges}
+          isConnected={isConnected}
+          offlineQueue={offlineQueue}
         />
       ) : (
         <StaffCardView

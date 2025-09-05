@@ -256,7 +256,7 @@ const ShiftScheduleEditorRealtime = ({
 
   // Real-time status indicator
   const realtimeStatus = useMemo(() => {
-    if (!isConnected) return { status: "disconnected", message: "Offline" };
+    if (!isConnected) return { status: "disconnected", message: "Offline - Auto-reconnecting..." };
     if (isSaving) return { status: "saving", message: "Saving..." };
     if (isSupabaseLoading) return { status: "loading", message: "Loading..." };
     return { status: "connected", message: "Real-time" };

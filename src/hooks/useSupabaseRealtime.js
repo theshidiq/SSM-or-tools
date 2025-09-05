@@ -11,6 +11,8 @@ export const QUERY_KEYS = {
 export const useSupabaseRealtime = (initialScheduleId = null) => {
   const queryClient = useQueryClient();
   const subscriptionRef = useRef(null);
+  const reconnectionTimeoutRef = useRef(null);
+  const reconnectionAttemptsRef = useRef(0);
   const [currentScheduleId, setCurrentScheduleId] = useState(initialScheduleId);
   const [isConnected, setIsConnected] = useState(false);
   const [error, setError] = useState(null);
@@ -217,10 +219,46 @@ export const useSupabaseRealtime = (initialScheduleId = null) => {
         },
       )
       .subscribe((status) => {
+        console.log(`🔄 Real-time status: ${status}`);
+        
         if (status === 'SUBSCRIBED') {
           console.log("✅ Real-time subscription active");
+          setIsConnected(true);
+          reconnectionAttemptsRef.current = 0; // Reset attempts on successful connection
         } else if (status === 'CHANNEL_ERROR') {
-          console.error("❌ Real-time subscription error");
+          console.error("❌ Real-time subscription error - connection failed");
+          setIsConnected(false);
+          
+          // Clear any existing reconnection timeout
+          if (reconnectionTimeoutRef.current) {
+            clearTimeout(reconnectionTimeoutRef.current);
+          }
+          
+          // Limit reconnection attempts to prevent infinite loops
+          if (reconnectionAttemptsRef.current < 3) {
+            reconnectionAttemptsRef.current++;
+            
+            // Schedule reconnection attempt after 5 seconds with error handling
+            reconnectionTimeoutRef.current = setTimeout(async () => {
+              try {
+                console.log(`🔄 Attempting real-time reconnection... (attempt ${reconnectionAttemptsRef.current}/3)`);
+                await refetchSchedule();
+                console.log("✅ Reconnection successful");
+              } catch (reconnectionError) {
+                console.error("❌ Reconnection attempt failed:", reconnectionError.message);
+                setError(`Reconnection failed: ${reconnectionError.message}`);
+              }
+            }, 5000);
+          } else {
+            console.error("❌ Max reconnection attempts reached. Manual refresh required.");
+            setError("Connection lost. Please refresh the page.");
+          }
+        } else if (status === 'TIMED_OUT') {
+          console.warn("⏰ Real-time subscription timed out");
+          setIsConnected(false);
+        } else if (status === 'CLOSED') {
+          console.warn("🔌 Real-time connection closed");
+          setIsConnected(false);
         }
       });
 
@@ -263,14 +301,37 @@ export const useSupabaseRealtime = (initialScheduleId = null) => {
     }
   }, [currentScheduleId, isConnected, subscribeToScheduleUpdates]);
 
-  // Cleanup subscription on unmount
+  // Cleanup subscription and timeouts on unmount
   useEffect(() => {
     return () => {
       if (subscriptionRef.current) {
         subscriptionRef.current.unsubscribe();
       }
+      if (reconnectionTimeoutRef.current) {
+        clearTimeout(reconnectionTimeoutRef.current);
+      }
     };
   }, []);
+
+  // Add connection health monitoring
+  useEffect(() => {
+    if (!isConnected) return;
+    
+    // Check connection health every 30 seconds when connected
+    const healthCheckInterval = setInterval(() => {
+      // Simple health check by attempting a lightweight query
+      supabase.from('schedules').select('id').limit(1)
+        .then(() => {
+          console.log("💓 Real-time connection healthy");
+        })
+        .catch((error) => {
+          console.warn("⚠️ Connection health check failed:", error.message);
+          setIsConnected(false);
+        });
+    }, 30000);
+
+    return () => clearInterval(healthCheckInterval);
+  }, [isConnected]);
 
   return {
     // State

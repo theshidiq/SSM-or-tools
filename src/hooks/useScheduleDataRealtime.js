@@ -11,6 +11,39 @@ import { defaultStaffMembersArray } from "../constants/staffConstants";
 import { useSupabaseRealtime, QUERY_KEYS } from "./useSupabaseRealtime";
 import { dataValidation } from "../utils/dataIntegrityUtils";
 
+// Offline queue utilities
+const MAX_RETRY_ATTEMPTS = 3;
+const RETRY_DELAY = 2000; // 2 seconds
+
+const createQueueItem = (type, data, timestamp = Date.now()) => ({
+  id: `${type}_${timestamp}_${Math.random().toString(36).substr(2, 9)}`,
+  type, // 'schedule' or 'singleCell'
+  data,
+  timestamp,
+  retryCount: 0,
+  maxRetries: MAX_RETRY_ATTEMPTS,
+});
+
+const deduplicateQueue = (queue, newItem) => {
+  // For single cell updates, remove any previous updates for the same cell
+  if (newItem.type === 'singleCell') {
+    const { staffId, dateKey } = newItem.data;
+    return queue.filter(item => {
+      if (item.type === 'singleCell') {
+        return !(item.data.staffId === staffId && item.data.dateKey === dateKey);
+      }
+      return true;
+    });
+  }
+  
+  // For full schedule updates, remove any previous full updates
+  if (newItem.type === 'schedule') {
+    return queue.filter(item => item.type !== 'schedule');
+  }
+  
+  return queue;
+};
+
 export const useScheduleDataRealtime = (
   currentMonthIndex,
   initialScheduleId = null,
@@ -48,6 +81,11 @@ export const useScheduleDataRealtime = (
   const autoSaveTimeoutRef = useRef(null);
   const currentMonthRef = useRef(currentMonthIndex);
   currentMonthRef.current = currentMonthIndex;
+  
+  // Offline queue state
+  const [offlineQueue, setOfflineQueue] = useState([]);
+  const [pendingCells, setPendingCells] = useState(new Set()); // Track cells with pending changes
+  const retryTimeoutRef = useRef(null);
 
   // Helper function to safely generate date ranges
   const safeGenerateDateRange = (monthIndex) => {
@@ -129,12 +167,29 @@ export const useScheduleDataRealtime = (
       return { previousSchedule };
     },
     onError: (error, variables, context) => {
-      // Rollback the optimistic update
-      if (context?.previousSchedule) {
-        setSchedule(context.previousSchedule);
+      if (!isConnected) {
+        // Connection failed - queue for retry instead of rolling back
+        const queueItem = createQueueItem('schedule', {
+          newSchedule: variables.newSchedule,
+          staffForSave: variables.staffForSave,
+        });
+        
+        setOfflineQueue(prevQueue => {
+          const dedupedQueue = deduplicateQueue(prevQueue, queueItem);
+          return [...dedupedQueue, queueItem];
+        });
+        
+        console.warn("🔄 Connection lost - queuing schedule update for retry", {
+          queueId: queueItem.id,
+          error: error.message
+        });
+      } else {
+        // Other errors - rollback the optimistic update
+        if (context?.previousSchedule) {
+          setSchedule(context.previousSchedule);
+        }
+        console.error("❌ Schedule update failed, rolling back:", error);
       }
-      
-      console.error("❌ Schedule update failed, rolling back:", error);
     },
     onSuccess: (result, variables) => {
       // Success - the UI is already updated optimistically
@@ -201,11 +256,37 @@ export const useScheduleDataRealtime = (
       return { previousSchedule };
     },
     onError: (error, variables, context) => {
-      // Rollback on error
-      if (context?.previousSchedule) {
-        setSchedule(context.previousSchedule);
+      if (!isConnected) {
+        // Connection failed - queue for retry instead of rolling back
+        const queueItem = createQueueItem('singleCell', {
+          staffId: variables.staffId,
+          dateKey: variables.dateKey,
+          shiftValue: variables.shiftValue,
+        });
+        
+        setOfflineQueue(prevQueue => {
+          const dedupedQueue = deduplicateQueue(prevQueue, queueItem);
+          return [...dedupedQueue, queueItem];
+        });
+        
+        // Mark cell as pending
+        const cellKey = `${variables.staffId}_${variables.dateKey}`;
+        setPendingCells(prev => new Set([...prev, cellKey]));
+        
+        console.warn("🔄 Connection lost - queuing cell update for retry", {
+          queueId: queueItem.id,
+          staffId: variables.staffId,
+          dateKey: variables.dateKey,
+          value: variables.shiftValue,
+          error: error.message
+        });
+      } else {
+        // Other errors - rollback the optimistic update
+        if (context?.previousSchedule) {
+          setSchedule(context.previousSchedule);
+        }
+        console.error("❌ Single cell update failed:", error);
       }
-      console.error("❌ Single cell update failed:", error);
     }
   });
 
@@ -340,6 +421,81 @@ export const useScheduleDataRealtime = (
     [updateShiftMutation]
   );
 
+  // Retry queued changes when connection is restored
+  const retryQueuedChanges = useCallback(async () => {
+    if (offlineQueue.length === 0 || !isConnected) return;
+    
+    console.log(`🔄 Connection restored - retrying ${offlineQueue.length} queued changes`);
+    
+    // Process queue items sequentially to avoid conflicts
+    for (const queueItem of offlineQueue) {
+      if (queueItem.retryCount >= queueItem.maxRetries) {
+        console.warn(`⚠️ Skipping queue item ${queueItem.id} - max retries exceeded`);
+        continue;
+      }
+      
+      try {
+        if (queueItem.type === 'schedule') {
+          console.log(`🔄 Retrying queued schedule update: ${queueItem.id}`);
+          await updateScheduleMutation.mutateAsync(queueItem.data);
+        } else if (queueItem.type === 'singleCell') {
+          console.log(`🔄 Retrying queued cell update: ${queueItem.id}`, {
+            staffId: queueItem.data.staffId,
+            dateKey: queueItem.data.dateKey,
+            value: queueItem.data.shiftValue
+          });
+          await updateShiftMutation.mutateAsync(queueItem.data);
+          
+          // Remove from pending cells on success
+          const cellKey = `${queueItem.data.staffId}_${queueItem.data.dateKey}`;
+          setPendingCells(prev => {
+            const newSet = new Set(prev);
+            newSet.delete(cellKey);
+            return newSet;
+          });
+        }
+        
+        console.log(`✅ Queue item ${queueItem.id} retried successfully`);
+      } catch (retryError) {
+        console.error(`❌ Queue retry failed for ${queueItem.id}:`, retryError.message);
+        
+        // Increment retry count
+        setOfflineQueue(prevQueue => 
+          prevQueue.map(item => 
+            item.id === queueItem.id 
+              ? { ...item, retryCount: item.retryCount + 1 }
+              : item
+          )
+        );
+      }
+    }
+    
+    // Clean up successfully processed items
+    setOfflineQueue(prevQueue => 
+      prevQueue.filter(item => item.retryCount < item.maxRetries)
+    );
+  }, [offlineQueue, isConnected, updateScheduleMutation, updateShiftMutation]);
+  
+  // Auto-retry when connection is restored
+  useEffect(() => {
+    if (isConnected && offlineQueue.length > 0) {
+      // Small delay to ensure connection is stable
+      if (retryTimeoutRef.current) {
+        clearTimeout(retryTimeoutRef.current);
+      }
+      
+      retryTimeoutRef.current = setTimeout(() => {
+        retryQueuedChanges();
+      }, RETRY_DELAY);
+    }
+    
+    return () => {
+      if (retryTimeoutRef.current) {
+        clearTimeout(retryTimeoutRef.current);
+      }
+    };
+  }, [isConnected, offlineQueue.length, retryQueuedChanges]);
+  
   // Legacy auto-save function for compatibility
   const scheduleAutoSave = useCallback(
     (newScheduleData, newStaffMembers = null, source = 'auto') => {
@@ -385,6 +541,12 @@ export const useScheduleDataRealtime = (
     isLoading: isSupabaseLoading,
     isSaving: isSupabaseSaving || updateScheduleMutation.isPending || updateShiftMutation.isPending,
     error: supabaseError,
+    
+    // Offline queue state
+    offlineQueue,
+    pendingCells,
+    hasPendingChanges: offlineQueue.length > 0,
+    retryQueuedChanges,
     
     // Utilities
     setHasExplicitlyDeletedData: () => {}, // Placeholder for compatibility
