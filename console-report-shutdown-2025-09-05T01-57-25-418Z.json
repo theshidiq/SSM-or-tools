@@ -1,0 +1,24 @@
+{
+  "exportReason": "shutdown",
+  "exportTime": "2025-09-05T01:57:25.418Z",
+  "sessionDuration": 691876111,
+  "summary": {
+    "totalLogs": 0,
+    "totalErrors": 1,
+    "logsByType": {},
+    "recentErrors": 0
+  },
+  "logs": [],
+  "errors": [
+    {
+      "timestamp": "2025-08-28T01:46:11.855Z",
+      "elapsed": 2548,
+      "type": "network_failure",
+      "url": "http://localhost:3000/",
+      "method": "GET",
+      "error": "net::ERR_CONNECTION_REFUSED"
+    }
+  ],
+  "performance": [],
+  "recommendations": []
+}
