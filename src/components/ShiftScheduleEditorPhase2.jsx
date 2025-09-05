@@ -12,7 +12,7 @@ import React, {
 
 // Import Phase 2 enhanced hooks
 import { useScheduleDataEnhanced } from "../hooks/useScheduleDataEnhanced";
-import { useStaffManagement } from "../hooks/useStaffManagement";
+import { useStaffRealtime } from "../hooks/useStaffRealtime";
 import { useSettingsData } from "../hooks/useSettingsData";
 
 // Import utilities
@@ -134,15 +134,7 @@ const ShiftScheduleEditorPhase2 = (props) => {
     deleteStaff,
     addStaffMember,
     localStaffData,
-  } = useStaffManagement(
-    staffMembersByMonth[currentMonthIndex] || [],
-    currentMonthIndex,
-    updateSchedule,
-    schedule,
-    staffMembersByMonth,
-    setStaffMembersByMonth,
-    scheduleAutoSave,
-  );
+  } = useStaffRealtime(currentMonthIndex); // Phase 3: Updated to use real-time staff management
 
   // Error state - combine all possible errors
   const combinedError = scheduleError || settingsError || autosaveError;

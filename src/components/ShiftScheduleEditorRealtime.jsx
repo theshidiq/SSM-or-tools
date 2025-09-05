@@ -28,7 +28,7 @@ import { exportToCSV, printSchedule } from "../utils/exportUtils";
 
 // Import extracted components
 import { useScheduleDataRealtime } from "../hooks/useScheduleDataRealtime";
-import { useStaffManagement } from "../hooks/useStaffManagement";
+import { useStaffRealtime } from "../hooks/useStaffRealtime";
 import { useSettingsData } from "../hooks/useSettingsData";
 import ErrorDisplay from "./schedule/ErrorDisplay";
 import StatisticsDashboard from "./schedule/StatisticsDashboard";
@@ -242,11 +242,7 @@ const ShiftScheduleEditorRealtime = ({
     deleteStaff,
     addStaff: addStaffMember,
     updateStaff: editStaffInfo,
-  } = useStaffManagement(
-    currentMonthIndex,
-    null, // supabaseScheduleData - using real-time hook instead
-    null, // loadScheduleData - using real-time hook instead
-  );
+  } = useStaffRealtime(currentMonthIndex); // Phase 3: Updated to use real-time staff management
 
   // Alias for compatibility with existing code
   const localStaffData = staffMembers;
