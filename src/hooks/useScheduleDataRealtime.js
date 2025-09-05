@@ -26,31 +26,33 @@ const createQueueItem = (type, data, timestamp = Date.now()) => ({
 
 const deduplicateQueue = (queue, newItem) => {
   // For single cell updates, remove any previous updates for the same cell
-  if (newItem.type === 'singleCell') {
+  if (newItem.type === "singleCell") {
     const { staffId, dateKey } = newItem.data;
-    return queue.filter(item => {
-      if (item.type === 'singleCell') {
-        return !(item.data.staffId === staffId && item.data.dateKey === dateKey);
+    return queue.filter((item) => {
+      if (item.type === "singleCell") {
+        return !(
+          item.data.staffId === staffId && item.data.dateKey === dateKey
+        );
       }
       return true;
     });
   }
-  
+
   // For full schedule updates, remove any previous full updates
-  if (newItem.type === 'schedule') {
-    return queue.filter(item => item.type !== 'schedule');
+  if (newItem.type === "schedule") {
+    return queue.filter((item) => item.type !== "schedule");
   }
-  
+
   return queue;
 };
 
 export const useScheduleDataRealtime = (
   currentMonthIndex,
   initialScheduleId = null,
-  totalPeriods = 0
+  totalPeriods = 0,
 ) => {
   const queryClient = useQueryClient();
-  
+
   // Use the new Supabase real-time hook
   const {
     isConnected,
@@ -70,10 +72,10 @@ export const useScheduleDataRealtime = (
     // Initialize with empty schedule structure - will be populated when periods load
     return initializeSchedule(
       defaultStaffMembersArray,
-      [] // Start with empty date range, will be updated when periods load
+      [], // Start with empty date range, will be updated when periods load
     );
   });
-  
+
   const [staffMembersByMonth, setStaffMembersByMonth] = useState({});
   const [migrationCompleted, setMigrationCompleted] = useState(false);
 
@@ -81,7 +83,7 @@ export const useScheduleDataRealtime = (
   const autoSaveTimeoutRef = useRef(null);
   const currentMonthRef = useRef(currentMonthIndex);
   currentMonthRef.current = currentMonthIndex;
-  
+
   // Offline queue state
   const [offlineQueue, setOfflineQueue] = useState([]);
   const [pendingCells, setPendingCells] = useState(new Set()); // Track cells with pending changes
@@ -108,23 +110,25 @@ export const useScheduleDataRealtime = (
   const updateScheduleMutation = useMutation({
     mutationFn: async ({ newSchedule, staffForSave }) => {
       // Prepare data for saving
-      const currentMonthStaff = staffForSave || staffMembersByMonth[currentMonthIndex] || [];
-      
+      const currentMonthStaff =
+        staffForSave || staffMembersByMonth[currentMonthIndex] || [];
+
       // Filter schedule data to only include current date range and active staff
       const currentDateRange = generateDateRange(currentMonthIndex);
       const validDateKeys = currentDateRange.map(
-        (date) => date.toISOString().split("T")[0]
+        (date) => date.toISOString().split("T")[0],
       );
-      
+
       const activeStaffIds = currentMonthStaff.map((staff) => staff.id);
       const filteredScheduleData = {};
-      
+
       activeStaffIds.forEach((staffId) => {
         if (newSchedule[staffId]) {
           filteredScheduleData[staffId] = {};
           validDateKeys.forEach((dateKey) => {
             if (newSchedule[staffId][dateKey] !== undefined) {
-              filteredScheduleData[staffId][dateKey] = newSchedule[staffId][dateKey];
+              filteredScheduleData[staffId][dateKey] =
+                newSchedule[staffId][dateKey];
             }
           });
         }
@@ -137,19 +141,22 @@ export const useScheduleDataRealtime = (
       };
 
       // Save to Supabase
-      await saveScheduleAsync({ data: saveData, scheduleId: currentScheduleId });
-      
+      await saveScheduleAsync({
+        data: saveData,
+        scheduleId: currentScheduleId,
+      });
+
       return { newSchedule, staffForSave };
     },
     onMutate: async ({ newSchedule, staffForSave }) => {
       // Cancel any outgoing refetches
-      await queryClient.cancelQueries({ 
-        queryKey: QUERY_KEYS.schedule(currentScheduleId) 
+      await queryClient.cancelQueries({
+        queryKey: QUERY_KEYS.schedule(currentScheduleId),
       });
 
       // Snapshot the previous value for rollback
       const previousSchedule = schedule;
-      
+
       // Optimistically update the UI immediately
       flushSync(() => {
         setSchedule(newSchedule);
@@ -157,7 +164,7 @@ export const useScheduleDataRealtime = (
 
       // Update staff members if provided
       if (staffForSave) {
-        setStaffMembersByMonth(prev => ({
+        setStaffMembersByMonth((prev) => ({
           ...prev,
           [currentMonthIndex]: staffForSave,
         }));
@@ -169,19 +176,19 @@ export const useScheduleDataRealtime = (
     onError: (error, variables, context) => {
       if (!isConnected) {
         // Connection failed - queue for retry instead of rolling back
-        const queueItem = createQueueItem('schedule', {
+        const queueItem = createQueueItem("schedule", {
           newSchedule: variables.newSchedule,
           staffForSave: variables.staffForSave,
         });
-        
-        setOfflineQueue(prevQueue => {
+
+        setOfflineQueue((prevQueue) => {
           const dedupedQueue = deduplicateQueue(prevQueue, queueItem);
           return [...dedupedQueue, queueItem];
         });
-        
+
         console.warn("🔄 Connection lost - queuing schedule update for retry", {
           queueId: queueItem.id,
-          error: error.message
+          error: error.message,
         });
       } else {
         // Other errors - rollback the optimistic update
@@ -193,10 +200,10 @@ export const useScheduleDataRealtime = (
     },
     onSuccess: (result, variables) => {
       // Success - the UI is already updated optimistically
-      if (process.env.NODE_ENV === 'development') {
-        console.log('✅ Schedule update successful with optimistic UI');
+      if (process.env.NODE_ENV === "development") {
+        console.log("✅ Schedule update successful with optimistic UI");
       }
-    }
+    },
   });
 
   // Single-cell update mutation for real-time typing
@@ -210,23 +217,26 @@ export const useScheduleDataRealtime = (
           [dateKey]: shiftValue,
         },
       };
-      
+
       // Use the same save logic as bulk updates
       const currentMonthStaff = staffMembersByMonth[currentMonthIndex] || [];
       const saveData = {
         ...newSchedule,
         _staff_members: currentMonthStaff,
       };
-      
+
       // Debounced auto-save to Supabase
       if (autoSaveTimeoutRef.current) {
         clearTimeout(autoSaveTimeoutRef.current);
       }
-      
+
       return new Promise((resolve, reject) => {
         autoSaveTimeoutRef.current = setTimeout(async () => {
           try {
-            await saveScheduleAsync({ data: saveData, scheduleId: currentScheduleId });
+            await saveScheduleAsync({
+              data: saveData,
+              scheduleId: currentScheduleId,
+            });
             resolve({ staffId, dateKey, shiftValue, newSchedule });
           } catch (error) {
             reject(error);
@@ -237,7 +247,7 @@ export const useScheduleDataRealtime = (
     onMutate: async ({ staffId, dateKey, shiftValue }) => {
       // Immediate UI update for typing responsiveness
       const previousSchedule = schedule;
-      
+
       const newSchedule = {
         ...schedule,
         [staffId]: {
@@ -245,40 +255,42 @@ export const useScheduleDataRealtime = (
           [dateKey]: shiftValue,
         },
       };
-      
+
       // Immediate UI update
       setSchedule(newSchedule);
-      
-      if (process.env.NODE_ENV === 'development') {
-        console.log(`📝 Instant update: ${staffId} → ${dateKey} = "${shiftValue}"`);
+
+      if (process.env.NODE_ENV === "development") {
+        console.log(
+          `📝 Instant update: ${staffId} → ${dateKey} = "${shiftValue}"`,
+        );
       }
-      
+
       return { previousSchedule };
     },
     onError: (error, variables, context) => {
       if (!isConnected) {
         // Connection failed - queue for retry instead of rolling back
-        const queueItem = createQueueItem('singleCell', {
+        const queueItem = createQueueItem("singleCell", {
           staffId: variables.staffId,
           dateKey: variables.dateKey,
           shiftValue: variables.shiftValue,
         });
-        
-        setOfflineQueue(prevQueue => {
+
+        setOfflineQueue((prevQueue) => {
           const dedupedQueue = deduplicateQueue(prevQueue, queueItem);
           return [...dedupedQueue, queueItem];
         });
-        
+
         // Mark cell as pending
         const cellKey = `${variables.staffId}_${variables.dateKey}`;
-        setPendingCells(prev => new Set([...prev, cellKey]));
-        
+        setPendingCells((prev) => new Set([...prev, cellKey]));
+
         console.warn("🔄 Connection lost - queuing cell update for retry", {
           queueId: queueItem.id,
           staffId: variables.staffId,
           dateKey: variables.dateKey,
           value: variables.shiftValue,
-          error: error.message
+          error: error.message,
         });
       } else {
         // Other errors - rollback the optimistic update
@@ -287,33 +299,41 @@ export const useScheduleDataRealtime = (
         }
         console.error("❌ Single cell update failed:", error);
       }
-    }
+    },
   });
 
   // Load and migrate data from Supabase when available
   useEffect(() => {
-    console.log(`🔍 useScheduleDataRealtime effect: currentMonthIndex=${currentMonthIndex}, totalPeriods=${totalPeriods}`);
-    
+    console.log(
+      `🔍 useScheduleDataRealtime effect: currentMonthIndex=${currentMonthIndex}, totalPeriods=${totalPeriods}`,
+    );
+
     // Skip if currentMonthIndex is invalid (negative)
     if (currentMonthIndex < 0) {
       console.log(`⚠️ BLOCKED: Negative period index: ${currentMonthIndex}`);
       return;
     }
-    
+
     // Skip if we have explicit totalPeriods count and index exceeds it
     if (totalPeriods > 0 && currentMonthIndex >= totalPeriods) {
-      console.log(`⚠️ BLOCKED: Period index ${currentMonthIndex} >= totalPeriods ${totalPeriods}`);
+      console.log(
+        `⚠️ BLOCKED: Period index ${currentMonthIndex} >= totalPeriods ${totalPeriods}`,
+      );
       return;
     }
-    
+
     // Additional safety check: skip if index seems unreasonably high (prevents loading deleted periods)
-    if (currentMonthIndex > 20) { // No restaurant should have more than 20 periods
-      console.log(`⚠️ Skipping data load for unreasonably high period index: ${currentMonthIndex}`);
+    if (currentMonthIndex > 20) {
+      // No restaurant should have more than 20 periods
+      console.log(
+        `⚠️ Skipping data load for unreasonably high period index: ${currentMonthIndex}`,
+      );
       return;
     }
-    
+
     if (supabaseScheduleData && supabaseScheduleData.schedule_data) {
-      const { _staff_members, ...actualScheduleData } = supabaseScheduleData.schedule_data;
+      const { _staff_members, ...actualScheduleData } =
+        supabaseScheduleData.schedule_data;
 
       // Migrate staff members from database
       const migratedStaffMembers = _staff_members
@@ -323,31 +343,39 @@ export const useScheduleDataRealtime = (
       // Migrate schedule data to use UUIDs
       const migratedScheduleData = migrateScheduleData(
         actualScheduleData,
-        migratedStaffMembers
+        migratedStaffMembers,
       );
 
       // Only update if we have meaningful data AND valid period index
-      if ((migratedStaffMembers.length > 0 || Object.keys(migratedScheduleData).length > 0) && currentMonthIndex >= 0) {
-        console.log(`🔄 Loading period ${currentMonthIndex} from Supabase real-time`);
-        
+      if (
+        (migratedStaffMembers.length > 0 ||
+          Object.keys(migratedScheduleData).length > 0) &&
+        currentMonthIndex >= 0
+      ) {
+        console.log(
+          `🔄 Loading period ${currentMonthIndex} from Supabase real-time`,
+        );
+
         // Update staff members
         if (migratedStaffMembers.length > 0) {
-          setStaffMembersByMonth(prev => ({
+          setStaffMembersByMonth((prev) => ({
             ...prev,
             [currentMonthIndex]: migratedStaffMembers,
           }));
         }
-        
+
         // Update schedule data
         const currentDateRange = generateDateRange(currentMonthIndex);
-        
+
         if (Object.keys(migratedScheduleData).length > 0) {
           setSchedule(migratedScheduleData);
         } else {
           // Initialize with staff structure
           const newSchedule = initializeSchedule(
-            migratedStaffMembers.length > 0 ? migratedStaffMembers : defaultStaffMembersArray,
-            currentDateRange
+            migratedStaffMembers.length > 0
+              ? migratedStaffMembers
+              : defaultStaffMembersArray,
+            currentDateRange,
           );
           setSchedule(newSchedule);
         }
@@ -360,12 +388,16 @@ export const useScheduleDataRealtime = (
     if (!supabaseScheduleData) {
       // When switching months without Supabase data, try to preserve staff from other periods
       let staffToUse = defaultStaffMembersArray;
-      
+
       // Try to find staff from the most recent period
       for (let i = 5; i >= 0; i--) {
         if (i !== currentMonthIndex) {
           const periodStaff = staffMembersByMonth[i];
-          if (periodStaff && Array.isArray(periodStaff) && periodStaff.length > 0) {
+          if (
+            periodStaff &&
+            Array.isArray(periodStaff) &&
+            periodStaff.length > 0
+          ) {
             staffToUse = periodStaff;
             break;
           }
@@ -373,109 +405,121 @@ export const useScheduleDataRealtime = (
       }
 
       // Initialize new schedule with appropriate staff
-      const newSchedule = initializeSchedule(staffToUse, safeGenerateDateRange(currentMonthIndex));
+      const newSchedule = initializeSchedule(
+        staffToUse,
+        safeGenerateDateRange(currentMonthIndex),
+      );
       setSchedule(newSchedule);
-      
+
       if (staffToUse !== defaultStaffMembersArray) {
-        setStaffMembersByMonth(prev => ({
+        setStaffMembersByMonth((prev) => ({
           ...prev,
           [currentMonthIndex]: staffToUse,
         }));
-        console.log(`🔄 Initialized period ${currentMonthIndex} with staff from previous period`);
+        console.log(
+          `🔄 Initialized period ${currentMonthIndex} with staff from previous period`,
+        );
       }
     }
   }, [currentMonthIndex, supabaseScheduleData, staffMembersByMonth]);
 
   // Optimistic update functions
   const updateSchedule = useCallback(
-    (newSchedule, staffForSave = null, source = 'auto') => {
+    (newSchedule, staffForSave = null, source = "auto") => {
       if (Object.keys(newSchedule).length === 0) return;
-      
+
       // Use the mutation for optimistic updates
       updateScheduleMutation.mutate({ newSchedule, staffForSave });
     },
-    [updateScheduleMutation]
+    [updateScheduleMutation],
   );
 
   const updateShift = useCallback(
     (staffId, dateKey, shiftValue) => {
       // Input validation
       if (!dataValidation.isValidStaffId(staffId)) {
-        console.warn('⚠️ Invalid staffId in updateShift:', staffId);
+        console.warn("⚠️ Invalid staffId in updateShift:", staffId);
         return;
       }
 
       if (!dataValidation.isValidDateKey(dateKey)) {
-        console.warn('⚠️ Invalid dateKey in updateShift:', dateKey);
+        console.warn("⚠️ Invalid dateKey in updateShift:", dateKey);
         return;
       }
 
       if (!dataValidation.isValidShiftValue(shiftValue)) {
-        console.warn('⚠️ Invalid shiftValue in updateShift:', shiftValue);
+        console.warn("⚠️ Invalid shiftValue in updateShift:", shiftValue);
         return;
       }
 
       // Use the mutation for instant UI update + background save
       updateShiftMutation.mutate({ staffId, dateKey, shiftValue });
     },
-    [updateShiftMutation]
+    [updateShiftMutation],
   );
 
   // Retry queued changes when connection is restored
   const retryQueuedChanges = useCallback(async () => {
     if (offlineQueue.length === 0 || !isConnected) return;
-    
-    console.log(`🔄 Connection restored - retrying ${offlineQueue.length} queued changes`);
-    
+
+    console.log(
+      `🔄 Connection restored - retrying ${offlineQueue.length} queued changes`,
+    );
+
     // Process queue items sequentially to avoid conflicts
     for (const queueItem of offlineQueue) {
       if (queueItem.retryCount >= queueItem.maxRetries) {
-        console.warn(`⚠️ Skipping queue item ${queueItem.id} - max retries exceeded`);
+        console.warn(
+          `⚠️ Skipping queue item ${queueItem.id} - max retries exceeded`,
+        );
         continue;
       }
-      
+
       try {
-        if (queueItem.type === 'schedule') {
+        if (queueItem.type === "schedule") {
           console.log(`🔄 Retrying queued schedule update: ${queueItem.id}`);
           await updateScheduleMutation.mutateAsync(queueItem.data);
-        } else if (queueItem.type === 'singleCell') {
+        } else if (queueItem.type === "singleCell") {
           console.log(`🔄 Retrying queued cell update: ${queueItem.id}`, {
             staffId: queueItem.data.staffId,
             dateKey: queueItem.data.dateKey,
-            value: queueItem.data.shiftValue
+            value: queueItem.data.shiftValue,
           });
           await updateShiftMutation.mutateAsync(queueItem.data);
-          
+
           // Remove from pending cells on success
           const cellKey = `${queueItem.data.staffId}_${queueItem.data.dateKey}`;
-          setPendingCells(prev => {
+          setPendingCells((prev) => {
             const newSet = new Set(prev);
             newSet.delete(cellKey);
             return newSet;
           });
         }
-        
+
         console.log(`✅ Queue item ${queueItem.id} retried successfully`);
       } catch (retryError) {
-        console.error(`❌ Queue retry failed for ${queueItem.id}:`, retryError.message);
-        
+        console.error(
+          `❌ Queue retry failed for ${queueItem.id}:`,
+          retryError.message,
+        );
+
         // Increment retry count
-        setOfflineQueue(prevQueue => 
-          prevQueue.map(item => 
-            item.id === queueItem.id 
+        setOfflineQueue((prevQueue) =>
+          prevQueue.map((item) =>
+            item.id === queueItem.id
               ? { ...item, retryCount: item.retryCount + 1 }
-              : item
-          )
+              : item,
+          ),
         );
       }
     }
-    
+
     // Clean up successfully processed items
-    setOfflineQueue(prevQueue => 
-      prevQueue.filter(item => item.retryCount < item.maxRetries)
+    setOfflineQueue((prevQueue) =>
+      prevQueue.filter((item) => item.retryCount < item.maxRetries),
     );
   }, [offlineQueue, isConnected, updateScheduleMutation, updateShiftMutation]);
-  
+
   // Auto-retry when connection is restored
   useEffect(() => {
     if (isConnected && offlineQueue.length > 0) {
@@ -483,37 +527,43 @@ export const useScheduleDataRealtime = (
       if (retryTimeoutRef.current) {
         clearTimeout(retryTimeoutRef.current);
       }
-      
+
       retryTimeoutRef.current = setTimeout(() => {
         retryQueuedChanges();
       }, RETRY_DELAY);
     }
-    
+
     return () => {
       if (retryTimeoutRef.current) {
         clearTimeout(retryTimeoutRef.current);
       }
     };
   }, [isConnected, offlineQueue.length, retryQueuedChanges]);
-  
+
   // Legacy auto-save function for compatibility
   const scheduleAutoSave = useCallback(
-    (newScheduleData, newStaffMembers = null, source = 'auto') => {
+    (newScheduleData, newStaffMembers = null, source = "auto") => {
       // This now uses the mutation system
       updateScheduleMutation.mutate({
         newSchedule: newScheduleData,
-        staffForSave: newStaffMembers
+        staffForSave: newStaffMembers,
       });
     },
-    [updateScheduleMutation]
+    [updateScheduleMutation],
   );
 
   // Update schedule when periods are loaded (if schedule is still empty)
   useEffect(() => {
     const currentDateRange = safeGenerateDateRange(currentMonthIndex);
-    if (currentDateRange.length > 0 && (!schedule || Object.keys(schedule).length === 0)) {
+    if (
+      currentDateRange.length > 0 &&
+      (!schedule || Object.keys(schedule).length === 0)
+    ) {
       // Periods are now loaded but schedule is still empty - reinitialize
-      const newSchedule = initializeSchedule(defaultStaffMembersArray, currentDateRange);
+      const newSchedule = initializeSchedule(
+        defaultStaffMembersArray,
+        currentDateRange,
+      );
       setSchedule(newSchedule);
     }
   }, [monthPeriods, currentMonthIndex, schedule]);
@@ -524,30 +574,33 @@ export const useScheduleDataRealtime = (
     schedulesByMonth: { [currentMonthIndex]: schedule }, // For compatibility
     staffMembersByMonth,
     dateRange,
-    
+
     // State setters (for compatibility)
     setSchedule,
     setStaffMembersByMonth,
-    
+
     // Update functions with optimistic updates
     updateSchedule,
     updateShift,
     scheduleAutoSave,
-    
+
     // Supabase state
     currentScheduleId,
     setCurrentScheduleId,
     isConnected,
     isLoading: isSupabaseLoading,
-    isSaving: isSupabaseSaving || updateScheduleMutation.isPending || updateShiftMutation.isPending,
+    isSaving:
+      isSupabaseSaving ||
+      updateScheduleMutation.isPending ||
+      updateShiftMutation.isPending,
     error: supabaseError,
-    
+
     // Offline queue state
     offlineQueue,
     pendingCells,
     hasPendingChanges: offlineQueue.length > 0,
     retryQueuedChanges,
-    
+
     // Utilities
     setHasExplicitlyDeletedData: () => {}, // Placeholder for compatibility
     syncLocalStorageToDatabase: () => Promise.resolve(), // No longer needed

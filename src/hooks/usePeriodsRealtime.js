@@ -1,6 +1,9 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { supabase } from "../utils/supabase";
-import { refreshPeriodsCache, synchronizePeriodsCache } from "../utils/dateUtils";
+import {
+  refreshPeriodsCache,
+  synchronizePeriodsCache,
+} from "../utils/dateUtils";
 
 export const usePeriodsRealtime = () => {
   const [periods, setPeriods] = useState([]);
@@ -14,25 +17,26 @@ export const usePeriodsRealtime = () => {
       setIsLoading(true);
       setError(null);
 
-      const { data, error } = await supabase.rpc('get_periods');
-      
+      const { data, error } = await supabase.rpc("get_periods");
+
       if (error) throw error;
 
-      const formattedPeriods = (data || []).map(period => ({
+      const formattedPeriods = (data || []).map((period) => ({
         id: period.id,
-        start: new Date(period.start_date + 'T00:00:00.000Z'),
-        end: new Date(period.end_date + 'T00:00:00.000Z'),
+        start: new Date(period.start_date + "T00:00:00.000Z"),
+        end: new Date(period.end_date + "T00:00:00.000Z"),
         label: period.label,
       }));
 
       setPeriods(formattedPeriods);
-      
+
       // Synchronize the dateUtils cache with our fresh data
       synchronizePeriodsCache(formattedPeriods);
-      console.log(`🔄 Synchronized dateUtils cache with ${formattedPeriods.length} periods`);
-      
+      console.log(
+        `🔄 Synchronized dateUtils cache with ${formattedPeriods.length} periods`,
+      );
     } catch (err) {
-      console.error('Failed to load periods:', err);
+      console.error("Failed to load periods:", err);
       setError(err.message);
     } finally {
       setIsLoading(false);
@@ -40,73 +44,80 @@ export const usePeriodsRealtime = () => {
   }, []);
 
   // Add a new period
-  const addPeriod = useCallback(async (startDate, endDate, label) => {
-    try {
-      setError(null);
-      
-      const { data, error } = await supabase.rpc('add_period', {
-        p_start_date: startDate.toISOString().split('T')[0],
-        p_end_date: endDate.toISOString().split('T')[0],
-        p_label: label
-      });
+  const addPeriod = useCallback(
+    async (startDate, endDate, label) => {
+      try {
+        setError(null);
 
-      if (error) throw error;
+        const { data, error } = await supabase.rpc("add_period", {
+          p_start_date: startDate.toISOString().split("T")[0],
+          p_end_date: endDate.toISOString().split("T")[0],
+          p_label: label,
+        });
 
-      // Reload periods to get updated list
-      await loadPeriods();
-      
-      return data;
-    } catch (err) {
-      console.error('Failed to add period:', err);
-      setError(err.message);
-      throw err;
-    }
-  }, [loadPeriods]);
+        if (error) throw error;
+
+        // Reload periods to get updated list
+        await loadPeriods();
+
+        return data;
+      } catch (err) {
+        console.error("Failed to add period:", err);
+        setError(err.message);
+        throw err;
+      }
+    },
+    [loadPeriods],
+  );
 
   // Delete a period
-  const deletePeriod = useCallback(async (periodId) => {
-    try {
-      setError(null);
-      
-      const { error } = await supabase.rpc('delete_period', {
-        period_id: periodId
-      });
+  const deletePeriod = useCallback(
+    async (periodId) => {
+      try {
+        setError(null);
 
-      if (error) throw error;
+        const { error } = await supabase.rpc("delete_period", {
+          period_id: periodId,
+        });
 
-      // Reload periods to get updated list
-      await loadPeriods();
-      
-    } catch (err) {
-      console.error('Failed to delete period:', err);
-      setError(err.message);
-      throw err;
-    }
-  }, [loadPeriods]);
+        if (error) throw error;
+
+        // Reload periods to get updated list
+        await loadPeriods();
+      } catch (err) {
+        console.error("Failed to delete period:", err);
+        setError(err.message);
+        throw err;
+      }
+    },
+    [loadPeriods],
+  );
 
   // Update a period
-  const updatePeriod = useCallback(async (periodId, startDate, endDate, label) => {
-    try {
-      setError(null);
-      
-      const { error } = await supabase.rpc('update_period', {
-        period_id: periodId,
-        p_start_date: startDate.toISOString().split('T')[0],
-        p_end_date: endDate.toISOString().split('T')[0],
-        p_label: label
-      });
+  const updatePeriod = useCallback(
+    async (periodId, startDate, endDate, label) => {
+      try {
+        setError(null);
 
-      if (error) throw error;
+        const { error } = await supabase.rpc("update_period", {
+          period_id: periodId,
+          p_start_date: startDate.toISOString().split("T")[0],
+          p_end_date: endDate.toISOString().split("T")[0],
+          p_label: label,
+        });
 
-      // Reload periods to get updated list
-      await loadPeriods();
-      
-    } catch (err) {
-      console.error('Failed to update period:', err);
-      setError(err.message);
-      throw err;
-    }
-  }, [loadPeriods]);
+        if (error) throw error;
+
+        // Reload periods to get updated list
+        await loadPeriods();
+      } catch (err) {
+        console.error("Failed to update period:", err);
+        setError(err.message);
+        throw err;
+      }
+    },
+    [loadPeriods],
+  );
 
   // Set up real-time subscription
   const subscribeToUpdates = useCallback(() => {
@@ -115,26 +126,32 @@ export const usePeriodsRealtime = () => {
     }
 
     subscriptionRef.current = supabase
-      .channel('periods-updates')
+      .channel("periods-updates")
       .on(
-        'postgres_changes',
+        "postgres_changes",
         {
-          event: '*',
-          schema: 'public',
-          table: 'periods',
+          event: "*",
+          schema: "public",
+          table: "periods",
         },
         (payload) => {
-          console.log('🔄 Periods table changed:', payload.eventType, payload.new?.label || payload.old?.label);
+          console.log(
+            "🔄 Periods table changed:",
+            payload.eventType,
+            payload.new?.label || payload.old?.label,
+          );
           // For DELETE events, reload immediately to prevent stale cache issues
           // For INSERT/UPDATE events, use small delay to ensure DB consistency
-          const isDelete = payload.eventType === 'DELETE';
+          const isDelete = payload.eventType === "DELETE";
           const delay = isDelete ? 10 : 50; // Very fast response for deletions to prevent race conditions
-          
+
           setTimeout(() => {
-            console.log(`🔄 Reloading periods after ${delay}ms delay (${payload.eventType} event)`);
+            console.log(
+              `🔄 Reloading periods after ${delay}ms delay (${payload.eventType} event)`,
+            );
             loadPeriods();
           }, delay);
-        }
+        },
       )
       .subscribe();
 
@@ -177,9 +194,9 @@ export const usePeriodsRealtime = () => {
     // Utilities
     clearError: () => setError(null),
     forceRefresh: () => {
-      console.log('🔄 Forcing period refresh...');
+      console.log("🔄 Forcing period refresh...");
       return loadPeriods();
-    }
+    },
   };
 };
 

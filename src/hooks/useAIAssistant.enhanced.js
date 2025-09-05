@@ -195,18 +195,20 @@ export const useAIAssistant = (
       try {
         const constraintEngine = await loadConstraintEngine();
         const configurationCache = await loadConfigurationCache();
-        
-        configInvalidationUnsubscribe.current = constraintEngine.onConfigurationCacheInvalidated(
-          () => {
+
+        configInvalidationUnsubscribe.current =
+          constraintEngine.onConfigurationCacheInvalidated(() => {
             console.log("🔄 Legacy configuration update detected");
             configurationCache.forceRefresh().catch(console.error);
-          },
-        );
+          });
       } catch (error) {
-        console.warn("⚠️ Failed to setup legacy configuration listener:", error);
+        console.warn(
+          "⚠️ Failed to setup legacy configuration listener:",
+          error,
+        );
       }
     };
-    
+
     setupLegacyListener();
 
     initializeConfigurationSystem();

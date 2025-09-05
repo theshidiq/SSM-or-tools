@@ -4,8 +4,9 @@ import { supabase } from "../utils/supabase";
 
 // Query keys for React Query cache management
 export const QUERY_KEYS = {
-  schedule: (scheduleId) => scheduleId ? ['schedule', scheduleId] : ['schedule', 'latest'],
-  schedules: ['schedules'],
+  schedule: (scheduleId) =>
+    scheduleId ? ["schedule", scheduleId] : ["schedule", "latest"],
+  schedules: ["schedules"],
 };
 
 export const useSupabaseRealtime = (initialScheduleId = null) => {
@@ -19,16 +20,16 @@ export const useSupabaseRealtime = (initialScheduleId = null) => {
 
   // Connection check query
   const { data: connectionStatus } = useQuery({
-    queryKey: ['supabase', 'connection'],
+    queryKey: ["supabase", "connection"],
     queryFn: async () => {
       try {
         const { data, error } = await supabase
           .from("schedules")
           .select("count")
           .limit(1);
-        
+
         if (error) throw error;
-        
+
         setIsConnected(true);
         setError(null);
         return { connected: true };
@@ -43,19 +44,20 @@ export const useSupabaseRealtime = (initialScheduleId = null) => {
   });
 
   // Load schedule data query
-  const { 
-    data: scheduleData, 
-    isLoading, 
+  const {
+    data: scheduleData,
+    isLoading,
     error: queryError,
-    refetch: refetchSchedule
+    refetch: refetchSchedule,
   } = useQuery({
     queryKey: QUERY_KEYS.schedule(currentScheduleId),
     queryFn: async () => {
-      const targetId = currentScheduleId || '502c037b-9be1-4018-bc92-6970748df9e2';
-      
+      const targetId =
+        currentScheduleId || "502c037b-9be1-4018-bc92-6970748df9e2";
+
       let query = supabase.from("schedules").select("*");
-      
-      if (targetId && targetId !== 'latest') {
+
+      if (targetId && targetId !== "latest") {
         query = query.eq("id", targetId);
       } else {
         query = query.order("updated_at", { ascending: false }).limit(1);
@@ -65,12 +67,12 @@ export const useSupabaseRealtime = (initialScheduleId = null) => {
       if (error) throw error;
 
       const scheduleRecord = data?.[0] || null;
-      
+
       // Update current schedule ID if we got a different one
       if (scheduleRecord?.id && scheduleRecord.id !== currentScheduleId) {
         setCurrentScheduleId(scheduleRecord.id);
       }
-      
+
       return scheduleRecord;
     },
     enabled: isConnected, // Only run query when connected
@@ -141,15 +143,15 @@ export const useSupabaseRealtime = (initialScheduleId = null) => {
       if (data?.id && data.id !== currentScheduleId) {
         setCurrentScheduleId(data.id);
       }
-      
+
       // Update cache with server response
       queryClient.setQueryData(context.queryKey, data);
-      
+
       // Invalidate related queries to keep them fresh
       queryClient.invalidateQueries({ queryKey: QUERY_KEYS.schedules });
-      
+
       console.log("✅ Schedule saved successfully");
-    }
+    },
   });
 
   // Delete schedule mutation
@@ -159,7 +161,7 @@ export const useSupabaseRealtime = (initialScheduleId = null) => {
         .from("schedules")
         .delete()
         .eq("id", scheduleId);
-      
+
       if (error) throw error;
       return { deleted: true };
     },
@@ -167,7 +169,7 @@ export const useSupabaseRealtime = (initialScheduleId = null) => {
       // Remove from cache
       queryClient.removeQueries({ queryKey: QUERY_KEYS.schedule(scheduleId) });
       queryClient.invalidateQueries({ queryKey: QUERY_KEYS.schedules });
-      
+
       // Reset current schedule ID if we deleted the current one
       if (scheduleId === currentScheduleId) {
         setCurrentScheduleId(null);
@@ -176,105 +178,123 @@ export const useSupabaseRealtime = (initialScheduleId = null) => {
     onError: (err) => {
       setError(err.message);
       console.error("❌ Schedule deletion failed:", err);
-    }
+    },
   });
 
   // Set up real-time subscription
-  const subscribeToScheduleUpdates = useCallback((scheduleId) => {
-    // Clean up existing subscription
-    if (subscriptionRef.current) {
-      subscriptionRef.current.unsubscribe();
-      subscriptionRef.current = null;
-    }
-
-    if (!scheduleId) return;
-
-    console.log("🔄 Setting up real-time subscription for schedule:", scheduleId);
-    
-    subscriptionRef.current = supabase
-      .channel(`schedule-${scheduleId}`)
-      .on(
-        "postgres_changes",
-        {
-          event: "*",
-          schema: "public",
-          table: "schedules",
-          filter: `id=eq.${scheduleId}`,
-        },
-        (payload) => {
-          console.log("📡 Real-time update received:", payload.eventType);
-          
-          const queryKey = QUERY_KEYS.schedule(scheduleId);
-          
-          if (payload.eventType === "UPDATE" || payload.eventType === "INSERT") {
-            // Update cache with real-time data
-            queryClient.setQueryData(queryKey, payload.new);
-          } else if (payload.eventType === "DELETE") {
-            // Remove from cache and reset state
-            queryClient.removeQueries({ queryKey });
-            if (scheduleId === currentScheduleId) {
-              setCurrentScheduleId(null);
-            }
-          }
-        },
-      )
-      .subscribe((status) => {
-        console.log(`🔄 Real-time status: ${status}`);
-        
-        if (status === 'SUBSCRIBED') {
-          console.log("✅ Real-time subscription active");
-          setIsConnected(true);
-          reconnectionAttemptsRef.current = 0; // Reset attempts on successful connection
-        } else if (status === 'CHANNEL_ERROR') {
-          console.error("❌ Real-time subscription error - connection failed");
-          setIsConnected(false);
-          
-          // Clear any existing reconnection timeout
-          if (reconnectionTimeoutRef.current) {
-            clearTimeout(reconnectionTimeoutRef.current);
-          }
-          
-          // Limit reconnection attempts to prevent infinite loops
-          if (reconnectionAttemptsRef.current < 3) {
-            reconnectionAttemptsRef.current++;
-            
-            // Schedule reconnection attempt after 5 seconds with error handling
-            reconnectionTimeoutRef.current = setTimeout(async () => {
-              try {
-                console.log(`🔄 Attempting real-time reconnection... (attempt ${reconnectionAttemptsRef.current}/3)`);
-                await refetchSchedule();
-                console.log("✅ Reconnection successful");
-              } catch (reconnectionError) {
-                console.error("❌ Reconnection attempt failed:", reconnectionError.message);
-                setError(`Reconnection failed: ${reconnectionError.message}`);
-              }
-            }, 5000);
-          } else {
-            console.error("❌ Max reconnection attempts reached. Manual refresh required.");
-            setError("Connection lost. Please refresh the page.");
-          }
-        } else if (status === 'TIMED_OUT') {
-          console.warn("⏰ Real-time subscription timed out");
-          setIsConnected(false);
-        } else if (status === 'CLOSED') {
-          console.warn("🔌 Real-time connection closed");
-          setIsConnected(false);
-        }
-      });
-
-    return () => {
+  const subscribeToScheduleUpdates = useCallback(
+    (scheduleId) => {
+      // Clean up existing subscription
       if (subscriptionRef.current) {
         subscriptionRef.current.unsubscribe();
         subscriptionRef.current = null;
       }
-    };
-  }, [queryClient, currentScheduleId]);
+
+      if (!scheduleId) return;
+
+      console.log(
+        "🔄 Setting up real-time subscription for schedule:",
+        scheduleId,
+      );
+
+      subscriptionRef.current = supabase
+        .channel(`schedule-${scheduleId}`)
+        .on(
+          "postgres_changes",
+          {
+            event: "*",
+            schema: "public",
+            table: "schedules",
+            filter: `id=eq.${scheduleId}`,
+          },
+          (payload) => {
+            console.log("📡 Real-time update received:", payload.eventType);
+
+            const queryKey = QUERY_KEYS.schedule(scheduleId);
+
+            if (
+              payload.eventType === "UPDATE" ||
+              payload.eventType === "INSERT"
+            ) {
+              // Update cache with real-time data
+              queryClient.setQueryData(queryKey, payload.new);
+            } else if (payload.eventType === "DELETE") {
+              // Remove from cache and reset state
+              queryClient.removeQueries({ queryKey });
+              if (scheduleId === currentScheduleId) {
+                setCurrentScheduleId(null);
+              }
+            }
+          },
+        )
+        .subscribe((status) => {
+          console.log(`🔄 Real-time status: ${status}`);
+
+          if (status === "SUBSCRIBED") {
+            console.log("✅ Real-time subscription active");
+            setIsConnected(true);
+            reconnectionAttemptsRef.current = 0; // Reset attempts on successful connection
+          } else if (status === "CHANNEL_ERROR") {
+            console.error(
+              "❌ Real-time subscription error - connection failed",
+            );
+            setIsConnected(false);
+
+            // Clear any existing reconnection timeout
+            if (reconnectionTimeoutRef.current) {
+              clearTimeout(reconnectionTimeoutRef.current);
+            }
+
+            // Limit reconnection attempts to prevent infinite loops
+            if (reconnectionAttemptsRef.current < 3) {
+              reconnectionAttemptsRef.current++;
+
+              // Schedule reconnection attempt after 5 seconds with error handling
+              reconnectionTimeoutRef.current = setTimeout(async () => {
+                try {
+                  console.log(
+                    `🔄 Attempting real-time reconnection... (attempt ${reconnectionAttemptsRef.current}/3)`,
+                  );
+                  await refetchSchedule();
+                  console.log("✅ Reconnection successful");
+                } catch (reconnectionError) {
+                  console.error(
+                    "❌ Reconnection attempt failed:",
+                    reconnectionError.message,
+                  );
+                  setError(`Reconnection failed: ${reconnectionError.message}`);
+                }
+              }, 5000);
+            } else {
+              console.error(
+                "❌ Max reconnection attempts reached. Manual refresh required.",
+              );
+              setError("Connection lost. Please refresh the page.");
+            }
+          } else if (status === "TIMED_OUT") {
+            console.warn("⏰ Real-time subscription timed out");
+            setIsConnected(false);
+          } else if (status === "CLOSED") {
+            console.warn("🔌 Real-time connection closed");
+            setIsConnected(false);
+          }
+        });
+
+      return () => {
+        if (subscriptionRef.current) {
+          subscriptionRef.current.unsubscribe();
+          subscriptionRef.current = null;
+        }
+      };
+    },
+    [queryClient, currentScheduleId],
+  );
 
   // Auto-save functionality with debouncing
   const autoSave = useCallback(
     (data, scheduleId = null, delay = 2000) => {
       const targetScheduleId = scheduleId || currentScheduleId;
-      
+
       return new Promise((resolve, reject) => {
         const timeoutId = setTimeout(() => {
           saveScheduleMutation.mutate(
@@ -282,7 +302,7 @@ export const useSupabaseRealtime = (initialScheduleId = null) => {
             {
               onSuccess: resolve,
               onError: reject,
-            }
+            },
           );
         }, delay);
 
@@ -290,7 +310,7 @@ export const useSupabaseRealtime = (initialScheduleId = null) => {
         return () => clearTimeout(timeoutId);
       });
     },
-    [saveScheduleMutation, currentScheduleId]
+    [saveScheduleMutation, currentScheduleId],
   );
 
   // Set up subscription when schedule ID changes
@@ -316,11 +336,14 @@ export const useSupabaseRealtime = (initialScheduleId = null) => {
   // Add connection health monitoring
   useEffect(() => {
     if (!isConnected) return;
-    
+
     // Check connection health every 30 seconds when connected
     const healthCheckInterval = setInterval(() => {
       // Simple health check by attempting a lightweight query
-      supabase.from('schedules').select('id').limit(1)
+      supabase
+        .from("schedules")
+        .select("id")
+        .limit(1)
         .then(() => {
           console.log("💓 Real-time connection healthy");
         })
@@ -340,19 +363,19 @@ export const useSupabaseRealtime = (initialScheduleId = null) => {
     error: error || queryError?.message,
     scheduleData,
     currentScheduleId,
-    
+
     // Mutations
     saveSchedule: saveScheduleMutation.mutate,
     saveScheduleAsync: saveScheduleMutation.mutateAsync,
     deleteSchedule: deleteScheduleMutation.mutate,
     isSupabaseSaving: saveScheduleMutation.isPending,
-    
+
     // Functions
     autoSave,
     refetchSchedule,
     subscribeToScheduleUpdates,
     setCurrentScheduleId,
-    
+
     // Utilities
     clearError: () => setError(null),
   };

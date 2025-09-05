@@ -34,15 +34,23 @@ import StatusModal from "./common/StatusModal";
 import SettingsModal from "./settings/SettingsModal";
 
 // Lazy loaded AI features for better performance
-import { Suspense, useState as useAIState, useCallback as useAICallback } from 'react';
-import ErrorBoundary from './ui/ErrorBoundary';
-import { AILoadingSpinner, DebugToolsLoading, FeatureLoadingProgress } from './ui/LoadingStates';
-import { 
-  aiFeatureLoader, 
+import {
+  Suspense,
+  useState as useAIState,
+  useCallback as useAICallback,
+} from "react";
+import ErrorBoundary from "./ui/ErrorBoundary";
+import {
+  AILoadingSpinner,
+  DebugToolsLoading,
+  FeatureLoadingProgress,
+} from "./ui/LoadingStates";
+import {
+  aiFeatureLoader,
   AI_FEATURES,
   getAIFeatureDefinitions,
-  checkAIFeatureSupport
-} from './lazy/LazyAIComponents';
+  checkAIFeatureSupport,
+} from "./lazy/LazyAIComponents";
 
 // Manual input integration utilities (development only)
 import { manualInputTestSuite } from "../utils/manualInputTestSuite";
@@ -83,11 +91,13 @@ const ShiftScheduleEditor = ({
 
   // UI state
   const [showDropdown, setShowDropdown] = useState(null);
-  
+
   // AI Features state
   const [aiEnabled, setAIEnabled] = useAIState(false);
   const [aiLoading, setAILoading] = useAIState(false);
-  const [aiSupported, setAISupported] = useAIState(() => checkAIFeatureSupport());
+  const [aiSupported, setAISupported] = useAIState(() =>
+    checkAIFeatureSupport(),
+  );
   const [aiLoadingProgress, setAILoadingProgress] = useAIState(null);
   const [aiFeatureError, setAIFeatureError] = useAIState(null);
 
@@ -115,45 +125,46 @@ const ShiftScheduleEditor = ({
   // AI Feature loading
   const enableAIFeatures = useAICallback(async () => {
     if (!aiSupported) {
-      setAIFeatureError('AI features are not supported in this browser');
+      setAIFeatureError("AI features are not supported in this browser");
       return;
     }
-    
+
     if (aiEnabled) return; // Already enabled
-    
+
     setAILoading(true);
     setAIFeatureError(null);
-    
+
     try {
       const features = getAIFeatureDefinitions();
-      
+
       // Set up progress listener
-      const removeListener = aiFeatureLoader.addProgressListener(setAILoadingProgress);
-      
+      const removeListener =
+        aiFeatureLoader.addProgressListener(setAILoadingProgress);
+
       // Load AI features
       await aiFeatureLoader.loadFeatures(features);
-      
+
       // Cleanup
       removeListener();
       setAILoadingProgress(null);
       setAIEnabled(true);
-      
-      console.log('✅ AI features loaded successfully');
+
+      console.log("✅ AI features loaded successfully");
     } catch (error) {
-      console.error('❌ Failed to load AI features:', error);
-      setAIFeatureError('Failed to load AI features: ' + error.message);
+      console.error("❌ Failed to load AI features:", error);
+      setAIFeatureError("Failed to load AI features: " + error.message);
       setAILoadingProgress(null);
     } finally {
       setAILoading(false);
     }
   }, [aiSupported, aiEnabled]);
-  
+
   const disableAIFeatures = useAICallback(() => {
     setAIEnabled(false);
     setAIFeatureError(null);
-    console.log('🔌 AI features disabled');
+    console.log("🔌 AI features disabled");
   }, []);
-  
+
   // Refs - removed unused newColumnInputRef
 
   // Custom hooks
@@ -206,7 +217,7 @@ const ShiftScheduleEditor = ({
   } = useScheduleData(currentMonthIndex, {
     enableAdvancedCache: true,
     enableOfflineSupport: true,
-    enableConflictResolution: true
+    enableConflictResolution: true,
   }); // Phase 3: Enhanced schedule hook
 
   const {
@@ -232,7 +243,7 @@ const ShiftScheduleEditor = ({
   } = useStaffManagement(currentMonthIndex, {
     enableAdvancedCache: true,
     enableOfflineSupport: true,
-    enableConflictResolution: true
+    enableConflictResolution: true,
   }); // Phase 3: Enhanced staff management hook
 
   // Re-evaluate period selection when Supabase data becomes available - ONE TIME ONLY
@@ -266,15 +277,28 @@ const ShiftScheduleEditor = ({
     if (process.env.NODE_ENV === "development") {
       window.cleanupAllPeriods = cleanupAllPeriods;
       window.fixStaffInconsistencies = fixStaffInconsistencies;
-      
+
       // Manual input testing utilities
-      window.testManualInput = () => manualInputTestSuite.runCompleteTestSuite(
-        updateShift, schedule, staffMembers, currentMonthIndex
-      );
-      window.checkDataIntegrity = () => dataIntegrityMonitor.checkCrossPeriodConsistency();
-      window.getAutoSaveStats = () => dataIntegrityMonitor.autoSaveMonitor.getStats();
+      window.testManualInput = () =>
+        manualInputTestSuite.runCompleteTestSuite(
+          updateShift,
+          schedule,
+          staffMembers,
+          currentMonthIndex,
+        );
+      window.checkDataIntegrity = () =>
+        dataIntegrityMonitor.checkCrossPeriodConsistency();
+      window.getAutoSaveStats = () =>
+        dataIntegrityMonitor.autoSaveMonitor.getStats();
     }
-  }, [cleanupAllPeriods, fixStaffInconsistencies, updateShift, schedule, staffMembers, currentMonthIndex]);
+  }, [
+    cleanupAllPeriods,
+    fixStaffInconsistencies,
+    updateShift,
+    schedule,
+    staffMembers,
+    currentMonthIndex,
+  ]);
 
   // Check if we have any data at all (including localStorage as backup)
   const localStaffData = useMemo(() => {
@@ -293,7 +317,7 @@ const ShiftScheduleEditor = ({
     if (isLoading) {
       return []; // Don't show anything while loading
     }
-    
+
     // If we have staff members, use them
     if (staffMembers && staffMembers.length > 0) {
       const ordered = getOrderedStaffMembers(staffMembers, dateRange);
@@ -301,8 +325,15 @@ const ShiftScheduleEditor = ({
     }
 
     // If we have Supabase data with staff members, extract and use them
-    if (supabaseScheduleData && supabaseScheduleData.schedule_data && supabaseScheduleData.schedule_data._staff_members) {
-      const ordered = getOrderedStaffMembers(supabaseScheduleData.schedule_data._staff_members, dateRange);
+    if (
+      supabaseScheduleData &&
+      supabaseScheduleData.schedule_data &&
+      supabaseScheduleData.schedule_data._staff_members
+    ) {
+      const ordered = getOrderedStaffMembers(
+        supabaseScheduleData.schedule_data._staff_members,
+        dateRange,
+      );
       return ordered;
     }
 
@@ -313,7 +344,14 @@ const ShiftScheduleEditor = ({
     }
 
     return [];
-  }, [staffMembers, dateRange, isLoading, supabaseScheduleData, localStaffData, hasLoadedFromDb]);
+  }, [
+    staffMembers,
+    dateRange,
+    isLoading,
+    supabaseScheduleData,
+    localStaffData,
+    hasLoadedFromDb,
+  ]);
 
   const hasAnyStaffData =
     (staffMembers && staffMembers.length > 0) ||
@@ -453,13 +491,15 @@ const ShiftScheduleEditor = ({
       // Add next period and switch to it
       const newPeriodIndex = await addNextPeriod();
       setCurrentMonthIndex(newPeriodIndex);
-      console.log(`✅ Successfully added new period and navigated to index ${newPeriodIndex}`);
+      console.log(
+        `✅ Successfully added new period and navigated to index ${newPeriodIndex}`,
+      );
     } catch (error) {
-      console.error('Failed to add new period:', error);
+      console.error("Failed to add new period:", error);
       setError({
         message: `Failed to add new period: ${error.message}`,
-        type: 'error',
-        details: 'Please try again or check your connection.'
+        type: "error",
+        details: "Please try again or check your connection.",
       });
     }
   };
@@ -474,7 +514,8 @@ const ShiftScheduleEditor = ({
         isOpen: true,
         type: "error",
         title: "Cannot Delete Period",
-        message: "Cannot delete the last remaining period. At least one period must exist in the system.",
+        message:
+          "Cannot delete the last remaining period. At least one period must exist in the system.",
       });
       return;
     }
@@ -497,8 +538,9 @@ const ShiftScheduleEditor = ({
   };
 
   const confirmDeletePeriod = async () => {
-    const periodToDeleteLabel = monthPeriods[currentMonthIndex]?.label || "current period";
-    
+    const periodToDeleteLabel =
+      monthPeriods[currentMonthIndex]?.label || "current period";
+
     // Show loading modal
     setDeleteModal({
       isOpen: true,
@@ -510,7 +552,7 @@ const ShiftScheduleEditor = ({
     try {
       // Step 1: Delete the period from the system
       const deletionResult = deletePeriod(currentMonthIndex);
-      
+
       if (!deletionResult.success) {
         throw new Error(deletionResult.error);
       }
@@ -518,35 +560,48 @@ const ShiftScheduleEditor = ({
       // Step 2: Navigate to a valid remaining period
       const newCurrentIndex = deletionResult.suggestedNavigationIndex;
       console.log(`🔄 Navigating to period ${newCurrentIndex} after deletion`);
-      
+
       // Force update the current month index to trigger re-render with new period
       setCurrentMonthIndex(newCurrentIndex);
 
       // Step 3: Clear any cached data for the deleted period
       try {
         // Clear localStorage cache for the deleted period if it exists
-        const savedScheduleByMonth = JSON.parse(localStorage.getItem("schedule-by-month-data") || "{}");
-        const savedStaffByMonth = JSON.parse(localStorage.getItem("staff-by-month-data") || "{}");
-        
+        const savedScheduleByMonth = JSON.parse(
+          localStorage.getItem("schedule-by-month-data") || "{}",
+        );
+        const savedStaffByMonth = JSON.parse(
+          localStorage.getItem("staff-by-month-data") || "{}",
+        );
+
         // Remove data for periods that are now out of range due to deletion
-        Object.keys(savedScheduleByMonth).forEach(key => {
+        Object.keys(savedScheduleByMonth).forEach((key) => {
           const periodIndex = parseInt(key);
           if (periodIndex >= monthPeriods.length) {
             delete savedScheduleByMonth[key];
           }
         });
-        
-        Object.keys(savedStaffByMonth).forEach(key => {
+
+        Object.keys(savedStaffByMonth).forEach((key) => {
           const periodIndex = parseInt(key);
           if (periodIndex >= monthPeriods.length) {
             delete savedStaffByMonth[key];
           }
         });
-        
-        localStorage.setItem("schedule-by-month-data", JSON.stringify(savedScheduleByMonth));
-        localStorage.setItem("staff-by-month-data", JSON.stringify(savedStaffByMonth));
+
+        localStorage.setItem(
+          "schedule-by-month-data",
+          JSON.stringify(savedScheduleByMonth),
+        );
+        localStorage.setItem(
+          "staff-by-month-data",
+          JSON.stringify(savedStaffByMonth),
+        );
       } catch (cacheError) {
-        console.warn("Failed to clean up cached data after period deletion:", cacheError);
+        console.warn(
+          "Failed to clean up cached data after period deletion:",
+          cacheError,
+        );
       }
 
       // Simulate some processing time for visual feedback
@@ -981,7 +1036,9 @@ const ShiftScheduleEditor = ({
         title={deleteModal.title}
         message={deleteModal.message}
         type={deleteModal.type}
-        confirmText={deleteModal.type === "confirm" ? "Delete Period" : "Delete"}
+        confirmText={
+          deleteModal.type === "confirm" ? "Delete Period" : "Delete"
+        }
         cancelText="Cancel"
         autoCloseDelay={deleteModal.type === "success" ? 2000 : null}
       />
@@ -1015,23 +1072,30 @@ const ShiftScheduleEditor = ({
           <div className="bg-white border border-blue-200 rounded-lg shadow-lg p-4 max-w-sm">
             <div className="flex items-center space-x-2 mb-3">
               <div className="text-blue-600">
-                <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+                <svg
+                  className="w-5 h-5"
+                  fill="currentColor"
+                  viewBox="0 0 20 20"
+                >
                   <path d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
                 </svg>
               </div>
-              <h3 className="font-medium text-gray-900">AI Features Available</h3>
+              <h3 className="font-medium text-gray-900">
+                AI Features Available
+              </h3>
             </div>
             <p className="text-sm text-gray-600 mb-3">
-              Enable AI-powered schedule optimization, debug tools, and advanced analytics.
+              Enable AI-powered schedule optimization, debug tools, and advanced
+              analytics.
             </p>
             <div className="flex space-x-2">
               <button
                 onClick={enableAIFeatures}
                 disabled={!aiSupported}
                 className={`px-3 py-2 text-sm font-medium rounded ${
-                  aiSupported 
-                    ? 'bg-blue-600 text-white hover:bg-blue-700' 
-                    : 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                  aiSupported
+                    ? "bg-blue-600 text-white hover:bg-blue-700"
+                    : "bg-gray-300 text-gray-500 cursor-not-allowed"
                 }`}
               >
                 Enable AI Features
@@ -1051,7 +1115,7 @@ const ShiftScheduleEditor = ({
           </div>
         </div>
       )}
-      
+
       {/* AI Loading Progress */}
       {aiLoading && aiLoadingProgress && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
@@ -1062,18 +1126,28 @@ const ShiftScheduleEditor = ({
           />
         </div>
       )}
-      
+
       {/* AI Feature Error */}
       {aiFeatureError && (
         <div className="fixed top-4 left-1/2 transform -translate-x-1/2 z-50">
           <div className="bg-red-50 border border-red-200 rounded-lg p-4 max-w-md">
             <div className="flex items-center space-x-2 mb-2">
               <div className="text-red-600">
-                <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
-                  <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                <svg
+                  className="w-4 h-4"
+                  fill="currentColor"
+                  viewBox="0 0 20 20"
+                >
+                  <path
+                    fillRule="evenodd"
+                    d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z"
+                    clipRule="evenodd"
+                  />
                 </svg>
               </div>
-              <div className="text-sm font-medium text-red-800">AI Feature Error</div>
+              <div className="text-sm font-medium text-red-800">
+                AI Feature Error
+              </div>
             </div>
             <div className="text-sm text-red-700 mb-3">{aiFeatureError}</div>
             <div className="flex space-x-2">

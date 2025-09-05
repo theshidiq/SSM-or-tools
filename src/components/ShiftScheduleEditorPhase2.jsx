@@ -3,12 +3,7 @@
  * Builds on Phase 1 with caching, offline support, and conflict resolution
  */
 
-import React, {
-  useState,
-  useEffect,
-  useMemo,
-  useCallback,
-} from "react";
+import React, { useState, useEffect, useMemo, useCallback } from "react";
 
 // Import Phase 2 enhanced hooks
 import { useScheduleDataEnhanced } from "../hooks/useScheduleDataEnhanced";
@@ -16,7 +11,7 @@ import { useStaffRealtime } from "../hooks/useStaffRealtime";
 import { useSettingsData } from "../hooks/useSettingsData";
 
 // Import utilities
-import { 
+import {
   monthPeriods,
   addNextPeriod,
   getCurrentMonthIndex,
@@ -44,7 +39,10 @@ const ShiftScheduleEditorPhase2 = (props) => {
     try {
       return getCurrentMonthIndex();
     } catch (error) {
-      console.warn("Failed to get current month index, defaulting to 0:", error);
+      console.warn(
+        "Failed to get current month index, defaulting to 0:",
+        error,
+      );
       return 0;
     }
   });
@@ -95,7 +93,7 @@ const ShiftScheduleEditorPhase2 = (props) => {
   } = useScheduleDataEnhanced(currentMonthIndex, {
     enableAdvancedCache: true,
     enableOfflineSupport: true,
-    enableConflictResolution: true
+    enableConflictResolution: true,
   });
 
   // Settings hook (unchanged)
@@ -204,57 +202,84 @@ const ShiftScheduleEditorPhase2 = (props) => {
   const Phase2ConnectionStatus = () => {
     const getStatusColor = () => {
       switch (connectionStatus) {
-        case 'connected': return 'bg-green-100 text-green-800 border-green-200';
-        case 'saving': return 'bg-blue-100 text-blue-800 border-blue-200';
-        case 'loading': return 'bg-yellow-100 text-yellow-800 border-yellow-200';
-        case 'syncing': return 'bg-purple-100 text-purple-800 border-purple-200';
-        case 'offline_mode': return 'bg-orange-100 text-orange-800 border-orange-200';
-        case 'conflicts': return 'bg-red-100 text-red-800 border-red-200';
-        case 'disconnected': return 'bg-gray-100 text-gray-800 border-gray-200';
-        default: return 'bg-gray-100 text-gray-800 border-gray-200';
+        case "connected":
+          return "bg-green-100 text-green-800 border-green-200";
+        case "saving":
+          return "bg-blue-100 text-blue-800 border-blue-200";
+        case "loading":
+          return "bg-yellow-100 text-yellow-800 border-yellow-200";
+        case "syncing":
+          return "bg-purple-100 text-purple-800 border-purple-200";
+        case "offline_mode":
+          return "bg-orange-100 text-orange-800 border-orange-200";
+        case "conflicts":
+          return "bg-red-100 text-red-800 border-red-200";
+        case "disconnected":
+          return "bg-gray-100 text-gray-800 border-gray-200";
+        default:
+          return "bg-gray-100 text-gray-800 border-gray-200";
       }
     };
 
     const getStatusIcon = () => {
       switch (connectionStatus) {
-        case 'connected': return '🟢';
-        case 'saving': return '💾';
-        case 'loading': return '⏳';
-        case 'syncing': return '🔄';
-        case 'offline_mode': return '📱';
-        case 'conflicts': return '⚠️';
-        case 'disconnected': return '🔴';
-        default: return '❓';
+        case "connected":
+          return "🟢";
+        case "saving":
+          return "💾";
+        case "loading":
+          return "⏳";
+        case "syncing":
+          return "🔄";
+        case "offline_mode":
+          return "📱";
+        case "conflicts":
+          return "⚠️";
+        case "disconnected":
+          return "🔴";
+        default:
+          return "❓";
       }
     };
 
     const getStatusMessage = () => {
       switch (connectionStatus) {
-        case 'connected': return 'Connected';
-        case 'saving': return 'Saving...';
-        case 'loading': return 'Loading...';
-        case 'syncing': return 'Syncing...';
-        case 'offline_mode': return 'Offline Mode';
-        case 'conflicts': return 'Conflicts Detected';
-        case 'disconnected': return 'Disconnected';
-        default: return 'Unknown';
+        case "connected":
+          return "Connected";
+        case "saving":
+          return "Saving...";
+        case "loading":
+          return "Loading...";
+        case "syncing":
+          return "Syncing...";
+        case "offline_mode":
+          return "Offline Mode";
+        case "conflicts":
+          return "Conflicts Detected";
+        case "disconnected":
+          return "Disconnected";
+        default:
+          return "Unknown";
       }
     };
 
     return (
       <div className="fixed top-2 right-2 z-50">
-        <div className={`px-3 py-1 rounded-full text-xs font-medium border ${getStatusColor()}`}>
+        <div
+          className={`px-3 py-1 rounded-full text-xs font-medium border ${getStatusColor()}`}
+        >
           <div className="flex items-center gap-2">
             <span>{getStatusIcon()}</span>
             <span>{getStatusMessage()}</span>
           </div>
         </div>
-        
+
         {/* Performance metrics tooltip */}
-        {process.env.NODE_ENV === 'development' && (
+        {process.env.NODE_ENV === "development" && (
           <div className="mt-1 text-xs opacity-75">
             {cache && `Cache: ${cache.cacheStats.hitRate}`}
-            {offline && ` | Offline: ${offline.pendingOperations.length} pending`}
+            {offline &&
+              ` | Offline: ${offline.pendingOperations.length} pending`}
             {conflicts && ` | Conflicts: ${conflicts.activeConflicts.length}`}
           </div>
         )}
@@ -268,7 +293,7 @@ const ShiftScheduleEditorPhase2 = (props) => {
       <Phase2ConnectionStatus />
 
       {/* Phase 2 Badge */}
-      {process.env.NODE_ENV === 'development' && (
+      {process.env.NODE_ENV === "development" && (
         <div className="fixed top-12 right-2 z-40">
           <div className="bg-blue-100 text-blue-800 border border-blue-200 px-3 py-1 rounded-full text-xs font-medium">
             {phase} ({Object.values(features).filter(Boolean).length} features)
@@ -293,10 +318,20 @@ const ShiftScheduleEditorPhase2 = (props) => {
           </h1>
           <div className="flex items-center gap-4 text-sm text-gray-600">
             <span>Schedule ID: {currentScheduleId?.substring(0, 8)}...</span>
-            {isSaving && <span className="text-blue-600 animate-pulse">Auto-saving...</span>}
-            {features.advancedCache && <span className="text-green-600">📦 Cache</span>}
-            {features.offlineSupport && <span className="text-orange-600">📱 Offline</span>}
-            {features.conflictResolution && <span className="text-purple-600">⚖️ Conflicts</span>}
+            {isSaving && (
+              <span className="text-blue-600 animate-pulse">
+                Auto-saving...
+              </span>
+            )}
+            {features.advancedCache && (
+              <span className="text-green-600">📦 Cache</span>
+            )}
+            {features.offlineSupport && (
+              <span className="text-orange-600">📱 Offline</span>
+            )}
+            {features.conflictResolution && (
+              <span className="text-purple-600">⚖️ Conflicts</span>
+            )}
           </div>
         </div>
       </div>
@@ -409,7 +444,7 @@ const ShiftScheduleEditorPhase2 = (props) => {
         hasUnsavedChanges={hasUnsavedChanges}
         validationErrors={validationErrors}
         connectionStatus={settingsConnectionStatus}
-        onCheckConnection={() => console.log('Check connection')}
+        onCheckConnection={() => console.log("Check connection")}
         isAutosaving={isAutosaving}
         lastSaveTime={lastSaveTime}
         autosaveError={autosaveError}
@@ -432,9 +467,7 @@ const ShiftScheduleEditorPhase2 = (props) => {
             <div className="font-bold mb-2">Phase 2 Debug Info</div>
             <div>🔄 Status: {connectionStatus}</div>
             <div>📊 Data: {Object.keys(schedule).length} staff</div>
-            {cache && (
-              <div>📦 Cache: {cache.cacheStats.hitRate} hit rate</div>
-            )}
+            {cache && <div>📦 Cache: {cache.cacheStats.hitRate} hit rate</div>}
             {offline && (
               <div>📱 Offline: {offline.pendingOperations.length} pending</div>
             )}

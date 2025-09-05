@@ -220,11 +220,11 @@ export const useSupabase = () => {
 
     try {
       // Load specific UUID with actual schedule data
-      const targetId = scheduleId || '502c037b-9be1-4018-bc92-6970748df9e2';
-      
+      const targetId = scheduleId || "502c037b-9be1-4018-bc92-6970748df9e2";
+
       let query = supabase.from("schedules").select("*");
 
-      if (targetId && targetId !== 'latest') {
+      if (targetId && targetId !== "latest") {
         query = query.eq("id", targetId);
       } else {
         query = query.order("updated_at", { ascending: false }).limit(1);

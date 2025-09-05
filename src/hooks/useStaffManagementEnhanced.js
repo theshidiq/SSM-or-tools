@@ -3,11 +3,14 @@
  * Combines Phase 3's Supabase-first real-time with Phase 2's advanced features
  */
 
-import { useStaffManagementRealtime } from './useStaffManagementRealtime';
-import { useAdvancedCache } from './useAdvancedCache';
-import { useOfflineSupport, OPERATION_TYPES } from './useOfflineSupport';
-import { useConflictResolver, RESOLUTION_STRATEGIES } from '../utils/conflictResolver';
-import { useCallback, useEffect, useMemo } from 'react';
+import { useStaffManagementRealtime } from "./useStaffManagementRealtime";
+import { useAdvancedCache } from "./useAdvancedCache";
+import { useOfflineSupport, OPERATION_TYPES } from "./useOfflineSupport";
+import {
+  useConflictResolver,
+  RESOLUTION_STRATEGIES,
+} from "../utils/conflictResolver";
+import { useCallback, useEffect, useMemo } from "react";
 
 export const useStaffManagementEnhanced = (currentMonthIndex, options = {}) => {
   const {
@@ -17,257 +20,279 @@ export const useStaffManagementEnhanced = (currentMonthIndex, options = {}) => {
     cacheOptions = {},
     offlineOptions = {},
     conflictOptions = {
-      defaultStrategy: RESOLUTION_STRATEGIES.AUTOMATIC_MERGE
-    }
+      defaultStrategy: RESOLUTION_STRATEGIES.AUTOMATIC_MERGE,
+    },
   } = options;
 
   // Phase 3: Supabase-first real-time staff management
   const realtimeHook = useStaffManagementRealtime(currentMonthIndex);
-  
+
   // Phase 2: Advanced features
   const cacheHook = useAdvancedCache({
     enableMemoryCache: enableAdvancedCache,
     enableIndexedDBCache: enableAdvancedCache,
-    ...cacheOptions
+    ...cacheOptions,
   });
 
   const offlineHook = useOfflineSupport({
     enableOfflineMode: enableOfflineSupport,
     ...offlineOptions,
     onSyncSuccess: (synced, failed) => {
-      console.log(`📊 Phase 2+3: Synced ${synced} staff operations, ${failed} failed`);
+      console.log(
+        `📊 Phase 2+3: Synced ${synced} staff operations, ${failed} failed`,
+      );
       // Invalidate cache after successful sync
       cacheHook.invalidatePattern(`staff_${currentMonthIndex}`);
     },
     onOfflineChange: (isOffline) => {
-      console.log(`📱 Phase 2+3: Staff ${isOffline ? 'Offline' : 'Online'} mode activated`);
-    }
+      console.log(
+        `📱 Phase 2+3: Staff ${isOffline ? "Offline" : "Online"} mode activated`,
+      );
+    },
   });
 
   const conflictHook = useConflictResolver({
     enableUserChoice: enableConflictResolution,
-    ...conflictOptions
+    ...conflictOptions,
   });
 
   /**
    * Enhanced add staff with Phase 2 features
    */
-  const addStaffEnhanced = useCallback(async (newStaff) => {
-    const changeMetadata = {
-      type: 'staff_create',
-      staffId: newStaff.id,
-      staffData: newStaff,
-      period: currentMonthIndex,
-      timestamp: new Date().toISOString(),
-      operation: 'create'
-    };
+  const addStaffEnhanced = useCallback(
+    async (newStaff) => {
+      const changeMetadata = {
+        type: "staff_create",
+        staffId: newStaff.id,
+        staffData: newStaff,
+        period: currentMonthIndex,
+        timestamp: new Date().toISOString(),
+        operation: "create",
+      };
 
-    try {
-      // Try offline-capable create first
-      if (enableOfflineSupport) {
-        const success = await offlineHook.queueOperation({
-          type: OPERATION_TYPES.CREATE_STAFF,
-          payload: {
-            createFunction: () => realtimeHook.addStaff(newStaff),
-            staffData: newStaff
+      try {
+        // Try offline-capable create first
+        if (enableOfflineSupport) {
+          const success = await offlineHook.queueOperation({
+            type: OPERATION_TYPES.CREATE_STAFF,
+            payload: {
+              createFunction: () => realtimeHook.addStaff(newStaff),
+              staffData: newStaff,
+            },
+          });
+
+          if (success) {
+            // Invalidate relevant cache entries
+            await cacheHook.invalidate(`staff_${currentMonthIndex}`);
+            await cacheHook.invalidate(`staff_all`);
+
+            console.log("✅ Phase 2+3: Enhanced staff creation completed");
+            return realtimeHook.addStaff(newStaff);
           }
-        });
-
-        if (success) {
-          // Invalidate relevant cache entries
-          await cacheHook.invalidate(`staff_${currentMonthIndex}`);
-          await cacheHook.invalidate(`staff_all`);
-          
-          console.log('✅ Phase 2+3: Enhanced staff creation completed');
-          return realtimeHook.addStaff(newStaff);
         }
-      }
 
-      // Fallback to direct real-time create
-      const result = realtimeHook.addStaff(newStaff);
-      
-      // Update cache
-      await cacheHook.setCached(`staff_${newStaff.id}`, newStaff);
-      await cacheHook.invalidate(`staff_${currentMonthIndex}`);
+        // Fallback to direct real-time create
+        const result = realtimeHook.addStaff(newStaff);
 
-      return result;
-    } catch (error) {
-      console.error('Phase 2+3: Enhanced staff creation failed:', error);
-      
-      // Store for conflict resolution if needed
-      if (enableConflictResolution && error.isConflict) {
-        await conflictHook.handleConflict(changeMetadata, error.remoteChange);
+        // Update cache
+        await cacheHook.setCached(`staff_${newStaff.id}`, newStaff);
+        await cacheHook.invalidate(`staff_${currentMonthIndex}`);
+
+        return result;
+      } catch (error) {
+        console.error("Phase 2+3: Enhanced staff creation failed:", error);
+
+        // Store for conflict resolution if needed
+        if (enableConflictResolution && error.isConflict) {
+          await conflictHook.handleConflict(changeMetadata, error.remoteChange);
+        }
+
+        throw error;
       }
-      
-      throw error;
-    }
-  }, [
-    currentMonthIndex,
-    enableOfflineSupport,
-    enableConflictResolution,
-    offlineHook,
-    cacheHook,
-    conflictHook,
-    realtimeHook
-  ]);
+    },
+    [
+      currentMonthIndex,
+      enableOfflineSupport,
+      enableConflictResolution,
+      offlineHook,
+      cacheHook,
+      conflictHook,
+      realtimeHook,
+    ],
+  );
 
   /**
    * Enhanced update staff with Phase 2 features
    */
-  const updateStaffEnhanced = useCallback(async (staffId, updatedData) => {
-    const changeMetadata = {
-      type: 'staff_update',
-      staffId,
-      staffData: updatedData,
-      period: currentMonthIndex,
-      timestamp: new Date().toISOString(),
-      operation: 'update'
-    };
-
-    try {
-      // Try offline-capable update first
-      if (enableOfflineSupport) {
-        const success = await offlineHook.updateStaffOffline(
-          staffId,
-          updatedData,
-          (id, data) => realtimeHook.updateStaff(id, data)
-        );
-
-        if (success) {
-          // Invalidate relevant cache entries
-          await cacheHook.invalidate(`staff_${staffId}`);
-          await cacheHook.invalidate(`staff_${currentMonthIndex}`);
-          
-          console.log('✅ Phase 2+3: Enhanced staff update completed');
-          return true;
-        }
-      }
-
-      // Fallback to direct real-time update
-      realtimeHook.updateStaff(staffId, updatedData);
-      
-      // Update cache
-      await cacheHook.setCached(`staff_${staffId}`, {
+  const updateStaffEnhanced = useCallback(
+    async (staffId, updatedData) => {
+      const changeMetadata = {
+        type: "staff_update",
         staffId,
-        ...updatedData,
-        updatedAt: new Date().toISOString()
-      });
+        staffData: updatedData,
+        period: currentMonthIndex,
+        timestamp: new Date().toISOString(),
+        operation: "update",
+      };
 
-      return true;
-    } catch (error) {
-      console.error('Phase 2+3: Enhanced staff update failed:', error);
-      
-      // Store for conflict resolution if needed
-      if (enableConflictResolution && error.isConflict) {
-        await conflictHook.handleConflict(changeMetadata, error.remoteChange);
+      try {
+        // Try offline-capable update first
+        if (enableOfflineSupport) {
+          const success = await offlineHook.updateStaffOffline(
+            staffId,
+            updatedData,
+            (id, data) => realtimeHook.updateStaff(id, data),
+          );
+
+          if (success) {
+            // Invalidate relevant cache entries
+            await cacheHook.invalidate(`staff_${staffId}`);
+            await cacheHook.invalidate(`staff_${currentMonthIndex}`);
+
+            console.log("✅ Phase 2+3: Enhanced staff update completed");
+            return true;
+          }
+        }
+
+        // Fallback to direct real-time update
+        realtimeHook.updateStaff(staffId, updatedData);
+
+        // Update cache
+        await cacheHook.setCached(`staff_${staffId}`, {
+          staffId,
+          ...updatedData,
+          updatedAt: new Date().toISOString(),
+        });
+
+        return true;
+      } catch (error) {
+        console.error("Phase 2+3: Enhanced staff update failed:", error);
+
+        // Store for conflict resolution if needed
+        if (enableConflictResolution && error.isConflict) {
+          await conflictHook.handleConflict(changeMetadata, error.remoteChange);
+        }
+
+        throw error;
       }
-      
-      throw error;
-    }
-  }, [
-    currentMonthIndex,
-    enableOfflineSupport,
-    enableConflictResolution,
-    offlineHook,
-    cacheHook,
-    conflictHook,
-    realtimeHook
-  ]);
+    },
+    [
+      currentMonthIndex,
+      enableOfflineSupport,
+      enableConflictResolution,
+      offlineHook,
+      cacheHook,
+      conflictHook,
+      realtimeHook,
+    ],
+  );
 
   /**
    * Enhanced delete staff with Phase 2 features
    */
-  const deleteStaffEnhanced = useCallback(async (staffId) => {
-    const changeMetadata = {
-      type: 'staff_delete',
-      staffId,
-      period: currentMonthIndex,
-      timestamp: new Date().toISOString(),
-      operation: 'delete'
-    };
+  const deleteStaffEnhanced = useCallback(
+    async (staffId) => {
+      const changeMetadata = {
+        type: "staff_delete",
+        staffId,
+        period: currentMonthIndex,
+        timestamp: new Date().toISOString(),
+        operation: "delete",
+      };
 
-    try {
-      // Try offline-capable delete first
-      if (enableOfflineSupport) {
-        const success = await offlineHook.queueOperation({
-          type: OPERATION_TYPES.DELETE_STAFF,
-          staffId,
-          payload: {
-            deleteFunction: () => realtimeHook.deleteStaff(staffId)
+      try {
+        // Try offline-capable delete first
+        if (enableOfflineSupport) {
+          const success = await offlineHook.queueOperation({
+            type: OPERATION_TYPES.DELETE_STAFF,
+            staffId,
+            payload: {
+              deleteFunction: () => realtimeHook.deleteStaff(staffId),
+            },
+          });
+
+          if (success) {
+            // Invalidate relevant cache entries
+            await cacheHook.invalidate(`staff_${staffId}`);
+            await cacheHook.invalidate(`staff_${currentMonthIndex}`);
+
+            console.log("✅ Phase 2+3: Enhanced staff deletion completed");
+            realtimeHook.deleteStaff(staffId);
+            return;
           }
-        });
-
-        if (success) {
-          // Invalidate relevant cache entries
-          await cacheHook.invalidate(`staff_${staffId}`);
-          await cacheHook.invalidate(`staff_${currentMonthIndex}`);
-          
-          console.log('✅ Phase 2+3: Enhanced staff deletion completed');
-          realtimeHook.deleteStaff(staffId);
-          return;
         }
-      }
 
-      // Fallback to direct real-time delete
-      realtimeHook.deleteStaff(staffId);
-      
-      // Remove from cache
-      await cacheHook.invalidate(`staff_${staffId}`);
-      await cacheHook.invalidate(`staff_${currentMonthIndex}`);
+        // Fallback to direct real-time delete
+        realtimeHook.deleteStaff(staffId);
 
-    } catch (error) {
-      console.error('Phase 2+3: Enhanced staff deletion failed:', error);
-      
-      // Store for conflict resolution if needed
-      if (enableConflictResolution && error.isConflict) {
-        await conflictHook.handleConflict(changeMetadata, error.remoteChange);
+        // Remove from cache
+        await cacheHook.invalidate(`staff_${staffId}`);
+        await cacheHook.invalidate(`staff_${currentMonthIndex}`);
+      } catch (error) {
+        console.error("Phase 2+3: Enhanced staff deletion failed:", error);
+
+        // Store for conflict resolution if needed
+        if (enableConflictResolution && error.isConflict) {
+          await conflictHook.handleConflict(changeMetadata, error.remoteChange);
+        }
+
+        throw error;
       }
-      
-      throw error;
-    }
-  }, [
-    currentMonthIndex,
-    enableOfflineSupport,
-    enableConflictResolution,
-    offlineHook,
-    cacheHook,
-    conflictHook,
-    realtimeHook
-  ]);
+    },
+    [
+      currentMonthIndex,
+      enableOfflineSupport,
+      enableConflictResolution,
+      offlineHook,
+      cacheHook,
+      conflictHook,
+      realtimeHook,
+    ],
+  );
 
   /**
    * Enhanced staff loading with advanced caching
    */
-  const loadStaffEnhanced = useCallback(async (period = currentMonthIndex) => {
-    const cacheKey = `staff_${period}`;
+  const loadStaffEnhanced = useCallback(
+    async (period = currentMonthIndex) => {
+      const cacheKey = `staff_${period}`;
 
-    try {
-      // Try cache first, then fallback to real-time loading
-      const cachedData = await cacheHook.getCached(
-        cacheKey,
-        async () => {
-          console.log(`🔄 Phase 2+3: Cache miss, loading from real-time source for period ${period}`);
-          return realtimeHook.staffMembers; // Current staff data
-        },
-        60 // 1 hour cache TTL
-      );
+      try {
+        // Try cache first, then fallback to real-time loading
+        const cachedData = await cacheHook.getCached(
+          cacheKey,
+          async () => {
+            console.log(
+              `🔄 Phase 2+3: Cache miss, loading from real-time source for period ${period}`,
+            );
+            return realtimeHook.staffMembers; // Current staff data
+          },
+          60, // 1 hour cache TTL
+        );
 
-      return cachedData;
-    } catch (error) {
-      console.error(`Phase 2+3: Enhanced staff loading failed for period ${period}:`, error);
-      
-      // Try offline data as last resort
-      if (enableOfflineSupport) {
-        const offlineData = await cacheHook.getCached(`offline_staff_${period}`);
-        if (offlineData) {
-          console.log('📱 Phase 2+3: Using offline staff data');
-          return offlineData;
+        return cachedData;
+      } catch (error) {
+        console.error(
+          `Phase 2+3: Enhanced staff loading failed for period ${period}:`,
+          error,
+        );
+
+        // Try offline data as last resort
+        if (enableOfflineSupport) {
+          const offlineData = await cacheHook.getCached(
+            `offline_staff_${period}`,
+          );
+          if (offlineData) {
+            console.log("📱 Phase 2+3: Using offline staff data");
+            return offlineData;
+          }
         }
+
+        throw error;
       }
-      
-      throw error;
-    }
-  }, [currentMonthIndex, cacheHook, realtimeHook, enableOfflineSupport]);
+    },
+    [currentMonthIndex, cacheHook, realtimeHook, enableOfflineSupport],
+  );
 
   /**
    * Get enhanced performance metrics
@@ -278,20 +303,24 @@ export const useStaffManagementEnhanced = (currentMonthIndex, options = {}) => {
         isConnected: realtimeHook.isConnected,
         isSaving: realtimeHook.isSaving,
         isLoading: realtimeHook.isLoading,
-        staffCount: realtimeHook.staffMembers.length
+        staffCount: realtimeHook.staffMembers.length,
       },
       phase2: {
         cache: enableAdvancedCache ? cacheHook.getCacheMetrics() : null,
-        offline: enableOfflineSupport ? {
-          isOnline: offlineHook.isOnline,
-          pendingOperations: offlineHook.pendingOperations.length,
-          syncStats: offlineHook.syncStats
-        } : null,
-        conflicts: enableConflictResolution ? {
-          activeConflicts: conflictHook.activeConflicts.length,
-          conflictStats: conflictHook.conflictStats
-        } : null
-      }
+        offline: enableOfflineSupport
+          ? {
+              isOnline: offlineHook.isOnline,
+              pendingOperations: offlineHook.pendingOperations.length,
+              syncStats: offlineHook.syncStats,
+            }
+          : null,
+        conflicts: enableConflictResolution
+          ? {
+              activeConflicts: conflictHook.activeConflicts.length,
+              conflictStats: conflictHook.conflictStats,
+            }
+          : null,
+      },
     };
 
     return metrics;
@@ -302,25 +331,35 @@ export const useStaffManagementEnhanced = (currentMonthIndex, options = {}) => {
     conflictHook,
     enableAdvancedCache,
     enableOfflineSupport,
-    enableConflictResolution
+    enableConflictResolution,
   ]);
 
   // Auto-sync pending operations when back online
   useEffect(() => {
-    if (enableOfflineSupport && offlineHook.isOnline && offlineHook.pendingOperations.length > 0) {
+    if (
+      enableOfflineSupport &&
+      offlineHook.isOnline &&
+      offlineHook.pendingOperations.length > 0
+    ) {
       offlineHook.syncPendingOperations();
     }
-  }, [offlineHook.isOnline, offlineHook.pendingOperations.length, offlineHook.syncPendingOperations, enableOfflineSupport]);
+  }, [
+    offlineHook.isOnline,
+    offlineHook.pendingOperations.length,
+    offlineHook.syncPendingOperations,
+    enableOfflineSupport,
+  ]);
 
   // Enhanced connection status
   const connectionStatus = useMemo(() => {
-    if (!realtimeHook.isConnected) return 'disconnected';
-    if (realtimeHook.isSaving) return 'saving';
-    if (realtimeHook.isLoading) return 'loading';
-    if (enableOfflineSupport && !offlineHook.isOnline) return 'offline_mode';
-    if (enableOfflineSupport && offlineHook.isSyncing) return 'syncing';
-    if (enableConflictResolution && conflictHook.activeConflicts.length > 0) return 'conflicts';
-    return 'connected';
+    if (!realtimeHook.isConnected) return "disconnected";
+    if (realtimeHook.isSaving) return "saving";
+    if (realtimeHook.isLoading) return "loading";
+    if (enableOfflineSupport && !offlineHook.isOnline) return "offline_mode";
+    if (enableOfflineSupport && offlineHook.isSyncing) return "syncing";
+    if (enableConflictResolution && conflictHook.activeConflicts.length > 0)
+      return "conflicts";
+    return "connected";
   }, [
     realtimeHook.isConnected,
     realtimeHook.isSaving,
@@ -329,50 +368,51 @@ export const useStaffManagementEnhanced = (currentMonthIndex, options = {}) => {
     offlineHook?.isSyncing,
     conflictHook?.activeConflicts?.length,
     enableOfflineSupport,
-    enableConflictResolution
+    enableConflictResolution,
   ]);
 
   return {
     // Phase 3 (Real-time) - Enhanced versions
     staffMembers: realtimeHook.staffMembers,
-    
+
     // Enhanced operations
     addStaff: addStaffEnhanced,
     updateStaff: updateStaffEnhanced,
     deleteStaff: deleteStaffEnhanced,
     editStaffName: realtimeHook.editStaffName,
     reorderStaff: realtimeHook.reorderStaff,
-    createNewStaff: (staffData) => addStaffEnhanced({
-      ...staffData,
-      id: `01934d2c-8a7b-7${Date.now().toString(16).slice(-3)}-8${Math.random().toString(16).slice(2, 5)}-${Math.random().toString(16).slice(2, 14)}`
-    }),
+    createNewStaff: (staffData) =>
+      addStaffEnhanced({
+        ...staffData,
+        id: `01934d2c-8a7b-7${Date.now().toString(16).slice(-3)}-8${Math.random().toString(16).slice(2, 5)}-${Math.random().toString(16).slice(2, 14)}`,
+      }),
     loadStaff: loadStaffEnhanced,
-    
+
     // Phase 3 Status
     isConnected: realtimeHook.isConnected,
     isLoading: realtimeHook.isLoading,
     isSaving: realtimeHook.isSaving,
     error: realtimeHook.error,
-    
+
     // Phase 2 Features
     cache: enableAdvancedCache ? cacheHook : null,
     offline: enableOfflineSupport ? offlineHook : null,
     conflicts: enableConflictResolution ? conflictHook : null,
-    
+
     // Enhanced Status
     connectionStatus,
     isEnhanced: true,
-    phase: 'Phase 2+3: Enhanced Real-time Staff Management',
-    
+    phase: "Phase 2+3: Enhanced Real-time Staff Management",
+
     // Enhanced Metrics
     getPerformanceMetrics,
-    
+
     // Feature flags
     features: {
       advancedCache: enableAdvancedCache,
       offlineSupport: enableOfflineSupport,
-      conflictResolution: enableConflictResolution
-    }
+      conflictResolution: enableConflictResolution,
+    },
   };
 };
 

@@ -1,39 +1,39 @@
 /**
  * Phase 2 Staff Management Integration Example
- * 
+ *
  * This example shows how to switch from useStaffManagement to useStaffRealtime
  * while maintaining complete API compatibility.
  */
 
-import React, { useState } from 'react';
+import React, { useState } from "react";
 
 // Import both hooks for comparison
-import { useStaffManagement } from '../hooks/useStaffManagement';
-import { useStaffRealtime } from '../hooks/useStaffRealtime';
+import { useStaffManagement } from "../hooks/useStaffManagement";
+import { useStaffRealtime } from "../hooks/useStaffRealtime";
 
 const StaffManagementIntegrationExample = () => {
   const [currentMonthIndex, setCurrentMonthIndex] = useState(0);
   const [useRealtimeHook, setUseRealtimeHook] = useState(false);
 
   // Example: Switch between hooks seamlessly
-  const staffHookProps = useRealtimeHook 
+  const staffHookProps = useRealtimeHook
     ? useStaffRealtime(currentMonthIndex)
     : useStaffManagement(currentMonthIndex, null, null);
 
   // Destructure the same API from either hook
   const {
-    staff,              // Array of staff members
-    loading,            // Loading state
-    addStaff,           // Function to add staff
-    updateStaff,        // Function to update staff
-    deleteStaff,        // Function to delete staff  
-    reorderStaff,       // Function to reorder staff
-    currentPeriod,      // Current period context (realtime only)
-    setCurrentPeriod,   // Period setter (realtime only)
-    isRealtime,         // Phase identification
-    phase,              // Phase description
-    error,              // Error state
-    isConnected         // Connection status (realtime only)
+    staff, // Array of staff members
+    loading, // Loading state
+    addStaff, // Function to add staff
+    updateStaff, // Function to update staff
+    deleteStaff, // Function to delete staff
+    reorderStaff, // Function to reorder staff
+    currentPeriod, // Current period context (realtime only)
+    setCurrentPeriod, // Period setter (realtime only)
+    isRealtime, // Phase identification
+    phase, // Phase description
+    error, // Error state
+    isConnected, // Connection status (realtime only)
   } = staffHookProps;
 
   // Example staff operations - identical API for both hooks
@@ -41,32 +41,45 @@ const StaffManagementIntegrationExample = () => {
     const newStaff = {
       id: `staff-${Date.now()}`,
       name: "新しいスタッフ",
-      position: "Server", 
+      position: "Server",
       status: "社員",
       startPeriod: null,
-      endPeriod: null
+      endPeriod: null,
     };
 
     addStaff(newStaff, (updatedStaff) => {
-      console.log('Staff added successfully:', updatedStaff.length, 'total staff');
+      console.log(
+        "Staff added successfully:",
+        updatedStaff.length,
+        "total staff",
+      );
     });
   };
 
   const handleUpdateStaff = (staffId) => {
     const updatedData = {
       name: "Updated Name",
-      position: "Manager"
+      position: "Manager",
     };
 
     updateStaff(staffId, updatedData, (updatedStaff) => {
-      console.log('Staff updated successfully');
+      console.log("Staff updated successfully");
     });
   };
 
   const handleDeleteStaff = (staffId) => {
-    deleteStaff(staffId, {}, () => {}, (newStaffMembers) => {
-      console.log('Staff deleted successfully:', newStaffMembers.length, 'remaining');
-    });
+    deleteStaff(
+      staffId,
+      {},
+      () => {},
+      (newStaffMembers) => {
+        console.log(
+          "Staff deleted successfully:",
+          newStaffMembers.length,
+          "remaining",
+        );
+      },
+    );
   };
 
   return (
@@ -75,7 +88,7 @@ const StaffManagementIntegrationExample = () => {
         <h1 className="text-2xl font-bold mb-4">
           Staff Management Integration Example
         </h1>
-        
+
         {/* Hook Switcher */}
         <div className="mb-4 p-4 bg-gray-100 rounded">
           <label className="flex items-center space-x-2">
@@ -85,16 +98,20 @@ const StaffManagementIntegrationExample = () => {
               onChange={(e) => setUseRealtimeHook(e.target.checked)}
               className="rounded"
             />
-            <span className="font-medium">
-              Use Real-time Hook (Phase 2)
-            </span>
+            <span className="font-medium">Use Real-time Hook (Phase 2)</span>
           </label>
-          
+
           <div className="mt-2 text-sm text-gray-600">
-            <div>Current Phase: <strong>{phase || "Phase 1: localStorage"}</strong></div>
-            <div>Real-time: <strong>{isRealtime ? "Yes" : "No"}</strong></div>
+            <div>
+              Current Phase: <strong>{phase || "Phase 1: localStorage"}</strong>
+            </div>
+            <div>
+              Real-time: <strong>{isRealtime ? "Yes" : "No"}</strong>
+            </div>
             {isConnected !== undefined && (
-              <div>Connected: <strong>{isConnected ? "Yes" : "No"}</strong></div>
+              <div>
+                Connected: <strong>{isConnected ? "Yes" : "No"}</strong>
+              </div>
             )}
           </div>
         </div>
@@ -115,7 +132,7 @@ const StaffManagementIntegrationExample = () => {
             }}
             className="border rounded px-3 py-1"
           >
-            {[0, 1, 2, 3, 4, 5].map(period => (
+            {[0, 1, 2, 3, 4, 5].map((period) => (
               <option key={period} value={period}>
                 Period {period}
               </option>
@@ -148,7 +165,7 @@ const StaffManagementIntegrationExample = () => {
           >
             Add Staff
           </button>
-          
+
           {staff.length > 0 && (
             <>
               <button
@@ -157,7 +174,7 @@ const StaffManagementIntegrationExample = () => {
               >
                 Update First Staff
               </button>
-              
+
               <button
                 onClick={() => handleDeleteStaff(staff[0].id)}
                 className="px-4 py-2 bg-red-500 text-white rounded hover:bg-red-600"
@@ -174,7 +191,7 @@ const StaffManagementIntegrationExample = () => {
         <h2 className="text-lg font-semibold mb-3">
           Current Staff ({staff.length})
         </h2>
-        
+
         {staff.length === 0 ? (
           <p className="text-gray-500">No staff members found.</p>
         ) : (
@@ -191,10 +208,11 @@ const StaffManagementIntegrationExample = () => {
                       {staffMember.position} • {staffMember.status}
                     </p>
                     <p className="text-xs text-gray-500">
-                      Order: {staffMember.order || index} • ID: {staffMember.id.slice(-8)}
+                      Order: {staffMember.order || index} • ID:{" "}
+                      {staffMember.id.slice(-8)}
                     </p>
                   </div>
-                  
+
                   <div className="flex gap-2">
                     <button
                       onClick={() => handleUpdateStaff(staffMember.id)}
@@ -220,17 +238,48 @@ const StaffManagementIntegrationExample = () => {
       <div className="p-4 bg-gray-50 rounded">
         <h3 className="font-semibold mb-2">API Compatibility</h3>
         <div className="text-sm text-gray-700 space-y-1">
-          <div>✅ <code>staff</code> - Array of staff members</div>
-          <div>✅ <code>loading</code> - Loading state</div>
-          <div>✅ <code>addStaff(newStaff, onSuccess)</code> - Add staff member</div>
-          <div>✅ <code>updateStaff(staffId, updatedData, onSuccess)</code> - Update staff</div>
-          <div>✅ <code>deleteStaff(staffId, schedule, updateSchedule, onSuccess)</code> - Delete staff</div>
-          <div>✅ <code>reorderStaff(reorderedStaff, onSuccess)</code> - Reorder staff</div>
-          <div>✅ <code>editStaffName(staffId, newName, onSuccess)</code> - Edit name</div>
-          <div>✅ <code>createNewStaff(...args)</code> - Create with schedule integration</div>
-          <div>✅ <code>handleCreateStaff(staffData, onSuccess)</code> - Handle creation</div>
-          <div>➕ <code>currentPeriod / setCurrentPeriod</code> - Real-time only</div>
-          <div>➕ <code>isRealtime / isConnected</code> - Real-time status</div>
+          <div>
+            ✅ <code>staff</code> - Array of staff members
+          </div>
+          <div>
+            ✅ <code>loading</code> - Loading state
+          </div>
+          <div>
+            ✅ <code>addStaff(newStaff, onSuccess)</code> - Add staff member
+          </div>
+          <div>
+            ✅ <code>updateStaff(staffId, updatedData, onSuccess)</code> -
+            Update staff
+          </div>
+          <div>
+            ✅{" "}
+            <code>
+              deleteStaff(staffId, schedule, updateSchedule, onSuccess)
+            </code>{" "}
+            - Delete staff
+          </div>
+          <div>
+            ✅ <code>reorderStaff(reorderedStaff, onSuccess)</code> - Reorder
+            staff
+          </div>
+          <div>
+            ✅ <code>editStaffName(staffId, newName, onSuccess)</code> - Edit
+            name
+          </div>
+          <div>
+            ✅ <code>createNewStaff(...args)</code> - Create with schedule
+            integration
+          </div>
+          <div>
+            ✅ <code>handleCreateStaff(staffData, onSuccess)</code> - Handle
+            creation
+          </div>
+          <div>
+            ➕ <code>currentPeriod / setCurrentPeriod</code> - Real-time only
+          </div>
+          <div>
+            ➕ <code>isRealtime / isConnected</code> - Real-time status
+          </div>
         </div>
       </div>
     </div>

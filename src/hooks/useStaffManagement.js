@@ -164,7 +164,8 @@ export const useStaffManagement = (
                 periodStaff.length > 0
               ) {
                 // Check each staff member to see if they should be active in current period
-                const currentDateRange = safeGenerateDateRange(currentMonthIndex);
+                const currentDateRange =
+                  safeGenerateDateRange(currentMonthIndex);
                 const activeInheritedStaff = periodStaff.filter((staff) => {
                   if (!staff) return false;
 
@@ -260,7 +261,8 @@ export const useStaffManagement = (
                 Array.isArray(laterPeriodStaff) &&
                 laterPeriodStaff.length > 0
               ) {
-                const currentDateRange = safeGenerateDateRange(currentMonthIndex);
+                const currentDateRange =
+                  safeGenerateDateRange(currentMonthIndex);
 
                 laterPeriodStaff.forEach((staff) => {
                   if (!staff) return;
@@ -380,7 +382,7 @@ export const useStaffManagement = (
         const { _staff_members, ...scheduleData } =
           supabaseScheduleData.schedule_data;
         const staffIds = Object.keys(scheduleData);
-        
+
         if (staffIds.length > 0) {
           // Create staff objects from schedule data keys
           const extractedStaff = staffIds.map((staffId) => ({

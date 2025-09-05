@@ -33,7 +33,6 @@ export class AIFoundation {
    * @returns {Object} Initialization result
    */
   async initialize(_options = {}) {
-
     try {
       const startTime = Date.now();
 

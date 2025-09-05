@@ -3,23 +3,23 @@
  * Handles multi-user editing conflicts with sophisticated resolution strategies
  */
 
-import React from 'react';
+import React from "react";
 
 // Conflict types
 export const CONFLICT_TYPES = {
-  CONCURRENT_EDIT: 'concurrent_edit',
-  VERSION_MISMATCH: 'version_mismatch',
-  DELETE_MODIFIED: 'delete_modified',
-  MODIFY_DELETED: 'modify_deleted'
+  CONCURRENT_EDIT: "concurrent_edit",
+  VERSION_MISMATCH: "version_mismatch",
+  DELETE_MODIFIED: "delete_modified",
+  MODIFY_DELETED: "modify_deleted",
 };
 
 // Resolution strategies
 export const RESOLUTION_STRATEGIES = {
-  LAST_WRITER_WINS: 'last_writer_wins',
-  FIRST_WRITER_WINS: 'first_writer_wins',
-  MERGE_CHANGES: 'merge_changes',
-  USER_CHOICE: 'user_choice',
-  AUTOMATIC_MERGE: 'automatic_merge'
+  LAST_WRITER_WINS: "last_writer_wins",
+  FIRST_WRITER_WINS: "first_writer_wins",
+  MERGE_CHANGES: "merge_changes",
+  USER_CHOICE: "user_choice",
+  AUTOMATIC_MERGE: "automatic_merge",
 };
 
 /**
@@ -27,7 +27,8 @@ export const RESOLUTION_STRATEGIES = {
  */
 export class ConflictResolver {
   constructor(options = {}) {
-    this.defaultStrategy = options.defaultStrategy || RESOLUTION_STRATEGIES.LAST_WRITER_WINS;
+    this.defaultStrategy =
+      options.defaultStrategy || RESOLUTION_STRATEGIES.LAST_WRITER_WINS;
     this.enableUserChoice = options.enableUserChoice !== false;
     this.mergeTimeout = options.mergeTimeout || 30000; // 30 seconds
     this.conflictLog = [];
@@ -52,11 +53,11 @@ export class ConflictResolver {
         localTimestamp: localChange.timestamp,
         remoteTimestamp: remoteChange.timestamp,
         staffId: localChange.staffId || remoteChange.staffId,
-        dateKey: localChange.dateKey || remoteChange.dateKey
-      }
+        dateKey: localChange.dateKey || remoteChange.dateKey,
+      },
     };
 
-    console.warn('🔥 Conflict detected:', conflict);
+    console.warn("🔥 Conflict detected:", conflict);
     this.conflictLog.push(conflict);
 
     return conflict;
@@ -65,9 +66,15 @@ export class ConflictResolver {
   /**
    * Resolve a conflict using the specified strategy
    */
-  async resolveConflict(conflict, strategy = this.defaultStrategy, userChoice = null) {
+  async resolveConflict(
+    conflict,
+    strategy = this.defaultStrategy,
+    userChoice = null,
+  ) {
     try {
-      console.log(`🔧 Resolving conflict ${conflict.id} using strategy: ${strategy}`);
+      console.log(
+        `🔧 Resolving conflict ${conflict.id} using strategy: ${strategy}`,
+      );
 
       let resolution;
 
@@ -103,15 +110,17 @@ export class ConflictResolver {
       console.log(`✅ Conflict ${conflict.id} resolved:`, resolution);
 
       return resolution;
-
     } catch (error) {
       console.error(`Failed to resolve conflict ${conflict.id}:`, error);
-      
+
       // Fallback to last writer wins
       if (strategy !== RESOLUTION_STRATEGIES.LAST_WRITER_WINS) {
-        return this.resolveConflict(conflict, RESOLUTION_STRATEGIES.LAST_WRITER_WINS);
+        return this.resolveConflict(
+          conflict,
+          RESOLUTION_STRATEGIES.LAST_WRITER_WINS,
+        );
       }
-      
+
       throw error;
     }
   }
@@ -130,11 +139,17 @@ export class ConflictResolver {
     }
 
     // Check for delete/modify conflicts
-    if (localChange.operation === 'delete' && remoteChange.operation === 'update') {
+    if (
+      localChange.operation === "delete" &&
+      remoteChange.operation === "update"
+    ) {
       return CONFLICT_TYPES.DELETE_MODIFIED;
     }
 
-    if (localChange.operation === 'update' && remoteChange.operation === 'delete') {
+    if (
+      localChange.operation === "update" &&
+      remoteChange.operation === "delete"
+    ) {
       return CONFLICT_TYPES.MODIFY_DELETED;
     }
 
@@ -152,10 +167,10 @@ export class ConflictResolver {
     const loser = winner === conflict.local ? conflict.remote : conflict.local;
 
     return {
-      type: 'accepted',
+      type: "accepted",
       acceptedChange: winner,
       rejectedChange: loser,
-      reason: `${winner === conflict.local ? 'Local' : 'Remote'} change was more recent`
+      reason: `${winner === conflict.local ? "Local" : "Remote"} change was more recent`,
     };
   }
 
@@ -170,10 +185,10 @@ export class ConflictResolver {
     const loser = winner === conflict.local ? conflict.remote : conflict.local;
 
     return {
-      type: 'accepted',
+      type: "accepted",
       acceptedChange: winner,
       rejectedChange: loser,
-      reason: `${winner === conflict.local ? 'Local' : 'Remote'} change came first`
+      reason: `${winner === conflict.local ? "Local" : "Remote"} change came first`,
     };
   }
 
@@ -183,16 +198,16 @@ export class ConflictResolver {
   async _resolveMergeChanges(conflict) {
     try {
       const merged = await this._mergeChanges(conflict.local, conflict.remote);
-      
+
       return {
-        type: 'merged',
+        type: "merged",
         mergedChange: merged,
         originalLocal: conflict.local,
         originalRemote: conflict.remote,
-        reason: 'Changes were successfully merged'
+        reason: "Changes were successfully merged",
       };
     } catch (error) {
-      console.warn('Merge failed, falling back to last writer wins:', error);
+      console.warn("Merge failed, falling back to last writer wins:", error);
       return this._resolveLastWriterWins(conflict);
     }
   }
@@ -202,26 +217,28 @@ export class ConflictResolver {
    */
   async _resolveUserChoice(conflict, userChoice) {
     if (userChoice) {
-      const chosenChange = userChoice === 'local' ? conflict.local : conflict.remote;
-      const rejectedChange = userChoice === 'local' ? conflict.remote : conflict.local;
+      const chosenChange =
+        userChoice === "local" ? conflict.local : conflict.remote;
+      const rejectedChange =
+        userChoice === "local" ? conflict.remote : conflict.local;
 
       return {
-        type: 'user_chosen',
+        type: "user_chosen",
         acceptedChange: chosenChange,
         rejectedChange: rejectedChange,
-        reason: `User chose ${userChoice} change`
+        reason: `User chose ${userChoice} change`,
       };
     }
 
     // If no user choice provided, present options
     return {
-      type: 'needs_user_input',
+      type: "needs_user_input",
       options: {
         local: conflict.local,
         remote: conflict.remote,
-        merge: await this._canMerge(conflict.local, conflict.remote)
+        merge: await this._canMerge(conflict.local, conflict.remote),
       },
-      reason: 'User input required for resolution'
+      reason: "User input required for resolution",
     };
   }
 
@@ -246,7 +263,11 @@ export class ConflictResolver {
    */
   async _canMerge(localChange, remoteChange) {
     // Can merge if they affect different fields/properties
-    if (localChange.field && remoteChange.field && localChange.field !== remoteChange.field) {
+    if (
+      localChange.field &&
+      remoteChange.field &&
+      localChange.field !== remoteChange.field
+    ) {
       return true;
     }
 
@@ -266,19 +287,22 @@ export class ConflictResolver {
     const merged = {
       ...localChange,
       timestamp: new Date().toISOString(),
-      operation: 'merged',
+      operation: "merged",
       mergedFrom: {
         local: localChange,
-        remote: remoteChange
-      }
+        remote: remoteChange,
+      },
     };
 
     // Merge based on change type
-    if (localChange.type === 'shift_update' && remoteChange.type === 'shift_update') {
+    if (
+      localChange.type === "shift_update" &&
+      remoteChange.type === "shift_update"
+    ) {
       // For shift updates, prefer the more recent non-empty value
-      const localValue = localChange.value || '';
-      const remoteValue = remoteChange.value || '';
-      
+      const localValue = localChange.value || "";
+      const remoteValue = remoteChange.value || "";
+
       if (!localValue && remoteValue) {
         merged.value = remoteValue;
       } else if (localValue && !remoteValue) {
@@ -289,7 +313,10 @@ export class ConflictResolver {
         const remoteTime = new Date(remoteChange.timestamp);
         merged.value = localTime > remoteTime ? localValue : remoteValue;
       }
-    } else if (localChange.type === 'staff_update' && remoteChange.type === 'staff_update') {
+    } else if (
+      localChange.type === "staff_update" &&
+      remoteChange.type === "staff_update"
+    ) {
       // Merge staff updates by field
       merged.value = {
         ...remoteChange.value,
@@ -298,8 +325,8 @@ export class ConflictResolver {
         _mergeInfo: {
           localFields: Object.keys(localChange.value || {}),
           remoteFields: Object.keys(remoteChange.value || {}),
-          mergedAt: merged.timestamp
-        }
+          mergedAt: merged.timestamp,
+        },
       };
     }
 
@@ -312,20 +339,20 @@ export class ConflictResolver {
   _areValuesCompatible(value1, value2) {
     // Empty values are compatible with anything
     if (!value1 || !value2) return true;
-    
+
     // Same values are compatible
     if (value1 === value2) return true;
-    
+
     // Different shift symbols are generally incompatible
-    if (typeof value1 === 'string' && typeof value2 === 'string') {
+    if (typeof value1 === "string" && typeof value2 === "string") {
       return false;
     }
-    
+
     // Objects can potentially be merged
-    if (typeof value1 === 'object' && typeof value2 === 'object') {
+    if (typeof value1 === "object" && typeof value2 === "object") {
       return true;
     }
-    
+
     return false;
   }
 
@@ -346,10 +373,11 @@ export class ConflictResolver {
     const byType = {};
     const byStrategy = {};
 
-    this.conflictLog.forEach(conflict => {
+    this.conflictLog.forEach((conflict) => {
       byType[conflict.type] = (byType[conflict.type] || 0) + 1;
       if (conflict.resolvedStrategy) {
-        byStrategy[conflict.resolvedStrategy] = (byStrategy[conflict.resolvedStrategy] || 0) + 1;
+        byStrategy[conflict.resolvedStrategy] =
+          (byStrategy[conflict.resolvedStrategy] || 0) + 1;
       }
     });
 
@@ -357,7 +385,7 @@ export class ConflictResolver {
       total,
       byType,
       byStrategy,
-      recent: this.conflictLog.slice(-10)
+      recent: this.conflictLog.slice(-10),
     };
   }
 
@@ -366,7 +394,7 @@ export class ConflictResolver {
    */
   clearHistory() {
     this.conflictLog = [];
-    console.log('🗑️ Conflict history cleared');
+    console.log("🗑️ Conflict history cleared");
   }
 }
 
@@ -383,59 +411,68 @@ export const useConflictResolver = (options = {}) => {
   /**
    * Handle a new conflict
    */
-  const handleConflict = React.useCallback(async (localChange, remoteChange, strategy) => {
-    const conflict = resolver.detectConflict(localChange, remoteChange);
-    
-    if (!conflict) return null;
+  const handleConflict = React.useCallback(
+    async (localChange, remoteChange, strategy) => {
+      const conflict = resolver.detectConflict(localChange, remoteChange);
 
-    setActiveConflicts(prev => [...prev, conflict]);
+      if (!conflict) return null;
 
-    try {
-      const resolution = await resolver.resolveConflict(conflict, strategy);
-      
-      // Remove from active conflicts
-      setActiveConflicts(prev => prev.filter(c => c.id !== conflict.id));
-      
-      // Update stats
-      setConflictStats(resolver.getConflictStats());
-      
-      return resolution;
-    } catch (error) {
-      console.error('Conflict resolution failed:', error);
-      return null;
-    }
-  }, [resolver]);
+      setActiveConflicts((prev) => [...prev, conflict]);
+
+      try {
+        const resolution = await resolver.resolveConflict(conflict, strategy);
+
+        // Remove from active conflicts
+        setActiveConflicts((prev) => prev.filter((c) => c.id !== conflict.id));
+
+        // Update stats
+        setConflictStats(resolver.getConflictStats());
+
+        return resolution;
+      } catch (error) {
+        console.error("Conflict resolution failed:", error);
+        return null;
+      }
+    },
+    [resolver],
+  );
 
   /**
    * Resolve conflict with user choice
    */
-  const resolveWithUserChoice = React.useCallback(async (conflictId, choice) => {
-    const conflict = activeConflicts.find(c => c.id === conflictId);
-    if (!conflict) return null;
+  const resolveWithUserChoice = React.useCallback(
+    async (conflictId, choice) => {
+      const conflict = activeConflicts.find((c) => c.id === conflictId);
+      if (!conflict) return null;
 
-    try {
-      const resolution = await resolver.resolveConflict(
-        conflict, 
-        RESOLUTION_STRATEGIES.USER_CHOICE, 
-        choice
-      );
-      
-      setActiveConflicts(prev => prev.filter(c => c.id !== conflictId));
-      setConflictStats(resolver.getConflictStats());
-      
-      return resolution;
-    } catch (error) {
-      console.error('User choice resolution failed:', error);
-      return null;
-    }
-  }, [activeConflicts, resolver]);
+      try {
+        const resolution = await resolver.resolveConflict(
+          conflict,
+          RESOLUTION_STRATEGIES.USER_CHOICE,
+          choice,
+        );
+
+        setActiveConflicts((prev) => prev.filter((c) => c.id !== conflictId));
+        setConflictStats(resolver.getConflictStats());
+
+        return resolution;
+      } catch (error) {
+        console.error("User choice resolution failed:", error);
+        return null;
+      }
+    },
+    [activeConflicts, resolver],
+  );
 
   /**
    * Get conflict history
    */
-  const getHistory = React.useCallback((limit) => {
-    return resolver.getConflictHistory(limit);
-  }, [resolver]);
+  const getHistory = React.useCallback(
+    (limit) => {
+      return resolver.getConflictHistory(limit);
+    },
+    [resolver],
+  );
 
   React.useEffect(() => {
     setConflictStats(resolver.getConflictStats());
@@ -448,20 +485,20 @@ export const useConflictResolver = (options = {}) => {
     conflictStats,
     getHistory,
     clearHistory: resolver.clearHistory.bind(resolver),
-    resolver // Direct access for advanced usage
+    resolver, // Direct access for advanced usage
   };
 };
 
 // Create global resolver instance
 export const globalConflictResolver = new ConflictResolver({
   defaultStrategy: RESOLUTION_STRATEGIES.AUTOMATIC_MERGE,
-  enableUserChoice: true
+  enableUserChoice: true,
 });
 
 // Development helper
-if (process.env.NODE_ENV === 'development' && typeof window !== 'undefined') {
+if (process.env.NODE_ENV === "development" && typeof window !== "undefined") {
   window.conflictResolver = globalConflictResolver;
-  console.log('🔧 Conflict resolver available: window.conflictResolver');
+  console.log("🔧 Conflict resolver available: window.conflictResolver");
 }
 
 export default ConflictResolver;

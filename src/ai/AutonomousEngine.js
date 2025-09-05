@@ -408,7 +408,9 @@ export class AutonomousEngine {
       } else if (overallHealth > 0.85) {
         // System health good
       } else {
-        console.warn(`⚠️ System health needs attention: ${(overallHealth * 100).toFixed(1)}%`);
+        console.warn(
+          `⚠️ System health needs attention: ${(overallHealth * 100).toFixed(1)}%`,
+        );
         await this.handleHealthIssues(healthStatus);
       }
 
@@ -803,7 +805,7 @@ export class AutonomousEngine {
           break;
 
         default:
-          // Attempting general recovery
+        // Attempting general recovery
       }
 
       // Recovery attempt completed
@@ -950,7 +952,9 @@ export class AutonomousEngine {
    * Emergency stop - immediately halt all autonomous operations
    */
   emergencyStop() {
-    console.warn("🚨 EMERGENCY STOP - Halting all autonomous operations immediately");
+    console.warn(
+      "🚨 EMERGENCY STOP - Halting all autonomous operations immediately",
+    );
 
     this.stopAutonomousOperation();
     this.initialized = false;

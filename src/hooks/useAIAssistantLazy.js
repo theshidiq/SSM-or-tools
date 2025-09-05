@@ -13,24 +13,24 @@ import { generateDateRange } from "../utils/dateUtils";
 const loadAISystem = async () => {
   try {
     // Loading AI system modules
-    
+
     const [
       { featureCacheManager },
       { aiErrorHandler },
       constraintModule,
-      configModule
+      configModule,
     ] = await Promise.all([
       import("../ai/cache/FeatureCacheManager.js"),
       import("../ai/utils/ErrorHandler"),
       import("../ai/constraints/ConstraintEngine"),
-      import("../ai/cache/ConfigurationCacheManager")
+      import("../ai/cache/ConfigurationCacheManager"),
     ]);
 
     return {
       featureCacheManager,
       aiErrorHandler,
       constraintEngine: constraintModule,
-      configurationCache: configModule.configurationCache
+      configurationCache: configModule.configurationCache,
     };
   } catch (error) {
     console.warn("⚠️ Failed to load AI system modules:", error.message);
@@ -41,17 +41,18 @@ const loadAISystem = async () => {
 const loadEnhancedAISystem = async () => {
   try {
     // Loading enhanced AI system
-    
-    const [hybridModule, businessRuleModule, tensorFlowModule] = await Promise.all([
-      import("../ai/hybrid/HybridPredictor"),
-      import("../ai/hybrid/BusinessRuleValidator"),
-      import("../ai/ml/TensorFlowScheduler")
-    ]);
+
+    const [hybridModule, businessRuleModule, tensorFlowModule] =
+      await Promise.all([
+        import("../ai/hybrid/HybridPredictor"),
+        import("../ai/hybrid/BusinessRuleValidator"),
+        import("../ai/ml/TensorFlowScheduler"),
+      ]);
 
     return {
       HybridPredictor: hybridModule.HybridPredictor,
       BusinessRuleValidator: businessRuleModule.BusinessRuleValidator,
-      TensorFlowScheduler: tensorFlowModule.TensorFlowScheduler
+      TensorFlowScheduler: tensorFlowModule.TensorFlowScheduler,
     };
   } catch (error) {
     console.warn("⚠️ Failed to load enhanced AI system:", error.message);
@@ -64,12 +65,12 @@ export const useAIAssistantLazy = (
   staffMembers,
   currentMonthIndex,
   updateSchedule,
-  options = {}
+  options = {},
 ) => {
-  const { 
-    autoInitialize = false, 
+  const {
+    autoInitialize = false,
     enableEnhanced = true,
-    fallbackMode = true 
+    fallbackMode = true,
   } = options;
 
   // Core state
@@ -80,93 +81,99 @@ export const useAIAssistantLazy = (
   const [systemHealth, setSystemHealth] = useState(null);
   const [isAvailable, setIsAvailable] = useState(false);
   const [error, setError] = useState(null);
-  
+
   // AI System reference
   const aiSystemRef = useRef(null);
   const loadingPromiseRef = useRef(null);
-  
+
   // Lightweight fallback system that works without AI
-  const fallbackSystem = useMemo(() => ({
-    type: "fallback",
-    generateSchedule: async () => {
-      // Using fallback schedule generation (rule-based)
-      
-      // Simple rule-based schedule generation
-      const newSchedule = { ...scheduleData };
-      const dateRange = generateDateRange(currentMonthIndex);
-      
-      // Apply basic patterns for each staff member
-      staffMembers.forEach(staff => {
-        if (!newSchedule[staff.id]) {
-          newSchedule[staff.id] = {};
-        }
-        
-        dateRange.forEach((date, index) => {
+  const fallbackSystem = useMemo(
+    () => ({
+      type: "fallback",
+      generateSchedule: async () => {
+        // Using fallback schedule generation (rule-based)
+
+        // Simple rule-based schedule generation
+        const newSchedule = { ...scheduleData };
+        const dateRange = generateDateRange(currentMonthIndex);
+
+        // Apply basic patterns for each staff member
+        staffMembers.forEach((staff) => {
+          if (!newSchedule[staff.id]) {
+            newSchedule[staff.id] = {};
+          }
+
+          dateRange.forEach((date, index) => {
+            const dateKey = date.toISOString().split("T")[0];
+            const dayOfWeek = date.getDay();
+
+            // Simple pattern: work 5 days, rest 2 days
+            if (dayOfWeek === 0 || dayOfWeek === 6) {
+              // Weekend
+              newSchedule[staff.id][dateKey] = "×"; // Day off
+            } else if (staff.status === "パート") {
+              newSchedule[staff.id][dateKey] = "○"; // Part-time normal shift
+            } else {
+              newSchedule[staff.id][dateKey] = ""; // Full-time normal shift (empty)
+            }
+          });
+        });
+
+        return {
+          success: true,
+          schedule: newSchedule,
+          message: "Generated basic schedule using rule-based approach",
+          source: "fallback",
+        };
+      },
+
+      validateConstraints: (schedule) => {
+        // Basic validation
+        const issues = [];
+        const dateRange = generateDateRange(currentMonthIndex);
+
+        dateRange.forEach((date) => {
           const dateKey = date.toISOString().split("T")[0];
-          const dayOfWeek = date.getDay();
-          
-          // Simple pattern: work 5 days, rest 2 days
-          if (dayOfWeek === 0 || dayOfWeek === 6) { // Weekend
-            newSchedule[staff.id][dateKey] = "×"; // Day off
-          } else if (staff.status === "パート") {
-            newSchedule[staff.id][dateKey] = "○"; // Part-time normal shift
-          } else {
-            newSchedule[staff.id][dateKey] = ""; // Full-time normal shift (empty)
+          const workingStaff = staffMembers.filter((staff) => {
+            const shift = schedule[staff.id]?.[dateKey];
+            return shift && shift !== "×"; // Not day off
+          });
+
+          // Check minimum staffing
+          if (workingStaff.length < 2) {
+            issues.push(
+              `${dateKey}: Minimum staffing not met (${workingStaff.length} < 2)`,
+            );
           }
         });
-      });
-      
-      return {
-        success: true,
-        schedule: newSchedule,
-        message: "Generated basic schedule using rule-based approach",
-        source: "fallback"
-      };
-    },
-    
-    validateConstraints: (schedule) => {
-      // Basic validation
-      const issues = [];
-      const dateRange = generateDateRange(currentMonthIndex);
-      
-      dateRange.forEach(date => {
-        const dateKey = date.toISOString().split("T")[0];
-        const workingStaff = staffMembers.filter(staff => {
-          const shift = schedule[staff.id]?.[dateKey];
-          return shift && shift !== "×"; // Not day off
-        });
-        
-        // Check minimum staffing
-        if (workingStaff.length < 2) {
-          issues.push(`${dateKey}: Minimum staffing not met (${workingStaff.length} < 2)`);
-        }
-      });
-      
-      return {
-        isValid: issues.length === 0,
-        violations: issues,
-        source: "fallback"
-      };
-    }
-  }), [scheduleData, staffMembers, currentMonthIndex]);
+
+        return {
+          isValid: issues.length === 0,
+          violations: issues,
+          source: "fallback",
+        };
+      },
+    }),
+    [scheduleData, staffMembers, currentMonthIndex],
+  );
 
   // Initialize AI system
   const initializeAI = useCallback(async () => {
     if (isInitialized || isLoading) return aiSystemRef.current;
-    
+
     // If already loading, wait for existing promise
     if (loadingPromiseRef.current) {
       return await loadingPromiseRef.current;
     }
-    
+
     setIsLoading(true);
     setError(null);
-    
+
     const loadingPromise = (async () => {
       try {
         // Initializing lazy AI system
         setSystemType("loading");
-        
+
         // Try to load enhanced system first
         if (enableEnhanced) {
           const enhancedSystem = await loadEnhancedAISystem();
@@ -175,9 +182,9 @@ export const useAIAssistantLazy = (
             const system = {
               type: "enhanced",
               ...enhancedSystem,
-              initialized: true
+              initialized: true,
             };
-            
+
             aiSystemRef.current = system;
             setSystemType("enhanced");
             setIsInitialized(true);
@@ -185,7 +192,7 @@ export const useAIAssistantLazy = (
             return system;
           }
         }
-        
+
         // Fallback to basic system
         const basicSystem = await loadAISystem();
         if (basicSystem) {
@@ -193,16 +200,16 @@ export const useAIAssistantLazy = (
           const system = {
             type: "basic",
             ...basicSystem,
-            initialized: true
+            initialized: true,
           };
-          
+
           aiSystemRef.current = system;
           setSystemType("basic");
           setIsInitialized(true);
           setIsAvailable(true);
           return system;
         }
-        
+
         // Use fallback system if nothing else works
         if (fallbackMode) {
           // Using fallback system (no AI loaded)
@@ -212,13 +219,12 @@ export const useAIAssistantLazy = (
           setIsAvailable(true);
           return fallbackSystem;
         }
-        
+
         throw new Error("No AI system could be loaded");
-        
       } catch (err) {
         console.error("❌ Failed to initialize AI system:", err);
         setError(err.message);
-        
+
         // Use fallback if available
         if (fallbackMode) {
           aiSystemRef.current = fallbackSystem;
@@ -226,17 +232,16 @@ export const useAIAssistantLazy = (
           setIsAvailable(true);
           return fallbackSystem;
         }
-        
+
         setSystemType("error");
         setIsAvailable(false);
         return null;
-        
       } finally {
         setIsLoading(false);
         loadingPromiseRef.current = null;
       }
     })();
-    
+
     loadingPromiseRef.current = loadingPromise;
     return await loadingPromise;
   }, [isInitialized, isLoading, enableEnhanced, fallbackMode, fallbackSystem]);
@@ -249,61 +254,73 @@ export const useAIAssistantLazy = (
   }, [autoInitialize, isInitialized, isLoading, initializeAI]);
 
   // Generate AI predictions
-  const generateAIPredictions = useCallback(async (options = {}) => {
-    setIsProcessing(true);
-    setError(null);
-    
-    try {
-      // Ensure AI is initialized
-      const system = aiSystemRef.current || await initializeAI();
-      if (!system) {
-        throw new Error("AI system not available");
-      }
-      
-      // Generating predictions using AI system
-      
-      if (system.generateSchedule) {
-        const result = await system.generateSchedule({
-          scheduleData,
-          staffMembers,
-          currentMonthIndex,
-          updateSchedule,
-          ...options
-        });
-        
-        // Apply the generated schedule
-        if (result.success && result.schedule) {
-          updateSchedule(result.schedule);
-          
-          // Save to storage
-          optimizedStorage.saveScheduleData(result.schedule);
+  const generateAIPredictions = useCallback(
+    async (options = {}) => {
+      setIsProcessing(true);
+      setError(null);
+
+      try {
+        // Ensure AI is initialized
+        const system = aiSystemRef.current || (await initializeAI());
+        if (!system) {
+          throw new Error("AI system not available");
         }
-        
-        return result;
-      } else {
-        // Fallback for systems without generateSchedule
-        return await fallbackSystem.generateSchedule();
+
+        // Generating predictions using AI system
+
+        if (system.generateSchedule) {
+          const result = await system.generateSchedule({
+            scheduleData,
+            staffMembers,
+            currentMonthIndex,
+            updateSchedule,
+            ...options,
+          });
+
+          // Apply the generated schedule
+          if (result.success && result.schedule) {
+            updateSchedule(result.schedule);
+
+            // Save to storage
+            optimizedStorage.saveScheduleData(result.schedule);
+          }
+
+          return result;
+        } else {
+          // Fallback for systems without generateSchedule
+          return await fallbackSystem.generateSchedule();
+        }
+      } catch (err) {
+        console.error("❌ Failed to generate AI predictions:", err);
+        setError(err.message);
+        return {
+          success: false,
+          error: err.message,
+        };
+      } finally {
+        setIsProcessing(false);
       }
-      
-    } catch (err) {
-      console.error("❌ Failed to generate AI predictions:", err);
-      setError(err.message);
-      return {
-        success: false,
-        error: err.message
-      };
-    } finally {
-      setIsProcessing(false);
-    }
-  }, [scheduleData, staffMembers, currentMonthIndex, updateSchedule, initializeAI, fallbackSystem]);
+    },
+    [
+      scheduleData,
+      staffMembers,
+      currentMonthIndex,
+      updateSchedule,
+      initializeAI,
+      fallbackSystem,
+    ],
+  );
 
   // Auto-fill schedule (alias for generateAIPredictions)
-  const autoFillSchedule = useCallback((options = {}) => {
-    return generateAIPredictions({
-      autoFill: true,
-      ...options
-    });
-  }, [generateAIPredictions]);
+  const autoFillSchedule = useCallback(
+    (options = {}) => {
+      return generateAIPredictions({
+        autoFill: true,
+        ...options,
+      });
+    },
+    [generateAIPredictions],
+  );
 
   // Get system status
   const getSystemStatus = useCallback(() => {
@@ -318,9 +335,9 @@ export const useAIAssistantLazy = (
       health: systemHealth,
       features: {
         enhanced: systemType === "enhanced",
-        basic: systemType === "basic", 
-        fallback: systemType === "fallback"
-      }
+        basic: systemType === "basic",
+        fallback: systemType === "fallback",
+      },
     };
   }, [isInitialized, isLoading, systemType, isAvailable, error, systemHealth]);
 
@@ -333,21 +350,21 @@ export const useAIAssistantLazy = (
     systemHealth,
     isAvailable,
     error,
-    
+
     // Methods
     initializeAI,
     generateAIPredictions,
     autoFillSchedule,
     getSystemStatus,
-    
+
     // Enhanced features detection
     isEnhanced: systemType === "enhanced",
     isBasic: systemType === "basic",
     isFallback: systemType === "fallback",
     isMLReady: systemType === "enhanced",
-    
+
     // Backwards compatibility
-    configurationStatus: isInitialized ? "ready" : "not-loaded"
+    configurationStatus: isInitialized ? "ready" : "not-loaded",
   };
 };
 

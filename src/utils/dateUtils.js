@@ -53,77 +53,79 @@ const migratePeriodsToSupabase = async () => {
     const stored = localStorage.getItem(PERIODS_STORAGE_KEY);
     if (stored) {
       const serializedPeriods = JSON.parse(stored);
-      
+
       // Insert periods into Supabase
       for (const period of serializedPeriods) {
-        await supabase.rpc('add_period', {
-          p_start_date: period.start.split('T')[0], // Convert to DATE format
-          p_end_date: period.end.split('T')[0],
-          p_label: period.label
+        await supabase.rpc("add_period", {
+          p_start_date: period.start.split("T")[0], // Convert to DATE format
+          p_end_date: period.end.split("T")[0],
+          p_label: period.label,
         });
       }
-      
-      console.log('✅ Migrated periods from localStorage to Supabase');
+
+      console.log("✅ Migrated periods from localStorage to Supabase");
     } else {
       // First time setup - add default periods
-      const hasEverHadPeriods = localStorage.getItem('periods_ever_initialized');
+      const hasEverHadPeriods = localStorage.getItem(
+        "periods_ever_initialized",
+      );
       if (!hasEverHadPeriods) {
         for (const period of defaultMonthPeriods) {
-          await supabase.rpc('add_period', {
-            p_start_date: period.start.toISOString().split('T')[0],
-            p_end_date: period.end.toISOString().split('T')[0],
-            p_label: period.label
+          await supabase.rpc("add_period", {
+            p_start_date: period.start.toISOString().split("T")[0],
+            p_end_date: period.end.toISOString().split("T")[0],
+            p_label: period.label,
           });
         }
-        console.log('✅ Initialized default periods in Supabase');
+        console.log("✅ Initialized default periods in Supabase");
       }
     }
-    
+
     // Mark as migrated
-    localStorage.setItem(MIGRATION_KEY, 'true');
-    
+    localStorage.setItem(MIGRATION_KEY, "true");
   } catch (error) {
-    console.error('Failed to migrate periods to Supabase:', error);
+    console.error("Failed to migrate periods to Supabase:", error);
   }
 };
 
 // Function to load periods from Supabase
 const loadPeriodsFromSupabase = async () => {
   try {
-    const { data, error } = await supabase.rpc('get_periods');
-    
+    const { data, error } = await supabase.rpc("get_periods");
+
     if (error) throw error;
-    
+
     if (!data || data.length === 0) {
       // Try migration first
       await migratePeriodsToSupabase();
-      
+
       // Try loading again
-      const { data: retryData, error: retryError } = await supabase.rpc('get_periods');
+      const { data: retryData, error: retryError } =
+        await supabase.rpc("get_periods");
       if (retryError) throw retryError;
-      
+
       if (!retryData || retryData.length === 0) {
-        console.warn('No periods found in database');
+        console.warn("No periods found in database");
         return [];
       }
-      
-      return retryData.map(period => ({
+
+      return retryData.map((period) => ({
         id: period.id,
-        start: new Date(period.start_date + 'T00:00:00.000Z'),
-        end: new Date(period.end_date + 'T00:00:00.000Z'),
+        start: new Date(period.start_date + "T00:00:00.000Z"),
+        end: new Date(period.end_date + "T00:00:00.000Z"),
         label: period.label,
       }));
     }
-    
-    return data.map(period => ({
+
+    return data.map((period) => ({
       id: period.id,
-      start: new Date(period.start_date + 'T00:00:00.000Z'),
-      end: new Date(period.end_date + 'T00:00:00.000Z'),
+      start: new Date(period.start_date + "T00:00:00.000Z"),
+      end: new Date(period.end_date + "T00:00:00.000Z"),
       label: period.label,
     }));
   } catch (error) {
-    console.error('Failed to load periods from Supabase:', error);
-    
+    console.error("Failed to load periods from Supabase:", error);
+
     // Fallback to localStorage for offline support
     const stored = localStorage.getItem(PERIODS_STORAGE_KEY);
     if (stored) {
@@ -134,9 +136,9 @@ const loadPeriodsFromSupabase = async () => {
         label: period.label,
       }));
     }
-    
+
     // Last fallback to default periods
-    const hasEverHadPeriods = localStorage.getItem('periods_ever_initialized');
+    const hasEverHadPeriods = localStorage.getItem("periods_ever_initialized");
     return hasEverHadPeriods ? [] : [...defaultMonthPeriods];
   }
 };
@@ -144,20 +146,23 @@ const loadPeriodsFromSupabase = async () => {
 // Function to initialize periods cache
 const initializePeriodsCache = async () => {
   if (cacheInitialized) return periodsCache;
-  
+
   periodsCache = await loadPeriodsFromSupabase();
   cacheInitialized = true;
-  
+
   // Note: cleanup will be available after function declaration below
-  
+
   return periodsCache;
 };
 
 // Function to refresh periods cache
 export const refreshPeriodsCache = async () => {
-  console.log('🔄 Refreshing dateUtils periods cache from database...');
+  console.log("🔄 Refreshing dateUtils periods cache from database...");
   const freshPeriods = await loadPeriodsFromSupabase();
-  console.log(`📊 Loaded ${freshPeriods.length} periods from database:`, freshPeriods.map(p => p.label));
+  console.log(
+    `📊 Loaded ${freshPeriods.length} periods from database:`,
+    freshPeriods.map((p) => p.label),
+  );
   periodsCache = freshPeriods;
   cacheInitialized = true;
   return periodsCache;
@@ -166,7 +171,9 @@ export const refreshPeriodsCache = async () => {
 // Function to synchronize cache with external periods data
 export const synchronizePeriodsCache = (externalPeriods) => {
   if (Array.isArray(externalPeriods)) {
-    console.log(`🔄 Synchronizing dateUtils cache with external data (${externalPeriods.length} periods)`);
+    console.log(
+      `🔄 Synchronizing dateUtils cache with external data (${externalPeriods.length} periods)`,
+    );
     periodsCache = [...externalPeriods]; // Create a copy to avoid reference issues
     cacheInitialized = true;
     return periodsCache;
@@ -178,16 +185,16 @@ export const synchronizePeriodsCache = (externalPeriods) => {
 export const cleanupDuplicatePeriods = async () => {
   try {
     await initializePeriodsCache();
-    
+
     // Find duplicates by date range
     const seen = new Map();
     const duplicates = [];
-    
+
     periodsCache.forEach((period) => {
-      const startDate = new Date(period.start).toISOString().split('T')[0];
-      const endDate = new Date(period.end).toISOString().split('T')[0];
+      const startDate = new Date(period.start).toISOString().split("T")[0];
+      const endDate = new Date(period.end).toISOString().split("T")[0];
       const dateKey = `${startDate}-${endDate}`;
-      
+
       if (seen.has(dateKey)) {
         // This is a duplicate - mark for deletion
         duplicates.push(period);
@@ -195,41 +202,45 @@ export const cleanupDuplicatePeriods = async () => {
         seen.set(dateKey, period);
       }
     });
-    
+
     if (duplicates.length === 0) {
-      console.log('✅ No duplicate periods found');
+      console.log("✅ No duplicate periods found");
       return { removed: 0, remaining: periodsCache.length };
     }
-    
+
     console.log(`🔄 Found ${duplicates.length} duplicate periods, removing...`);
-    
+
     // Remove duplicates from database
     let removedCount = 0;
     for (const duplicate of duplicates) {
       if (duplicate.id) {
         try {
-          const { error } = await supabase.rpc('delete_period', {
-            period_id: duplicate.id
+          const { error } = await supabase.rpc("delete_period", {
+            period_id: duplicate.id,
           });
-          
+
           if (error) throw error;
           removedCount++;
           console.log(`✅ Removed duplicate period: ${duplicate.label}`);
         } catch (error) {
-          console.error(`Failed to remove duplicate period ${duplicate.label}:`, error);
+          console.error(
+            `Failed to remove duplicate period ${duplicate.label}:`,
+            error,
+          );
         }
       }
     }
-    
+
     // Refresh cache after cleanup
     await refreshPeriodsCache();
-    
+
     const result = { removed: removedCount, remaining: periodsCache.length };
-    console.log(`✅ Cleanup complete: removed ${removedCount} duplicates, ${periodsCache.length} periods remaining`);
+    console.log(
+      `✅ Cleanup complete: removed ${removedCount} duplicates, ${periodsCache.length} periods remaining`,
+    );
     return result;
-    
   } catch (error) {
-    console.error('Failed to cleanup duplicate periods:', error);
+    console.error("Failed to cleanup duplicate periods:", error);
     return { removed: 0, remaining: periodsCache.length, error: error.message };
   }
 };
@@ -242,13 +253,21 @@ export const getMonthPeriods = () => {
 // Export reactive periods array that updates from cache
 export const monthPeriods = new Proxy([], {
   get(target, prop) {
-    if (prop === 'length') {
+    if (prop === "length") {
       return cacheInitialized ? periodsCache.length : 0;
     }
-    if (prop === 'map' || prop === 'forEach' || prop === 'filter' || prop === 'find' || prop === 'findIndex') {
-      return cacheInitialized ? periodsCache[prop].bind(periodsCache) : [][prop].bind([]);
+    if (
+      prop === "map" ||
+      prop === "forEach" ||
+      prop === "filter" ||
+      prop === "find" ||
+      prop === "findIndex"
+    ) {
+      return cacheInitialized
+        ? periodsCache[prop].bind(periodsCache)
+        : [][prop].bind([]);
     }
-    if (typeof prop === 'string' && !isNaN(prop)) {
+    if (typeof prop === "string" && !isNaN(prop)) {
       const index = parseInt(prop);
       return cacheInitialized ? periodsCache[index] : undefined;
     }
@@ -270,22 +289,24 @@ export const monthPeriods = new Proxy([], {
     return cacheInitialized ? Object.keys(periodsCache) : [];
   },
   getOwnPropertyDescriptor(target, prop) {
-    return cacheInitialized ? Object.getOwnPropertyDescriptor(periodsCache, prop) : undefined;
-  }
+    return cacheInitialized
+      ? Object.getOwnPropertyDescriptor(periodsCache, prop)
+      : undefined;
+  },
 });
 
 // Initialize cache on module load
 initializePeriodsCache();
 
 // Expose cleanup function to window for manual use (development only)
-if (typeof window !== 'undefined' && process.env.NODE_ENV === 'development') {
+if (typeof window !== "undefined" && process.env.NODE_ENV === "development") {
   window.cleanupDuplicatePeriods = cleanupDuplicatePeriods;
 }
 
 // Function to add next period
 export const addNextPeriod = async () => {
   await initializePeriodsCache(); // Ensure cache is initialized
-  
+
   const lastPeriod = periodsCache[periodsCache.length - 1];
   if (!lastPeriod || !lastPeriod.end) {
     console.error("Cannot add next period - no valid last period found");
@@ -306,19 +327,23 @@ export const addNextPeriod = async () => {
   nextEndDate.setUTCHours(0, 0, 0, 0); // Ensure midnight UTC
 
   // Check for duplicate periods before creating
-  const nextStartDateString = nextStartDate.toISOString().split('T')[0];
-  const nextEndDateString = nextEndDate.toISOString().split('T')[0];
-  
-  const existingPeriod = periodsCache.find(period => {
-    const existingStart = new Date(period.start).toISOString().split('T')[0];
-    const existingEnd = new Date(period.end).toISOString().split('T')[0];
-    return existingStart === nextStartDateString && existingEnd === nextEndDateString;
+  const nextStartDateString = nextStartDate.toISOString().split("T")[0];
+  const nextEndDateString = nextEndDate.toISOString().split("T")[0];
+
+  const existingPeriod = periodsCache.find((period) => {
+    const existingStart = new Date(period.start).toISOString().split("T")[0];
+    const existingEnd = new Date(period.end).toISOString().split("T")[0];
+    return (
+      existingStart === nextStartDateString && existingEnd === nextEndDateString
+    );
   });
-  
+
   if (existingPeriod) {
-    console.warn(`⚠️ Period already exists: ${existingPeriod.label} (${nextStartDateString} to ${nextEndDateString})`);
+    console.warn(
+      `⚠️ Period already exists: ${existingPeriod.label} (${nextStartDateString} to ${nextEndDateString})`,
+    );
     // Return the index of the existing period instead of creating duplicate
-    const existingIndex = periodsCache.findIndex(p => p === existingPeriod);
+    const existingIndex = periodsCache.findIndex((p) => p === existingPeriod);
     return existingIndex;
   }
 
@@ -360,10 +385,10 @@ export const addNextPeriod = async () => {
 
   try {
     // Add period to Supabase
-    const { data, error } = await supabase.rpc('add_period', {
+    const { data, error } = await supabase.rpc("add_period", {
       p_start_date: nextStartDateString,
       p_end_date: nextEndDateString,
-      p_label: label
+      p_label: label,
     });
 
     if (error) throw error;
@@ -373,46 +398,55 @@ export const addNextPeriod = async () => {
     // Refresh cache from database with retry logic
     let retryCount = 0;
     const maxRetries = 3;
-    
+
     while (retryCount < maxRetries) {
       await refreshPeriodsCache();
-      
+
       // Check if the new period is now in the cache
-      const newPeriodExists = periodsCache.find(period => {
-        const periodStart = new Date(period.start).toISOString().split('T')[0];
-        const periodEnd = new Date(period.end).toISOString().split('T')[0];
-        return periodStart === nextStartDateString && 
-               periodEnd === nextEndDateString && 
-               period.label === label;
+      const newPeriodExists = periodsCache.find((period) => {
+        const periodStart = new Date(period.start).toISOString().split("T")[0];
+        const periodEnd = new Date(period.end).toISOString().split("T")[0];
+        return (
+          periodStart === nextStartDateString &&
+          periodEnd === nextEndDateString &&
+          period.label === label
+        );
       });
-      
+
       if (newPeriodExists) {
-        console.log(`✅ Period ${label} confirmed in cache after ${retryCount + 1} attempts`);
+        console.log(
+          `✅ Period ${label} confirmed in cache after ${retryCount + 1} attempts`,
+        );
         return periodsCache.length - 1; // Return the new period index
       }
-      
+
       retryCount++;
       if (retryCount < maxRetries) {
-        console.log(`⏳ Period ${label} not yet in cache, retry ${retryCount}/${maxRetries} after 200ms...`);
-        await new Promise(resolve => setTimeout(resolve, 200));
+        console.log(
+          `⏳ Period ${label} not yet in cache, retry ${retryCount}/${maxRetries} after 200ms...`,
+        );
+        await new Promise((resolve) => setTimeout(resolve, 200));
       }
     }
 
-    console.warn(`⚠️ Period ${label} added to database but not confirmed in cache after ${maxRetries} attempts`);
+    console.warn(
+      `⚠️ Period ${label} added to database but not confirmed in cache after ${maxRetries} attempts`,
+    );
     return periodsCache.length - 1; // Return best guess index
-    
   } catch (error) {
-    console.error('Failed to add period to database:', error);
-    
+    console.error("Failed to add period to database:", error);
+
     // Fallback: add to cache only
     const newPeriod = {
       start: nextStartDate,
       end: nextEndDate,
       label: label,
     };
-    
+
     periodsCache.push(newPeriod);
-    console.log(`⚠️ Added new period to cache only: ${label} (database failed)`);
+    console.log(
+      `⚠️ Added new period to cache only: ${label} (database failed)`,
+    );
     return periodsCache.length - 1;
   }
 };
@@ -422,8 +456,13 @@ export const generateDateRange = (monthIndex) => {
   // Handle case where no periods exist or cache not initialized
   if (!cacheInitialized || periodsCache.length === 0) {
     // Only warn once during development, not repeatedly
-    if (process.env.NODE_ENV === 'development' && !window._dateUtilsWarningShown) {
-      console.warn("No periods available - returning empty date range (periods still loading from database)");
+    if (
+      process.env.NODE_ENV === "development" &&
+      !window._dateUtilsWarningShown
+    ) {
+      console.warn(
+        "No periods available - returning empty date range (periods still loading from database)",
+      );
       window._dateUtilsWarningShown = true;
     }
     return [];
@@ -508,7 +547,7 @@ export const isDateWithinWorkPeriod = (date, staff) => {
 export const getCurrentMonthIndex = (periods = null) => {
   // Use provided periods or fall back to cache
   const periodsToUse = periods || periodsCache;
-  
+
   // Handle case where no periods exist
   if (!periodsToUse || periodsToUse.length === 0) {
     return 0; // Default to 0 when no periods exist
@@ -523,19 +562,25 @@ export const getCurrentMonthIndex = (periods = null) => {
   for (let i = 0; i < periodsToUse.length; i++) {
     const period = periodsToUse[i];
     if (todayUTC >= period.start && todayUTC <= period.end) {
-      console.log(`📅 Today (${todayUTC.toISOString().split('T')[0]}) falls in period ${i}: ${period.label}`);
+      console.log(
+        `📅 Today (${todayUTC.toISOString().split("T")[0]}) falls in period ${i}: ${period.label}`,
+      );
       return i;
     }
   }
 
   // If today's date doesn't fall in any existing period, check if it's before the first period
   if (periodsToUse.length > 0 && todayUTC < periodsToUse[0].start) {
-    console.log(`📅 Today is before all periods, using first period (${periodsToUse[0].label})`);
+    console.log(
+      `📅 Today is before all periods, using first period (${periodsToUse[0].label})`,
+    );
     return 0;
   }
 
   // If today's date is after all periods, return the last period
-  console.log(`📅 Today is after all periods, using last period (${periodsToUse[periodsToUse.length - 1].label})`);
+  console.log(
+    `📅 Today is after all periods, using last period (${periodsToUse[periodsToUse.length - 1].label})`,
+  );
   return periodsToUse.length - 1;
 };
 
@@ -573,7 +618,9 @@ export const findPeriodWithData = (supabaseData = null) => {
       });
 
       if (hasDataInPeriod) {
-        console.log(`✅ Found schedule data in period ${i}: ${periodsCache[i].label}`);
+        console.log(
+          `✅ Found schedule data in period ${i}: ${periodsCache[i].label}`,
+        );
         return i;
       }
     }
@@ -588,24 +635,28 @@ export const findPeriodWithData = (supabaseData = null) => {
 export const deletePeriod = async (periodIndex, realtimePeriods = null) => {
   try {
     await initializePeriodsCache(); // Ensure cache is initialized
-    
+
     // Use real-time periods if provided (to avoid race conditions), fallback to cache
     const periodsToUse = realtimePeriods || periodsCache;
-    
+
     // Validate period index against the most current period data
     if (periodIndex < 0 || periodIndex >= periodsToUse.length) {
-      console.error(`Invalid period index: ${periodIndex}. Available: 0-${Math.max(0, periodsToUse.length - 1)}`);
+      console.error(
+        `Invalid period index: ${periodIndex}. Available: 0-${Math.max(0, periodsToUse.length - 1)}`,
+      );
       return { success: false, error: "Invalid period index" };
     }
-    
+
     // Ensure cache is also synchronized before proceeding
     if (periodsToUse !== periodsCache) {
       // Refresh cache to match real-time data
       await refreshPeriodsCache();
-      
+
       // Double-check bounds with refreshed cache
       if (periodIndex >= periodsCache.length) {
-        console.error(`Period index ${periodIndex} is still out of bounds after cache refresh. Available: 0-${Math.max(0, periodsCache.length - 1)}`);
+        console.error(
+          `Period index ${periodIndex} is still out of bounds after cache refresh. Available: 0-${Math.max(0, periodsCache.length - 1)}`,
+        );
         return { success: false, error: "Invalid period index after refresh" };
       }
     }
@@ -617,43 +668,57 @@ export const deletePeriod = async (periodIndex, realtimePeriods = null) => {
     try {
       // Delete period from Supabase if it has an ID
       if (periodToDelete.id) {
-        const { error } = await supabase.rpc('delete_period', {
-          period_id: periodToDelete.id
+        const { error } = await supabase.rpc("delete_period", {
+          period_id: periodToDelete.id,
         });
-        
+
         if (error) throw error;
         console.log(`✅ Period deleted from database: ${periodToDelete.label}`);
       }
-      
+
       // Force immediate cache refresh from database
       await refreshPeriodsCache();
-      
+
       // Verify the deleted period is actually gone from the cache
-      const stillExists = periodsCache.find(p => p.id === periodToDelete.id);
+      const stillExists = periodsCache.find((p) => p.id === periodToDelete.id);
       if (!stillExists) {
-        console.log(`✅ Period successfully removed from cache after database refresh`);
+        console.log(
+          `✅ Period successfully removed from cache after database refresh`,
+        );
       } else {
-        console.warn(`⚠️ Period still exists in cache after refresh - forcing manual removal`);
+        console.warn(
+          `⚠️ Period still exists in cache after refresh - forcing manual removal`,
+        );
         // Force remove from cache if database refresh didn't work
-        const indexToRemove = periodsCache.findIndex(p => p.id === periodToDelete.id);
+        const indexToRemove = periodsCache.findIndex(
+          (p) => p.id === periodToDelete.id,
+        );
         if (indexToRemove >= 0) {
           periodsCache.splice(indexToRemove, 1);
-          console.log(`✅ Period forcibly removed from cache at index ${indexToRemove}`);
+          console.log(
+            `✅ Period forcibly removed from cache at index ${indexToRemove}`,
+          );
         }
       }
-      
     } catch (error) {
-      console.error('Failed to delete period from database:', error);
-      
+      console.error("Failed to delete period from database:", error);
+
       // Fallback: remove from cache only
       periodsCache.splice(periodIndex, 1);
-      console.log(`⚠️ Period deleted from cache only: ${periodToDelete.label} (database failed)`);
+      console.log(
+        `⚠️ Period deleted from cache only: ${periodToDelete.label} (database failed)`,
+      );
     }
 
     // Report the CURRENT cache length after refresh
-    console.log(`✅ Period deleted successfully. Remaining periods: ${periodsCache.length}`);
-    console.log(`📊 Current periods in cache:`, periodsCache.map(p => p.label));
-    
+    console.log(
+      `✅ Period deleted successfully. Remaining periods: ${periodsCache.length}`,
+    );
+    console.log(
+      `📊 Current periods in cache:`,
+      periodsCache.map((p) => p.label),
+    );
+
     // Return success with navigation info
     let suggestedIndex = periodIndex;
     if (periodsCache.length === 0) {
@@ -662,21 +727,26 @@ export const deletePeriod = async (periodIndex, realtimePeriods = null) => {
     } else if (suggestedIndex >= periodsCache.length) {
       suggestedIndex = periodsCache.length - 1; // Go to last period if deleted period was at end
     }
-    
+
     // Ensure suggested index is within bounds and validate against current cache state
-    suggestedIndex = Math.max(0, Math.min(suggestedIndex, periodsCache.length - 1));
-    
+    suggestedIndex = Math.max(
+      0,
+      Math.min(suggestedIndex, periodsCache.length - 1),
+    );
+
     // Final validation: ensure suggestedIndex doesn't exceed available periods
     const finalSuggestedIndex = periodsCache.length === 0 ? 0 : suggestedIndex;
-    
-    console.log(`🔄 Navigation suggestion: index ${finalSuggestedIndex} of ${periodsCache.length} remaining periods`);
 
-    return { 
-      success: true, 
+    console.log(
+      `🔄 Navigation suggestion: index ${finalSuggestedIndex} of ${periodsCache.length} remaining periods`,
+    );
+
+    return {
+      success: true,
       deletedPeriod: periodToDelete,
       newPeriodCount: periodsCache.length,
       suggestedNavigationIndex: finalSuggestedIndex,
-      isEmpty: periodsCache.length === 0
+      isEmpty: periodsCache.length === 0,
     };
   } catch (error) {
     console.error("Failed to delete period:", error);
@@ -688,36 +758,36 @@ export const deletePeriod = async (periodIndex, realtimePeriods = null) => {
 export const resetPeriodsToDefault = async () => {
   try {
     await initializePeriodsCache(); // Ensure cache is initialized
-    
+
     // Clear existing periods from database
     for (const period of periodsCache) {
       if (period.id) {
-        await supabase.rpc('delete_period', {
-          period_id: period.id
+        await supabase.rpc("delete_period", {
+          period_id: period.id,
         });
       }
     }
-    
+
     // Add default periods to database
     for (const period of defaultMonthPeriods) {
-      await supabase.rpc('add_period', {
-        p_start_date: period.start.toISOString().split('T')[0],
-        p_end_date: period.end.toISOString().split('T')[0],
-        p_label: period.label
+      await supabase.rpc("add_period", {
+        p_start_date: period.start.toISOString().split("T")[0],
+        p_end_date: period.end.toISOString().split("T")[0],
+        p_label: period.label,
       });
     }
-    
+
     // Refresh cache from database
     await refreshPeriodsCache();
-    
+
     console.log("✅ Periods reset to default in database");
     return true;
   } catch (error) {
     console.error("Failed to reset periods:", error);
-    
+
     // Fallback: reset cache only
     periodsCache.length = 0; // Clear existing array
-    periodsCache.push(...defaultMonthPeriods.map(p => ({...p}))); // Add default periods
+    periodsCache.push(...defaultMonthPeriods.map((p) => ({ ...p }))); // Add default periods
     console.log("⚠️ Periods reset to default in cache only (database failed)");
     return false;
   }

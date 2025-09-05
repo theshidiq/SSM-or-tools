@@ -9,15 +9,15 @@ import { supabase } from "../utils/supabase";
 
 // Query keys for React Query cache management
 export const SETTINGS_QUERY_KEYS = {
-  settings: ['settings'],
-  settingsById: (settingsId) => ['settings', settingsId],
+  settings: ["settings"],
+  settingsById: (settingsId) => ["settings", settingsId],
 };
 
 // Default settings structure (moved from ConfigurationService)
 const getDefaultSettings = () => ({
   // Migration version
   migrationVersion: 3,
-  
+
   // Staff Groups
   staffGroups: [
     {
@@ -28,7 +28,7 @@ const getDefaultSettings = () => ({
     },
     {
       id: "group2",
-      name: "Group 2", 
+      name: "Group 2",
       members: ["料理長", "古藤"],
       color: "#EF4444",
     },
@@ -69,7 +69,7 @@ const getDefaultSettings = () => ({
       color: "#84CC16",
     },
   ],
-  
+
   // Daily Limits
   dailyLimits: [
     {
@@ -121,10 +121,10 @@ const getDefaultSettings = () => ({
       description: "Minimum number of staff required to work per day",
     },
   ],
-  
+
   // Priority Rules
   priorityRules: [],
-  
+
   // ML Parameters
   mlParameters: {
     model_name: "genetic_algorithm",
@@ -143,7 +143,7 @@ const getDefaultSettings = () => ({
     },
     confidence_threshold: 0.75,
   },
-  
+
   // Monthly Limits
   monthlyLimits: [
     {
@@ -159,10 +159,11 @@ const getDefaultSettings = () => ({
       },
       isHardConstraint: false,
       penaltyWeight: 40,
-      description: "Maximum number of days off allowed per staff member per month",
+      description:
+        "Maximum number of days off allowed per staff member per month",
     },
   ],
-  
+
   // Backup Assignments
   backupAssignments: [],
 });
@@ -175,22 +176,22 @@ export const useSettingsDataRealtime = () => {
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
   const [validationErrors, setValidationErrors] = useState({});
   const [isAutosaveEnabled, setIsAutosaveEnabled] = useState(true);
-  
+
   // Auto-save refs for debouncing
   const autoSaveTimeoutRef = useRef(null);
 
   // Connection check query
   const { data: connectionStatus } = useQuery({
-    queryKey: ['supabase', 'settings-connection'],
+    queryKey: ["supabase", "settings-connection"],
     queryFn: async () => {
       try {
         const { data, error } = await supabase
           .from("app_settings")
           .select("count")
           .limit(1);
-        
+
         if (error) throw error;
-        
+
         setIsConnected(true);
         setError(null);
         return { connected: true };
@@ -207,16 +208,16 @@ export const useSettingsDataRealtime = () => {
   /**
    * Load settings from Supabase
    */
-  const { 
-    data: supabaseSettingsData, 
-    isLoading: isSupabaseLoading, 
+  const {
+    data: supabaseSettingsData,
+    isLoading: isSupabaseLoading,
     error: queryError,
-    refetch: refetchSettings
+    refetch: refetchSettings,
   } = useQuery({
     queryKey: SETTINGS_QUERY_KEYS.settings,
     queryFn: async () => {
       console.log("🔍 Loading settings from Supabase...");
-      
+
       const { data, error } = await supabase
         .from("app_settings")
         .select("*")
@@ -226,8 +227,11 @@ export const useSettingsDataRealtime = () => {
       if (error) throw error;
 
       const settingsRecord = data?.[0] || null;
-      console.log(`📊 Settings loaded:`, settingsRecord ? 'Found' : 'Not found');
-      
+      console.log(
+        `📊 Settings loaded:`,
+        settingsRecord ? "Found" : "Not found",
+      );
+
       return settingsRecord;
     },
     enabled: isConnected, // Only run query when connected
@@ -240,7 +244,7 @@ export const useSettingsDataRealtime = () => {
   const saveSettingsMutation = useMutation({
     mutationFn: async ({ settings, operation }) => {
       console.log(`💾 Saving settings to Supabase (${operation})`);
-      
+
       const settingsForSave = {
         settings_data: settings,
         updated_at: new Date().toISOString(),
@@ -255,21 +259,23 @@ export const useSettingsDataRealtime = () => {
           .select();
 
         if (error) throw error;
-        
+
         console.log("✅ Settings updated in Supabase");
         return data[0];
       } else {
         // Create new settings record
         const { data, error } = await supabase
           .from("app_settings")
-          .insert([{
-            ...settingsForSave,
-            created_at: new Date().toISOString(),
-          }])
+          .insert([
+            {
+              ...settingsForSave,
+              created_at: new Date().toISOString(),
+            },
+          ])
           .select();
 
         if (error) throw error;
-        
+
         console.log("✅ New settings created in Supabase");
         return data[0];
       }
@@ -303,7 +309,7 @@ export const useSettingsDataRealtime = () => {
       if (context?.previousSettings) {
         queryClient.setQueryData(context.queryKey, context.previousSettings);
       }
-      
+
       // Restore unsaved changes flag
       setHasUnsavedChanges(true);
       setError(`Settings save failed: ${err.message}`);
@@ -312,11 +318,11 @@ export const useSettingsDataRealtime = () => {
     onSuccess: (data, variables, context) => {
       // Update cache with server response
       queryClient.setQueryData(context.queryKey, data);
-      
+
       setError(null); // Clear any previous errors
       setHasUnsavedChanges(false);
       console.log("✅ Settings saved successfully to Supabase");
-    }
+    },
   });
 
   /**
@@ -324,17 +330,19 @@ export const useSettingsDataRealtime = () => {
    */
   const updateSettingsSectionMutation = useMutation({
     mutationFn: async ({ sectionName, sectionData, operation }) => {
-      console.log(`🔄 Updating settings section: ${sectionName} (${operation})`);
-      
+      console.log(
+        `🔄 Updating settings section: ${sectionName} (${operation})`,
+      );
+
       const currentSettings = settings;
       const updatedSettings = {
         ...currentSettings,
         [sectionName]: sectionData,
       };
 
-      return await saveSettingsMutation.mutateAsync({ 
-        settings: updatedSettings, 
-        operation 
+      return await saveSettingsMutation.mutateAsync({
+        settings: updatedSettings,
+        operation,
       });
     },
   });
@@ -344,32 +352,35 @@ export const useSettingsDataRealtime = () => {
     if (supabaseSettingsData?.settings_data) {
       return supabaseSettingsData.settings_data;
     }
-    
+
     // Fallback to defaults if no Supabase data
     if (!isSupabaseLoading && isConnected) {
       return getDefaultSettings();
     }
-    
+
     return getDefaultSettings();
   }, [supabaseSettingsData, isSupabaseLoading, isConnected]);
 
   /**
    * Auto-save with debouncing
    */
-  const scheduleAutoSave = useCallback((settingsData, operation = 'auto-save') => {
-    if (!isAutosaveEnabled) return;
-    
-    clearTimeout(autoSaveTimeoutRef.current);
-    
-    autoSaveTimeoutRef.current = setTimeout(() => {
-      if (isConnected && settingsData) {
-        saveSettingsMutation.mutate({ 
-          settings: settingsData, 
-          operation 
-        });
-      }
-    }, 1000); // 1 second debounce
-  }, [saveSettingsMutation, isConnected, isAutosaveEnabled]);
+  const scheduleAutoSave = useCallback(
+    (settingsData, operation = "auto-save") => {
+      if (!isAutosaveEnabled) return;
+
+      clearTimeout(autoSaveTimeoutRef.current);
+
+      autoSaveTimeoutRef.current = setTimeout(() => {
+        if (isConnected && settingsData) {
+          saveSettingsMutation.mutate({
+            settings: settingsData,
+            operation,
+          });
+        }
+      }, 1000); // 1 second debounce
+    },
+    [saveSettingsMutation, isConnected, isAutosaveEnabled],
+  );
 
   /**
    * Validate settings structure
@@ -391,7 +402,10 @@ export const useSettingsDataRealtime = () => {
     }
 
     // Validate ML parameters
-    if (!settingsToValidate.mlParameters || typeof settingsToValidate.mlParameters !== 'object') {
+    if (
+      !settingsToValidate.mlParameters ||
+      typeof settingsToValidate.mlParameters !== "object"
+    ) {
       errors.mlParameters = "ML parameters must be an object";
       isValid = false;
     }
@@ -402,84 +416,105 @@ export const useSettingsDataRealtime = () => {
   /**
    * Public API methods
    */
-  const updateSettings = useCallback((newSettings) => {
-    setHasUnsavedChanges(true);
-    setValidationErrors({});
-    
-    // Update cache optimistically
-    queryClient.setQueryData(SETTINGS_QUERY_KEYS.settings, (old) => ({
-      ...old,
-      settings_data: newSettings,
-      updated_at: new Date().toISOString(),
-    }));
-    
-    // Schedule auto-save if enabled
-    if (isAutosaveEnabled) {
-      scheduleAutoSave(newSettings, 'update');
-    }
-  }, [queryClient, isAutosaveEnabled, scheduleAutoSave]);
+  const updateSettings = useCallback(
+    (newSettings) => {
+      setHasUnsavedChanges(true);
+      setValidationErrors({});
 
-  const saveSettings = useCallback(async (settingsToSave = settings, skipLoadingState = false) => {
-    const validation = validateSettings(settingsToSave);
-    if (!validation.isValid) {
-      setValidationErrors(validation.errors);
-      throw new Error("Validation errors found");
-    }
+      // Update cache optimistically
+      queryClient.setQueryData(SETTINGS_QUERY_KEYS.settings, (old) => ({
+        ...old,
+        settings_data: newSettings,
+        updated_at: new Date().toISOString(),
+      }));
 
-    return await saveSettingsMutation.mutateAsync({ 
-      settings: settingsToSave, 
-      operation: 'manual-save' 
-    });
-  }, [settings, validateSettings, saveSettingsMutation]);
+      // Schedule auto-save if enabled
+      if (isAutosaveEnabled) {
+        scheduleAutoSave(newSettings, "update");
+      }
+    },
+    [queryClient, isAutosaveEnabled, scheduleAutoSave],
+  );
+
+  const saveSettings = useCallback(
+    async (settingsToSave = settings, skipLoadingState = false) => {
+      const validation = validateSettings(settingsToSave);
+      if (!validation.isValid) {
+        setValidationErrors(validation.errors);
+        throw new Error("Validation errors found");
+      }
+
+      return await saveSettingsMutation.mutateAsync({
+        settings: settingsToSave,
+        operation: "manual-save",
+      });
+    },
+    [settings, validateSettings, saveSettingsMutation],
+  );
 
   const resetToDefaults = useCallback(async () => {
     const defaultSettings = getDefaultSettings();
-    await saveSettingsMutation.mutateAsync({ 
-      settings: defaultSettings, 
-      operation: 'reset-defaults' 
+    await saveSettingsMutation.mutateAsync({
+      settings: defaultSettings,
+      operation: "reset-defaults",
     });
   }, [saveSettingsMutation]);
 
   // Individual section update methods
-  const updateStaffGroups = useCallback((staffGroups) => {
-    updateSettingsSectionMutation.mutate({ 
-      sectionName: 'staffGroups', 
-      sectionData: staffGroups, 
-      operation: 'staff-groups-update' 
-    });
-  }, [updateSettingsSectionMutation]);
+  const updateStaffGroups = useCallback(
+    (staffGroups) => {
+      updateSettingsSectionMutation.mutate({
+        sectionName: "staffGroups",
+        sectionData: staffGroups,
+        operation: "staff-groups-update",
+      });
+    },
+    [updateSettingsSectionMutation],
+  );
 
-  const updateDailyLimits = useCallback((dailyLimits) => {
-    updateSettingsSectionMutation.mutate({ 
-      sectionName: 'dailyLimits', 
-      sectionData: dailyLimits, 
-      operation: 'daily-limits-update' 
-    });
-  }, [updateSettingsSectionMutation]);
+  const updateDailyLimits = useCallback(
+    (dailyLimits) => {
+      updateSettingsSectionMutation.mutate({
+        sectionName: "dailyLimits",
+        sectionData: dailyLimits,
+        operation: "daily-limits-update",
+      });
+    },
+    [updateSettingsSectionMutation],
+  );
 
-  const updateMLParameters = useCallback((mlParameters) => {
-    updateSettingsSectionMutation.mutate({ 
-      sectionName: 'mlParameters', 
-      sectionData: mlParameters, 
-      operation: 'ml-parameters-update' 
-    });
-  }, [updateSettingsSectionMutation]);
+  const updateMLParameters = useCallback(
+    (mlParameters) => {
+      updateSettingsSectionMutation.mutate({
+        sectionName: "mlParameters",
+        sectionData: mlParameters,
+        operation: "ml-parameters-update",
+      });
+    },
+    [updateSettingsSectionMutation],
+  );
 
-  const updateMonthlyLimits = useCallback((monthlyLimits) => {
-    updateSettingsSectionMutation.mutate({ 
-      sectionName: 'monthlyLimits', 
-      sectionData: monthlyLimits, 
-      operation: 'monthly-limits-update' 
-    });
-  }, [updateSettingsSectionMutation]);
+  const updateMonthlyLimits = useCallback(
+    (monthlyLimits) => {
+      updateSettingsSectionMutation.mutate({
+        sectionName: "monthlyLimits",
+        sectionData: monthlyLimits,
+        operation: "monthly-limits-update",
+      });
+    },
+    [updateSettingsSectionMutation],
+  );
 
-  const updateBackupAssignments = useCallback((backupAssignments) => {
-    updateSettingsSectionMutation.mutate({ 
-      sectionName: 'backupAssignments', 
-      sectionData: backupAssignments, 
-      operation: 'backup-assignments-update' 
-    });
-  }, [updateSettingsSectionMutation]);
+  const updateBackupAssignments = useCallback(
+    (backupAssignments) => {
+      updateSettingsSectionMutation.mutate({
+        sectionName: "backupAssignments",
+        sectionData: backupAssignments,
+        operation: "backup-assignments-update",
+      });
+    },
+    [updateSettingsSectionMutation],
+  );
 
   // Set up real-time subscription
   useEffect(() => {
@@ -488,22 +523,22 @@ export const useSettingsDataRealtime = () => {
     console.log("🔔 Setting up real-time subscription for app settings");
 
     const channel = supabase
-      .channel('app_settings_changes')
+      .channel("app_settings_changes")
       .on(
-        'postgres_changes',
+        "postgres_changes",
         {
-          event: '*',
-          schema: 'public',
-          table: 'app_settings'
+          event: "*",
+          schema: "public",
+          table: "app_settings",
         },
         (payload) => {
-          console.log('📡 Real-time settings update:', payload);
-          
+          console.log("📡 Real-time settings update:", payload);
+
           // Invalidate and refetch settings data on any change
-          queryClient.invalidateQueries({ 
-            queryKey: SETTINGS_QUERY_KEYS.settings 
+          queryClient.invalidateQueries({
+            queryKey: SETTINGS_QUERY_KEYS.settings,
           });
-        }
+        },
       )
       .subscribe();
 
@@ -529,53 +564,60 @@ export const useSettingsDataRealtime = () => {
   return {
     // Data
     settings,
-    
+
     // Loading states
     isLoading: isSupabaseLoading,
-    isSaving: saveSettingsMutation.isPending || updateSettingsSectionMutation.isPending,
-    
+    isSaving:
+      saveSettingsMutation.isPending || updateSettingsSectionMutation.isPending,
+
     // Connection status
     isConnected,
     error: error || queryError?.message,
-    
+
     // Change tracking
     hasUnsavedChanges,
     validationErrors,
-    
+
     // Autosave state
     isAutosaveEnabled,
     setIsAutosaveEnabled,
     isAutosaving: saveSettingsMutation.isPending && isAutosaveEnabled,
     lastSaveTime: supabaseSettingsData?.updated_at,
-    
+
     // Actions
     updateSettings,
     saveSettings,
     resetToDefaults,
-    
+
     // Section-specific updates
     updateStaffGroups,
     updateDailyLimits,
     updateMLParameters,
     updateMonthlyLimits,
     updateBackupAssignments,
-    
+
     // Utilities
     validateSettings,
     scheduleAutoSave,
     refetchSettings,
-    
+
     // Getters for individual sections
-    getStaffGroups: () => settings.staffGroups || getDefaultSettings().staffGroups,
-    getDailyLimits: () => settings.dailyLimits || getDefaultSettings().dailyLimits,
-    getPriorityRules: () => settings.priorityRules || getDefaultSettings().priorityRules,
-    getMLParameters: () => settings.mlParameters || getDefaultSettings().mlParameters,
-    getMonthlyLimits: () => settings.monthlyLimits || getDefaultSettings().monthlyLimits,
-    getBackupAssignments: () => settings.backupAssignments || getDefaultSettings().backupAssignments,
-    
+    getStaffGroups: () =>
+      settings.staffGroups || getDefaultSettings().staffGroups,
+    getDailyLimits: () =>
+      settings.dailyLimits || getDefaultSettings().dailyLimits,
+    getPriorityRules: () =>
+      settings.priorityRules || getDefaultSettings().priorityRules,
+    getMLParameters: () =>
+      settings.mlParameters || getDefaultSettings().mlParameters,
+    getMonthlyLimits: () =>
+      settings.monthlyLimits || getDefaultSettings().monthlyLimits,
+    getBackupAssignments: () =>
+      settings.backupAssignments || getDefaultSettings().backupAssignments,
+
     // Phase identification
     isRealtime: true,
-    phase: 'Phase 3: Supabase-first Settings Management',
+    phase: "Phase 3: Supabase-first Settings Management",
   };
 };
 

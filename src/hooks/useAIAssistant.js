@@ -60,7 +60,6 @@ const loadEnhancedAISystem = async () => {
       isEnhanced: true,
     };
   } catch (error) {
-
     // Fallback to legacy system with proper webpack imports
     try {
       const { autonomousEngine } = await import(
@@ -298,7 +297,6 @@ export const useAIAssistant = (
         setSystemType("enhanced");
         setSystemHealth(hybridPredictor.getDetailedStatus());
         setIsInitialized(true);
-
       } else if (aiSystem && aiSystem.fallback) {
         // Legacy system fallback
         // Falling back to legacy AI system
@@ -341,7 +339,6 @@ export const useAIAssistant = (
   // Emergency prediction fallback with basic business rule compliance
   const performEmergencyPredictionWithRules = useCallback(
     async (scheduleData, staffMembers) => {
-
       try {
         const newSchedule = JSON.parse(JSON.stringify(scheduleData));
         let filledCells = 0;
@@ -441,7 +438,6 @@ export const useAIAssistant = (
     const startTime = Date.now();
 
     try {
-
       // **PHASE 2 ENHANCEMENT: Invalidate feature cache on configuration changes**
       try {
         const featureCacheManager = await loadFeatureCacheManager();
@@ -574,7 +570,6 @@ export const useAIAssistant = (
 
       // Try emergency recovery
       if (recoveryAttempts < 2 && !error.message.includes("timeout")) {
-
         const emergencyResult = await performEmergencyPredictionWithRules(
           scheduleData,
           staffMembers,
@@ -629,7 +624,6 @@ export const useAIAssistant = (
         startTime,
         canCancel: false,
       };
-
 
       const ENHANCED_TIMEOUT = processingData.timeout || 20000;
       let isTimedOut = false;
@@ -686,7 +680,6 @@ export const useAIAssistant = (
         startTime,
         canCancel: false,
       };
-
 
       if (progressCallback) {
         progressCallback({
@@ -1048,7 +1041,6 @@ export const useAIAssistant = (
       historicalData,
       yieldFn,
     ) => {
-
       const workShifts = ["○", "△", "▽", ""];
       const restShifts = ["×"];
 
@@ -1138,7 +1130,6 @@ export const useAIAssistant = (
         98,
         baseAccuracy + historyBonus + existingDataBonus + ruleComplianceBonus,
       );
-
 
       return {
         success: filledCells > 0,
@@ -1524,7 +1515,6 @@ const analyzeAndFillScheduleWithHistory = async (
   currentMonthIndex,
   historicalData,
 ) => {
-
   const workShifts = ["○", "△", "▽", ""];
   const restShifts = ["×"];
 
@@ -1599,7 +1589,6 @@ const analyzeAndFillScheduleWithHistory = async (
     98,
     baseAccuracy + historyBonus + existingDataBonus,
   );
-
 
   return {
     success: filledCells > 0,

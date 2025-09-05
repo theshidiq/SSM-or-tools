@@ -276,10 +276,13 @@ class OptimizedFeatureManager {
    */
   logPerformanceSummary() {
     const stats = this.getPerformanceStats();
-    
+
     // Performance tracking for optimization (only log warnings)
     if (stats.avgTime > 50) {
-      console.warn("⚠️ Feature generation average time exceeds 50ms target:", `${stats.avgTime.toFixed(1)}ms`);
+      console.warn(
+        "⚠️ Feature generation average time exceeds 50ms target:",
+        `${stats.avgTime.toFixed(1)}ms`,
+      );
     }
   }
 

@@ -2,7 +2,9 @@
 export class AdvancedLogger {
   constructor(options = {}) {
     this.options = {
-      level: options.level || (process.env.NODE_ENV === 'development' ? 'debug' : 'info'),
+      level:
+        options.level ||
+        (process.env.NODE_ENV === "development" ? "debug" : "info"),
       enableConsole: options.enableConsole !== false,
       enableStorage: options.enableStorage || false,
       enableRemote: options.enableRemote || false,
@@ -11,7 +13,7 @@ export class AdvancedLogger {
       flushInterval: options.flushInterval || 10000, // 10 seconds
       remoteEndpoint: options.remoteEndpoint,
       context: options.context || {},
-      ...options
+      ...options,
     };
 
     this.levels = {
@@ -19,7 +21,7 @@ export class AdvancedLogger {
       warn: 1,
       info: 2,
       debug: 3,
-      trace: 4
+      trace: 4,
     };
 
     this.buffer = [];
@@ -32,7 +34,7 @@ export class AdvancedLogger {
       warnCount: 0,
       infoCount: 0,
       debugCount: 0,
-      traceCount: 0
+      traceCount: 0,
     };
 
     this.initializeLogger();
@@ -46,29 +48,29 @@ export class AdvancedLogger {
     }, this.options.flushInterval);
 
     // Handle page unload to flush remaining logs
-    if (typeof window !== 'undefined') {
-      window.addEventListener('beforeunload', () => {
+    if (typeof window !== "undefined") {
+      window.addEventListener("beforeunload", () => {
         this.flush(true); // Force sync flush
       });
 
       // Handle uncaught errors
-      window.addEventListener('error', (event) => {
-        this.error('Uncaught Error', {
+      window.addEventListener("error", (event) => {
+        this.error("Uncaught Error", {
           message: event.error?.message,
           stack: event.error?.stack,
           filename: event.filename,
           lineno: event.lineno,
           colno: event.colno,
-          source: 'window.error'
+          source: "window.error",
         });
       });
 
       // Handle unhandled promise rejections
-      window.addEventListener('unhandledrejection', (event) => {
-        this.error('Unhandled Promise Rejection', {
+      window.addEventListener("unhandledrejection", (event) => {
+        this.error("Unhandled Promise Rejection", {
           reason: event.reason,
           promise: event.promise,
-          source: 'unhandledrejection'
+          source: "unhandledrejection",
         });
       });
     }
@@ -94,12 +96,13 @@ export class AdvancedLogger {
       data: this.sanitizeData(data),
       metadata: {
         sessionId: this.sessionId,
-        userAgent: typeof navigator !== 'undefined' ? navigator.userAgent : 'Unknown',
-        url: typeof window !== 'undefined' ? window.location.href : 'Unknown',
+        userAgent:
+          typeof navigator !== "undefined" ? navigator.userAgent : "Unknown",
+        url: typeof window !== "undefined" ? window.location.href : "Unknown",
         context: this.context,
-        ...metadata
+        ...metadata,
       },
-      id: this.generateLogId()
+      id: this.generateLogId(),
     };
 
     // Add performance timing if available
@@ -112,7 +115,7 @@ export class AdvancedLogger {
       entry.metadata.memory = {
         used: performance.memory.usedJSHeapSize,
         total: performance.memory.totalJSHeapSize,
-        limit: performance.memory.jsHeapSizeLimit
+        limit: performance.memory.jsHeapSizeLimit,
       };
     }
 
@@ -129,30 +132,32 @@ export class AdvancedLogger {
     try {
       // Handle circular references
       const seen = new WeakSet();
-      const sanitized = JSON.parse(JSON.stringify(data, (key, val) => {
-        if (val != null && typeof val === 'object') {
-          if (seen.has(val)) return '[Circular]';
-          seen.add(val);
-        }
-        return val;
-      }));
+      const sanitized = JSON.parse(
+        JSON.stringify(data, (key, val) => {
+          if (val != null && typeof val === "object") {
+            if (seen.has(val)) return "[Circular]";
+            seen.add(val);
+          }
+          return val;
+        }),
+      );
 
       // Limit object size
       const serialized = JSON.stringify(sanitized);
       if (serialized.length > 10000) {
-        return { 
-          _truncated: true, 
+        return {
+          _truncated: true,
           _originalSize: serialized.length,
-          _data: serialized.substring(0, 1000) + '...'
+          _data: serialized.substring(0, 1000) + "...",
         };
       }
 
       return sanitized;
     } catch (error) {
-      return { 
-        _error: 'Failed to sanitize data', 
+      return {
+        _error: "Failed to sanitize data",
         _originalType: typeof data,
-        _message: error.message
+        _message: error.message,
       };
     }
   }
@@ -162,10 +167,10 @@ export class AdvancedLogger {
     if (!this.shouldLog(level)) return;
 
     const entry = this.createLogEntry(level, message, data, metadata);
-    
+
     // Update metrics
     this.metrics.totalLogs++;
-    this.metrics[level + 'Count'] = (this.metrics[level + 'Count'] || 0) + 1;
+    this.metrics[level + "Count"] = (this.metrics[level + "Count"] || 0) + 1;
 
     // Add to buffer
     this.buffer.push(entry);
@@ -192,20 +197,23 @@ export class AdvancedLogger {
   logToConsole(entry) {
     const { level, message, data, metadata } = entry;
     const timestamp = new Date(entry.timestamp).toLocaleTimeString();
-    
+
     const style = this.getConsoleStyle(level);
     const prefix = `%c[${timestamp}] ${level.toUpperCase()}`;
-    
-    if (Object.keys(data).length > 0 || Object.keys(metadata.context).length > 0) {
+
+    if (
+      Object.keys(data).length > 0 ||
+      Object.keys(metadata.context).length > 0
+    ) {
       console.groupCollapsed(prefix, style, message);
       if (Object.keys(data).length > 0) {
-        console.log('Data:', data);
+        console.log("Data:", data);
       }
       if (Object.keys(metadata.context).length > 0) {
-        console.log('Context:', metadata.context);
+        console.log("Context:", metadata.context);
       }
       if (metadata.stack) {
-        console.log('Stack:', metadata.stack);
+        console.log("Stack:", metadata.stack);
       }
       console.groupEnd();
     } else {
@@ -216,11 +224,11 @@ export class AdvancedLogger {
   // Get console styling for different log levels
   getConsoleStyle(level) {
     const styles = {
-      error: 'color: #DC2626; font-weight: bold;',
-      warn: 'color: #D97706; font-weight: bold;',
-      info: 'color: #2563EB; font-weight: bold;',
-      debug: 'color: #059669; font-weight: normal;',
-      trace: 'color: #6B7280; font-weight: normal;'
+      error: "color: #DC2626; font-weight: bold;",
+      warn: "color: #D97706; font-weight: bold;",
+      info: "color: #2563EB; font-weight: bold;",
+      debug: "color: #059669; font-weight: normal;",
+      trace: "color: #6B7280; font-weight: normal;",
     };
     return styles[level] || styles.info;
   }
@@ -228,22 +236,25 @@ export class AdvancedLogger {
   // Add to local storage
   addToStorage(entry) {
     this.storage.push(entry);
-    
+
     // Limit storage size
     if (this.storage.length > this.options.maxStorageSize) {
       this.storage = this.storage.slice(-this.options.maxStorageSize);
     }
 
     // Try to persist to localStorage
-    if (typeof localStorage !== 'undefined') {
+    if (typeof localStorage !== "undefined") {
       try {
         const storageKey = `advanced-logger-${this.sessionId}`;
-        localStorage.setItem(storageKey, JSON.stringify({
-          sessionId: this.sessionId,
-          logs: this.storage.slice(-100), // Store only last 100 logs
-          metrics: this.metrics,
-          timestamp: Date.now()
-        }));
+        localStorage.setItem(
+          storageKey,
+          JSON.stringify({
+            sessionId: this.sessionId,
+            logs: this.storage.slice(-100), // Store only last 100 logs
+            metrics: this.metrics,
+            timestamp: Date.now(),
+          }),
+        );
       } catch (error) {
         // localStorage might be full, ignore error
       }
@@ -263,29 +274,29 @@ export class AdvancedLogger {
           sessionId: this.sessionId,
           logs: logsToFlush,
           metrics: this.metrics,
-          timestamp: Date.now()
+          timestamp: Date.now(),
         };
 
         if (forceSync && navigator.sendBeacon) {
           // Use sendBeacon for synchronous sending during page unload
           navigator.sendBeacon(
             this.options.remoteEndpoint,
-            JSON.stringify(payload)
+            JSON.stringify(payload),
           );
         } else {
           // Regular async fetch
           await fetch(this.options.remoteEndpoint, {
-            method: 'POST',
+            method: "POST",
             headers: {
-              'Content-Type': 'application/json'
+              "Content-Type": "application/json",
             },
-            body: JSON.stringify(payload)
+            body: JSON.stringify(payload),
           });
         }
       } catch (error) {
         // Put logs back in buffer on failure
         this.buffer.unshift(...logsToFlush);
-        console.warn('Failed to flush logs to remote endpoint:', error);
+        console.warn("Failed to flush logs to remote endpoint:", error);
       }
     }
   }
@@ -308,41 +319,41 @@ export class AdvancedLogger {
       Error.captureStackTrace(error, this.error);
       metadata.stack = error.stack;
     }
-    return this.log('error', message, data, metadata);
+    return this.log("error", message, data, metadata);
   }
 
   warn(message, data = {}, metadata = {}) {
-    return this.log('warn', message, data, metadata);
+    return this.log("warn", message, data, metadata);
   }
 
   info(message, data = {}, metadata = {}) {
-    return this.log('info', message, data, metadata);
+    return this.log("info", message, data, metadata);
   }
 
   debug(message, data = {}, metadata = {}) {
-    return this.log('debug', message, data, metadata);
+    return this.log("debug", message, data, metadata);
   }
 
   trace(message, data = {}, metadata = {}) {
-    return this.log('trace', message, data, metadata);
+    return this.log("trace", message, data, metadata);
   }
 
   // Performance logging
   time(label) {
     const startTime = performance.now();
     this.debug(`Timer started: ${label}`, { startTime });
-    
+
     return {
       end: () => {
         const endTime = performance.now();
         const duration = endTime - startTime;
-        this.debug(`Timer ended: ${label}`, { 
-          startTime, 
-          endTime, 
-          duration: `${duration.toFixed(2)}ms` 
+        this.debug(`Timer ended: ${label}`, {
+          startTime,
+          endTime,
+          duration: `${duration.toFixed(2)}ms`,
         });
         return duration;
-      }
+      },
     };
   }
 
@@ -366,19 +377,20 @@ export class AdvancedLogger {
     let logs = [...this.storage];
 
     if (filter.level) {
-      logs = logs.filter(log => log.level === filter.level);
+      logs = logs.filter((log) => log.level === filter.level);
     }
 
     if (filter.since) {
       const since = new Date(filter.since);
-      logs = logs.filter(log => new Date(log.timestamp) >= since);
+      logs = logs.filter((log) => new Date(log.timestamp) >= since);
     }
 
     if (filter.search) {
       const search = filter.search.toLowerCase();
-      logs = logs.filter(log => 
-        log.message.toLowerCase().includes(search) ||
-        JSON.stringify(log.data).toLowerCase().includes(search)
+      logs = logs.filter(
+        (log) =>
+          log.message.toLowerCase().includes(search) ||
+          JSON.stringify(log.data).toLowerCase().includes(search),
       );
     }
 
@@ -392,7 +404,7 @@ export class AdvancedLogger {
       sessionId: this.sessionId,
       bufferSize: this.buffer.length,
       storageSize: this.storage.length,
-      uptime: Date.now() - parseInt(this.sessionId.split('-')[1])
+      uptime: Date.now() - parseInt(this.sessionId.split("-")[1]),
     };
   }
 
@@ -403,7 +415,7 @@ export class AdvancedLogger {
       exportTime: new Date().toISOString(),
       metrics: this.getMetrics(),
       logs: this.storage,
-      context: this.context
+      context: this.context,
     };
   }
 
@@ -417,10 +429,10 @@ export class AdvancedLogger {
       warnCount: 0,
       infoCount: 0,
       debugCount: 0,
-      traceCount: 0
+      traceCount: 0,
     };
 
-    if (typeof localStorage !== 'undefined') {
+    if (typeof localStorage !== "undefined") {
       const storageKey = `advanced-logger-${this.sessionId}`;
       localStorage.removeItem(storageKey);
     }
@@ -430,7 +442,7 @@ export class AdvancedLogger {
   destroy() {
     // Flush remaining logs
     this.flush(true);
-    
+
     // Clear intervals
     if (this.flushInterval) {
       clearInterval(this.flushInterval);
@@ -443,46 +455,60 @@ export class AdvancedLogger {
 
 // Create default logger instance
 export const logger = new AdvancedLogger({
-  level: process.env.NODE_ENV === 'development' ? 'debug' : 'info',
+  level: process.env.NODE_ENV === "development" ? "debug" : "info",
   enableConsole: true,
   enableStorage: true,
   context: {
-    application: 'Shift Schedule Manager',
-    version: process.env.REACT_APP_VERSION || '2.0.0',
-    environment: process.env.NODE_ENV
-  }
+    application: "Shift Schedule Manager",
+    version: process.env.REACT_APP_VERSION || "2.0.0",
+    environment: process.env.NODE_ENV,
+  },
 });
 
 // Enhanced console logger that integrates with existing code
 export const consoleLogger = {
   ...logger,
-  
+
   // Compatibility with existing consoleLogger
   logScheduleOperation: (operation, data) => {
-    logger.info(`Schedule Operation: ${operation}`, data, { category: 'schedule' });
+    logger.info(`Schedule Operation: ${operation}`, data, {
+      category: "schedule",
+    });
   },
 
   logSupabaseOperation: (operation, success, data) => {
-    const level = success ? 'info' : 'error';
-    logger[level](`Supabase Operation: ${operation}`, { success, ...data }, { category: 'supabase' });
+    const level = success ? "info" : "error";
+    logger[level](
+      `Supabase Operation: ${operation}`,
+      { success, ...data },
+      { category: "supabase" },
+    );
   },
 
   logPerformance: (operation, duration, data) => {
-    const level = duration > 100 ? 'warn' : 'debug';
-    logger[level](`Performance: ${operation}`, { duration: `${duration}ms`, ...data }, { category: 'performance' });
+    const level = duration > 100 ? "warn" : "debug";
+    logger[level](
+      `Performance: ${operation}`,
+      { duration: `${duration}ms`, ...data },
+      { category: "performance" },
+    );
   },
 
   logUserAction: (action, data) => {
-    logger.info(`User Action: ${action}`, data, { category: 'user' });
+    logger.info(`User Action: ${action}`, data, { category: "user" });
   },
 
   logError: (error, context) => {
-    logger.error(error.message || error, {
-      stack: error.stack,
-      name: error.name,
-      ...context
-    }, { category: 'error' });
-  }
+    logger.error(
+      error.message || error,
+      {
+        stack: error.stack,
+        name: error.name,
+        ...context,
+      },
+      { category: "error" },
+    );
+  },
 };
 
 export default AdvancedLogger;
