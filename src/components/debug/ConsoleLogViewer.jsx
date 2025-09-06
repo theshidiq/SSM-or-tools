@@ -1,15 +1,15 @@
 /**
  * ConsoleLogViewer.jsx
- * 
+ *
  * Real-time console log viewer component
  * Shows captured console logs with filtering and export capabilities
  */
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect } from "react";
 
 const ConsoleLogViewer = () => {
   const [logs, setLogs] = useState([]);
-  const [filter, setFilter] = useState('ALL');
+  const [filter, setFilter] = useState("ALL");
   const [isVisible, setIsVisible] = useState(false);
   const [autoScroll, setAutoScroll] = useState(true);
   const [summary, setSummary] = useState(null);
@@ -17,7 +17,7 @@ const ConsoleLogViewer = () => {
   useEffect(() => {
     // Check if console logger is available
     if (!window.consoleLogger) {
-      console.log('⏳ Waiting for console logger...');
+      console.log("⏳ Waiting for console logger...");
       const checkInterval = setInterval(() => {
         if (window.consoleLogger) {
           clearInterval(checkInterval);
@@ -42,19 +42,25 @@ const ConsoleLogViewer = () => {
     }
   };
 
-  const filteredLogs = logs.filter(log => {
-    if (filter === 'ALL') return true;
+  const filteredLogs = logs.filter((log) => {
+    if (filter === "ALL") return true;
     return log.level === filter;
   });
 
   const getLogColor = (level) => {
     switch (level) {
-      case 'ERROR': return 'text-red-600 bg-red-50';
-      case 'WARN': return 'text-yellow-700 bg-yellow-50';
-      case 'INFO': return 'text-blue-600 bg-blue-50';
-      case 'LOG': return 'text-gray-700 bg-gray-50';
-      case 'DEBUG': return 'text-purple-600 bg-purple-50';
-      default: return 'text-gray-600 bg-white';
+      case "ERROR":
+        return "text-red-600 bg-red-50";
+      case "WARN":
+        return "text-yellow-700 bg-yellow-50";
+      case "INFO":
+        return "text-blue-600 bg-blue-50";
+      case "LOG":
+        return "text-gray-700 bg-gray-50";
+      case "DEBUG":
+        return "text-purple-600 bg-purple-50";
+      default:
+        return "text-gray-600 bg-white";
     }
   };
 
@@ -92,7 +98,9 @@ const ConsoleLogViewer = () => {
       {/* Header */}
       <div className="flex items-center justify-between p-3 border-b border-gray-200 bg-gray-50">
         <div className="flex items-center space-x-2">
-          <span className="text-sm font-medium text-gray-900">📋 Console Logs</span>
+          <span className="text-sm font-medium text-gray-900">
+            📋 Console Logs
+          </span>
           {summary && (
             <span className="text-xs text-gray-600">
               ({summary.total} total)
@@ -115,11 +123,21 @@ const ConsoleLogViewer = () => {
           className="text-xs border border-gray-200 rounded px-2 py-1"
         >
           <option value="ALL">All ({logs.length})</option>
-          <option value="ERROR">Errors ({logs.filter(l => l.level === 'ERROR').length})</option>
-          <option value="WARN">Warnings ({logs.filter(l => l.level === 'WARN').length})</option>
-          <option value="INFO">Info ({logs.filter(l => l.level === 'INFO').length})</option>
-          <option value="LOG">Logs ({logs.filter(l => l.level === 'LOG').length})</option>
-          <option value="DEBUG">Debug ({logs.filter(l => l.level === 'DEBUG').length})</option>
+          <option value="ERROR">
+            Errors ({logs.filter((l) => l.level === "ERROR").length})
+          </option>
+          <option value="WARN">
+            Warnings ({logs.filter((l) => l.level === "WARN").length})
+          </option>
+          <option value="INFO">
+            Info ({logs.filter((l) => l.level === "INFO").length})
+          </option>
+          <option value="LOG">
+            Logs ({logs.filter((l) => l.level === "LOG").length})
+          </option>
+          <option value="DEBUG">
+            Debug ({logs.filter((l) => l.level === "DEBUG").length})
+          </option>
         </select>
 
         <label className="flex items-center text-xs">
@@ -155,7 +173,8 @@ const ConsoleLogViewer = () => {
           </div>
           {summary.recentErrors.slice(0, 2).map((error, index) => (
             <div key={index} className="text-xs text-red-700 mt-1">
-              {new Date(error.timestamp).toLocaleTimeString()}: {error.message.substring(0, 50)}...
+              {new Date(error.timestamp).toLocaleTimeString()}:{" "}
+              {error.message.substring(0, 50)}...
             </div>
           ))}
         </div>
@@ -178,17 +197,19 @@ const ConsoleLogViewer = () => {
                   <span className="font-mono text-xs text-gray-500">
                     {new Date(log.timestamp).toLocaleTimeString()}
                   </span>
-                  <span className={`text-xs font-medium px-1 rounded ${
-                    log.level === 'ERROR' ? 'bg-red-200 text-red-800' :
-                    log.level === 'WARN' ? 'bg-yellow-200 text-yellow-800' :
-                    'bg-gray-200 text-gray-800'
-                  }`}>
+                  <span
+                    className={`text-xs font-medium px-1 rounded ${
+                      log.level === "ERROR"
+                        ? "bg-red-200 text-red-800"
+                        : log.level === "WARN"
+                          ? "bg-yellow-200 text-yellow-800"
+                          : "bg-gray-200 text-gray-800"
+                    }`}
+                  >
                     {log.level}
                   </span>
                 </div>
-                <div className="mt-1 break-words">
-                  {log.message}
-                </div>
+                <div className="mt-1 break-words">{log.message}</div>
                 {log.stack && (
                   <details className="mt-1">
                     <summary className="cursor-pointer text-gray-500 text-xs">

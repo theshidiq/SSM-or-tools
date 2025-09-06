@@ -8,8 +8,8 @@ import {
   migrateStaffMembers,
 } from "../utils/staffUtils";
 import { defaultStaffMembersArray } from "../constants/staffConstants";
-import { useSupabaseRealtime, QUERY_KEYS } from "./useSupabaseRealtime";
 import { dataValidation } from "../utils/dataIntegrityUtils";
+import { useSupabaseRealtime, QUERY_KEYS } from "./useSupabaseRealtime";
 
 // Offline queue utilities
 const MAX_RETRY_ATTEMPTS = 3;

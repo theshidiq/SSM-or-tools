@@ -3,11 +3,11 @@
  * Provides migration interface within the settings panel
  */
 
-import React from 'react';
+import React from "react";
+import { AlertTriangle, Info } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "../../ui/card";
 import { Alert, AlertDescription } from "../../ui/alert";
 import { Badge } from "../../ui/badge";
-import { AlertTriangle, Info } from "lucide-react";
 import StaffMigrationPanel from "../../StaffMigrationPanel";
 
 const DataMigrationTab = () => {
@@ -15,9 +15,12 @@ const DataMigrationTab = () => {
     <div className="space-y-6">
       {/* Tab Header */}
       <div>
-        <h3 className="text-lg font-medium text-gray-900 mb-2">Data Migration</h3>
+        <h3 className="text-lg font-medium text-gray-900 mb-2">
+          Data Migration
+        </h3>
         <p className="text-sm text-gray-600">
-          Migrate staff data from localStorage to the database for improved performance and real-time collaboration.
+          Migrate staff data from localStorage to the database for improved
+          performance and real-time collaboration.
         </p>
       </div>
 
@@ -25,8 +28,10 @@ const DataMigrationTab = () => {
       <Alert>
         <Info className="h-4 w-4" />
         <AlertDescription>
-          This feature helps you migrate existing staff data stored in your browser's localStorage to the Supabase database. 
-          This enables real-time collaboration and prevents data loss when switching devices or browsers.
+          This feature helps you migrate existing staff data stored in your
+          browser's localStorage to the Supabase database. This enables
+          real-time collaboration and prevents data loss when switching devices
+          or browsers.
         </AlertDescription>
       </Alert>
 
@@ -44,7 +49,9 @@ const DataMigrationTab = () => {
           <div className="space-y-3">
             <div className="flex items-center justify-between">
               <span className="text-sm text-gray-600">Current Status:</span>
-              <span className="text-sm font-medium">Database-first architecture enabled</span>
+              <span className="text-sm font-medium">
+                Database-first architecture enabled
+              </span>
             </div>
             <div className="flex items-center justify-between">
               <span className="text-sm text-gray-600">Real-time Features:</span>
@@ -84,8 +91,10 @@ const DataMigrationTab = () => {
           <Alert className="mb-4">
             <AlertTriangle className="h-4 w-4" />
             <AlertDescription>
-              <strong>Important:</strong> Migration will automatically create backups, but it's recommended to export 
-              your current schedule data before proceeding. The migration is designed to be safe and reversible.
+              <strong>Important:</strong> Migration will automatically create
+              backups, but it's recommended to export your current schedule data
+              before proceeding. The migration is designed to be safe and
+              reversible.
             </AlertDescription>
           </Alert>
 
@@ -113,7 +122,9 @@ const DataMigrationTab = () => {
               </ul>
             </div>
             <div>
-              <h4 className="font-medium text-blue-700 mb-2">ℹ️ Technical Details</h4>
+              <h4 className="font-medium text-blue-700 mb-2">
+                ℹ️ Technical Details
+              </h4>
               <ul className="text-sm text-gray-600 space-y-1">
                 <li>• Uses Supabase PostgreSQL database</li>
                 <li>• Row-level security enabled</li>

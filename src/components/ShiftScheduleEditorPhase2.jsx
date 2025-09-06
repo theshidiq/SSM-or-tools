@@ -21,6 +21,7 @@ import { generateStatistics } from "../utils/statisticsUtils";
 import { exportToCSV, printSchedule } from "../utils/exportUtils";
 
 // Import components
+import { OfflineIndicator } from "../hooks/useOfflineSupport";
 import ErrorDisplay from "./schedule/ErrorDisplay";
 import StatisticsDashboard from "./schedule/StatisticsDashboard";
 import NavigationToolbar from "./schedule/NavigationToolbar";
@@ -31,7 +32,6 @@ import StatusModal from "./common/StatusModal";
 import SettingsModal from "./settings/SettingsModal";
 
 // Phase 2 specific components
-import { OfflineIndicator } from "../hooks/useOfflineSupport";
 
 const ShiftScheduleEditorPhase2 = (props) => {
   // Main state

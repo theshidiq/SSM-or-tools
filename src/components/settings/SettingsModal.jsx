@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from "react";
 import { X, RotateCcw, AlertTriangle, Check } from "lucide-react";
 
 // ShadCN UI Components
+import { toast } from "sonner";
 import {
   Dialog,
   DialogContent,
@@ -17,7 +18,6 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "../ui/tabs";
 import { Switch } from "../ui/switch";
 import { Label } from "../ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "../ui/card";
-import { toast } from "sonner";
 
 // Import tab components
 import { useSettingsCache } from "../../hooks/useConfigurationCache";
@@ -211,8 +211,12 @@ const SettingsModal = ({
             <div className="w-8 h-8 bg-blue-500 rounded-lg flex items-center justify-center text-white font-bold">
               ⚙️
             </div>
-            <span className="japanese-text text-xl font-bold">Settings & Configuration</span>
-            <Badge variant="secondary" className="japanese-text">設定</Badge>
+            <span className="japanese-text text-xl font-bold">
+              Settings & Configuration
+            </span>
+            <Badge variant="secondary" className="japanese-text">
+              設定
+            </Badge>
           </DialogTitle>
           <DialogDescription>
             Configure ML models, business rules, and system settings
@@ -229,26 +233,37 @@ const SettingsModal = ({
           </Alert>
         )}
 
-        <Tabs value={activeTab} onValueChange={setActiveTab} className="flex-1 flex flex-col min-h-0">
+        <Tabs
+          value={activeTab}
+          onValueChange={setActiveTab}
+          className="flex-1 flex flex-col min-h-0"
+        >
           <TabsList className="mx-4 mb-4 flex-shrink-0">
             {TABS.map((tab, index) => (
-              <TabsTrigger 
-                key={tab.id} 
+              <TabsTrigger
+                key={tab.id}
                 value={tab.id}
                 className="flex items-center gap-2"
               >
                 <span>{tab.icon}</span>
                 {tab.label}
-                {validationErrors[tab.id] && Object.keys(validationErrors[tab.id]).length > 0 && (
-                  <Badge variant="destructive" className="ml-2 text-xs">!</Badge>
-                )}
+                {validationErrors[tab.id] &&
+                  Object.keys(validationErrors[tab.id]).length > 0 && (
+                    <Badge variant="destructive" className="ml-2 text-xs">
+                      !
+                    </Badge>
+                  )}
               </TabsTrigger>
             ))}
           </TabsList>
-          
+
           <div className="flex-1 min-h-0 overflow-hidden px-4">
-            {TABS.map(tab => (
-              <TabsContent key={tab.id} value={tab.id} className="h-full overflow-y-auto mt-0 data-[state=active]:flex data-[state=active]:flex-col">
+            {TABS.map((tab) => (
+              <TabsContent
+                key={tab.id}
+                value={tab.id}
+                className="h-full overflow-y-auto mt-0 data-[state=active]:flex data-[state=active]:flex-col"
+              >
                 {renderTabContent(tab.id)}
               </TabsContent>
             ))}
@@ -292,7 +307,9 @@ const SettingsModal = ({
                   checked={isAutosaveEnabled}
                   onCheckedChange={onToggleAutosave}
                 />
-                <Label htmlFor="autosave" className="text-sm">Auto-save</Label>
+                <Label htmlFor="autosave" className="text-sm">
+                  Auto-save
+                </Label>
               </div>
             )}
 
@@ -309,9 +326,7 @@ const SettingsModal = ({
           </div>
 
           <div className="flex items-center gap-3">
-            <Button onClick={onClose}>
-              Done
-            </Button>
+            <Button onClick={onClose}>Done</Button>
           </div>
         </div>
       </DialogContent>

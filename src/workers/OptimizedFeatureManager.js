@@ -114,7 +114,7 @@ class OptimizedFeatureManager {
     return new Promise((resolve, reject) => {
       const startTime = performance.now();
       const requestId = this.generateRequestId();
-      let progressCallback = onProgress;
+      const progressCallback = onProgress;
 
       this.pendingRequests.set(requestId, {
         resolve: (results) => {

@@ -253,7 +253,9 @@ export class SimulatedAnnealing {
         totalMoves,
       );
 
-      console.log(`✅ Annealing completed: ${bestFitness.toFixed(2)}% fitness in ${annealingTime}ms`);
+      console.log(
+        `✅ Annealing completed: ${bestFitness.toFixed(2)}% fitness in ${annealingTime}ms`,
+      );
 
       // Return in format expected by ScheduleGenerator
       return bestSolution;

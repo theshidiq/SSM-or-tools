@@ -24,7 +24,7 @@ export const MODEL_CONFIG = {
     HISTORICAL_FEATURES: 12, // past patterns, preferences, etc.
     CONTEXT_FEATURES: 5, // business context, constraints, etc.
     TOTAL: 35, // Basic feature size
-    
+
     // Enhanced features (optimized)
     ENHANCED_TOTAL: 65, // Enhanced feature size for high accuracy
     ENHANCED_STAFF_RELATIONSHIP: 10,
@@ -105,7 +105,7 @@ export const MODEL_CONFIG = {
     USE_WEBGL_OPTIMIZATION: true,
     ENABLE_PROFILING: false, // Enable for debugging only
     PARALLEL_PROCESSING: true,
-    
+
     // Feature generation performance
     FEATURE_GENERATION_TIMEOUT: 100, // ms per prediction target
     USE_OPTIMIZED_WORKER: true,

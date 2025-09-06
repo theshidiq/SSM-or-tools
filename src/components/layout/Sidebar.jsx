@@ -1,5 +1,5 @@
-import React from 'react';
-import { 
+import React from "react";
+import {
   Calendar,
   Settings,
   HelpCircle,
@@ -7,22 +7,21 @@ import {
   CalendarDays,
   Menu,
   AlertTriangle,
-  ChevronDown
-} from 'lucide-react';
-import { Badge } from '../ui/badge';
-import { Button } from '../ui/button';
-import { Separator } from '../ui/separator';
+  ChevronDown,
+} from "lucide-react";
+import { Badge } from "../ui/badge";
+import { Button } from "../ui/button";
+import { Separator } from "../ui/separator";
 
-const Sidebar = ({ currentView = 'schedule', onViewChange }) => {
+const Sidebar = ({ currentView = "schedule", onViewChange }) => {
   const menuItems = [
-    { id: 'schedule', label: 'Schedule', icon: Calendar, type: 'nav' },
-    { id: 'monitor', label: 'Monitor', icon: Monitor, type: 'nav' },
-    { id: 'calendar', label: 'Calendar', icon: CalendarDays, type: 'nav' },
-    { id: 'menu', label: 'Menu', icon: Menu, type: 'nav' },
-    { id: 'alergi', label: 'Alergi', icon: AlertTriangle, type: 'nav' },
-    { id: 'settings', label: 'Settings', icon: Settings, type: 'nav' },
+    { id: "schedule", label: "Schedule", icon: Calendar, type: "nav" },
+    { id: "monitor", label: "Monitor", icon: Monitor, type: "nav" },
+    { id: "calendar", label: "Calendar", icon: CalendarDays, type: "nav" },
+    { id: "menu", label: "Menu", icon: Menu, type: "nav" },
+    { id: "alergi", label: "Alergi", icon: AlertTriangle, type: "nav" },
+    { id: "settings", label: "Settings", icon: Settings, type: "nav" },
   ];
-
 
   return (
     <div className="w-64 h-screen bg-sidebar border-r border-sidebar-border flex flex-col">
@@ -51,18 +50,21 @@ const Sidebar = ({ currentView = 'schedule', onViewChange }) => {
             {menuItems.map((item) => {
               const Icon = item.icon;
               const isActive = currentView === item.id;
-              
+
               return (
                 <button
                   key={item.id}
                   onClick={() => onViewChange?.(item.id)}
                   className={`group w-full flex items-center gap-3 px-3 py-2.5 rounded-md text-sm font-medium transition-all duration-200 ${
-                    isActive 
-                      ? 'bg-primary text-primary-foreground shadow-sm' 
-                      : 'text-sidebar-foreground hover:bg-secondary hover:text-secondary-foreground'
+                    isActive
+                      ? "bg-primary text-primary-foreground shadow-sm"
+                      : "text-sidebar-foreground hover:bg-secondary hover:text-secondary-foreground"
                   }`}
                 >
-                  <Icon size={16} className="transition-transform duration-200 group-hover:scale-105" />
+                  <Icon
+                    size={16}
+                    className="transition-transform duration-200 group-hover:scale-105"
+                  />
                   {item.label}
                 </button>
               );
@@ -74,7 +76,10 @@ const Sidebar = ({ currentView = 'schedule', onViewChange }) => {
           {/* Utility Items */}
           <nav className="space-y-1">
             <button className="group w-full flex items-center gap-3 px-3 py-2.5 rounded-md text-sm font-medium text-sidebar-foreground hover:bg-secondary hover:text-secondary-foreground transition-all duration-200">
-              <HelpCircle size={16} className="transition-transform duration-200 group-hover:scale-105" />
+              <HelpCircle
+                size={16}
+                className="transition-transform duration-200 group-hover:scale-105"
+              />
               Get Help
             </button>
           </nav>
@@ -94,17 +99,24 @@ const Sidebar = ({ currentView = 'schedule', onViewChange }) => {
             ID: 502c037b...
           </span>
         </div>
-        
+
         {/* User Profile */}
         <div className="group flex items-center gap-3 p-2 rounded-md hover:bg-secondary transition-all duration-200 cursor-pointer">
           <div className="w-8 h-8 rounded-full bg-primary flex items-center justify-center text-primary-foreground text-sm font-medium">
             KS
           </div>
           <div className="flex-1 min-w-0">
-            <div className="text-sm font-medium text-sidebar-foreground group-hover:text-secondary-foreground transition-colors duration-200">Kamal Ashidiq</div>
-            <div className="text-xs text-muted-foreground truncate">k@shidiq.com</div>
+            <div className="text-sm font-medium text-sidebar-foreground group-hover:text-secondary-foreground transition-colors duration-200">
+              Kamal Ashidiq
+            </div>
+            <div className="text-xs text-muted-foreground truncate">
+              k@shidiq.com
+            </div>
           </div>
-          <ChevronDown size={16} className="text-muted-foreground group-hover:text-secondary-foreground transition-all duration-200" />
+          <ChevronDown
+            size={16}
+            className="text-muted-foreground group-hover:text-secondary-foreground transition-all duration-200"
+          />
         </div>
       </div>
     </div>

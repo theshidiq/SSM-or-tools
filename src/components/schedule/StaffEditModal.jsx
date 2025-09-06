@@ -1,5 +1,6 @@
 import React, { useEffect, useRef } from "react";
 import { X } from "lucide-react";
+import { toast } from "sonner";
 import { isDateWithinWorkPeriod } from "../../utils/dateUtils";
 
 // ShadCN UI Components
@@ -25,7 +26,6 @@ import { Card, CardContent, CardHeader, CardTitle } from "../ui/card";
 import { Badge } from "../ui/badge";
 import { Separator } from "../ui/separator";
 import { RadioGroup, RadioGroupItem } from "../ui/radio-group";
-import { toast } from "sonner";
 
 const StaffEditModal = ({
   showStaffEditModal,
@@ -366,11 +366,10 @@ const StaffEditModal = ({
                     <CardContent className="p-3">
                       <div className="flex items-center justify-between">
                         <div>
-                          <div className="font-medium">
-                            {staff.name}
-                          </div>
+                          <div className="font-medium">{staff.name}</div>
                           <div className="text-sm text-muted-foreground flex items-center gap-2">
-                            <span>{staff.position}</span> • <Badge variant="outline">{staff.status}</Badge>
+                            <span>{staff.position}</span> •{" "}
+                            <Badge variant="outline">{staff.status}</Badge>
                             {!isActive && (
                               <Badge variant="destructive">期間外</Badge>
                             )}
@@ -422,9 +421,7 @@ const StaffEditModal = ({
 
                 {/* Position Field */}
                 <div className="space-y-2">
-                  <Label htmlFor="staff-position">
-                    職位
-                  </Label>
+                  <Label htmlFor="staff-position">職位</Label>
                   <Input
                     id="staff-position"
                     type="text"
@@ -452,16 +449,18 @@ const StaffEditModal = ({
                         ...prev,
                         status: value,
                         // If 派遣 or パート is selected, set both periods to current year
-                        ...(value === "派遣" || value === "パート" ? {
-                          startPeriod: {
-                            ...prev.startPeriod,
-                            year: currentYear,
-                          },
-                          endPeriod: {
-                            ...prev.endPeriod,
-                            year: currentYear,
-                          },
-                        } : {})
+                        ...(value === "派遣" || value === "パート"
+                          ? {
+                              startPeriod: {
+                                ...prev.startPeriod,
+                                year: currentYear,
+                              },
+                              endPeriod: {
+                                ...prev.endPeriod,
+                                year: currentYear,
+                              },
+                            }
+                          : {}),
                       }));
                     }}
                     className="flex flex-row space-x-6"
@@ -483,12 +482,12 @@ const StaffEditModal = ({
 
                 {/* Start Period */}
                 <div className="space-y-2">
-                  <Label>
-                    開始期間
-                  </Label>
+                  <Label>開始期間</Label>
                   <div className="grid grid-cols-3 gap-2">
                     <Select
-                      value={safeEditingStaffData.startPeriod?.year?.toString() || ""}
+                      value={
+                        safeEditingStaffData.startPeriod?.year?.toString() || ""
+                      }
                       onValueChange={(value) =>
                         updateEditingStaffData((prev) => ({
                           ...prev,
@@ -515,7 +514,10 @@ const StaffEditModal = ({
                       </SelectContent>
                     </Select>
                     <Select
-                      value={safeEditingStaffData.startPeriod?.month?.toString() || ""}
+                      value={
+                        safeEditingStaffData.startPeriod?.month?.toString() ||
+                        ""
+                      }
                       onValueChange={(value) =>
                         updateEditingStaffData((prev) => ({
                           ...prev,
@@ -538,7 +540,9 @@ const StaffEditModal = ({
                       </SelectContent>
                     </Select>
                     <Select
-                      value={safeEditingStaffData.startPeriod?.day?.toString() || ""}
+                      value={
+                        safeEditingStaffData.startPeriod?.day?.toString() || ""
+                      }
                       onValueChange={(value) =>
                         updateEditingStaffData((prev) => ({
                           ...prev,
@@ -565,12 +569,12 @@ const StaffEditModal = ({
 
                 {/* End Period */}
                 <div className="space-y-2">
-                  <Label>
-                    終了期間
-                  </Label>
+                  <Label>終了期間</Label>
                   <div className="grid grid-cols-3 gap-2">
                     <Select
-                      value={safeEditingStaffData.endPeriod?.year?.toString() || ""}
+                      value={
+                        safeEditingStaffData.endPeriod?.year?.toString() || ""
+                      }
                       onValueChange={(value) =>
                         updateEditingStaffData((prev) => ({
                           ...prev,
@@ -598,7 +602,9 @@ const StaffEditModal = ({
                       </SelectContent>
                     </Select>
                     <Select
-                      value={safeEditingStaffData.endPeriod?.month?.toString() || ""}
+                      value={
+                        safeEditingStaffData.endPeriod?.month?.toString() || ""
+                      }
                       onValueChange={(value) =>
                         updateEditingStaffData((prev) => ({
                           ...prev,
@@ -624,7 +630,9 @@ const StaffEditModal = ({
                       </SelectContent>
                     </Select>
                     <Select
-                      value={safeEditingStaffData.endPeriod?.day?.toString() || ""}
+                      value={
+                        safeEditingStaffData.endPeriod?.day?.toString() || ""
+                      }
                       onValueChange={(value) =>
                         updateEditingStaffData((prev) => ({
                           ...prev,

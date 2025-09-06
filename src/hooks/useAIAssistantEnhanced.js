@@ -611,7 +611,7 @@ export const useAIAssistantEnhanced = (
 
     console.log("🛑 Cancelling enhanced AI processing...");
 
-    let results = [];
+    const results = [];
 
     // Cancel server processing if active
     if (serverProcessing) {

@@ -1,8 +1,8 @@
-import React, { useState } from 'react';
-import Sidebar from './Sidebar';
+import React, { useState } from "react";
+import Sidebar from "./Sidebar";
 
 const DashboardLayout = ({ children }) => {
-  const [currentView, setCurrentView] = useState('schedule');
+  const [currentView, setCurrentView] = useState("schedule");
 
   const handleViewChange = (view) => {
     setCurrentView(view);
@@ -11,17 +11,20 @@ const DashboardLayout = ({ children }) => {
   };
 
   const renderContent = () => {
-    if (currentView === 'schedule') {
+    if (currentView === "schedule") {
       return children;
     }
-    
+
     // Show "Coming Soon" for all other views
     return (
       <div className="flex items-center justify-center h-full bg-background">
         <div className="text-center">
-          <h1 className="text-4xl font-bold text-muted-foreground mb-4">Coming Soon</h1>
+          <h1 className="text-4xl font-bold text-muted-foreground mb-4">
+            Coming Soon
+          </h1>
           <p className="text-lg text-muted-foreground capitalize">
-            {currentView.replace(/([A-Z])/g, ' $1').trim()} feature is under development
+            {currentView.replace(/([A-Z])/g, " $1").trim()} feature is under
+            development
           </p>
         </div>
       </div>
@@ -31,18 +34,13 @@ const DashboardLayout = ({ children }) => {
   return (
     <div className="flex h-screen bg-gray-50">
       {/* Sidebar */}
-      <Sidebar 
-        currentView={currentView} 
-        onViewChange={handleViewChange} 
-      />
-      
+      <Sidebar currentView={currentView} onViewChange={handleViewChange} />
+
       {/* Main Content */}
       <div className="flex-1 flex flex-col overflow-hidden">
         {/* Content Area */}
         <main className="flex-1 overflow-auto">
-          <div className="h-full">
-            {renderContent()}
-          </div>
+          <div className="h-full">{renderContent()}</div>
         </main>
       </div>
     </div>

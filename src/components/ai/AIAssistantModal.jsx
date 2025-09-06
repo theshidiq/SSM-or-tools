@@ -93,7 +93,13 @@ const AIAssistantModal = ({
                 </div>
                 <div className="text-xs text-muted-foreground">
                   MLモデル:{" "}
-                  <Badge variant={systemStatus.health?.mlModel?.ready ? "default" : "outline"}>
+                  <Badge
+                    variant={
+                      systemStatus.health?.mlModel?.ready
+                        ? "default"
+                        : "outline"
+                    }
+                  >
                     {systemStatus.health?.mlModel?.ready
                       ? "準備完了"
                       : "トレーニング必要"}
@@ -111,217 +117,217 @@ const AIAssistantModal = ({
             </Card>
           )}
 
-            {/* Training Progress */}
-            {isProcessing && trainingProgress && (
-              <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 mb-4">
+          {/* Training Progress */}
+          {isProcessing && trainingProgress && (
+            <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 mb-4">
+              <div className="flex items-center gap-2 mb-2">
+                <Zap size={16} className="text-yellow-600 animate-pulse" />
+                <span className="text-sm font-medium text-yellow-900">
+                  {trainingProgress.message || "AI処理中..."}
+                </span>
+              </div>
+              <div className="w-full bg-yellow-200 rounded-full h-2">
+                <div
+                  className="bg-yellow-600 h-2 rounded-full transition-all duration-300"
+                  style={{ width: `${trainingProgress.progress || 0}%` }}
+                ></div>
+              </div>
+              <div className="text-xs text-yellow-700 mt-1">
+                {trainingProgress.progress || 0}% 完了
+              </div>
+            </div>
+          )}
+
+          <div className="text-center">
+            <Sparkles size={32} className="text-violet-600 mx-auto mb-2" />
+            <h3 className="text-lg font-medium text-gray-900 mb-2">
+              AI スケジュール自動入力
+            </h3>
+            <p className="text-gray-600 text-sm mb-4">
+              ハイブリッドAIが機械学習とビジネスルールで最適なシフトを予測します
+            </p>
+            <button
+              onClick={handleAutoFillSchedule}
+              disabled={isProcessing}
+              className="bg-violet-600 text-white px-6 py-2 rounded-lg hover:bg-violet-700 disabled:opacity-50 transition-colors flex items-center gap-2 mx-auto"
+            >
+              <Sparkles
+                size={16}
+                className={isProcessing ? "animate-spin" : ""}
+              />
+              {isProcessing ? "AI処理中..." : "AI 自動入力を実行"}
+            </button>
+          </div>
+
+          {results && (
+            <div className="mt-6 space-y-4">
+              <div
+                className={`border rounded-lg p-4 ${
+                  results.success
+                    ? "bg-green-50 border-green-200"
+                    : "bg-red-50 border-red-200"
+                }`}
+              >
                 <div className="flex items-center gap-2 mb-2">
-                  <Zap size={16} className="text-yellow-600 animate-pulse" />
-                  <span className="text-sm font-medium text-yellow-900">
-                    {trainingProgress.message || "AI処理中..."}
+                  <CheckCircle
+                    size={16}
+                    className={
+                      results.success ? "text-green-600" : "text-red-600"
+                    }
+                  />
+                  <span
+                    className={`font-medium ${results.success ? "text-green-900" : "text-red-900"}`}
+                  >
+                    {results.success ? "自動入力完了" : "エラー"}
                   </span>
                 </div>
-                <div className="w-full bg-yellow-200 rounded-full h-2">
-                  <div
-                    className="bg-yellow-600 h-2 rounded-full transition-all duration-300"
-                    style={{ width: `${trainingProgress.progress || 0}%` }}
-                  ></div>
-                </div>
-                <div className="text-xs text-yellow-700 mt-1">
-                  {trainingProgress.progress || 0}% 完了
-                </div>
-              </div>
-            )}
-
-            <div className="text-center">
-              <Sparkles size={32} className="text-violet-600 mx-auto mb-2" />
-              <h3 className="text-lg font-medium text-gray-900 mb-2">
-                AI スケジュール自動入力
-              </h3>
-              <p className="text-gray-600 text-sm mb-4">
-                ハイブリッドAIが機械学習とビジネスルールで最適なシフトを予測します
-              </p>
-              <button
-                onClick={handleAutoFillSchedule}
-                disabled={isProcessing}
-                className="bg-violet-600 text-white px-6 py-2 rounded-lg hover:bg-violet-700 disabled:opacity-50 transition-colors flex items-center gap-2 mx-auto"
-              >
-                <Sparkles
-                  size={16}
-                  className={isProcessing ? "animate-spin" : ""}
-                />
-                {isProcessing ? "AI処理中..." : "AI 自動入力を実行"}
-              </button>
-            </div>
-
-            {results && (
-              <div className="mt-6 space-y-4">
-                <div
-                  className={`border rounded-lg p-4 ${
-                    results.success
-                      ? "bg-green-50 border-green-200"
-                      : "bg-red-50 border-red-200"
-                  }`}
+                <p
+                  className={`text-sm ${results.success ? "text-green-800" : "text-red-800"}`}
                 >
-                  <div className="flex items-center gap-2 mb-2">
-                    <CheckCircle
-                      size={16}
-                      className={
-                        results.success ? "text-green-600" : "text-red-600"
-                      }
-                    />
-                    <span
-                      className={`font-medium ${results.success ? "text-green-900" : "text-red-900"}`}
-                    >
-                      {results.success ? "自動入力完了" : "エラー"}
-                    </span>
-                  </div>
-                  <p
-                    className={`text-sm ${results.success ? "text-green-800" : "text-red-800"}`}
-                  >
-                    {results.message}
-                  </p>
-                </div>
+                  {results.message}
+                </p>
+              </div>
 
-                {results.success && results.data && (
-                  <div className="space-y-3">
-                    {/* Main Metrics */}
-                    <div className="grid grid-cols-2 gap-3">
-                      <div className="bg-gray-50 rounded-lg p-3">
-                        <div className="text-sm text-gray-600 mb-1 flex items-center gap-1">
-                          <Target size={12} />
-                          入力されたセル数
-                        </div>
-                        <div className="text-2xl font-bold text-violet-600">
-                          {results.data.filledCells || 0}
-                        </div>
+              {results.success && results.data && (
+                <div className="space-y-3">
+                  {/* Main Metrics */}
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="bg-gray-50 rounded-lg p-3">
+                      <div className="text-sm text-gray-600 mb-1 flex items-center gap-1">
+                        <Target size={12} />
+                        入力されたセル数
                       </div>
-
-                      <div className="bg-gray-50 rounded-lg p-3">
-                        <div className="text-sm text-gray-600 mb-1 flex items-center gap-1">
-                          <TrendingUp size={12} />
-                          予測精度
-                        </div>
-                        <div className="text-2xl font-bold text-green-600">
-                          {results.data.accuracy || 0}%
-                        </div>
+                      <div className="text-2xl font-bold text-violet-600">
+                        {results.data.filledCells || 0}
                       </div>
                     </div>
 
-                    {/* ML System Details */}
-                    {results.data.mlUsed && (
-                      <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
-                        <div className="text-sm font-medium text-blue-900 mb-2 flex items-center gap-1">
-                          <Brain size={14} />
-                          機械学習情報
-                        </div>
-                        <div className="space-y-1 text-xs text-blue-800">
-                          <div>
-                            モデル精度: {results.data.modelAccuracy || 0}%
-                          </div>
-                          <div>
-                            予測手法: {results.data.hybridMethod || "hybrid"}
-                          </div>
-                          <div>
-                            ルール適用:{" "}
-                            {results.data.rulesApplied ? "あり" : "なし"}
-                          </div>
-                          {results.data.processingTime && (
-                            <div className="flex items-center gap-1">
-                              <Clock size={10} />
-                              処理時間: {results.data.processingTime}ms
-                            </div>
-                          )}
-                        </div>
+                    <div className="bg-gray-50 rounded-lg p-3">
+                      <div className="text-sm text-gray-600 mb-1 flex items-center gap-1">
+                        <TrendingUp size={12} />
+                        予測精度
                       </div>
-                    )}
-
-                    {/* Performance Metrics */}
-                    {systemStatus?.health?.mlModel && (
-                      <div className="bg-gray-50 border border-gray-200 rounded-lg p-3">
-                        <div className="text-sm font-medium text-gray-900 mb-2 flex items-center gap-1">
-                          <BarChart3 size={14} />
-                          パフォーマンス
-                        </div>
-                        <div className="grid grid-cols-2 gap-2 text-xs text-gray-700">
-                          <div>
-                            メモリ使用量:{" "}
-                            {Math.round(
-                              (systemStatus.health.mlModel.memoryUsage?.total ||
-                                0) /
-                                1024 /
-                                1024,
-                            )}
-                            MB
-                          </div>
-                          <div>
-                            テンソル数:{" "}
-                            {systemStatus.health.mlModel.memoryUsage
-                              ?.numTensors || 0}
-                          </div>
-                        </div>
+                      <div className="text-2xl font-bold text-green-600">
+                        {results.data.accuracy || 0}%
                       </div>
-                    )}
+                    </div>
+                  </div>
 
-                    {/* Error Information */}
-                    {results.error && results.canRetry && (
-                      <div className="bg-orange-50 border border-orange-200 rounded-lg p-3">
-                        <div className="text-sm font-medium text-orange-900 mb-1">
-                          エラー情報
+                  {/* ML System Details */}
+                  {results.data.mlUsed && (
+                    <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+                      <div className="text-sm font-medium text-blue-900 mb-2 flex items-center gap-1">
+                        <Brain size={14} />
+                        機械学習情報
+                      </div>
+                      <div className="space-y-1 text-xs text-blue-800">
+                        <div>
+                          モデル精度: {results.data.modelAccuracy || 0}%
                         </div>
-                        <div className="text-xs text-orange-800 mb-2">
-                          {results.error.error}
+                        <div>
+                          予測手法: {results.data.hybridMethod || "hybrid"}
                         </div>
-                        {results.recommendedAction && (
-                          <div className="text-xs text-orange-700">
-                            推奨アクション: {results.recommendedAction}
+                        <div>
+                          ルール適用:{" "}
+                          {results.data.rulesApplied ? "あり" : "なし"}
+                        </div>
+                        {results.data.processingTime && (
+                          <div className="flex items-center gap-1">
+                            <Clock size={10} />
+                            処理時間: {results.data.processingTime}ms
                           </div>
                         )}
                       </div>
+                    </div>
+                  )}
+
+                  {/* Performance Metrics */}
+                  {systemStatus?.health?.mlModel && (
+                    <div className="bg-gray-50 border border-gray-200 rounded-lg p-3">
+                      <div className="text-sm font-medium text-gray-900 mb-2 flex items-center gap-1">
+                        <BarChart3 size={14} />
+                        パフォーマンス
+                      </div>
+                      <div className="grid grid-cols-2 gap-2 text-xs text-gray-700">
+                        <div>
+                          メモリ使用量:{" "}
+                          {Math.round(
+                            (systemStatus.health.mlModel.memoryUsage?.total ||
+                              0) /
+                              1024 /
+                              1024,
+                          )}
+                          MB
+                        </div>
+                        <div>
+                          テンソル数:{" "}
+                          {systemStatus.health.mlModel.memoryUsage
+                            ?.numTensors || 0}
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Error Information */}
+                  {results.error && results.canRetry && (
+                    <div className="bg-orange-50 border border-orange-200 rounded-lg p-3">
+                      <div className="text-sm font-medium text-orange-900 mb-1">
+                        エラー情報
+                      </div>
+                      <div className="text-xs text-orange-800 mb-2">
+                        {results.error.error}
+                      </div>
+                      {results.recommendedAction && (
+                        <div className="text-xs text-orange-700">
+                          推奨アクション: {results.recommendedAction}
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Violations and Corrections */}
+                  {results.data.violations &&
+                    results.data.violations.length > 0 && (
+                      <div className="bg-orange-50 border border-orange-200 rounded-lg p-3">
+                        <div className="text-sm font-medium text-orange-900 mb-2">
+                          ルール違反と修正: {results.data.violations.length}件
+                        </div>
+                        <div className="text-xs text-orange-800">
+                          AIが自動で修正し、ビジネスルールに適合したスケジュールを生成しました。
+                        </div>
+                      </div>
                     )}
 
-                    {/* Violations and Corrections */}
-                    {results.data.violations &&
-                      results.data.violations.length > 0 && (
-                        <div className="bg-orange-50 border border-orange-200 rounded-lg p-3">
-                          <div className="text-sm font-medium text-orange-900 mb-2">
-                            ルール違反と修正: {results.data.violations.length}件
-                          </div>
-                          <div className="text-xs text-orange-800">
-                            AIが自動で修正し、ビジネスルールに適合したスケジュールを生成しました。
-                          </div>
+                  {results.data.patterns &&
+                    results.data.patterns.length > 0 && (
+                      <div className="mt-4">
+                        <div className="text-sm font-medium text-gray-900 mb-2 flex items-center gap-1">
+                          <Lightbulb size={16} className="text-yellow-500" />
+                          学習されたパターン
                         </div>
-                      )}
-
-                    {results.data.patterns &&
-                      results.data.patterns.length > 0 && (
-                        <div className="mt-4">
-                          <div className="text-sm font-medium text-gray-900 mb-2 flex items-center gap-1">
-                            <Lightbulb size={16} className="text-yellow-500" />
-                            学習されたパターン
-                          </div>
-                          <div className="space-y-2">
-                            {results.data.patterns
-                              .slice(0, 3)
-                              .map((pattern, index) => (
-                                <div
-                                  key={index}
-                                  className="bg-blue-50 border border-blue-200 rounded-lg p-3"
-                                >
-                                  <div className="text-sm text-blue-900">
-                                    {pattern.description}
-                                  </div>
-                                  <div className="text-xs text-blue-600 mt-1">
-                                    信頼度: {pattern.confidence}%
-                                  </div>
+                        <div className="space-y-2">
+                          {results.data.patterns
+                            .slice(0, 3)
+                            .map((pattern, index) => (
+                              <div
+                                key={index}
+                                className="bg-blue-50 border border-blue-200 rounded-lg p-3"
+                              >
+                                <div className="text-sm text-blue-900">
+                                  {pattern.description}
                                 </div>
-                              ))}
-                          </div>
+                                <div className="text-xs text-blue-600 mt-1">
+                                  信頼度: {pattern.confidence}%
+                                </div>
+                              </div>
+                            ))}
                         </div>
-                      )}
-                  </div>
-                )}
-              </div>
-            )}
+                      </div>
+                    )}
+                </div>
+              )}
+            </div>
+          )}
         </div>
 
         {/* Footer */}

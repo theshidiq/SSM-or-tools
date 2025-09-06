@@ -45,6 +45,18 @@ export const useStaffRealtime = (currentMonthIndex, options = {}) => {
   // Period context
   const [currentPeriod, setCurrentPeriod] = useState(currentMonthIndex);
 
+  // Modal states (Phase 2 Fix: Add proper state management)
+  const [isAddingNewStaff, setIsAddingNewStaff] = useState(false);
+  const [selectedStaffForEdit, setSelectedStaffForEdit] = useState(null);
+  const [showStaffEditModal, setShowStaffEditModal] = useState(false);
+  const [editingStaffData, setEditingStaffData] = useState({
+    name: "",
+    position: "",
+    status: "社員",
+    startPeriod: null,
+    endPeriod: null,
+  });
+
   // Connection check query - Updated to use staff table
   const { data: _connectionStatus } = useQuery({
     queryKey: STAFF_REALTIME_QUERY_KEYS.connection(),
@@ -753,21 +765,15 @@ export const useStaffRealtime = (currentMonthIndex, options = {}) => {
     hasInitiallyLoaded: !!rawStaffData,
     isRefreshingFromDatabase: false, // Not implemented yet
 
-    // Modal states (for compatibility)
-    isAddingNewStaff: false,
-    setIsAddingNewStaff: () => {},
-    selectedStaffForEdit: null,
-    setSelectedStaffForEdit: () => {},
-    showStaffEditModal: false,
-    setShowStaffEditModal: () => {},
-    editingStaffData: {
-      name: "",
-      position: "",
-      status: "社員",
-      startPeriod: null,
-      endPeriod: null,
-    },
-    setEditingStaffData: () => {},
+    // Modal states (Phase 2 Fix: Use real state instead of hardcoded values)
+    isAddingNewStaff,
+    setIsAddingNewStaff,
+    selectedStaffForEdit,
+    setSelectedStaffForEdit,
+    showStaffEditModal,
+    setShowStaffEditModal,
+    editingStaffData,
+    setEditingStaffData,
 
     // Utility functions (for compatibility)
     cleanupAllPeriods: () => 0,

@@ -1,10 +1,10 @@
 /**
  * ErrorBoundary.jsx
- * 
+ *
  * Error boundary component for lazy loaded AI features
  */
 
-import React, { Component } from 'react';
+import React, { Component } from "react";
 
 class ErrorBoundary extends Component {
   constructor(props) {
@@ -13,7 +13,7 @@ class ErrorBoundary extends Component {
       hasError: false,
       error: null,
       errorInfo: null,
-      retryCount: 0
+      retryCount: 0,
     };
   }
 
@@ -24,25 +24,25 @@ class ErrorBoundary extends Component {
 
   componentDidCatch(error, errorInfo) {
     // Log error details
-    console.error('ErrorBoundary caught an error:', error, errorInfo);
-    
+    console.error("ErrorBoundary caught an error:", error, errorInfo);
+
     this.setState({
       error: error,
-      errorInfo: errorInfo
+      errorInfo: errorInfo,
     });
 
     // Log to performance monitoring if available
     if (window.performance && window.performance.mark) {
-      window.performance.mark('ai-feature-load-error');
+      window.performance.mark("ai-feature-load-error");
     }
   }
 
   handleRetry = () => {
-    this.setState(prevState => ({
+    this.setState((prevState) => ({
       hasError: false,
       error: null,
       errorInfo: null,
-      retryCount: prevState.retryCount + 1
+      retryCount: prevState.retryCount + 1,
     }));
   };
 
@@ -51,11 +51,11 @@ class ErrorBoundary extends Component {
     if (this.props.onDisableFeature) {
       this.props.onDisableFeature();
     }
-    
+
     this.setState({
       hasError: false,
       error: null,
-      errorInfo: null
+      errorInfo: null,
     });
   };
 
@@ -67,7 +67,11 @@ class ErrorBoundary extends Component {
           <div className="flex items-center space-x-2 mb-4">
             <div className="text-red-600">
               <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
-                <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                <path
+                  fillRule="evenodd"
+                  d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z"
+                  clipRule="evenodd"
+                />
               </svg>
             </div>
             <h3 className="text-lg font-medium text-red-800">
@@ -76,23 +80,27 @@ class ErrorBoundary extends Component {
           </div>
 
           <div className="text-red-700 mb-4">
-            {this.props.userFriendlyMessage || 'There was an error loading the AI features. The core application will continue to work normally.'}
+            {this.props.userFriendlyMessage ||
+              "There was an error loading the AI features. The core application will continue to work normally."}
           </div>
 
-          {process.env.NODE_ENV === 'development' && this.state.error && (
+          {process.env.NODE_ENV === "development" && this.state.error && (
             <details className="mb-4">
               <summary className="cursor-pointer text-red-600 text-sm font-medium mb-2">
                 Technical Details (Development)
               </summary>
               <div className="bg-red-100 border border-red-200 rounded p-3 text-xs font-mono text-red-800 overflow-auto max-h-32">
                 <div className="font-semibold mb-1">Error:</div>
-                <div className="mb-2">{this.state.error && this.state.error.toString()}</div>
-                {this.state.errorInfo && this.state.errorInfo.componentStack && (
-                  <>
-                    <div className="font-semibold mb-1">Component Stack:</div>
-                    <div>{this.state.errorInfo.componentStack}</div>
-                  </>
-                )}
+                <div className="mb-2">
+                  {this.state.error && this.state.error.toString()}
+                </div>
+                {this.state.errorInfo &&
+                  this.state.errorInfo.componentStack && (
+                    <>
+                      <div className="font-semibold mb-1">Component Stack:</div>
+                      <div>{this.state.errorInfo.componentStack}</div>
+                    </>
+                  )}
               </div>
             </details>
           )}
@@ -103,20 +111,27 @@ class ErrorBoundary extends Component {
                 onClick={this.handleRetry}
                 className="px-4 py-2 bg-red-600 text-white text-sm font-medium rounded hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2"
               >
-                {this.state.retryCount === 0 ? 'Retry' : `Retry (${3 - this.state.retryCount} attempts left)`}
+                {this.state.retryCount === 0
+                  ? "Retry"
+                  : `Retry (${3 - this.state.retryCount} attempts left)`}
               </button>
             )}
-            
+
             <button
               onClick={this.handleDisableFeature}
               className="px-4 py-2 bg-gray-300 text-gray-700 text-sm font-medium rounded hover:bg-gray-400 focus:outline-none focus:ring-2 focus:ring-gray-500 focus:ring-offset-2"
             >
               Continue Without AI
             </button>
-            
+
             {this.props.onReportError && (
               <button
-                onClick={() => this.props.onReportError(this.state.error, this.state.errorInfo)}
+                onClick={() =>
+                  this.props.onReportError(
+                    this.state.error,
+                    this.state.errorInfo,
+                  )
+                }
                 className="px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
               >
                 Report Issue
@@ -127,8 +142,9 @@ class ErrorBoundary extends Component {
           {this.state.retryCount >= 3 && (
             <div className="mt-4 p-3 bg-yellow-50 border border-yellow-200 rounded">
               <div className="text-yellow-800 text-sm">
-                <strong>Multiple failures detected.</strong> AI features may be incompatible with your browser or device. 
-                The application will continue to work without AI assistance.
+                <strong>Multiple failures detected.</strong> AI features may be
+                incompatible with your browser or device. The application will
+                continue to work without AI assistance.
               </div>
             </div>
           )}
@@ -147,7 +163,7 @@ export const withErrorBoundary = (Component, errorBoundaryProps = {}) => {
       <Component {...props} />
     </ErrorBoundary>
   );
-  
+
   WrappedComponent.displayName = `withErrorBoundary(${Component.displayName || Component.name})`;
   return WrappedComponent;
 };
@@ -156,8 +172,18 @@ export const withErrorBoundary = (Component, errorBoundaryProps = {}) => {
 export const SimpleErrorFallback = ({ error, retry, disable }) => (
   <div className="text-center py-8 px-4 bg-gray-50 border border-gray-200 rounded-lg">
     <div className="text-gray-600 mb-4">
-      <svg className="w-8 h-8 mx-auto mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L3.732 16.5c-.77.833.192 2.5 1.732 2.5z" />
+      <svg
+        className="w-8 h-8 mx-auto mb-2"
+        fill="none"
+        stroke="currentColor"
+        viewBox="0 0 24 24"
+      >
+        <path
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          strokeWidth={2}
+          d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L3.732 16.5c-.77.833.192 2.5 1.732 2.5z"
+        />
       </svg>
       Something went wrong loading this feature
     </div>

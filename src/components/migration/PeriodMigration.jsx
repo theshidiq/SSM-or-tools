@@ -1,10 +1,10 @@
-import React, { useEffect, useState } from 'react';
-import { supabase } from '../../utils/supabase';
-import { refreshPeriodsCache } from '../../utils/dateUtils';
+import React, { useEffect, useState } from "react";
+import { supabase } from "../../utils/supabase";
+import { refreshPeriodsCache } from "../../utils/dateUtils";
 
 // Migration component to handle localStorage to database migration
 export const PeriodMigration = ({ onMigrationComplete }) => {
-  const [migrationStatus, setMigrationStatus] = useState('checking');
+  const [migrationStatus, setMigrationStatus] = useState("checking");
   const [error, setError] = useState(null);
 
   const defaultMonthPeriods = [
@@ -43,112 +43,130 @@ export const PeriodMigration = ({ onMigrationComplete }) => {
   useEffect(() => {
     const performMigration = async () => {
       try {
-        setMigrationStatus('checking');
-        
+        setMigrationStatus("checking");
+
         // Check if migration has already been completed
-        const migrationKey = 'periods_migrated_to_supabase';
+        const migrationKey = "periods_migrated_to_supabase";
         const alreadyMigrated = localStorage.getItem(migrationKey);
-        
+
         if (alreadyMigrated) {
-          console.log('✅ Periods migration already completed');
-          setMigrationStatus('completed');
+          console.log("✅ Periods migration already completed");
+          setMigrationStatus("completed");
           if (onMigrationComplete) onMigrationComplete();
           return;
         }
 
         // Check if we have periods in database
-        const { data: existingPeriods, error: fetchError } = await supabase.rpc('get_periods');
-        
+        const { data: existingPeriods, error: fetchError } =
+          await supabase.rpc("get_periods");
+
         if (fetchError) {
-          console.error('❌ Failed to check existing periods:', fetchError);
+          console.error("❌ Failed to check existing periods:", fetchError);
           setError(fetchError.message);
-          setMigrationStatus('error');
+          setMigrationStatus("error");
           return;
         }
 
         if (existingPeriods && existingPeriods.length > 0) {
-          console.log('✅ Periods already exist in database, skipping migration');
-          localStorage.setItem(migrationKey, 'true');
-          setMigrationStatus('completed');
+          console.log(
+            "✅ Periods already exist in database, skipping migration",
+          );
+          localStorage.setItem(migrationKey, "true");
+          setMigrationStatus("completed");
           if (onMigrationComplete) onMigrationComplete();
           return;
         }
 
-        setMigrationStatus('migrating');
+        setMigrationStatus("migrating");
 
         // Check for localStorage periods to migrate
-        const periodsStorageKey = 'shift_manager_periods';
+        const periodsStorageKey = "shift_manager_periods";
         const stored = localStorage.getItem(periodsStorageKey);
-        
+
         if (stored) {
-          console.log('🔄 Migrating periods from localStorage to database...');
-          
+          console.log("🔄 Migrating periods from localStorage to database...");
+
           try {
             const serializedPeriods = JSON.parse(stored);
-            
+
             // Insert periods into Supabase
             for (const period of serializedPeriods) {
-              const { error: insertError } = await supabase.rpc('add_period', {
-                p_start_date: period.start.split('T')[0],
-                p_end_date: period.end.split('T')[0],
-                p_label: period.label
+              const { error: insertError } = await supabase.rpc("add_period", {
+                p_start_date: period.start.split("T")[0],
+                p_end_date: period.end.split("T")[0],
+                p_label: period.label,
               });
-              
+
               if (insertError) {
-                console.error('Failed to migrate period:', period.label, insertError);
+                console.error(
+                  "Failed to migrate period:",
+                  period.label,
+                  insertError,
+                );
                 // Continue with other periods even if one fails
               }
             }
-            
-            console.log('✅ Successfully migrated periods from localStorage');
-            
+
+            console.log("✅ Successfully migrated periods from localStorage");
           } catch (parseError) {
-            console.error('❌ Failed to parse localStorage periods:', parseError);
+            console.error(
+              "❌ Failed to parse localStorage periods:",
+              parseError,
+            );
             // Fall through to create default periods
           }
         } else {
           // Check if this is first time use
-          const hasEverHadPeriods = localStorage.getItem('periods_ever_initialized');
-          
+          const hasEverHadPeriods = localStorage.getItem(
+            "periods_ever_initialized",
+          );
+
           if (!hasEverHadPeriods) {
-            console.log('🆕 First time use - creating default periods in database...');
-            
+            console.log(
+              "🆕 First time use - creating default periods in database...",
+            );
+
             // Create default periods
             for (const period of defaultMonthPeriods) {
-              const { error: insertError } = await supabase.rpc('add_period', {
-                p_start_date: period.start.toISOString().split('T')[0],
-                p_end_date: period.end.toISOString().split('T')[0],
-                p_label: period.label
+              const { error: insertError } = await supabase.rpc("add_period", {
+                p_start_date: period.start.toISOString().split("T")[0],
+                p_end_date: period.end.toISOString().split("T")[0],
+                p_label: period.label,
               });
-              
+
               if (insertError) {
-                console.error('Failed to create default period:', period.label, insertError);
+                console.error(
+                  "Failed to create default period:",
+                  period.label,
+                  insertError,
+                );
                 // Continue with other periods even if one fails
               }
             }
-            
-            console.log('✅ Successfully created default periods');
+
+            console.log("✅ Successfully created default periods");
           } else {
-            console.log('ℹ️ User previously deleted all periods - respecting choice');
+            console.log(
+              "ℹ️ User previously deleted all periods - respecting choice",
+            );
           }
         }
 
         // Mark migration as completed
-        localStorage.setItem(migrationKey, 'true');
-        
+        localStorage.setItem(migrationKey, "true");
+
         // Refresh the periods cache
         await refreshPeriodsCache();
-        
-        setMigrationStatus('completed');
-        console.log('✅ Period migration completed successfully');
-        
+
+        setMigrationStatus("completed");
+        console.log("✅ Period migration completed successfully");
+
         if (onMigrationComplete) onMigrationComplete();
-        
       } catch (err) {
-        console.error('❌ Migration failed:', err);
+        console.error("❌ Migration failed:", err);
         setError(err.message);
-        setMigrationStatus('error');
-        
+        setMigrationStatus("error");
+
         // Still call completion callback so app doesn't hang
         if (onMigrationComplete) onMigrationComplete();
       }
@@ -158,7 +176,7 @@ export const PeriodMigration = ({ onMigrationComplete }) => {
   }, [onMigrationComplete]);
 
   // Don't render anything - this is a background migration
-  if (migrationStatus === 'completed' || migrationStatus === 'error') {
+  if (migrationStatus === "completed" || migrationStatus === "error") {
     return null;
   }
 
@@ -168,12 +186,12 @@ export const PeriodMigration = ({ onMigrationComplete }) => {
       <div className="bg-card p-6 rounded-lg shadow-lg max-w-md text-center">
         <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto mb-4"></div>
         <h3 className="text-lg font-semibold mb-2">
-          {migrationStatus === 'checking' && 'Checking periods...'}
-          {migrationStatus === 'migrating' && 'Migrating periods...'}
+          {migrationStatus === "checking" && "Checking periods..."}
+          {migrationStatus === "migrating" && "Migrating periods..."}
         </h3>
         <p className="text-sm text-muted-foreground">
-          {migrationStatus === 'checking' && 'Verifying database state...'}
-          {migrationStatus === 'migrating' && 'Moving periods to database...'}
+          {migrationStatus === "checking" && "Verifying database state..."}
+          {migrationStatus === "migrating" && "Moving periods to database..."}
         </p>
       </div>
     </div>

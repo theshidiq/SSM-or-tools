@@ -7,12 +7,6 @@ import React, {
 } from "react";
 
 // ShadCN UI components
-import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
-import { Badge } from "./ui/badge";
-import { Alert, AlertDescription } from "./ui/alert";
-import { Separator } from "./ui/separator";
-
-// Import extracted utilities and constants
 import { shiftSymbols, getAvailableShifts } from "../constants/shiftConstants";
 import {
   monthPeriods,
@@ -25,11 +19,18 @@ import { usePeriodsRealtime } from "../hooks/usePeriodsRealtime";
 import { getOrderedStaffMembers } from "../utils/staffUtils";
 import { generateStatistics } from "../utils/statisticsUtils";
 import { exportToCSV, printSchedule } from "../utils/exportUtils";
-
-// Import extracted components
 import { useScheduleDataRealtime } from "../hooks/useScheduleDataRealtime";
 import { useStaffRealtime } from "../hooks/useStaffRealtime";
 import { useSettingsData } from "../hooks/useSettingsData";
+import { manualInputTestSuite } from "../utils/manualInputTestSuite";
+import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
+import { Badge } from "./ui/badge";
+import { Alert, AlertDescription } from "./ui/alert";
+import { Separator } from "./ui/separator";
+
+// Import extracted utilities and constants
+
+// Import extracted components
 import ErrorDisplay from "./schedule/ErrorDisplay";
 import StatisticsDashboard from "./schedule/StatisticsDashboard";
 import NavigationToolbar from "./schedule/NavigationToolbar";
@@ -40,7 +41,6 @@ import StatusModal from "./common/StatusModal";
 import SettingsModal from "./settings/SettingsModal";
 
 // Manual input integration utilities (development only)
-import { manualInputTestSuite } from "../utils/manualInputTestSuite";
 import { dataIntegrityMonitor } from "../utils/dataIntegrityUtils";
 import { runPhase1TestSuite } from "../utils/phase1Validation";
 

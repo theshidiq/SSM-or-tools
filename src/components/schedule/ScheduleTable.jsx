@@ -12,13 +12,21 @@ import {
 } from "lucide-react";
 
 // ShadCN UI components
+import { toast } from "sonner";
 import { Card, CardContent, CardHeader, CardTitle } from "../ui/card";
 import { Button } from "../ui/button";
 import { Badge } from "../ui/badge";
 import { Separator } from "../ui/separator";
-import { Table, TableBody, TableCell, TableFooter, TableHead, TableHeader, TableRow } from "../ui/table";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableFooter,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "../ui/table";
 import { Input } from "../ui/input";
-import { toast } from "sonner";
 import {
   shiftSymbols,
   getAvailableShifts,
@@ -99,10 +107,13 @@ const ScheduleTable = ({
   const showBulkToolbar = selectedCells.size > 1;
 
   // Utility function to check if a cell has pending changes
-  const isCellPending = useCallback((staffId, dateKey) => {
-    const cellKey = `${staffId}_${dateKey}`;
-    return pendingCells.has(cellKey);
-  }, [pendingCells]);
+  const isCellPending = useCallback(
+    (staffId, dateKey) => {
+      const cellKey = `${staffId}_${dateKey}`;
+      return pendingCells.has(cellKey);
+    },
+    [pendingCells],
+  );
 
   // Track drag state to prevent accidental drag selection
   const [isDragging, setIsDragging] = useState(false);
@@ -611,7 +622,7 @@ const ScheduleTable = ({
           )}
         </div>
       )}
-      
+
       {/* Bulk Operations Toolbar - Bottom positioned with slide up animation */}
       {showBulkToolbar && (
         <div
@@ -965,7 +976,7 @@ const ScheduleTable = ({
                             isActiveForDate && (
                               <div className="absolute top-0 right-0 w-2 h-2 bg-blue-500 rounded-full transform translate-x-1 -translate-y-1"></div>
                             )}
-                            
+
                           {/* Pending changes indicator */}
                           {isPending && isActiveForDate && (
                             <div className="absolute bottom-0 left-0 w-3 h-3 bg-orange-400 rounded-full transform -translate-x-1 translate-y-1 flex items-center justify-center">

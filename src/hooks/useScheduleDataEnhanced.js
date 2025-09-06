@@ -3,14 +3,14 @@
  * Combines Phase 1 real-time with Phase 2 advanced features
  */
 
-import { useScheduleDataRealtime } from "./useScheduleDataRealtime";
-import { useAdvancedCache } from "./useAdvancedCache";
-import { useOfflineSupport, OPERATION_TYPES } from "./useOfflineSupport";
+import { useCallback, useEffect, useMemo } from "react";
 import {
   useConflictResolver,
   RESOLUTION_STRATEGIES,
 } from "../utils/conflictResolver";
-import { useCallback, useEffect, useMemo } from "react";
+import { useScheduleDataRealtime } from "./useScheduleDataRealtime";
+import { useAdvancedCache } from "./useAdvancedCache";
+import { useOfflineSupport, OPERATION_TYPES } from "./useOfflineSupport";
 
 export const useScheduleDataEnhanced = (currentMonthIndex, options = {}) => {
   const {

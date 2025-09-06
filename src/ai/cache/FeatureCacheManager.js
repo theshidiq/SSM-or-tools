@@ -470,7 +470,7 @@ class FeatureCacheManager {
     const hitRate = parseFloat(stats.hit_rate);
 
     let health = "excellent";
-    let issues = [];
+    const issues = [];
 
     if (hitRate < 20) {
       health = "poor";

@@ -3,14 +3,14 @@
  * Combines Phase 3's Supabase-first real-time with Phase 2's advanced features
  */
 
-import { useStaffManagementRealtime } from "./useStaffManagementRealtime";
-import { useAdvancedCache } from "./useAdvancedCache";
-import { useOfflineSupport, OPERATION_TYPES } from "./useOfflineSupport";
+import { useCallback, useEffect, useMemo } from "react";
 import {
   useConflictResolver,
   RESOLUTION_STRATEGIES,
 } from "../utils/conflictResolver";
-import { useCallback, useEffect, useMemo } from "react";
+import { useStaffManagementRealtime } from "./useStaffManagementRealtime";
+import { useAdvancedCache } from "./useAdvancedCache";
+import { useOfflineSupport, OPERATION_TYPES } from "./useOfflineSupport";
 
 export const useStaffManagementEnhanced = (currentMonthIndex, options = {}) => {
   const {

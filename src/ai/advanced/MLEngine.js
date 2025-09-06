@@ -181,7 +181,7 @@ export class MLEngine {
           ...this.config.neuralNetwork,
           onEpochEnd: (epoch, loss, accuracy) => {
             if (epoch % 10 === 0) {
-      // Training accuracy logged
+              // Training accuracy logged
             }
           },
         },
@@ -243,7 +243,7 @@ export class MLEngine {
         {
           ...this.config.ensemble,
           onModelTrained: (modelName, accuracy) => {
-      // Training accuracy logged
+            // Training accuracy logged
           },
         },
       );

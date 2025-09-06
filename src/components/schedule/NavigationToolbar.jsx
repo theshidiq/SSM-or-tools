@@ -19,10 +19,20 @@ import {
 import { Button } from "../ui/button";
 import { Card, CardContent } from "../ui/card";
 import { Tabs, TabsList, TabsTrigger } from "../ui/tabs";
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "../ui/dropdown-menu";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "../ui/dropdown-menu";
 import { Separator } from "../ui/separator";
 import { Badge } from "../ui/badge";
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "../ui/tooltip";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "../ui/tooltip";
 import { addNextPeriod } from "../../utils/dateUtils";
 import { usePeriodsRealtime } from "../../hooks/usePeriodsRealtime";
 import { useAIAssistant } from "../../hooks/useAIAssistant";
@@ -61,12 +71,13 @@ const NavigationToolbar = ({
   const monthPickerRef = useRef(null);
 
   // Use real-time periods hook
-  const { periods: monthPeriods, isLoading: periodsLoading } = usePeriodsRealtime();
+  const { periods: monthPeriods, isLoading: periodsLoading } =
+    usePeriodsRealtime();
 
   // Get available years from monthPeriods (only years with actual periods)
   const availableYears = useMemo(() => {
     const years = new Set();
-    
+
     if (monthPeriods && monthPeriods.length > 0) {
       monthPeriods.forEach((period) => {
         years.add(period.start.getFullYear());
@@ -76,7 +87,7 @@ const NavigationToolbar = ({
       // Default to current year if no periods yet
       years.add(new Date().getFullYear());
     }
-    
+
     return Array.from(years).sort();
   }, [monthPeriods]);
 
@@ -84,7 +95,9 @@ const NavigationToolbar = ({
   const [currentYear, setCurrentYear] = useState(() => {
     if (monthPeriods && monthPeriods.length > 0) {
       const selectedPeriod = monthPeriods[currentMonthIndex];
-      return selectedPeriod ? selectedPeriod.start.getFullYear() : monthPeriods[0].start.getFullYear();
+      return selectedPeriod
+        ? selectedPeriod.start.getFullYear()
+        : monthPeriods[0].start.getFullYear();
     }
     return new Date().getFullYear();
   });
@@ -99,18 +112,22 @@ const NavigationToolbar = ({
       if (selectedPeriod) {
         const newYear = selectedPeriod.start.getFullYear();
         if (newYear !== currentYear) {
-          console.log(`📅 Updating calendar year to ${newYear} for period: ${selectedPeriod.label}`);
+          console.log(
+            `📅 Updating calendar year to ${newYear} for period: ${selectedPeriod.label}`,
+          );
           setCurrentYear(newYear);
         }
       }
     }
   }, [currentMonthIndex, currentYear, isManualYearNavigation, monthPeriods]);
-  
+
   // Auto-navigate away from years with no periods
   useEffect(() => {
     if (availableYears.length > 0 && !availableYears.includes(currentYear)) {
       const firstAvailableYear = availableYears[0];
-      console.log(`📅 Auto-navigating from empty year ${currentYear} to ${firstAvailableYear}`);
+      console.log(
+        `📅 Auto-navigating from empty year ${currentYear} to ${firstAvailableYear}`,
+      );
       setCurrentYear(firstAvailableYear);
       setIsManualYearNavigation(false);
     }
@@ -125,7 +142,7 @@ const NavigationToolbar = ({
     currentMonthIndex,
     updateSchedule,
   );
-  
+
   const lazyAI = useAIAssistantLazy(
     scheduleData,
     staffMembers,
@@ -134,13 +151,13 @@ const NavigationToolbar = ({
     {
       autoInitialize: aiEnabled,
       enableEnhanced: true,
-      fallbackMode: true
-    }
+      fallbackMode: true,
+    },
   );
-  
+
   // Choose which AI system to use
   const ai = aiEnabled ? lazyAI : regularAI;
-  
+
   const {
     isInitialized,
     isProcessing,
@@ -178,7 +195,10 @@ const NavigationToolbar = ({
   useEffect(() => {
     if (isManualYearNavigation && monthPeriods && monthPeriods.length > 0) {
       const selectedPeriod = monthPeriods[currentMonthIndex];
-      if (selectedPeriod && selectedPeriod.start.getFullYear() === currentYear) {
+      if (
+        selectedPeriod &&
+        selectedPeriod.start.getFullYear() === currentYear
+      ) {
         setIsManualYearNavigation(false);
       }
     }
@@ -187,10 +207,10 @@ const NavigationToolbar = ({
   const handleAIClick = (e) => {
     e.preventDefault();
     e.stopPropagation();
-    
+
     // Always show modal immediately to avoid timing issues
     setShowAIModal(true);
-    
+
     // Enable AI if not already enabled
     if (!aiEnabled && onEnableAI) {
       onEnableAI(true);
@@ -198,16 +218,24 @@ const NavigationToolbar = ({
   };
 
   // Debug function to check periods (you can call this from browser console)
-  if (typeof window !== 'undefined') {
+  if (typeof window !== "undefined") {
     window.checkPeriods = () => {
       if (monthPeriods && monthPeriods.length > 0) {
-        console.log('📅 Current periods:', monthPeriods.map((p, i) => `${i}: ${p.label} (${p.start.getFullYear()})`));
-        console.log('📊 Total periods:', monthPeriods.length);
-        console.log('📆 Years represented:', [...new Set(monthPeriods.map(p => p.start.getFullYear()))].sort());
-        console.log('🔄 Loading state:', periodsLoading);
+        console.log(
+          "📅 Current periods:",
+          monthPeriods.map(
+            (p, i) => `${i}: ${p.label} (${p.start.getFullYear()})`,
+          ),
+        );
+        console.log("📊 Total periods:", monthPeriods.length);
+        console.log(
+          "📆 Years represented:",
+          [...new Set(monthPeriods.map((p) => p.start.getFullYear()))].sort(),
+        );
+        console.log("🔄 Loading state:", periodsLoading);
       } else {
-        console.log('📅 No periods available or still loading');
-        console.log('🔄 Loading state:', periodsLoading);
+        console.log("📅 No periods available or still loading");
+        console.log("🔄 Loading state:", periodsLoading);
       }
     };
   }
@@ -239,7 +267,11 @@ const NavigationToolbar = ({
       } else if (event.key === "ArrowRight") {
         event.preventDefault();
         // Navigate to next period if possible
-        if (monthPeriods && monthPeriods.length > 0 && currentMonthIndex < monthPeriods.length - 1) {
+        if (
+          monthPeriods &&
+          monthPeriods.length > 0 &&
+          currentMonthIndex < monthPeriods.length - 1
+        ) {
           onMonthChange(currentMonthIndex + 1);
         }
       }
@@ -257,7 +289,10 @@ const NavigationToolbar = ({
   // Handle outside click to close month picker
   useEffect(() => {
     const handleOutsideClick = (event) => {
-      if (monthPickerRef.current && !monthPickerRef.current.contains(event.target)) {
+      if (
+        monthPickerRef.current &&
+        !monthPickerRef.current.contains(event.target)
+      ) {
         setShowMonthPicker(false);
       }
     };
@@ -285,7 +320,9 @@ const NavigationToolbar = ({
                     variant="outline"
                     size="sm"
                     onClick={() => onMonthChange(currentMonthIndex - 1)}
-                    disabled={currentMonthIndex <= 0 || monthPeriods.length === 0}
+                    disabled={
+                      currentMonthIndex <= 0 || monthPeriods.length === 0
+                    }
                   >
                     <ChevronLeft size={16} />
                   </Button>
@@ -306,9 +343,14 @@ const NavigationToolbar = ({
                     >
                       <Calendar size={16} />
                       <span className="japanese-text">
-                        {currentYear}年 {monthPeriods && monthPeriods.length > 0 && monthPeriods[currentMonthIndex] 
-                          ? monthPeriods[currentMonthIndex].label 
-                          : periodsLoading ? "Loading..." : "No Periods"}
+                        {currentYear}年{" "}
+                        {monthPeriods &&
+                        monthPeriods.length > 0 &&
+                        monthPeriods[currentMonthIndex]
+                          ? monthPeriods[currentMonthIndex].label
+                          : periodsLoading
+                            ? "Loading..."
+                            : "No Periods"}
                       </span>
                     </Button>
                   </TooltipTrigger>
@@ -326,7 +368,8 @@ const NavigationToolbar = ({
                           variant="ghost"
                           size="sm"
                           onClick={() => {
-                            const currentIndex = availableYears.indexOf(currentYear);
+                            const currentIndex =
+                              availableYears.indexOf(currentYear);
                             if (currentIndex > 0) {
                               setIsManualYearNavigation(true);
                               setCurrentYear(availableYears[currentIndex - 1]);
@@ -343,13 +386,17 @@ const NavigationToolbar = ({
                           variant="ghost"
                           size="sm"
                           onClick={() => {
-                            const currentIndex = availableYears.indexOf(currentYear);
+                            const currentIndex =
+                              availableYears.indexOf(currentYear);
                             if (currentIndex < availableYears.length - 1) {
                               setIsManualYearNavigation(true);
                               setCurrentYear(availableYears[currentIndex + 1]);
                             }
                           }}
-                          disabled={availableYears.indexOf(currentYear) >= availableYears.length - 1}
+                          disabled={
+                            availableYears.indexOf(currentYear) >=
+                            availableYears.length - 1
+                          }
                         >
                           <ChevronRight size={16} />
                         </Button>
@@ -359,12 +406,22 @@ const NavigationToolbar = ({
                       <div className="grid grid-cols-2 gap-2 max-h-64 overflow-y-auto">
                         {monthPeriods.length > 0 ? (
                           monthPeriods
-                            .map((period, index) => ({ period, originalIndex: index }))
-                            .filter(({ period }) => period.start.getFullYear() === currentYear)
+                            .map((period, index) => ({
+                              period,
+                              originalIndex: index,
+                            }))
+                            .filter(
+                              ({ period }) =>
+                                period.start.getFullYear() === currentYear,
+                            )
                             .map(({ period, originalIndex }) => (
                               <Button
                                 key={originalIndex}
-                                variant={originalIndex === currentMonthIndex ? "default" : "outline"}
+                                variant={
+                                  originalIndex === currentMonthIndex
+                                    ? "default"
+                                    : "outline"
+                                }
                                 size="sm"
                                 onClick={() => {
                                   onMonthChange(originalIndex);
@@ -393,7 +450,10 @@ const NavigationToolbar = ({
                     variant="outline"
                     size="sm"
                     onClick={() => onMonthChange(currentMonthIndex + 1)}
-                    disabled={currentMonthIndex >= monthPeriods.length - 1 || monthPeriods.length === 0}
+                    disabled={
+                      currentMonthIndex >= monthPeriods.length - 1 ||
+                      monthPeriods.length === 0
+                    }
                   >
                     <ChevronRight size={16} />
                   </Button>
@@ -407,13 +467,23 @@ const NavigationToolbar = ({
             <Separator orientation="vertical" className="h-8 mx-4" />
 
             {/* View Mode Toggle */}
-            <Tabs value={viewMode} onValueChange={onViewModeChange} className="w-auto">
+            <Tabs
+              value={viewMode}
+              onValueChange={onViewModeChange}
+              className="w-auto"
+            >
               <TabsList className="grid w-full grid-cols-2">
-                <TabsTrigger value="table" className="flex items-center gap-2 japanese-text">
+                <TabsTrigger
+                  value="table"
+                  className="flex items-center gap-2 japanese-text"
+                >
                   <Table size={16} />
                   エディター
                 </TabsTrigger>
-                <TabsTrigger value="card" className="flex items-center gap-2 japanese-text">
+                <TabsTrigger
+                  value="card"
+                  className="flex items-center gap-2 japanese-text"
+                >
                   <Eye size={16} />
                   ビュー
                 </TabsTrigger>
@@ -456,8 +526,8 @@ const NavigationToolbar = ({
                     disabled={isProcessing}
                     className={isProcessing ? "animate-pulse" : ""}
                   >
-                    <Sparkles 
-                      size={16} 
+                    <Sparkles
+                      size={16}
                       className={isProcessing ? "animate-spin" : ""}
                     />
                   </Button>
@@ -465,7 +535,9 @@ const NavigationToolbar = ({
                 <TooltipContent>
                   <p className="japanese-text">
                     {isEnhanced
-                      ? isMLReady && typeof isMLReady === 'function' && isMLReady()
+                      ? isMLReady &&
+                        typeof isMLReady === "function" &&
+                        isMLReady()
                         ? "ハイブリッドAI (ML準備完了)"
                         : "ハイブリッドAI (ML初期化中)"
                       : "AI Assistant"}
@@ -488,7 +560,11 @@ const NavigationToolbar = ({
               {/* Manage Staff */}
               <Tooltip>
                 <TooltipTrigger asChild>
-                  <Button variant="outline" size="sm" onClick={() => setShowStaffEditModal(true)}>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setShowStaffEditModal(true)}
+                  >
                     <Users size={16} className="text-purple-600" />
                   </Button>
                 </TooltipTrigger>
@@ -512,13 +588,19 @@ const NavigationToolbar = ({
               {/* Delete Current Period */}
               <Tooltip>
                 <TooltipTrigger asChild>
-                  <Button variant="outline" size="sm" onClick={handleDeletePeriod}>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={handleDeletePeriod}
+                  >
                     <Trash2 size={16} className="text-destructive" />
                   </Button>
                 </TooltipTrigger>
                 <TooltipContent>
                   <p className="japanese-text">
-                    Delete entire {monthPeriods[currentMonthIndex]?.label || "current period"} table
+                    Delete entire{" "}
+                    {monthPeriods[currentMonthIndex]?.label || "current period"}{" "}
+                    table
                   </p>
                 </TooltipContent>
               </Tooltip>
@@ -553,14 +635,20 @@ const NavigationToolbar = ({
 
       {/* AI Assistant Modal - Show when AI is enabled OR when modal is requested */}
       {(aiEnabled || showAIModal) && (
-        <ErrorBoundary 
+        <ErrorBoundary
           userFriendlyMessage="AI Assistant failed to load. Core functionality remains available."
           onDisableFeature={() => {
             setShowAIModal(false);
             if (onEnableAI) onEnableAI(false);
           }}
         >
-          <Suspense fallback={showAIModal ? <AILoadingSpinner message="Loading AI Assistant..." /> : null}>
+          <Suspense
+            fallback={
+              showAIModal ? (
+                <AILoadingSpinner message="Loading AI Assistant..." />
+              ) : null
+            }
+          >
             <LazyAIAssistantModal
               isOpen={showAIModal}
               onClose={() => setShowAIModal(false)}
