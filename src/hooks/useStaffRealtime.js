@@ -420,7 +420,7 @@ export const useStaffRealtime = (currentMonthIndex, options = {}) => {
     (staffId, updatedData, onSuccess) => {
       // Don't pass lastModified to database - it will be handled by updated_at
       const { lastModified, ...dbUpdatedData } = updatedData;
-      
+
       updateSingleStaffMutation.mutate({
         staffId,
         updatedData: dbUpdatedData,

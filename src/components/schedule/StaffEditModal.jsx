@@ -1,6 +1,4 @@
 import React, { useEffect, useRef } from "react";
-import { X } from "lucide-react";
-import { toast } from "sonner";
 import { isDateWithinWorkPeriod } from "../../utils/dateUtils";
 
 // ShadCN UI Components
@@ -10,7 +8,6 @@ import {
   DialogDescription,
   DialogHeader,
   DialogTitle,
-  DialogTrigger,
 } from "../ui/dialog";
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
@@ -22,9 +19,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "../ui/select";
-import { Card, CardContent, CardHeader, CardTitle } from "../ui/card";
+import { Card, CardContent } from "../ui/card";
 import { Badge } from "../ui/badge";
-import { Separator } from "../ui/separator";
 import { RadioGroup, RadioGroupItem } from "../ui/radio-group";
 
 const StaffEditModal = ({
@@ -46,7 +42,7 @@ const StaffEditModal = ({
   setStaffMembersByMonth,
   currentMonthIndex,
   scheduleAutoSave,
-  clearAndRefreshFromDatabase,
+  _clearAndRefreshFromDatabase,
   isRefreshingFromDatabase,
 }) => {
   // Track if user is actively editing to prevent overwriting their changes
@@ -310,10 +306,10 @@ const StaffEditModal = ({
         }
       }}
     >
-      <DialogContent className="max-w-4xl max-h-[80vh] overflow-y-auto bg-background border-border shadow-2xl">
+      <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto bg-background border-border shadow-2xl z-50 relative">
         {/* Loading overlay for database refresh */}
         {isRefreshingFromDatabase && (
-          <div className="absolute inset-0 bg-background flex items-center justify-center z-50 rounded-lg">
+          <div className="absolute inset-0 bg-background/90 flex items-center justify-center z-[60] rounded-lg">
             <div className="text-center">
               <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto mb-3"></div>
               <p className="text-muted-foreground text-sm">
@@ -329,9 +325,9 @@ const StaffEditModal = ({
           </DialogDescription>
         </DialogHeader>
 
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div className="flex flex-col lg:flex-row gap-6 overflow-hidden">
           {/* Left Panel - Staff List */}
-          <div className="space-y-4">
+          <div className="flex-1 lg:max-w-md space-y-4">
             <div className="flex items-center justify-between">
               <h3 className="text-lg font-semibold text-card-foreground">
                 スタッフ一覧
@@ -387,7 +383,7 @@ const StaffEditModal = ({
           </div>
 
           {/* Right Panel - Staff Form */}
-          <div className="space-y-4">
+          <div className="flex-1 space-y-4">
             <h3 className="text-lg font-semibold text-card-foreground">
               {isAddingNewStaff
                 ? "スタッフ追加"
@@ -397,7 +393,8 @@ const StaffEditModal = ({
             </h3>
 
             {(isAddingNewStaff || selectedStaffForEdit) && (
-              <form key={formKey} onSubmit={handleSubmit} className="space-y-4">
+              <div className="relative isolate">
+                <form key={formKey} onSubmit={handleSubmit} className="space-y-4">
                 {/* Name Field */}
                 <div className="space-y-2">
                   <Label htmlFor="staff-name">
@@ -405,6 +402,7 @@ const StaffEditModal = ({
                   </Label>
                   <Input
                     id="staff-name"
+                    name="staff-name"
                     ref={nameInputRef}
                     type="text"
                     value={safeEditingStaffData.name}
@@ -416,6 +414,8 @@ const StaffEditModal = ({
                     }
                     required
                     placeholder="スタッフ名を入力"
+                    autoComplete="off"
+                    list=""
                   />
                 </div>
 
@@ -424,6 +424,7 @@ const StaffEditModal = ({
                   <Label htmlFor="staff-position">職位</Label>
                   <Input
                     id="staff-position"
+                    name="position"
                     type="text"
                     value={safeEditingStaffData.position}
                     onChange={(e) =>
@@ -433,6 +434,13 @@ const StaffEditModal = ({
                       }))
                     }
                     placeholder="例: Server, Kitchen, Manager"
+                    autoComplete="new-password"
+                    autoCapitalize="none"
+                    autoCorrect="off"
+                    spellCheck={false}
+                    list=""
+                    data-1p-ignore
+                    data-lpignore="true"
                   />
                 </div>
 
@@ -483,7 +491,7 @@ const StaffEditModal = ({
                 {/* Start Period */}
                 <div className="space-y-2">
                   <Label>開始期間</Label>
-                  <div className="grid grid-cols-3 gap-2">
+                  <div className="grid grid-cols-3 gap-2 relative">
                     <Select
                       value={
                         safeEditingStaffData.startPeriod?.year?.toString() || ""
@@ -501,7 +509,7 @@ const StaffEditModal = ({
                       <SelectTrigger>
                         <SelectValue placeholder="年" />
                       </SelectTrigger>
-                      <SelectContent className="z-[70000]">
+                      <SelectContent className="z-[60]">
                         {Array.from({ length: 5 }, (_, i) => {
                           const currentYear = new Date().getFullYear();
                           const year = currentYear - 4 + i;
@@ -531,7 +539,7 @@ const StaffEditModal = ({
                       <SelectTrigger>
                         <SelectValue placeholder="月" />
                       </SelectTrigger>
-                      <SelectContent className="z-[70000]">
+                      <SelectContent className="z-[60]">
                         {Array.from({ length: 12 }, (_, i) => (
                           <SelectItem key={i + 1} value={(i + 1).toString()}>
                             {i + 1}
@@ -556,7 +564,7 @@ const StaffEditModal = ({
                       <SelectTrigger>
                         <SelectValue placeholder="日" />
                       </SelectTrigger>
-                      <SelectContent className="z-[70000]">
+                      <SelectContent className="z-[60]">
                         {Array.from({ length: 31 }, (_, i) => (
                           <SelectItem key={i + 1} value={(i + 1).toString()}>
                             {i + 1}
@@ -570,7 +578,7 @@ const StaffEditModal = ({
                 {/* End Period */}
                 <div className="space-y-2">
                   <Label>終了期間</Label>
-                  <div className="grid grid-cols-3 gap-2">
+                  <div className="grid grid-cols-3 gap-2 relative">
                     <Select
                       value={
                         safeEditingStaffData.endPeriod?.year?.toString() || ""
@@ -590,7 +598,7 @@ const StaffEditModal = ({
                       <SelectTrigger>
                         <SelectValue placeholder="年" />
                       </SelectTrigger>
-                      <SelectContent className="z-[70000]">
+                      <SelectContent className="z-[60]">
                         {Array.from({ length: 2 }, (_, i) => {
                           const year = new Date().getFullYear() + i;
                           return (
@@ -621,7 +629,7 @@ const StaffEditModal = ({
                       <SelectTrigger>
                         <SelectValue placeholder="月" />
                       </SelectTrigger>
-                      <SelectContent className="z-[70000]">
+                      <SelectContent className="z-[60]">
                         {Array.from({ length: 12 }, (_, i) => (
                           <SelectItem key={i + 1} value={(i + 1).toString()}>
                             {i + 1}
@@ -649,7 +657,7 @@ const StaffEditModal = ({
                       <SelectTrigger>
                         <SelectValue placeholder="日" />
                       </SelectTrigger>
-                      <SelectContent className="z-[70000]">
+                      <SelectContent className="z-[60]">
                         {Array.from({ length: 31 }, (_, i) => (
                           <SelectItem key={i + 1} value={(i + 1).toString()}>
                             {i + 1}
@@ -693,6 +701,7 @@ const StaffEditModal = ({
                   </Button>
                 </div>
               </form>
+              </div>
             )}
           </div>
         </div>

@@ -23,6 +23,8 @@ import { useScheduleDataRealtime } from "../hooks/useScheduleDataRealtime";
 import { useStaffRealtime } from "../hooks/useStaffRealtime";
 import { useSettingsData } from "../hooks/useSettingsData";
 import { manualInputTestSuite } from "../utils/manualInputTestSuite";
+import { dataIntegrityMonitor } from "../utils/dataIntegrityUtils";
+import { runPhase1TestSuite } from "../utils/phase1Validation";
 import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
 import { Badge } from "./ui/badge";
 import { Alert, AlertDescription } from "./ui/alert";
@@ -41,8 +43,6 @@ import StatusModal from "./common/StatusModal";
 import SettingsModal from "./settings/SettingsModal";
 
 // Manual input integration utilities (development only)
-import { dataIntegrityMonitor } from "../utils/dataIntegrityUtils";
-import { runPhase1TestSuite } from "../utils/phase1Validation";
 
 const ShiftScheduleEditorRealtime = ({
   supabaseScheduleData: legacySupabaseScheduleData, // Legacy prop - not used
