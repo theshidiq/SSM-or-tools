@@ -306,7 +306,7 @@ const StaffEditModal = ({
         }
       }}
     >
-      <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto bg-background border-border shadow-2xl z-50 relative">
+      <DialogContent className="!max-w-4xl w-[90vw] max-h-[90vh] overflow-y-auto bg-background border-border shadow-2xl z-50 relative">
         {/* Loading overlay for database refresh */}
         {isRefreshingFromDatabase && (
           <div className="absolute inset-0 bg-background/90 flex items-center justify-center z-[60] rounded-lg">
