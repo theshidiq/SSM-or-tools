@@ -607,7 +607,7 @@ export const useStaffManagement = (
   // Create new staff member with schedule initialization
   const createNewStaff = useCallback(
     (staffData, schedule, dateRange, onScheduleUpdate, onStaffUpdate) => {
-      const newStaffId = `01934d2c-8a7b-7${Date.now().toString(16).slice(-3)}-8${Math.random().toString(16).slice(2, 5)}-${Math.random().toString(16).slice(2, 14)}`;
+      const newStaffId = crypto.randomUUID();
 
       const newStaff = {
         id: newStaffId,
@@ -689,7 +689,7 @@ export const useStaffManagement = (
   // Handle staff creation from modal
   const handleCreateStaff = useCallback(
     (staffData, onSuccess) => {
-      const newStaffId = `01934d2c-8a7b-7${Date.now().toString(16).slice(-3)}-8${Math.random().toString(16).slice(2, 5)}-${Math.random().toString(16).slice(2, 14)}`;
+      const newStaffId = crypto.randomUUID();
 
       const newStaff = {
         id: newStaffId,

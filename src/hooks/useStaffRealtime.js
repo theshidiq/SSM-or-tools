@@ -186,6 +186,7 @@ export const useStaffRealtime = (currentMonthIndex, options = {}) => {
   const transformStaffForDatabase = useCallback((staff) => {
     return {
       id: staff.id,
+      restaurant_id: "e1661c71-b24f-4ee1-9e8b-7290a43c9575", // Fixed: Add required restaurant_id
       name: staff.name,
       position: staff.position || "",
       department: staff.department || null,
@@ -356,15 +357,13 @@ export const useStaffRealtime = (currentMonthIndex, options = {}) => {
       const dbStaff = transformStaffForDatabase({
         ...newStaff,
         order: staffMembers.length,
-        id:
-          newStaff.id ||
-          `staff-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+        id: newStaff.id || crypto.randomUUID(),
       });
 
       const { data, error } = await supabase
         .from("staff")
         .insert([dbStaff])
-        .select()
+        .select("*")
         .single();
 
       if (error) throw error;
@@ -382,8 +381,19 @@ export const useStaffRealtime = (currentMonthIndex, options = {}) => {
       console.log("✅ Staff member added successfully");
     },
     onError: (err) => {
-      setError(`Add staff failed: ${err.message}`);
+      // Better error handling - err might be an object
+      const errorMessage = err?.message || err?.error?.message || JSON.stringify(err) || "Unknown error";
+      setError(`Add staff failed: ${errorMessage}`);
       console.error("❌ Add staff failed:", err);
+      
+      // Log the full error details for debugging
+      console.error("❌ Full error object:", {
+        error: err,
+        message: err?.message,
+        details: err?.details,
+        hint: err?.hint,
+        code: err?.code
+      });
     },
   });
 
@@ -591,7 +601,7 @@ export const useStaffRealtime = (currentMonthIndex, options = {}) => {
 
   const createNewStaff = useCallback(
     (staffData, schedule, dateRange, onScheduleUpdate, onStaffUpdate) => {
-      const newStaffId = `staff-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+      const newStaffId = crypto.randomUUID();
 
       const newStaff = {
         id: newStaffId,
@@ -659,7 +669,7 @@ export const useStaffRealtime = (currentMonthIndex, options = {}) => {
 
   const handleCreateStaff = useCallback(
     (staffData, onSuccess) => {
-      const newStaffId = `staff-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+      const newStaffId = crypto.randomUUID();
 
       const newStaff = {
         id: newStaffId,

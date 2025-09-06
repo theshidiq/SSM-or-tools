@@ -384,7 +384,7 @@ export const useStaffManagementEnhanced = (currentMonthIndex, options = {}) => {
     createNewStaff: (staffData) =>
       addStaffEnhanced({
         ...staffData,
-        id: `01934d2c-8a7b-7${Date.now().toString(16).slice(-3)}-8${Math.random().toString(16).slice(2, 5)}-${Math.random().toString(16).slice(2, 14)}`,
+        id: crypto.randomUUID(),
       }),
     loadStaff: loadStaffEnhanced,
 
