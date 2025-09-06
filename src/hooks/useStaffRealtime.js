@@ -294,6 +294,10 @@ export const useStaffRealtime = (currentMonthIndex, options = {}) => {
         updatePayload.staff_order = updatedData.order;
         delete updatePayload.order;
       }
+      // Remove lastModified - database uses updated_at instead
+      if (updatePayload.lastModified !== undefined) {
+        delete updatePayload.lastModified;
+      }
 
       // Update single staff member in database
       const { data, error } = await supabase
@@ -414,12 +418,12 @@ export const useStaffRealtime = (currentMonthIndex, options = {}) => {
 
   const updateStaff = useCallback(
     (staffId, updatedData, onSuccess) => {
+      // Don't pass lastModified to database - it will be handled by updated_at
+      const { lastModified, ...dbUpdatedData } = updatedData;
+      
       updateSingleStaffMutation.mutate({
         staffId,
-        updatedData: {
-          ...updatedData,
-          lastModified: Date.now(),
-        },
+        updatedData: dbUpdatedData,
         operation: "update",
       });
 
