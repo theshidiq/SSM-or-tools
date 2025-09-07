@@ -268,9 +268,14 @@ const ShiftScheduleEditor = ({
     }
   }, [supabaseScheduleData]); // Remove currentMonthIndex to prevent infinite loop
 
-  // Check if we're still loading - only show loading if Supabase is undefined (initial state)
-  // Once we have either data OR null (meaning no data), we can proceed
-  const isLoading = supabaseScheduleData === undefined;
+  // Check if we're still loading - consider all data sources
+  // Enhanced hooks have their own loading states that need to be considered
+  const isLoadingSupabase = supabaseScheduleData === undefined;
+  const isLoadingEnhancedData = isLoading || !hasLoadedFromDb;
+  const isLoadingAnySource = isLoadingSupabase || isLoadingEnhancedData;
+  
+  // Don't show content if enhanced hooks are still loading staff data
+  const shouldShowLoading = isLoadingAnySource;
 
   // Expose cleanup functions to global window for debugging (development only)
   useEffect(() => {
@@ -314,17 +319,18 @@ const ShiftScheduleEditor = ({
 
   // Calculate derived data
   const orderedStaffMembers = useMemo(() => {
-    if (isLoading) {
-      return []; // Don't show anything while loading
+    // During initial loading, return empty array to show loading spinner
+    if (shouldShowLoading && !hasLoadedFromDb) {
+      return []; // Don't show anything during initial load
     }
 
-    // If we have staff members, use them
+    // If we have staff members from enhanced hooks, use them (priority 1)
     if (staffMembers && staffMembers.length > 0) {
       const ordered = getOrderedStaffMembers(staffMembers, dateRange);
       return ordered;
     }
 
-    // If we have Supabase data with staff members, extract and use them
+    // If enhanced hooks are syncing but we have Supabase data, use it (priority 2)
     if (
       supabaseScheduleData &&
       supabaseScheduleData.schedule_data &&
@@ -337,12 +343,13 @@ const ShiftScheduleEditor = ({
       return ordered;
     }
 
-    // Fallback to localStorage staff data
+    // If real-time is syncing but we have localStorage cache, use it (priority 3)
     if (localStaffData && localStaffData.length > 0) {
       const ordered = getOrderedStaffMembers(localStaffData, dateRange);
       return ordered;
     }
 
+    // Only return empty if we've loaded but truly have no data
     return [];
   }, [
     staffMembers,
@@ -351,6 +358,7 @@ const ShiftScheduleEditor = ({
     supabaseScheduleData,
     localStaffData,
     hasLoadedFromDb,
+    shouldShowLoading,
   ]);
 
   const hasAnyStaffData =
@@ -697,13 +705,16 @@ const ShiftScheduleEditor = ({
     editColumnName,
   ]);
 
-  // Don't render anything until data is loaded
-  if (isLoading) {
+  // Don't render anything during initial loading
+  if (shouldShowLoading && !hasLoadedFromDb) {
     return (
       <div className="shift-schedule-editor max-w-full mx-auto bg-white">
         <div className="flex flex-col items-center justify-center py-16 space-y-4">
           <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
           <div className="text-gray-500">Loading schedule data...</div>
+          {isLoadingEnhancedData && (
+            <div className="text-xs text-gray-400">Initializing enhanced features...</div>
+          )}
         </div>
       </div>
     );

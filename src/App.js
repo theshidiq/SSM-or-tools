@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import ShiftScheduleEditorRealtime from "./components/ShiftScheduleEditorRealtime.jsx";
+import ShiftScheduleEditorPhase3 from "./components/ShiftScheduleEditorPhase3.jsx";
 import ForceDataLoader from "./components/ForceDataLoader.jsx";
 import DashboardLayout from "./components/layout/DashboardLayout.jsx";
 import PeriodMigration from "./components/migration/PeriodMigration.jsx";
@@ -30,8 +31,8 @@ function AppContent() {
         {/* Phase 1: Force load actual Supabase data for migration testing */}
         <ForceDataLoader onDataLoaded={setForceData} />
 
-        {/* NEW REAL-TIME VERSION - Phase 1 Implementation */}
-        <ShiftScheduleEditorRealtime
+        {/* PHASE 3 NORMALIZED ARCHITECTURE - Testing Implementation */}
+        <ShiftScheduleEditorPhase3
           supabaseScheduleData={effectiveScheduleData}
           isConnected={isConnected}
           error={error}

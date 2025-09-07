@@ -96,7 +96,7 @@ const ScheduleTable = ({
   } = useScheduleSelection(
     schedule,
     updateShift,
-    orderedStaffMembers,
+    orderedStaffMembers || [],
     dateKeys,
     updateSchedule,
   );
@@ -716,7 +716,7 @@ const ScheduleTable = ({
       >
         <Table
           className="shift-table w-full text-sm"
-          style={{ minWidth: `${40 + orderedStaffMembers.length * 40}px` }}
+          style={{ minWidth: `${40 + (orderedStaffMembers?.length || 0) * 40}px` }}
         >
           {/* Sticky Header Row: Staff Names as Column Headers */}
           <TableHeader className="sticky top-0 z-50">
@@ -731,13 +731,13 @@ const ScheduleTable = ({
               </TableHead>
 
               {/* Staff Column Headers */}
-              {orderedStaffMembers.map((staff, staffIndex) => {
+              {(orderedStaffMembers || []).map((staff, staffIndex) => {
                 if (!staff) return null;
                 return (
                   <TableHead
                     key={staff.id}
                     className={`bg-primary text-primary-foreground text-center relative border-r border-border cursor-pointer font-bold hover:bg-primary/80 hover:text-white ${
-                      staffIndex === orderedStaffMembers.length - 1
+                      staffIndex === (orderedStaffMembers?.length || 0) - 1
                         ? "border-r-2"
                         : ""
                     }`}
@@ -854,7 +854,7 @@ const ScheduleTable = ({
                   </TableCell>
 
                   {/* Staff Shift Cells */}
-                  {orderedStaffMembers.map((staff, staffIndex) => {
+                  {(orderedStaffMembers || []).map((staff, staffIndex) => {
                     if (!staff) {
                       return null;
                     }
@@ -868,7 +868,7 @@ const ScheduleTable = ({
                       <TableCell
                         key={staff.id}
                         className={`text-center border-r border-border relative ${
-                          staffIndex === orderedStaffMembers.length - 1
+                          staffIndex === (orderedStaffMembers?.length || 0) - 1
                             ? "border-r-2 border-border"
                             : ""
                         } ${
@@ -1023,7 +1023,7 @@ const ScheduleTable = ({
               >
                 休日数
               </TableCell>
-              {orderedStaffMembers.map((staff, staffIndex) => {
+              {(orderedStaffMembers || []).map((staff, staffIndex) => {
                 if (!staff) return null;
 
                 // Calculate day off count to match statistics dashboard total
@@ -1058,7 +1058,7 @@ const ScheduleTable = ({
                   <TableCell
                     key={staff.id}
                     className={`text-center font-bold text-xs border-r border-border bg-yellow-100 py-2 ${
-                      staffIndex === orderedStaffMembers.length - 1
+                      staffIndex === (orderedStaffMembers?.length || 0) - 1
                         ? "border-r-2"
                         : ""
                     }`}
