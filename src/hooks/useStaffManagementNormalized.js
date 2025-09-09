@@ -133,8 +133,9 @@ export const useStaffManagementNormalized = (currentMonthIndex, options = {}) =>
       }
     },
     enabled: isConnected,
-    staleTime: 0, // Force fresh data every time to prevent cache issues
-    cacheTime: 0, // Don't cache to prevent stale data
+    staleTime: 1000, // Keep data fresh for 1 second to prevent loading flashes
+    cacheTime: 5 * 60 * 1000, // Cache for 5 minutes to smooth transitions
+    keepPreviousData: true, // Maintain previous data during loading to prevent flashes
   });
 
   /**
@@ -163,10 +164,11 @@ export const useStaffManagementNormalized = (currentMonthIndex, options = {}) =>
 
   /**
    * Process and filter staff members using normalized architecture
+   * Avoid loading flashes by maintaining previous data during transitions
    */
   const staffMembers = useMemo(() => {
-    // Show loading state with default staff while connecting
-    if (isStaffLoading && !rawStaffData) {
+    // Only show default staff on initial load (no previous data)
+    if (isStaffLoading && !rawStaffData && !queryClient.getQueryData(["staff", "normalized", "period-filtered", currentMonthIndex, "v2"])) {
       return defaultStaffMembersArray;
     }
 
