@@ -25,9 +25,10 @@ import { useScheduleDataRealtimeNormalized } from "../hooks/useScheduleDataRealt
 import { useStaffManagementNormalized } from "../hooks/useStaffManagementNormalized";
 
 import { useSettingsData } from "../hooks/useSettingsData";
-import { manualInputTestSuite } from "../utils/manualInputTestSuite";
-import { dataIntegrityMonitor } from "../utils/dataIntegrityUtils";
-import { runPhase1TestSuite } from "../utils/phase1Validation";
+// Phase 3: Removed localStorage-dependent utilities for pure database integration
+// - manualInputTestSuite (development testing only)
+// - dataIntegrityMonitor (uses localStorage fallbacks)
+// - runPhase1TestSuite (validates localStorage data)
 import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
 import { Badge } from "./ui/badge";
 import { Alert, AlertDescription } from "./ui/alert";
@@ -155,10 +156,9 @@ const ShiftScheduleEditorPhase3 = ({
     forcePeriodsRefresh,
   ]);
 
-  // Phase 3: Schedule data with normalized hooks
+  // Phase 3: Schedule data with normalized hooks (staff managed separately)
   const {
     schedule,
-    staffMembersByMonth,
     dateRange,
     currentScheduleId,
     setCurrentScheduleId,
@@ -171,12 +171,12 @@ const ShiftScheduleEditorPhase3 = ({
     phase: schedulePhase,
   } = useScheduleDataRealtimeNormalized(currentMonthIndex, null, realtimePeriods.length);
 
-  // Debug logging for normalized architecture
+  // Debug logging for normalized schedule architecture
   useEffect(() => {
     console.log(
-      `🔍 [Phase 3] Schedule state: currentMonthIndex=${currentMonthIndex}, schedulePhase="${schedulePhase}", staff count=${staffMembersByMonth[currentMonthIndex]?.length || 0}`,
+      `🔍 [Phase 3] Schedule state: currentMonthIndex=${currentMonthIndex}, schedulePhase="${schedulePhase}"`,
     );
-  }, [currentMonthIndex, schedulePhase, staffMembersByMonth]);
+  }, [currentMonthIndex, schedulePhase]);
 
   // Settings hook (unchanged)
   const {
@@ -244,16 +244,11 @@ const ShiftScheduleEditorPhase3 = ({
     };
   }, [isConnected, isSaving, isSupabaseLoading]);
 
-  // Process current staff and generate stats
+  // Process current staff and generate stats - use normalized staff data
   const currentStaff = useMemo(() => {
-    if (
-      staffMembersByMonth[currentMonthIndex] &&
-      staffMembersByMonth[currentMonthIndex].length > 0
-    ) {
-      return getOrderedStaffMembers(staffMembersByMonth[currentMonthIndex]);
-    }
-    return getOrderedStaffMembers(localStaffData);
-  }, [staffMembersByMonth, currentMonthIndex, localStaffData]);
+    // Phase 3: Use normalized staff data directly (no more schedule-embedded staff)
+    return getOrderedStaffMembers(staffMembers || []);
+  }, [staffMembers]);
 
   // Generate statistics
   const statistics = useMemo(() => {

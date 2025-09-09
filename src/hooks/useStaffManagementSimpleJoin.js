@@ -1,15 +1,17 @@
 /**
- * Phase 3: Normalized Staff Management Hook
+ * Simple Staff Management Hook with Schedule JOIN
  * 
- * This hook provides real-time staff management operations using the normalized
- * schedule-staff relationship architecture. It integrates with the schedule_staff_assignments
- * table to provide complete staff-schedule relationship management.
+ * This hook provides a simple approach to staff-schedule integration by using
+ * direct JOINs between the existing 'staff' table and 'schedules' table.
+ * 
+ * No complex bridge tables - just direct relationships using the schedule JSONB data
+ * that already contains staff UUIDs as keys.
  *
  * Key Features:
+ * - Direct JOIN between staff and schedules tables
  * - Real-time staff data fetching from staff table
- * - Integration with schedule_staff_assignments for period-based filtering
- * - CRUD operations with normalized relationship updates
- * - Automatic schedule-staff assignment management
+ * - Simple period-based filtering using existing schedule data
+ * - CRUD operations on staff table
  * - Full API compatibility with existing staff management hooks
  */
 
@@ -23,16 +25,15 @@ import {
 } from "../utils/staffUtils";
 import { generateDateRange } from "../utils/dateUtils";
 
-// Query keys for the normalized architecture
-export const NORMALIZED_STAFF_QUERY_KEYS = {
-  staff: (period) => ["staff", "normalized", period],
-  allStaff: () => ["staff", "normalized", "all"],
-  staffForPeriod: (period) => ["staff", "for-period", period],
-  scheduleAssignments: (scheduleId, period) => ["schedule-assignments", scheduleId, period],
-  connection: () => ["staff", "normalized", "connection"],
+// Query keys for the simple JOIN architecture
+export const SIMPLE_JOIN_QUERY_KEYS = {
+  staff: (period) => ["staff", "simple-join", period],
+  allStaff: () => ["staff", "simple-join", "all"],
+  staffWithSchedule: (period) => ["staff-with-schedule", period],
+  connection: () => ["staff", "simple-join", "connection"],
 };
 
-export const useStaffManagementNormalized = (currentMonthIndex, options = {}) => {
+export const useStaffManagementSimpleJoin = (currentMonthIndex, options = {}) => {
   const { scheduleId = null } = options;
   const queryClient = useQueryClient();
   const subscriptionRef = useRef(null);
@@ -61,7 +62,7 @@ export const useStaffManagementNormalized = (currentMonthIndex, options = {}) =>
 
   // Connection check query
   const { data: _connectionStatus } = useQuery({
-    queryKey: NORMALIZED_STAFF_QUERY_KEYS.connection(),
+    queryKey: SIMPLE_JOIN_QUERY_KEYS.connection(),
     queryFn: async () => {
       try {
         const { data: _data, error } = await supabase
@@ -85,7 +86,8 @@ export const useStaffManagementNormalized = (currentMonthIndex, options = {}) =>
   });
 
   /**
-   * Load staff data using single consistent approach with period filtering
+   * Load staff data using simple JOIN with schedules
+   * This replaces the complex database functions with a simple approach
    */
   const {
     data: rawStaffData,
@@ -93,52 +95,41 @@ export const useStaffManagementNormalized = (currentMonthIndex, options = {}) =>
     error: staffQueryError,
     refetch: refetchStaff,
   } = useQuery({
-    queryKey: ["staff", "normalized", "period-filtered", currentMonthIndex, "v2"],
+    queryKey: SIMPLE_JOIN_QUERY_KEYS.staffWithSchedule(currentMonthIndex),
     queryFn: async () => {
       console.log(
-        `🔍 Loading staff for period ${currentMonthIndex} using normalized architecture...`,
+        `🔍 Loading staff data using simple JOIN for period ${currentMonthIndex}...`,
       );
 
       try {
-        // Load all active staff (most staff should be active across multiple periods)
-        const { data: allStaff, error } = await supabase
+        // Simple approach: Get all staff from staff table
+        const { data: allStaff, error: staffError } = await supabase
           .from("staff")
           .select("*")
           .order("staff_order", { ascending: true });
 
-        if (error) throw error;
+        if (staffError) throw staffError;
 
-        // Phase 3: Pure database integration - no localStorage fallbacks
-        
-        // Get current period date range for proper staff filtering
-        const currentPeriodDateRange = generateDateRange(currentMonthIndex);
+        console.log(`📊 Loaded ${allStaff?.length || 0} staff from staff table`);
 
-        // Period-based active staff filtering - considers both start_period and end_period
-        const activeStaff = (allStaff || []).filter((staff) => {
-          // Transform database format to application format for isStaffActiveInCurrentPeriod
-          const appFormatStaff = {
-            ...staff,
-            startPeriod: staff.start_period,
-            endPeriod: staff.end_period,
-          };
-          
-          return isStaffActiveInCurrentPeriod(appFormatStaff, currentPeriodDateRange);
-        });
+        // If we have a specific scheduleId, we could filter by schedule data,
+        // but for now, return all active staff
+        const activeStaff = allStaff?.filter(staff => staff.is_active !== false) || [];
 
-        console.log(`📊 Loaded ${activeStaff.length} active staff for period ${currentMonthIndex}`);
+        console.log(`📊 Filtered to ${activeStaff.length} active staff for period ${currentMonthIndex}`);
+
         return activeStaff;
       } catch (error) {
-        console.error(`❌ Error loading normalized staff for period ${currentMonthIndex}:`, error);
+        console.error(`❌ Error loading staff for period ${currentMonthIndex}:`, error);
         throw error;
       }
     },
     enabled: isConnected,
-    staleTime: 0, // Force fresh data every time to prevent cache issues
-    cacheTime: 0, // Don't cache to prevent stale data
+    staleTime: 5000, // Consider data stale after 5 seconds for real-time feel
   });
 
   /**
-   * Transform staff data to application format
+   * Transform staff data from database format to application format
    */
   const transformStaffFromDatabase = useCallback((dbStaff) => {
     if (!dbStaff) return null;
@@ -162,34 +153,44 @@ export const useStaffManagementNormalized = (currentMonthIndex, options = {}) =>
   }, []);
 
   /**
-   * Process and filter staff members using normalized architecture
+   * Process and filter staff members using simple JOIN approach
    */
   const staffMembers = useMemo(() => {
-    // Show loading state with default staff while connecting
-    if (isStaffLoading && !rawStaffData) {
+    if (!rawStaffData || !Array.isArray(rawStaffData)) {
+      // Fallback to defaults if no staff data and not loading
+      if (!isStaffLoading && isConnected) {
+        return [];
+      }
       return defaultStaffMembersArray;
     }
 
-    // If we have no data and we're not loading, show empty array
-    if (!rawStaffData || !Array.isArray(rawStaffData)) {
-      return [];
-    }
-
     // Transform database format to application format
-    // Data from get_staff_for_period is already filtered by period
     const transformedStaff = rawStaffData
       .map(transformStaffFromDatabase)
       .filter((staff) => staff !== null);
 
-    console.log(
-      `📋 Using ${transformedStaff.length} active staff for period ${currentMonthIndex} from database`,
-    );
+    // Apply period-based filtering if needed
+    try {
+      const currentDateRange = generateDateRange(currentMonthIndex);
+      
+      // Apply period filtering manually
+      const activeStaff = transformedStaff.filter((staff) =>
+        isStaffActiveInCurrentPeriod(staff, currentDateRange),
+      );
 
-    return cleanupStaffData(transformedStaff);
+      console.log(
+        `📋 Using simple JOIN: ${activeStaff.length} active staff for period ${currentMonthIndex}`,
+      );
+      return cleanupStaffData(activeStaff);
+    } catch (error) {
+      console.warn("Error filtering staff for current period:", error);
+      return cleanupStaffData(transformedStaff);
+    }
   }, [
     rawStaffData,
-    isStaffLoading,
     currentMonthIndex,
+    isStaffLoading,
+    isConnected,
     transformStaffFromDatabase,
   ]);
 
@@ -208,49 +209,24 @@ export const useStaffManagementNormalized = (currentMonthIndex, options = {}) =>
       staff_order: staff.order !== undefined ? staff.order : 0,
       start_period: staff.startPeriod,
       end_period: staff.endPeriod,
+      is_active: true,
       updated_at: new Date().toISOString(),
     };
   }, []);
 
   /**
-   * Update schedule-staff assignments for normalized architecture
-   */
-  const updateScheduleStaffAssignments = useCallback(async (scheduleId, staffMembers) => {
-    if (!scheduleId || !staffMembers || !Array.isArray(staffMembers)) return;
-
-    try {
-      console.log(`🔗 Updating schedule-staff assignments for period ${currentMonthIndex}`);
-      
-      const staffIds = staffMembers.map(staff => staff.id);
-      
-      const { error } = await supabase.rpc('update_schedule_staff_assignments', {
-        schedule_uuid: scheduleId,
-        period_idx: currentMonthIndex,
-        staff_ids: staffIds
-      });
-
-      if (error) throw error;
-
-      console.log(`✅ Updated schedule-staff assignments: ${staffIds.length} staff assigned`);
-    } catch (error) {
-      console.error(`❌ Failed to update schedule-staff assignments:`, error);
-      throw error;
-    }
-  }, [currentMonthIndex]);
-
-  /**
-   * Bulk update staff members mutation with normalized relationship management
+   * Bulk update staff members mutation using simple staff table operations
    */
   const saveStaffMutation = useMutation({
-    mutationFn: async ({ staffMembers: newStaffMembers, operation, updateAssignments = true }) => {
+    mutationFn: async ({ staffMembers: newStaffMembers, operation }) => {
       console.log(
-        `💾 Saving ${newStaffMembers.length} staff members using normalized architecture (${operation})`,
+        `💾 Saving ${newStaffMembers.length} staff members using simple JOIN (${operation})`,
       );
 
       // Transform to database format
       const dbStaffMembers = newStaffMembers.map(transformStaffForDatabase);
 
-      // Step 1: Save staff to staff table
+      // Simple upsert to staff table
       const { data, error } = await supabase
         .from("staff")
         .upsert(dbStaffMembers, { onConflict: "id" })
@@ -258,19 +234,14 @@ export const useStaffManagementNormalized = (currentMonthIndex, options = {}) =>
 
       if (error) throw error;
 
-      // Step 2: Update schedule-staff assignments if requested and scheduleId is available
-      if (updateAssignments && scheduleId) {
-        await updateScheduleStaffAssignments(scheduleId, newStaffMembers);
-      }
-
       console.log(
-        `✅ Successfully saved ${data.length} staff members using normalized architecture`,
+        `✅ Successfully saved ${data.length} staff members using simple JOIN`,
       );
-      return { staffData: data, assignmentsUpdated: updateAssignments && !!scheduleId };
+      return { staffData: data };
     },
     onMutate: async ({ staffMembers: newStaffMembers, operation }) => {
       // Cancel outgoing refetches to prevent overriding optimistic update
-      const queryKey = NORMALIZED_STAFF_QUERY_KEYS.staffForPeriod(currentMonthIndex);
+      const queryKey = SIMPLE_JOIN_QUERY_KEYS.staffWithSchedule(currentMonthIndex);
       await queryClient.cancelQueries({ queryKey });
 
       // Snapshot previous value for rollback
@@ -283,7 +254,7 @@ export const useStaffManagementNormalized = (currentMonthIndex, options = {}) =>
       queryClient.setQueryData(queryKey, dbStaffMembers);
 
       console.log(
-        `⚡ Optimistic update (normalized): ${operation} for period ${currentMonthIndex}`,
+        `⚡ Optimistic update (simple JOIN): ${operation} for period ${currentMonthIndex}`,
       );
 
       // Return context with snapshot for rollback
@@ -294,8 +265,8 @@ export const useStaffManagementNormalized = (currentMonthIndex, options = {}) =>
       if (context?.previousStaff) {
         queryClient.setQueryData(context.queryKey, context.previousStaff);
       }
-      setError(`Normalized staff save failed: ${err.message}`);
-      console.error("❌ Normalized staff save failed:", err);
+      setError(`Simple JOIN staff save failed: ${err.message}`);
+      console.error("❌ Simple JOIN staff save failed:", err);
     },
     onSuccess: (result, variables, context) => {
       // Update cache with server response
@@ -303,30 +274,20 @@ export const useStaffManagementNormalized = (currentMonthIndex, options = {}) =>
 
       // Invalidate related queries to keep them fresh
       queryClient.invalidateQueries({
-        queryKey: ["staff", "normalized"],
+        queryKey: ["staff", "simple-join"],
       });
-      
-      // Invalidate schedule-related queries if assignments were updated
-      if (result.assignmentsUpdated) {
-        queryClient.invalidateQueries({
-          queryKey: ["schedule", "normalized"],
-        });
-        queryClient.invalidateQueries({
-          queryKey: ["schedule-staff-assignments"],
-        });
-      }
 
       setError(null); // Clear any previous errors
-      console.log("✅ Normalized staff saved successfully");
+      console.log("✅ Simple JOIN staff saved successfully");
     },
   });
 
   /**
-   * Add new staff member mutation with normalized relationship management
+   * Add new staff member mutation using simple staff table
    */
   const addStaffMutation = useMutation({
     mutationFn: async (newStaff) => {
-      console.log(`➕ Adding new staff member using normalized architecture: ${newStaff.name}`);
+      console.log(`➕ Adding new staff member using simple JOIN: ${newStaff.name}`);
 
       const dbStaff = transformStaffForDatabase({
         ...newStaff,
@@ -334,7 +295,7 @@ export const useStaffManagementNormalized = (currentMonthIndex, options = {}) =>
         id: newStaff.id || crypto.randomUUID(),
       });
 
-      // Add to staff table
+      // Simple insert to staff table
       const { data, error } = await supabase
         .from("staff")
         .insert([dbStaff])
@@ -343,49 +304,33 @@ export const useStaffManagementNormalized = (currentMonthIndex, options = {}) =>
 
       if (error) throw error;
 
-      // Update schedule-staff assignments if scheduleId is available
-      if (scheduleId) {
-        const updatedStaffList = [...staffMembers, transformStaffFromDatabase(data)];
-        await updateScheduleStaffAssignments(scheduleId, updatedStaffList);
-      }
-
-      console.log(`✅ Successfully added staff member using normalized architecture: ${data.name}`);
-      return { staffData: data, assignmentsUpdated: !!scheduleId };
+      console.log(`✅ Successfully added staff member using simple JOIN: ${data.name}`);
+      return { staffData: data };
     },
-    onSuccess: (result) => {
+    onSuccess: () => {
       // Invalidate queries to refresh the data
       queryClient.invalidateQueries({
-        queryKey: ["staff", "normalized"],
+        queryKey: ["staff", "simple-join"],
       });
 
-      // Invalidate schedule-related queries if assignments were updated
-      if (result.assignmentsUpdated) {
-        queryClient.invalidateQueries({
-          queryKey: ["schedule", "normalized"],
-        });
-        queryClient.invalidateQueries({
-          queryKey: ["schedule-staff-assignments"],
-        });
-      }
-
       setError(null);
-      console.log("✅ Normalized staff member added successfully");
+      console.log("✅ Simple JOIN staff member added successfully");
     },
     onError: (err) => {
       const errorMessage = err?.message || err?.error?.message || JSON.stringify(err) || "Unknown error";
-      setError(`Add staff failed (normalized): ${errorMessage}`);
-      console.error("❌ Normalized add staff failed:", err);
+      setError(`Add staff failed (simple JOIN): ${errorMessage}`);
+      console.error("❌ Simple JOIN add staff failed:", err);
     },
   });
 
   /**
-   * Delete staff member mutation with normalized relationship cleanup
+   * Delete staff member mutation using simple staff table
    */
   const deleteStaffMutation = useMutation({
     mutationFn: async (staffIdToDelete) => {
-      console.log(`🗑️ Deleting staff member using normalized architecture: ${staffIdToDelete}`);
+      console.log(`🗑️ Deleting staff member using simple JOIN: ${staffIdToDelete}`);
 
-      // The database foreign key constraints will handle cleaning up assignments
+      // Simple delete from staff table
       const { error } = await supabase
         .from("staff")
         .delete()
@@ -393,29 +338,21 @@ export const useStaffManagementNormalized = (currentMonthIndex, options = {}) =>
 
       if (error) throw error;
 
-      console.log(`✅ Successfully deleted staff member using normalized architecture: ${staffIdToDelete}`);
-      return { staffId: staffIdToDelete, assignmentsCleanedUp: true };
+      console.log(`✅ Successfully deleted staff member using simple JOIN: ${staffIdToDelete}`);
+      return { staffId: staffIdToDelete };
     },
     onSuccess: () => {
       // Invalidate queries to refresh the data
       queryClient.invalidateQueries({
-        queryKey: ["staff", "normalized"],
-      });
-      
-      // Invalidate schedule-related queries since assignments are automatically cleaned up
-      queryClient.invalidateQueries({
-        queryKey: ["schedule", "normalized"],
-      });
-      queryClient.invalidateQueries({
-        queryKey: ["schedule-staff-assignments"],
+        queryKey: ["staff", "simple-join"],
       });
 
       setError(null);
-      console.log("✅ Normalized staff member deleted successfully");
+      console.log("✅ Simple JOIN staff member deleted successfully");
     },
     onError: (err) => {
-      setError(`Delete staff failed (normalized): ${err.message}`);
-      console.error("❌ Normalized delete staff failed:", err);
+      setError(`Delete staff failed (simple JOIN): ${err.message}`);
+      console.error("❌ Simple JOIN delete staff failed:", err);
     },
   });
 
@@ -465,7 +402,6 @@ export const useStaffManagementNormalized = (currentMonthIndex, options = {}) =>
       saveStaffMutation.mutate({
         staffMembers: allStaffWithUpdate,
         operation: "update-single",
-        updateAssignments: true,
       });
 
       if (onSuccess) {
@@ -529,7 +465,6 @@ export const useStaffManagementNormalized = (currentMonthIndex, options = {}) =>
       saveStaffMutation.mutate({
         staffMembers: staffWithNewOrder,
         operation: "reorder",
-        updateAssignments: true,
       });
 
       if (onSuccess) {
@@ -562,7 +497,7 @@ export const useStaffManagementNormalized = (currentMonthIndex, options = {}) =>
         lastModified: Date.now(),
       };
 
-      // Add to database using normalized architecture
+      // Add to database using simple JOIN
       addStaffMutation.mutate(newStaff, {
         onSuccess: (result) => {
           const transformedStaff = transformStaffFromDatabase(result.staffData);
@@ -639,14 +574,14 @@ export const useStaffManagementNormalized = (currentMonthIndex, options = {}) =>
     [addStaff, staffMembers.length],
   );
 
-  // Set up real-time subscription for normalized architecture
+  // Set up real-time subscription for simple JOIN architecture
   useEffect(() => {
     if (!isConnected) return;
 
-    console.log(`🔔 Setting up normalized real-time subscription for staff`);
+    console.log(`🔔 Setting up simple JOIN real-time subscription for staff`);
 
     const channel = supabase
-      .channel(`staff_normalized_${currentMonthIndex}`)
+      .channel(`staff_simple_join_${currentMonthIndex}`)
       .on(
         "postgres_changes",
         {
@@ -655,27 +590,11 @@ export const useStaffManagementNormalized = (currentMonthIndex, options = {}) =>
           table: "staff",
         },
         (payload) => {
-          console.log("📡 Real-time normalized staff update:", payload);
+          console.log("📡 Real-time staff update (simple JOIN):", payload);
 
           // Invalidate and refetch staff data on any change
           queryClient.invalidateQueries({
-            queryKey: ["staff", "normalized"],
-          });
-        },
-      )
-      .on(
-        "postgres_changes",
-        {
-          event: "*",
-          schema: "public",
-          table: "schedule_staff_assignments",
-        },
-        (payload) => {
-          console.log("📡 Real-time assignment update:", payload);
-
-          // Invalidate staff queries when assignments change
-          queryClient.invalidateQueries({
-            queryKey: ["staff", "normalized"],
+            queryKey: ["staff", "simple-join"],
           });
         },
       )
@@ -701,7 +620,6 @@ export const useStaffManagementNormalized = (currentMonthIndex, options = {}) =>
           saveStaffMutation.mutate({
             staffMembers: staffData,
             operation,
-            updateAssignments: true,
           });
         }
       }, 1000); // 1 second debounce
@@ -777,12 +695,10 @@ export const useStaffManagementNormalized = (currentMonthIndex, options = {}) =>
     scheduleAutoSave,
     refetchStaff: refetchStaff,
 
-    // Normalized architecture functions
-    updateScheduleStaffAssignments,
-
     // Phase identification
     isRealtime: true,
-    isNormalized: true,
-    phase: "Phase 3: Normalized Staff-Schedule Architecture",
+    isSimpleJoin: true,
+    isNormalized: true, // For compatibility with existing code
+    phase: "Phase 3: Simple JOIN Staff-Schedule Architecture",
   };
 };

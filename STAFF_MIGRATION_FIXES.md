@@ -35,10 +35,10 @@ const generateStaffUUID = () => {
 **Solution**: Updated RLS policies to allow both authenticated and anonymous users:
 ```sql
 -- Replaced restrictive policies with permissive ones
-CREATE POLICY "Allow all users to view staff" ON app_staff FOR SELECT USING (true);
-CREATE POLICY "Allow all users to create staff" ON app_staff FOR INSERT WITH CHECK (true);
-CREATE POLICY "Allow all users to update staff" ON app_staff FOR UPDATE USING (true) WITH CHECK (true);
-CREATE POLICY "Allow all users to delete staff" ON app_staff FOR DELETE USING (true);
+CREATE POLICY "Allow all users to view staff" ON staff FOR SELECT USING (true);
+CREATE POLICY "Allow all users to create staff" ON staff FOR INSERT WITH CHECK (true);
+CREATE POLICY "Allow all users to update staff" ON staff FOR UPDATE USING (true) WITH CHECK (true);
+CREATE POLICY "Allow all users to delete staff" ON staff FOR DELETE USING (true);
 ```
 
 ### 3. Authentication Issues ❌ → ✅ FIXED
@@ -132,7 +132,7 @@ CREATE POLICY "Allow all users to delete staff" ON app_staff FOR DELETE USING (t
 - **Status**: `ACTIVE_HEALTHY`
 - **PostgreSQL Version**: `17.4.1.054`
 
-### Table Structure: `app_staff`
+### Table Structure: `staff`
 - **Primary Key**: `id` (UUID format)
 - **Required Fields**: `name` (text)
 - **Optional Fields**: `position`, `department`, `type`, `status`, `color`, `staff_order`

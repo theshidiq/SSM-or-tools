@@ -1,6 +1,6 @@
 /**
  * Phase 4: Staff Data Migration Utilities
- * Migrates localStorage staff data to Supabase app_staff table
+ * Migrates localStorage staff data to Supabase staff table
  */
 
 import { supabase } from "./supabase";
@@ -267,7 +267,7 @@ export const checkForDuplicateStaff = async (staffToMigrate) => {
   try {
     // Get existing staff from database
     const { data: existingStaff, error } = await supabase
-      .from("app_staff")
+      .from("staff")
       .select("id, name, position");
 
     if (error) {
@@ -366,7 +366,7 @@ export const migrateStaffToDatabase = async (staffData, options = {}) => {
 
       try {
         const { error } = await supabase
-          .from("app_staff")
+          .from("staff")
           .upsert(batch, { onConflict: updateDuplicates ? "id" : undefined });
 
         if (error) {

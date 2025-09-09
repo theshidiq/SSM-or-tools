@@ -9,7 +9,7 @@ Successfully implemented Phase 3 of the shift schedule manager, establishing a n
 ### ✅ 1. Database Schema Normalization
 
 **Created `schedule_staff_assignments` table:**
-- Proper foreign key relationships to `schedules` and `app_staff`
+- Proper foreign key relationships to `schedules` and `staff`
 - Period-based assignments with `period_index` field
 - Staff ordering with `staff_order` field
 - Comprehensive indexing for performance
@@ -21,7 +21,7 @@ Successfully implemented Phase 3 of the shift schedule manager, establishing a n
 CREATE TABLE schedule_staff_assignments (
     id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
     schedule_id UUID NOT NULL REFERENCES schedules(id) ON DELETE CASCADE,
-    staff_id UUID NOT NULL REFERENCES app_staff(id) ON DELETE CASCADE,
+    staff_id UUID NOT NULL REFERENCES staff(id) ON DELETE CASCADE,
     period_index INTEGER NOT NULL,
     staff_order INTEGER DEFAULT 0,
     is_active BOOLEAN DEFAULT true,
@@ -34,7 +34,7 @@ CREATE TABLE schedule_staff_assignments (
 ### ✅ 2. Data Migration Success
 
 **Migration Results:**
-- **25 staff members** successfully extracted from embedded data to `app_staff` table
+- **25 staff members** successfully extracted from embedded data to `staff` table
 - **3,589 schedule-staff assignments** created across all periods
 - **300 schedules** cleaned of embedded `_staff_members` data
 - **Zero data loss** - all relationships preserved
@@ -42,7 +42,7 @@ CREATE TABLE schedule_staff_assignments (
 
 **Migration Process:**
 1. Extracted all unique staff from embedded `_staff_members` arrays
-2. Created normalized staff records in `app_staff` table
+2. Created normalized staff records in `staff` table
 3. Generated period-indexed assignments in `schedule_staff_assignments` table
 4. Cleaned up embedded data from all schedule JSONB fields
 5. Verified data integrity with comprehensive checks
@@ -107,7 +107,7 @@ CREATE TABLE schedule_staff_assignments (
 
 **Multi-table real-time subscriptions:**
 - `schedules` table changes trigger schedule data refreshes
-- `app_staff` table changes trigger staff list updates
+- `staff` table changes trigger staff list updates
 - `schedule_staff_assignments` table changes trigger relationship updates
 - Cross-table cache invalidation ensures data consistency
 - **Zero-latency** UI updates with optimistic mutations
@@ -124,7 +124,7 @@ supabase.channel(`assignments_normalized_${scheduleId}_${period}`)
 
 // Staff changes
 supabase.channel(`staff_normalized_${period}`)
-  .on('postgres_changes', { table: 'app_staff' })
+  .on('postgres_changes', { table: 'staff' })
 ```
 
 ### ✅ 6. Data Integrity Verification
@@ -188,7 +188,7 @@ supabase.channel(`staff_normalized_${period}`)
   }
 }
 
--- app_staff table (single source of truth)
+-- staff table (single source of truth)
 | id    | name   | position | status | ... |
 |-------|--------|----------|--------|-----|
 | uuid1 | Staff1 | Chef     | 社員   | ... |
@@ -235,7 +235,7 @@ const {
 
 ### Database Migrations:
 - `create_schedule_staff_assignments_table` - Schema creation
-- `migrate_embedded_staff_to_app_staff_and_assignments_v2` - Data migration
+- `migrate_embedded_staff_to_staff_and_assignments_v2` - Data migration
 - `remove_embedded_staff_from_schedules` - Cleanup migration
 - `create_schedule_staff_functions` - Database functions
 

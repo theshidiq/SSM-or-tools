@@ -115,7 +115,7 @@ export const testDatabaseOperations = async () => {
   try {
     // Test 1: Simple select to check connection
     const { data: existingStaff, error: selectError } = await supabase
-      .from("app_staff")
+      .from("staff")
       .select("id, name")
       .limit(1);
 
@@ -142,7 +142,7 @@ export const testDatabaseOperations = async () => {
     };
 
     const { error: insertError } = await supabase
-      .from("app_staff")
+      .from("staff")
       .insert([testStaff]);
 
     if (insertError) {
@@ -154,7 +154,7 @@ export const testDatabaseOperations = async () => {
 
     // Test 3: Verify the record was inserted
     const { data: insertedStaff, error: verifyError } = await supabase
-      .from("app_staff")
+      .from("staff")
       .select("*")
       .eq("id", testStaff.id)
       .single();
@@ -168,7 +168,7 @@ export const testDatabaseOperations = async () => {
 
     // Test 4: Clean up test record
     const { error: deleteError } = await supabase
-      .from("app_staff")
+      .from("staff")
       .delete()
       .eq("id", testStaff.id);
 
@@ -238,7 +238,7 @@ export const testMigrationWorkflow = async () => {
     if (migrationResult.success) {
       // Clean up test records
       const { error: cleanupError } = await supabase
-        .from("app_staff")
+        .from("staff")
         .delete()
         .like("name", "TEST_%");
 

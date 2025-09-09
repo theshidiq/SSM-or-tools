@@ -4,12 +4,14 @@
       "Bash(git commit:*)",
       "Bash(git push:*)",
       "Bash(pkill:*)",
-      "Bash(npm start)"
+      "Bash(npm start)",
+      "mcp__playwright__browser_console_messages",
+      "Bash(git add:*)"
     ],
     "deny": []
   },
+  "enableAllProjectMcpServers": true,
   "enabledMcpjsonServers": [
     "shadcn"
-  ],
-  "enableAllProjectMcpServers": true
+  ]
 }
