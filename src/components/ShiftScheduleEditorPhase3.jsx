@@ -55,8 +55,9 @@ const ShiftScheduleEditorPhase3 = ({
   const [pendingNavigationToPeriod, setPendingNavigationToPeriod] =
     useState(null);
 
-  // Ref to track navigation timeout
+  // Ref to track navigation timeout and initialization state
   const navigationTimeoutRef = useRef(null);
+  const isInitializedRef = useRef(false);
 
   const [viewMode, setViewMode] = useState("table"); // 'table' or 'card'
 
@@ -87,21 +88,32 @@ const ShiftScheduleEditorPhase3 = ({
     forceRefresh: forcePeriodsRefresh,
   } = usePeriodsRealtime();
 
-  // Initialize current month index when periods are loaded
+  // Initialize current month index when periods are loaded (prevent race conditions)
   useEffect(() => {
-    if (!periodsLoading && realtimePeriods.length > 0) {
+    if (!periodsLoading && realtimePeriods.length > 0 && !isInitializedRef.current) {
       try {
         const correctIndex = getCurrentMonthIndex(realtimePeriods);
         setCurrentMonthIndex(correctIndex);
+        isInitializedRef.current = true; // Mark as initialized to prevent subsequent updates
         console.log(
-          `📅 [Phase 3] Set initial period index to ${correctIndex} (${realtimePeriods[correctIndex]?.label})`,
+          `📅 [Phase 3] Initial period index set to ${correctIndex} (${realtimePeriods[correctIndex]?.label})`,
         );
       } catch (error) {
         console.warn("Failed to get current month index, using 0:", error);
         setCurrentMonthIndex(0);
+        isInitializedRef.current = true;
       }
     }
   }, [periodsLoading, realtimePeriods]);
+
+  // Cleanup navigation timeouts on unmount
+  useEffect(() => {
+    return () => {
+      if (navigationTimeoutRef.current) {
+        clearTimeout(navigationTimeoutRef.current);
+      }
+    };
+  }, []);
 
   // Handle navigation to newly added period and bounds checking
   useEffect(() => {
@@ -281,16 +293,32 @@ const ShiftScheduleEditorPhase3 = ({
   const previousMonth = useCallback(() => {
     if (currentMonthIndex > 0) {
       const newIndex = currentMonthIndex - 1;
-      console.log(`📅 [Phase 3] Previous period: ${currentMonthIndex} → ${newIndex}`);
-      setCurrentMonthIndex(newIndex);
+      
+      // Debounce navigation to prevent race conditions
+      if (navigationTimeoutRef.current) {
+        clearTimeout(navigationTimeoutRef.current);
+      }
+      
+      navigationTimeoutRef.current = setTimeout(() => {
+        console.log(`📅 [Phase 3] Previous period: ${currentMonthIndex} → ${newIndex}`);
+        setCurrentMonthIndex(newIndex);
+      }, 150); // 150ms debounce to prevent rapid navigation
     }
   }, [currentMonthIndex]);
 
   const nextMonth = useCallback(() => {
     if (currentMonthIndex < realtimePeriods.length - 1) {
       const newIndex = currentMonthIndex + 1;
-      console.log(`📅 [Phase 3] Next period: ${currentMonthIndex} → ${newIndex}`);
-      setCurrentMonthIndex(newIndex);
+      
+      // Debounce navigation to prevent race conditions
+      if (navigationTimeoutRef.current) {
+        clearTimeout(navigationTimeoutRef.current);
+      }
+      
+      navigationTimeoutRef.current = setTimeout(() => {
+        console.log(`📅 [Phase 3] Next period: ${currentMonthIndex} → ${newIndex}`);
+        setCurrentMonthIndex(newIndex);
+      }, 150); // 150ms debounce to prevent rapid navigation
     }
   }, [currentMonthIndex, realtimePeriods.length]);
 
@@ -325,10 +353,17 @@ const ShiftScheduleEditorPhase3 = ({
           try {
             await deletePeriod(periodIndex, realtimePeriods);
             
-            // Navigate to a valid period after deletion
+            // Navigate to a valid period after deletion with debounce
             const newCurrentIndex = Math.min(periodIndex, realtimePeriods.length - 2);
             if (newCurrentIndex >= 0) {
-              setCurrentMonthIndex(newCurrentIndex);
+              // Debounce navigation after deletion
+              if (navigationTimeoutRef.current) {
+                clearTimeout(navigationTimeoutRef.current);
+              }
+              
+              navigationTimeoutRef.current = setTimeout(() => {
+                setCurrentMonthIndex(newCurrentIndex);
+              }, 200); // 200ms debounce for period deletion
             }
             
             await forcePeriodsRefresh();

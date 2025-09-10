@@ -133,9 +133,11 @@ export const useStaffManagementNormalized = (currentMonthIndex, options = {}) =>
       }
     },
     enabled: isConnected,
-    staleTime: 1000, // Keep data fresh for 1 second to prevent loading flashes
+    staleTime: 2000, // Increased to 2 seconds to coordinate with schedule hook
     cacheTime: 5 * 60 * 1000, // Cache for 5 minutes to smooth transitions
     keepPreviousData: true, // Maintain previous data during loading to prevent flashes
+    refetchOnWindowFocus: false, // Prevent race conditions on tab focus
+    refetchOnMount: false, // Prevent double queries on mount
   });
 
   /**
@@ -303,19 +305,23 @@ export const useStaffManagementNormalized = (currentMonthIndex, options = {}) =>
       // Update cache with server response
       queryClient.setQueryData(context.queryKey, result.staffData);
 
-      // Invalidate related queries to keep them fresh
-      queryClient.invalidateQueries({
-        queryKey: ["staff", "normalized"],
-      });
+      // Coordinated invalidation to prevent race conditions
+      setTimeout(() => {
+        queryClient.invalidateQueries({
+          queryKey: ["staff", "normalized"],
+        });
+      }, 300); // 0.3 second delay
       
       // Invalidate schedule-related queries if assignments were updated
       if (result.assignmentsUpdated) {
-        queryClient.invalidateQueries({
-          queryKey: ["schedule", "normalized"],
-        });
-        queryClient.invalidateQueries({
-          queryKey: ["schedule-staff-assignments"],
-        });
+        setTimeout(() => {
+          queryClient.invalidateQueries({
+            queryKey: ["schedule", "normalized"],
+          });
+          queryClient.invalidateQueries({
+            queryKey: ["schedule-staff-assignments"],
+          });
+        }, 800); // 0.8 second delay to prevent conflicts
       }
 
       setError(null); // Clear any previous errors
@@ -355,19 +361,23 @@ export const useStaffManagementNormalized = (currentMonthIndex, options = {}) =>
       return { staffData: data, assignmentsUpdated: !!scheduleId };
     },
     onSuccess: (result) => {
-      // Invalidate queries to refresh the data
-      queryClient.invalidateQueries({
-        queryKey: ["staff", "normalized"],
-      });
+      // Coordinated invalidation to prevent race conditions with schedule hook
+      setTimeout(() => {
+        queryClient.invalidateQueries({
+          queryKey: ["staff", "normalized"],
+        });
+      }, 500); // 0.5 second delay
 
       // Invalidate schedule-related queries if assignments were updated
       if (result.assignmentsUpdated) {
-        queryClient.invalidateQueries({
-          queryKey: ["schedule", "normalized"],
-        });
-        queryClient.invalidateQueries({
-          queryKey: ["schedule-staff-assignments"],
-        });
+        setTimeout(() => {
+          queryClient.invalidateQueries({
+            queryKey: ["schedule", "normalized"],
+          });
+          queryClient.invalidateQueries({
+            queryKey: ["schedule-staff-assignments"],
+          });
+        }, 1000); // 1 second delay to prevent conflicts
       }
 
       setError(null);
@@ -399,18 +409,22 @@ export const useStaffManagementNormalized = (currentMonthIndex, options = {}) =>
       return { staffId: staffIdToDelete, assignmentsCleanedUp: true };
     },
     onSuccess: () => {
-      // Invalidate queries to refresh the data
-      queryClient.invalidateQueries({
-        queryKey: ["staff", "normalized"],
-      });
+      // Coordinated invalidation to prevent race conditions
+      setTimeout(() => {
+        queryClient.invalidateQueries({
+          queryKey: ["staff", "normalized"],
+        });
+      }, 400); // 0.4 second delay
       
       // Invalidate schedule-related queries since assignments are automatically cleaned up
-      queryClient.invalidateQueries({
-        queryKey: ["schedule", "normalized"],
-      });
-      queryClient.invalidateQueries({
-        queryKey: ["schedule-staff-assignments"],
-      });
+      setTimeout(() => {
+        queryClient.invalidateQueries({
+          queryKey: ["schedule", "normalized"],
+        });
+        queryClient.invalidateQueries({
+          queryKey: ["schedule-staff-assignments"],
+        });
+      }, 1200); // 1.2 second delay to prevent conflicts
 
       setError(null);
       console.log("✅ Normalized staff member deleted successfully");
@@ -659,10 +673,12 @@ export const useStaffManagementNormalized = (currentMonthIndex, options = {}) =>
         (payload) => {
           console.log("📡 Real-time normalized staff update:", payload);
 
-          // Invalidate and refetch staff data on any change
-          queryClient.invalidateQueries({
-            queryKey: ["staff", "normalized"],
-          });
+          // Debounced invalidation to prevent rapid-fire updates
+          setTimeout(() => {
+            queryClient.invalidateQueries({
+              queryKey: ["staff", "normalized"],
+            });
+          }, 1500); // 1.5 second delay to coordinate with schedule hook
         },
       )
       .on(
@@ -675,10 +691,12 @@ export const useStaffManagementNormalized = (currentMonthIndex, options = {}) =>
         (payload) => {
           console.log("📡 Real-time assignment update:", payload);
 
-          // Invalidate staff queries when assignments change
-          queryClient.invalidateQueries({
-            queryKey: ["staff", "normalized"],
-          });
+          // Debounced invalidation to prevent conflicts
+          setTimeout(() => {
+            queryClient.invalidateQueries({
+              queryKey: ["staff", "normalized"],
+            });
+          }, 2000); // 2 second delay to prevent schedule hook conflicts
         },
       )
       .subscribe();
