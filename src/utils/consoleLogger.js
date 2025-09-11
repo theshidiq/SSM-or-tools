@@ -72,11 +72,8 @@ class ConsoleLogger {
       });
     });
 
-    // Only log initialization message once per session
-    if (!window.consoleLoggerInitialized) {
-      console.log("🔍 Console Logger initialized - capturing all console output");
-      window.consoleLoggerInitialized = true;
-    }
+    // Silent initialization - no console output needed
+    window.consoleLoggerInitialized = true;
   }
 
   addLog(logEntry) {

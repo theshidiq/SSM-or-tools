@@ -4,13 +4,9 @@ import { QueryProvider } from "./providers/QueryProvider";
 import App from "./App";
 import "./index.css";
 
-// Initialize console logger in development mode
+// Initialize console logger in development mode (silent)
 if (process.env.NODE_ENV === "development") {
-  import("./utils/consoleLogger").then(() => {
-    console.log("🔍 Console logger initialized - all logs are being captured");
-    console.log("💡 Use exportConsoleLogs() to download logs anytime");
-    console.log("📊 Use printLogSummary() to see log statistics");
-  });
+  import("./utils/consoleLogger");
 }
 
 // Expose debug utilities in development mode (lazy loading)
