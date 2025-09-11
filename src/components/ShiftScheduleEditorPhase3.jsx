@@ -20,9 +20,8 @@ import { getOrderedStaffMembers } from "../utils/staffUtils";
 import { generateStatistics } from "../utils/statisticsUtils";
 import { exportToCSV, printSchedule } from "../utils/exportUtils";
 
-// Phase 3: Import the normalized hooks
-import { useScheduleDataRealtimeNormalized } from "../hooks/useScheduleDataRealtime.normalized";
-import { useStaffManagementNormalized } from "../hooks/useStaffManagementNormalized";
+// Phase 4: Import the unified prefetch hook (replaces competing hooks)
+import { useScheduleDataPrefetch } from "../hooks/useScheduleDataPrefetch";
 
 import { useSettingsData } from "../hooks/useSettingsData";
 // Phase 3: Removed localStorage-dependent utilities for pure database integration
@@ -55,8 +54,7 @@ const ShiftScheduleEditorPhase3 = ({
   const [pendingNavigationToPeriod, setPendingNavigationToPeriod] =
     useState(null);
 
-  // Ref to track navigation timeout and initialization state
-  const navigationTimeoutRef = useRef(null);
+  // Ref to track initialization state (no timeout needed with prefetch)
   const isInitializedRef = useRef(false);
 
   const [viewMode, setViewMode] = useState("table"); // 'table' or 'card'
@@ -106,25 +104,14 @@ const ShiftScheduleEditorPhase3 = ({
     }
   }, [periodsLoading, realtimePeriods]);
 
-  // Cleanup navigation timeouts on unmount
-  useEffect(() => {
-    return () => {
-      if (navigationTimeoutRef.current) {
-        clearTimeout(navigationTimeoutRef.current);
-      }
-    };
-  }, []);
+  // Phase 4: No more navigation timeouts needed with prefetch architecture
 
   // Handle navigation to newly added period and bounds checking
   useEffect(() => {
     if (!periodsLoading && realtimePeriods.length > 0) {
       // Check if we need to navigate to a specific period after adding
       if (pendingNavigationToPeriod) {
-        // Clear any existing timeout
-        if (navigationTimeoutRef.current) {
-          clearTimeout(navigationTimeoutRef.current);
-          navigationTimeoutRef.current = null;
-        }
+        // Phase 4: No timeout clearing needed with instant navigation
 
         // Find the period by matching the label and dates
         const targetPeriodIndex = realtimePeriods.findIndex((period) => {
@@ -168,27 +155,32 @@ const ShiftScheduleEditorPhase3 = ({
     forcePeriodsRefresh,
   ]);
 
-  // Phase 3: Schedule data with normalized hooks (staff managed separately)
+  // Phase 4: Unified prefetch hook - eliminates all race conditions
   const {
     schedule,
     dateRange,
+    staff: staffMembers,
     currentScheduleId,
     setCurrentScheduleId,
     updateSchedule,
     updateShift,
+    addStaff: addStaffMember,
+    updateStaff: editStaffInfo,
+    deleteStaff,
     isConnected,
     isLoading: isSupabaseLoading,
     isSaving,
     error: supabaseError,
-    phase: schedulePhase,
-  } = useScheduleDataRealtimeNormalized(currentMonthIndex, null, realtimePeriods.length);
+    phase: prefetchPhase,
+    prefetchStats,
+  } = useScheduleDataPrefetch(currentMonthIndex);
 
-  // Debug logging for normalized schedule architecture
+  // Debug logging for prefetch architecture
   useEffect(() => {
     console.log(
-      `🔍 [Phase 3] Schedule state: currentMonthIndex=${currentMonthIndex}, schedulePhase="${schedulePhase}"`,
+      `🚀 [PREFETCH] State: period=${currentMonthIndex}, phase="${prefetchPhase}", staff=${staffMembers?.length || 0}, loadTime=${prefetchStats?.loadTime?.toFixed(1)}ms`,
     );
-  }, [currentMonthIndex, schedulePhase]);
+  }, [currentMonthIndex, prefetchPhase, staffMembers?.length, prefetchStats?.loadTime]);
 
   // Settings hook (unchanged)
   const {
@@ -208,36 +200,64 @@ const ShiftScheduleEditorPhase3 = ({
     setIsAutosaveEnabled,
   } = useSettingsData();
 
-  // Phase 3: Staff management with normalized hooks
-  const {
-    staffMembers,
-    hasLoadedFromDb,
-    isAddingNewStaff,
-    setIsAddingNewStaff,
-    selectedStaffForEdit,
-    setSelectedStaffForEdit,
-    showStaffEditModal,
-    setShowStaffEditModal,
-    editingStaffData,
-    setEditingStaffData,
-    createNewStaff,
-    editStaffName,
-    deleteStaff,
-    addStaff: addStaffMember,
-    updateStaff: editStaffInfo,
-    phase: staffPhase,
-    isNormalized: staffIsNormalized,
-  } = useStaffManagementNormalized(currentMonthIndex, { scheduleId: currentScheduleId });
+  // Phase 4: Staff management handled by unified prefetch hook (no separate hook needed)
+  // Staff modal states
+  const [isAddingNewStaff, setIsAddingNewStaff] = useState(false);
+  const [selectedStaffForEdit, setSelectedStaffForEdit] = useState(null);
+  const [showStaffEditModal, setShowStaffEditModal] = useState(false);
+  const [editingStaffData, setEditingStaffData] = useState({
+    name: "",
+    position: "",
+    status: "社員",
+    startPeriod: null,
+    endPeriod: null,
+  });
+
+  // Staff management functions (now using prefetch hook)
+  const createNewStaff = useCallback(
+    (staffData, schedule, dateRange, onScheduleUpdate, onStaffUpdate) => {
+      const newStaffId = crypto.randomUUID();
+      const newStaff = {
+        id: newStaffId,
+        name: staffData.name || "新しいスタッフ",
+        position: staffData.position || "Staff",
+        color: "position-server",
+        status: staffData.status || "社員",
+        startPeriod: staffData.startPeriod,
+        endPeriod: staffData.endPeriod,
+        order: staffMembers.length,
+      };
+
+      const result = addStaffMember(newStaff, onStaffUpdate);
+      
+      // Handle schedule initialization for new staff
+      if (schedule && dateRange) {
+        const newSchedule = {
+          ...schedule,
+          [newStaffId]: {},
+        };
+        dateRange.forEach((date) => {
+          const dateKey = date.toISOString().split("T")[0];
+          newSchedule[newStaffId][dateKey] = "";
+        });
+        if (onScheduleUpdate) onScheduleUpdate(newSchedule);
+      }
+
+      return result;
+    },
+    [addStaffMember, staffMembers]
+  );
+
+  const editStaffName = useCallback(
+    (staffId, newName, onSuccess) => {
+      editStaffInfo(staffId, { name: newName }, onSuccess);
+    },
+    [editStaffInfo]
+  );
 
   // Alias for compatibility with existing code
   const localStaffData = staffMembers;
-
-  // Debug logging for normalized staff architecture
-  useEffect(() => {
-    console.log(
-      `👥 [Phase 3] Staff state: period=${currentMonthIndex}, staffPhase="${staffPhase}", isNormalized=${staffIsNormalized}, count=${staffMembers?.length || 0}`,
-    );
-  }, [currentMonthIndex, staffPhase, staffIsNormalized, staffMembers?.length]);
+  const hasLoadedFromDb = !!staffMembers && staffMembers.length > 0;
 
   // Error state - combine all possible errors
   const error =
@@ -283,7 +303,7 @@ const ShiftScheduleEditorPhase3 = ({
   const navigateToMonth = useCallback(
     (monthIndex) => {
       if (monthIndex >= 0 && monthIndex < realtimePeriods.length) {
-        console.log(`📅 [Phase 3] Navigating to period ${monthIndex}`);
+        console.log(`📅 [PREFETCH] Navigating to period ${monthIndex} (instant)`);
         setCurrentMonthIndex(monthIndex);
       }
     },
@@ -293,32 +313,16 @@ const ShiftScheduleEditorPhase3 = ({
   const previousMonth = useCallback(() => {
     if (currentMonthIndex > 0) {
       const newIndex = currentMonthIndex - 1;
-      
-      // Debounce navigation to prevent race conditions
-      if (navigationTimeoutRef.current) {
-        clearTimeout(navigationTimeoutRef.current);
-      }
-      
-      navigationTimeoutRef.current = setTimeout(() => {
-        console.log(`📅 [Phase 3] Previous period: ${currentMonthIndex} → ${newIndex}`);
-        setCurrentMonthIndex(newIndex);
-      }, 150); // 150ms debounce to prevent rapid navigation
+      console.log(`📅 [PREFETCH] Previous period: ${currentMonthIndex} → ${newIndex} (instant)`);
+      setCurrentMonthIndex(newIndex);
     }
   }, [currentMonthIndex]);
 
   const nextMonth = useCallback(() => {
     if (currentMonthIndex < realtimePeriods.length - 1) {
       const newIndex = currentMonthIndex + 1;
-      
-      // Debounce navigation to prevent race conditions
-      if (navigationTimeoutRef.current) {
-        clearTimeout(navigationTimeoutRef.current);
-      }
-      
-      navigationTimeoutRef.current = setTimeout(() => {
-        console.log(`📅 [Phase 3] Next period: ${currentMonthIndex} → ${newIndex}`);
-        setCurrentMonthIndex(newIndex);
-      }, 150); // 150ms debounce to prevent rapid navigation
+      console.log(`📅 [PREFETCH] Next period: ${currentMonthIndex} → ${newIndex} (instant)`);
+      setCurrentMonthIndex(newIndex);
     }
   }, [currentMonthIndex, realtimePeriods.length]);
 
@@ -353,17 +357,10 @@ const ShiftScheduleEditorPhase3 = ({
           try {
             await deletePeriod(periodIndex, realtimePeriods);
             
-            // Navigate to a valid period after deletion with debounce
+            // Navigate to a valid period after deletion (instant with prefetch)
             const newCurrentIndex = Math.min(periodIndex, realtimePeriods.length - 2);
             if (newCurrentIndex >= 0) {
-              // Debounce navigation after deletion
-              if (navigationTimeoutRef.current) {
-                clearTimeout(navigationTimeoutRef.current);
-              }
-              
-              navigationTimeoutRef.current = setTimeout(() => {
-                setCurrentMonthIndex(newCurrentIndex);
-              }, 200); // 200ms debounce for period deletion
+              setCurrentMonthIndex(newCurrentIndex);
             }
             
             await forcePeriodsRefresh();
@@ -597,8 +594,8 @@ const ShiftScheduleEditorPhase3 = ({
           staffHook={{
             addStaff: addStaffMember,
             updateStaff: editStaffInfo,
-            phase: staffPhase,
-            isNormalized: staffIsNormalized,
+            phase: prefetchPhase,
+            isNormalized: true, // Phase 4: Always normalized in prefetch architecture
           }}
         />
       )}
@@ -648,10 +645,10 @@ const ShiftScheduleEditorPhase3 = ({
                 <div>
                   <h4 className="font-medium">Architecture Status</h4>
                   <p className="text-sm text-muted-foreground">
-                    Schedule: {schedulePhase || "Unknown"}
+                    Architecture: {prefetchPhase || "Unknown"}
                   </p>
                   <p className="text-sm text-muted-foreground">
-                    Staff: {staffPhase || "Unknown"} {staffIsNormalized ? "(Normalized)" : ""}
+                    Staff: {prefetchPhase || "Unknown"} (Normalized)
                   </p>
                 </div>
                 <div>
