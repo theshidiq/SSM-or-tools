@@ -573,30 +573,22 @@ const ShiftScheduleEditorPhase3 = ({
       {/* Staff Edit Modal */}
       {showStaffEditModal && (
         <StaffEditModal
-          isOpen={showStaffEditModal}
-          onClose={() => setShowStaffEditModal(false)}
-          staff={localStaffData}
+          showStaffEditModal={showStaffEditModal}
+          setShowStaffEditModal={setShowStaffEditModal}
+          staffMembers={staffMembers}
           schedule={schedule}
           dateRange={dateRange}
-          onStaffUpdate={handleStaffUpdate}
-          onScheduleUpdate={handleScheduleUpdate}
           selectedStaffForEdit={selectedStaffForEdit}
           setSelectedStaffForEdit={setSelectedStaffForEdit}
           editingStaffData={editingStaffData}
           setEditingStaffData={setEditingStaffData}
           isAddingNewStaff={isAddingNewStaff}
           setIsAddingNewStaff={setIsAddingNewStaff}
-          createNewStaff={createNewStaff}
-          editStaffName={editStaffName}
+          handleCreateStaff={addStaffMember}
+          updateStaff={editStaffInfo}
           deleteStaff={deleteStaff}
-          periods={realtimePeriods}
-          currentPeriodIndex={currentMonthIndex}
-          staffHook={{
-            addStaff: addStaffMember,
-            updateStaff: editStaffInfo,
-            phase: prefetchPhase,
-            isNormalized: true, // Phase 4: Always normalized in prefetch architecture
-          }}
+          currentMonthIndex={currentMonthIndex}
+          updateSchedule={updateSchedule}
         />
       )}
 
@@ -645,10 +637,10 @@ const ShiftScheduleEditorPhase3 = ({
                 <div>
                   <h4 className="font-medium">Architecture Status</h4>
                   <p className="text-sm text-muted-foreground">
-                    Architecture: {prefetchPhase || "Unknown"}
+                    Architecture: {"Phase 4: Prefetch"}
                   </p>
                   <p className="text-sm text-muted-foreground">
-                    Staff: {prefetchPhase || "Unknown"} (Normalized)
+                    Staff: {"Phase 4: Prefetch"} (Normalized)
                   </p>
                 </div>
                 <div>

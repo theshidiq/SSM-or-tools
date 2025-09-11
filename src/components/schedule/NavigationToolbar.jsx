@@ -571,7 +571,11 @@ const NavigationToolbar = ({
                   <Button
                     variant="outline"
                     size="sm"
-                    onClick={() => setShowStaffEditModal(true)}
+                    onClick={() => {
+                      console.log('🔧 Staff management button clicked');
+                      setShowStaffEditModal(true);
+                      console.log('✅ Modal state set to true');
+                    }}
                   >
                     <Users size={16} className="text-purple-600" />
                   </Button>
