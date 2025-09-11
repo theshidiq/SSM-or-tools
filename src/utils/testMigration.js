@@ -310,11 +310,7 @@ export const quickTests = {
   },
 };
 
-// Expose functions to window for browser console testing
+// Expose functions to window for browser console testing (silent with Phase 4 working)
 if (typeof window !== "undefined") {
   window.migrationTest = quickTests;
-  console.log("🛠️ Migration test utilities available at: window.migrationTest");
-  console.log(
-    "Available methods: dryRun(), migrate(), createData(), cleanup(), check()",
-  );
 }

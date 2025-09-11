@@ -72,7 +72,11 @@ class ConsoleLogger {
       });
     });
 
-    console.log("🔍 Console Logger initialized - capturing all console output");
+    // Only log initialization message once per session
+    if (!window.consoleLoggerInitialized) {
+      console.log("🔍 Console Logger initialized - capturing all console output");
+      window.consoleLoggerInitialized = true;
+    }
   }
 
   addLog(logEntry) {
@@ -180,12 +184,14 @@ class ConsoleLogger {
   }
 }
 
-// Create global instance
-window.consoleLogger = new ConsoleLogger();
-
-// Add some helpful global functions
-window.exportConsoleLogs = () => window.consoleLogger.exportLogs();
-window.printLogSummary = () => window.consoleLogger.printSummary();
-window.clearConsoleLogs = () => window.consoleLogger.clear();
+// Create global instance (singleton pattern)
+if (!window.consoleLogger) {
+  window.consoleLogger = new ConsoleLogger();
+  
+  // Add some helpful global functions
+  window.exportConsoleLogs = () => window.consoleLogger.exportLogs();
+  window.printLogSummary = () => window.consoleLogger.printSummary();
+  window.clearConsoleLogs = () => window.consoleLogger.clear();
+}
 
 export default window.consoleLogger;
