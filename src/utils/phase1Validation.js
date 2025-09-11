@@ -232,7 +232,5 @@ if (typeof window !== "undefined") {
     runPhase1TestSuite,
   };
 
-  console.log("🔧 Phase 1 validation tools available:");
-  console.log("• window.phase1Validation.runPhase1TestSuite()");
-  console.log("• window.phase1Validation.validatePhase1Implementation()");
+  // Phase 1 validation tools available (less verbose logging with Phase 4 working)
 }

@@ -43,18 +43,18 @@ export const PeriodMigration = ({ onMigrationComplete }) => {
   useEffect(() => {
     const performMigration = async () => {
       try {
-        setMigrationStatus("checking");
-
-        // Check if migration has already been completed
+        // Quick check - if migration already completed, skip immediately
         const migrationKey = "periods_migrated_to_supabase";
         const alreadyMigrated = localStorage.getItem(migrationKey);
 
         if (alreadyMigrated) {
-          console.log("✅ Periods migration already completed");
+          // Silent completion - no need to log repeatedly
           setMigrationStatus("completed");
           if (onMigrationComplete) onMigrationComplete();
           return;
         }
+
+        setMigrationStatus("checking");
 
         // Check if we have periods in database
         const { data: existingPeriods, error: fetchError } =

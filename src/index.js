@@ -44,19 +44,9 @@ if (process.env.NODE_ENV === "development") {
   };
   console.log("🔧 Debug utilities available: window.debugConfig (async)");
 
-  // Phase 4: Staff Migration Test Utilities - Direct access
+  // Phase 4: Migration utilities available but not verbose logged (prefetch working)
   import("./utils/testMigration").then(({ quickTests }) => {
     window.migrationTest = quickTests;
-    console.log(
-      "🚀 Staff migration test utilities available: window.migrationTest",
-    );
-    console.log("   • migrationTest.dryRun() - Test migration without changes");
-    console.log("   • migrationTest.migrate() - Perform actual migration");
-    console.log(
-      "   • migrationTest.createData() - Create sample localStorage data",
-    );
-    console.log("   • migrationTest.check() - Check localStorage status");
-    console.log("   • migrationTest.cleanup() - Clear test data");
   });
 }
 

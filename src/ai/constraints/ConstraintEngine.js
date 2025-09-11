@@ -97,7 +97,7 @@ const getCachedConfig = async (configType) => {
     return configCache.get(configType);
   }
 
-  console.log(`🔄 Loading fresh ${configType} configuration...`);
+  // Loading fresh configuration (reduced logging for Phase 4)
 
   // Load fresh configuration with timeout protection
   if (configService) {
@@ -157,8 +157,7 @@ const getCachedConfig = async (configType) => {
     }
   }
 
-  // Fallback to static configuration
-  console.log(`🔄 Using static fallback for ${configType} configuration`);
+  // Fallback to static configuration (silent for Phase 4)
   return getStaticConfiguration(configType);
 };
 

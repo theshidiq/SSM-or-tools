@@ -171,11 +171,24 @@ export const refreshPeriodsCache = async () => {
 // Function to synchronize cache with external periods data
 export const synchronizePeriodsCache = (externalPeriods) => {
   if (Array.isArray(externalPeriods)) {
-    console.log(
-      `🔄 Synchronizing dateUtils cache with external data (${externalPeriods.length} periods)`,
-    );
-    periodsCache = [...externalPeriods]; // Create a copy to avoid reference issues
-    cacheInitialized = true;
+    // Prevent redundant synchronizations by checking if data has actually changed
+    const hasChanged = !cacheInitialized || 
+                      periodsCache.length !== externalPeriods.length ||
+                      periodsCache.some((cached, idx) => 
+                        !externalPeriods[idx] || 
+                        cached.label !== externalPeriods[idx].label ||
+                        cached.start?.toISOString() !== new Date(externalPeriods[idx].start).toISOString()
+                      );
+
+    if (hasChanged) {
+      periodsCache = [...externalPeriods]; // Create a copy to avoid reference issues
+      cacheInitialized = true;
+      // Only log on significant changes (development mode)
+      if (process.env.NODE_ENV === 'development') {
+        console.log(`🔄 Synchronized dateUtils cache with ${externalPeriods.length} periods`);
+      }
+    }
+    // Remove verbose "skipping" logs to reduce console noise
     return periodsCache;
   }
   return periodsCache;

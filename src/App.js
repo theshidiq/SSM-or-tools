@@ -1,7 +1,7 @@
 import React, { useState } from "react";
 import ShiftScheduleEditorRealtime from "./components/ShiftScheduleEditorRealtime.jsx";
 import ShiftScheduleEditorPhase3 from "./components/ShiftScheduleEditorPhase3.jsx";
-import ForceDataLoader from "./components/ForceDataLoader.jsx";
+// ForceDataLoader removed - obsolete with Phase 4 prefetch architecture
 import DashboardLayout from "./components/layout/DashboardLayout.jsx";
 import PeriodMigration from "./components/migration/PeriodMigration.jsx";
 import { useSupabase } from "./hooks/useSupabase.js";
@@ -16,11 +16,10 @@ function AppContent() {
     loadScheduleData,
   } = useSupabase();
 
-  const [forceData, setForceData] = useState(null);
   const [migrationComplete, setMigrationComplete] = useState(false);
 
-  // Use forced data if available, otherwise use Supabase data
-  const effectiveScheduleData = forceData || scheduleData;
+  // Phase 4: Use prefetch architecture directly - no forced data needed
+  const effectiveScheduleData = scheduleData;
 
   return (
     <>
@@ -28,10 +27,7 @@ function AppContent() {
       <PeriodMigration onMigrationComplete={() => setMigrationComplete(true)} />
 
       <DashboardLayout>
-        {/* Phase 1: Force load actual Supabase data for migration testing */}
-        <ForceDataLoader onDataLoaded={setForceData} />
-
-        {/* PHASE 3 NORMALIZED ARCHITECTURE - Testing Implementation */}
+        {/* PHASE 4 PREFETCH ARCHITECTURE - Production Implementation */}
         <ShiftScheduleEditorPhase3
           supabaseScheduleData={effectiveScheduleData}
           isConnected={isConnected}
