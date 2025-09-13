@@ -184,7 +184,7 @@ class ConsoleLogger {
 // Create global instance (singleton pattern)
 if (!window.consoleLogger) {
   window.consoleLogger = new ConsoleLogger();
-  
+
   // Add some helpful global functions
   window.exportConsoleLogs = () => window.consoleLogger.exportLogs();
   window.printLogSummary = () => window.consoleLogger.printSummary();

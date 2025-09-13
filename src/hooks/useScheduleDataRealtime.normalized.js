@@ -1,6 +1,6 @@
 /**
  * Phase 3: Normalized Schedule Data Real-time Hook
- * 
+ *
  * This hook provides real-time schedule management with normalized staff-schedule relationships
  * using the new schedule_staff_assignments table instead of embedded _staff_members data.
  *
@@ -16,10 +16,7 @@ import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { useMutation, useQueryClient, useQuery } from "@tanstack/react-query";
 import { flushSync } from "react-dom";
 import { generateDateRange, monthPeriods } from "../utils/dateUtils";
-import {
-  initializeSchedule,
-  migrateScheduleData,
-} from "../utils/staffUtils";
+import { initializeSchedule, migrateScheduleData } from "../utils/staffUtils";
 import { defaultStaffMembersArray } from "../constants/staffConstants";
 import { dataValidation } from "../utils/dataIntegrityUtils";
 import { supabase } from "../utils/supabase";
@@ -62,9 +59,18 @@ const deduplicateQueue = (queue, newItem) => {
 // Query keys for the normalized architecture
 export const NORMALIZED_QUERY_KEYS = {
   schedule: (scheduleId) => ["schedule", "normalized", scheduleId],
-  scheduleWithStaff: (scheduleId, periodIndex) => ["schedule", "with-staff", scheduleId, periodIndex],
+  scheduleWithStaff: (scheduleId, periodIndex) => [
+    "schedule",
+    "with-staff",
+    scheduleId,
+    periodIndex,
+  ],
   staffForPeriod: (periodIndex) => ["staff", "for-period", periodIndex],
-  scheduleStaffAssignments: (scheduleId, periodIndex) => ["schedule-staff-assignments", scheduleId, periodIndex],
+  scheduleStaffAssignments: (scheduleId, periodIndex) => [
+    "schedule-staff-assignments",
+    scheduleId,
+    periodIndex,
+  ],
   connection: () => ["normalized", "connection"],
 };
 
@@ -157,8 +163,10 @@ export const useScheduleDataRealtimeNormalized = (
       if (currentMonthIndex < 0) return null;
 
       try {
-        console.log(`🔍 Finding or creating schedule for period ${currentMonthIndex}`);
-        
+        console.log(
+          `🔍 Finding or creating schedule for period ${currentMonthIndex}`,
+        );
+
         // First try to find existing schedule for this period
         // Note: Query existing schedules and find by created date or any existing logic
         const { data: existingSchedules, error: findError } = await supabase
@@ -172,25 +180,34 @@ export const useScheduleDataRealtimeNormalized = (
         if (existingSchedules && existingSchedules.length > 0) {
           // Use the most recent schedule or create a mapping logic later
           const existingSchedule = existingSchedules[0];
-          console.log(`✅ Found existing schedule: ${existingSchedule.id} for period ${currentMonthIndex}`);
+          console.log(
+            `✅ Found existing schedule: ${existingSchedule.id} for period ${currentMonthIndex}`,
+          );
           return existingSchedule;
         }
 
         // Create new schedule if none exists - using minimal required fields
         const { data: newSchedule, error: createError } = await supabase
           .from("schedules")
-          .insert([{
-            schedule_data: {},
-          }])
+          .insert([
+            {
+              schedule_data: {},
+            },
+          ])
           .select()
           .single();
 
         if (createError) throw createError;
 
-        console.log(`🆕 Created new schedule: ${newSchedule.id} for period ${currentMonthIndex}`);
+        console.log(
+          `🆕 Created new schedule: ${newSchedule.id} for period ${currentMonthIndex}`,
+        );
         return newSchedule;
       } catch (error) {
-        console.error(`❌ Error finding/creating schedule for period ${currentMonthIndex}:`, error);
+        console.error(
+          `❌ Error finding/creating schedule for period ${currentMonthIndex}:`,
+          error,
+        );
         throw error;
       }
     },
@@ -202,10 +219,17 @@ export const useScheduleDataRealtimeNormalized = (
   // Update current schedule ID when found/created
   useEffect(() => {
     if (scheduleIdData?.id && scheduleIdData.id !== currentScheduleId) {
-      console.log(`🆔 Setting schedule ID: ${scheduleIdData.id} for period ${currentMonthIndex}`);
+      console.log(
+        `🆔 Setting schedule ID: ${scheduleIdData.id} for period ${currentMonthIndex}`,
+      );
       setCurrentScheduleId(scheduleIdData.id);
     }
-  }, [scheduleIdData, currentScheduleId, currentMonthIndex, setCurrentScheduleId]);
+  }, [
+    scheduleIdData,
+    currentScheduleId,
+    currentMonthIndex,
+    setCurrentScheduleId,
+  ]);
 
   // Load schedule with staff using normalized relationship
   const {
@@ -214,13 +238,18 @@ export const useScheduleDataRealtimeNormalized = (
     error: scheduleError,
     refetch: refetchSchedule,
   } = useQuery({
-    queryKey: NORMALIZED_QUERY_KEYS.scheduleWithStaff(currentScheduleId, currentMonthIndex),
+    queryKey: NORMALIZED_QUERY_KEYS.scheduleWithStaff(
+      currentScheduleId,
+      currentMonthIndex,
+    ),
     queryFn: async () => {
       if (!currentScheduleId) return null;
 
       try {
-        console.log(`🔍 Loading schedule ${currentScheduleId} for period ${currentMonthIndex} using normalized architecture`);
-        
+        console.log(
+          `🔍 Loading schedule ${currentScheduleId} for period ${currentMonthIndex} using normalized architecture`,
+        );
+
         // Use simple query instead of missing RPC function
         const { data: scheduleData, error } = await supabase
           .from("schedules")
@@ -232,10 +261,15 @@ export const useScheduleDataRealtimeNormalized = (
 
         // Note: Staff data is handled by useStaffManagementNormalized hook
         // This query only loads schedule data - no embedded staff
-        console.log(`📊 Loaded schedule data (staff managed separately by normalized hook)`);
+        console.log(
+          `📊 Loaded schedule data (staff managed separately by normalized hook)`,
+        );
         return scheduleData;
       } catch (error) {
-        console.error(`❌ Error loading schedule for period ${currentMonthIndex}:`, error);
+        console.error(
+          `❌ Error loading schedule for period ${currentMonthIndex}:`,
+          error,
+        );
         throw error;
       }
     },
@@ -244,34 +278,41 @@ export const useScheduleDataRealtimeNormalized = (
   });
 
   // Save schedule using normalized architecture
-  const saveScheduleNormalized = useCallback(async ({ data: scheduleData, scheduleId }) => {
-    try {
-      const { _staff_members, ...actualScheduleData } = scheduleData;
-      
-      // Step 1: Save schedule data (without embedded staff)
-      const { data: savedSchedule, error: scheduleError } = await supabase
-        .from("schedules")
-        .upsert({
-          id: scheduleId,
-          schedule_data: actualScheduleData,
-          updated_at: new Date().toISOString(),
-        })
-        .select()
-        .single();
+  const saveScheduleNormalized = useCallback(
+    async ({ data: scheduleData, scheduleId }) => {
+      try {
+        const { _staff_members, ...actualScheduleData } = scheduleData;
 
-      if (scheduleError) throw scheduleError;
+        // Step 1: Save schedule data (without embedded staff)
+        const { data: savedSchedule, error: scheduleError } = await supabase
+          .from("schedules")
+          .upsert({
+            id: scheduleId,
+            schedule_data: actualScheduleData,
+            updated_at: new Date().toISOString(),
+          })
+          .select()
+          .single();
 
-      // Simple approach: Staff assignments are handled via direct staff table queries
-      // No need for complex bridge table operations
-      console.log(`✅ Schedule saved with ${_staff_members?.length || 0} staff members (simple JOIN approach)`);
+        if (scheduleError) throw scheduleError;
 
-      console.log(`✅ Successfully saved normalized schedule for period ${currentMonthIndex}`);
-      return savedSchedule;
-    } catch (error) {
-      console.error(`❌ Failed to save normalized schedule:`, error);
-      throw error;
-    }
-  }, [currentMonthIndex]);
+        // Simple approach: Staff assignments are handled via direct staff table queries
+        // No need for complex bridge table operations
+        console.log(
+          `✅ Schedule saved with ${_staff_members?.length || 0} staff members (simple JOIN approach)`,
+        );
+
+        console.log(
+          `✅ Successfully saved normalized schedule for period ${currentMonthIndex}`,
+        );
+        return savedSchedule;
+      } catch (error) {
+        console.error(`❌ Failed to save normalized schedule:`, error);
+        throw error;
+      }
+    },
+    [currentMonthIndex],
+  );
 
   // Mutation for optimistic schedule updates using normalized architecture
   const updateScheduleMutation = useMutation({
@@ -318,7 +359,10 @@ export const useScheduleDataRealtimeNormalized = (
     onMutate: async ({ newSchedule, staffForSave }) => {
       // Cancel any outgoing refetches
       await queryClient.cancelQueries({
-        queryKey: NORMALIZED_QUERY_KEYS.scheduleWithStaff(currentScheduleId, currentMonthIndex),
+        queryKey: NORMALIZED_QUERY_KEYS.scheduleWithStaff(
+          currentScheduleId,
+          currentMonthIndex,
+        ),
       });
 
       // Snapshot the previous value for rollback
@@ -374,7 +418,9 @@ export const useScheduleDataRealtimeNormalized = (
       }, 2000); // 2 second delay to prevent competing with staff hook
 
       if (process.env.NODE_ENV === "development") {
-        console.log("✅ Normalized schedule update successful with optimistic UI");
+        console.log(
+          "✅ Normalized schedule update successful with optimistic UI",
+        );
       }
     },
   });
@@ -458,13 +504,16 @@ export const useScheduleDataRealtimeNormalized = (
         const cellKey = `${variables.staffId}_${variables.dateKey}`;
         setPendingCells((prev) => new Set([...prev, cellKey]));
 
-        console.warn("🔄 Connection lost - queuing normalized cell update for retry", {
-          queueId: queueItem.id,
-          staffId: variables.staffId,
-          dateKey: variables.dateKey,
-          value: variables.shiftValue,
-          error: error.message,
-        });
+        console.warn(
+          "🔄 Connection lost - queuing normalized cell update for retry",
+          {
+            queueId: queueItem.id,
+            staffId: variables.staffId,
+            dateKey: variables.dateKey,
+            value: variables.shiftValue,
+            error: error.message,
+          },
+        );
       } else {
         // Other errors - rollback the optimistic update
         if (context?.previousSchedule) {
@@ -549,9 +598,7 @@ export const useScheduleDataRealtimeNormalized = (
           // Initialize with staff structure
           const currentDateRange = generateDateRange(currentMonthIndex);
           const newSchedule = initializeSchedule(
-            staffMembers.length > 0
-              ? staffMembers
-              : defaultStaffMembersArray,
+            staffMembers.length > 0 ? staffMembers : defaultStaffMembersArray,
             currentDateRange,
           );
           setSchedule(newSchedule);
@@ -567,25 +614,31 @@ export const useScheduleDataRealtimeNormalized = (
   useEffect(() => {
     if (!isConnected || !currentScheduleId) return;
 
-    console.log(`🔔 Setting up normalized real-time subscriptions for schedule ${currentScheduleId}`);
+    console.log(
+      `🔔 Setting up normalized real-time subscriptions for schedule ${currentScheduleId}`,
+    );
 
     // Enhanced debounce with coordination prevention
     let invalidationTimeout;
     let lastInvalidation = 0;
     const debouncedInvalidate = (queryKey, delay = 1000) => {
       const now = Date.now();
-      
+
       // Prevent rapid-fire invalidations (min 1 second apart)
       if (now - lastInvalidation < 1000) {
-        console.log(`⚡ Skipping rapid invalidation for ${JSON.stringify(queryKey)}`);
+        console.log(
+          `⚡ Skipping rapid invalidation for ${JSON.stringify(queryKey)}`,
+        );
         return;
       }
-      
+
       clearTimeout(invalidationTimeout);
       invalidationTimeout = setTimeout(() => {
         lastInvalidation = Date.now();
         queryClient.invalidateQueries({ queryKey });
-        console.log(`♻️ Schedule query invalidated: ${JSON.stringify(queryKey)}`);
+        console.log(
+          `♻️ Schedule query invalidated: ${JSON.stringify(queryKey)}`,
+        );
       }, delay);
     };
 
@@ -602,16 +655,23 @@ export const useScheduleDataRealtimeNormalized = (
         },
         (payload) => {
           console.log("📡 Real-time schedule update (normalized):", payload);
-          
+
           // Debounced invalidate to prevent race conditions
-          debouncedInvalidate(NORMALIZED_QUERY_KEYS.scheduleWithStaff(currentScheduleId, currentMonthIndex));
+          debouncedInvalidate(
+            NORMALIZED_QUERY_KEYS.scheduleWithStaff(
+              currentScheduleId,
+              currentMonthIndex,
+            ),
+          );
         },
       )
       .subscribe();
 
     // Subscribe to schedule-staff assignment changes
     const assignmentChannel = supabase
-      .channel(`assignments_normalized_${currentScheduleId}_${currentMonthIndex}`)
+      .channel(
+        `assignments_normalized_${currentScheduleId}_${currentMonthIndex}`,
+      )
       .on(
         "postgres_changes",
         {
@@ -622,10 +682,17 @@ export const useScheduleDataRealtimeNormalized = (
         },
         (payload) => {
           console.log("📡 Real-time assignment update (normalized):", payload);
-          
+
           // Debounced invalidate to prevent race conditions
-          debouncedInvalidate(NORMALIZED_QUERY_KEYS.scheduleWithStaff(currentScheduleId, currentMonthIndex));
-          debouncedInvalidate(NORMALIZED_QUERY_KEYS.staffForPeriod(currentMonthIndex));
+          debouncedInvalidate(
+            NORMALIZED_QUERY_KEYS.scheduleWithStaff(
+              currentScheduleId,
+              currentMonthIndex,
+            ),
+          );
+          debouncedInvalidate(
+            NORMALIZED_QUERY_KEYS.staffForPeriod(currentMonthIndex),
+          );
         },
       )
       .subscribe();
@@ -642,10 +709,17 @@ export const useScheduleDataRealtimeNormalized = (
         },
         (payload) => {
           console.log("📡 Real-time staff update (normalized):", payload);
-          
+
           // Debounced invalidate to prevent race conditions
-          debouncedInvalidate(NORMALIZED_QUERY_KEYS.staffForPeriod(currentMonthIndex));
-          debouncedInvalidate(NORMALIZED_QUERY_KEYS.scheduleWithStaff(currentScheduleId, currentMonthIndex));
+          debouncedInvalidate(
+            NORMALIZED_QUERY_KEYS.staffForPeriod(currentMonthIndex),
+          );
+          debouncedInvalidate(
+            NORMALIZED_QUERY_KEYS.scheduleWithStaff(
+              currentScheduleId,
+              currentMonthIndex,
+            ),
+          );
         },
       )
       .subscribe();
@@ -712,14 +786,19 @@ export const useScheduleDataRealtimeNormalized = (
 
       try {
         if (queueItem.type === "schedule") {
-          console.log(`🔄 Retrying queued normalized schedule update: ${queueItem.id}`);
+          console.log(
+            `🔄 Retrying queued normalized schedule update: ${queueItem.id}`,
+          );
           await updateScheduleMutation.mutateAsync(queueItem.data);
         } else if (queueItem.type === "singleCell") {
-          console.log(`🔄 Retrying queued normalized cell update: ${queueItem.id}`, {
-            staffId: queueItem.data.staffId,
-            dateKey: queueItem.data.dateKey,
-            value: queueItem.data.shiftValue,
-          });
+          console.log(
+            `🔄 Retrying queued normalized cell update: ${queueItem.id}`,
+            {
+              staffId: queueItem.data.staffId,
+              dateKey: queueItem.data.dateKey,
+              value: queueItem.data.shiftValue,
+            },
+          );
           await updateShiftMutation.mutateAsync(queueItem.data);
 
           // Remove from pending cells on success
@@ -731,7 +810,9 @@ export const useScheduleDataRealtimeNormalized = (
           });
         }
 
-        console.log(`✅ Normalized queue item ${queueItem.id} retried successfully`);
+        console.log(
+          `✅ Normalized queue item ${queueItem.id} retried successfully`,
+        );
       } catch (retryError) {
         console.error(
           `❌ Normalized queue retry failed for ${queueItem.id}:`,
@@ -823,9 +904,7 @@ export const useScheduleDataRealtimeNormalized = (
     setCurrentScheduleId,
     isConnected,
     isLoading: isScheduleIdLoading || isScheduleLoading,
-    isSaving:
-      updateScheduleMutation.isPending ||
-      updateShiftMutation.isPending,
+    isSaving: updateScheduleMutation.isPending || updateShiftMutation.isPending,
     error: error || scheduleIdError?.message || scheduleError?.message,
 
     // Offline queue state
@@ -837,7 +916,8 @@ export const useScheduleDataRealtimeNormalized = (
     // Save functions for normalized architecture
     saveSchedule: saveScheduleNormalized,
     saveScheduleAsync: saveScheduleNormalized,
-    isSupabaseSaving: updateScheduleMutation.isPending || updateShiftMutation.isPending,
+    isSupabaseSaving:
+      updateScheduleMutation.isPending || updateShiftMutation.isPending,
     autoSave: scheduleAutoSave,
 
     // Utilities

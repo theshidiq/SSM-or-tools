@@ -1,9 +1,9 @@
 /**
  * Simple Staff Management Hook with Schedule JOIN
- * 
+ *
  * This hook provides a simple approach to staff-schedule integration by using
  * direct JOINs between the existing 'staff' table and 'schedules' table.
- * 
+ *
  * No complex bridge tables - just direct relationships using the schedule JSONB data
  * that already contains staff UUIDs as keys.
  *
@@ -33,7 +33,10 @@ export const SIMPLE_JOIN_QUERY_KEYS = {
   connection: () => ["staff", "simple-join", "connection"],
 };
 
-export const useStaffManagementSimpleJoin = (currentMonthIndex, options = {}) => {
+export const useStaffManagementSimpleJoin = (
+  currentMonthIndex,
+  options = {},
+) => {
   const { scheduleId = null } = options;
   const queryClient = useQueryClient();
   const subscriptionRef = useRef(null);
@@ -110,17 +113,25 @@ export const useStaffManagementSimpleJoin = (currentMonthIndex, options = {}) =>
 
         if (staffError) throw staffError;
 
-        console.log(`📊 Loaded ${allStaff?.length || 0} staff from staff table`);
+        console.log(
+          `📊 Loaded ${allStaff?.length || 0} staff from staff table`,
+        );
 
         // If we have a specific scheduleId, we could filter by schedule data,
         // but for now, return all active staff
-        const activeStaff = allStaff?.filter(staff => staff.is_active !== false) || [];
+        const activeStaff =
+          allStaff?.filter((staff) => staff.is_active !== false) || [];
 
-        console.log(`📊 Filtered to ${activeStaff.length} active staff for period ${currentMonthIndex}`);
+        console.log(
+          `📊 Filtered to ${activeStaff.length} active staff for period ${currentMonthIndex}`,
+        );
 
         return activeStaff;
       } catch (error) {
-        console.error(`❌ Error loading staff for period ${currentMonthIndex}:`, error);
+        console.error(
+          `❌ Error loading staff for period ${currentMonthIndex}:`,
+          error,
+        );
         throw error;
       }
     },
@@ -172,7 +183,7 @@ export const useStaffManagementSimpleJoin = (currentMonthIndex, options = {}) =>
     // Apply period-based filtering if needed
     try {
       const currentDateRange = generateDateRange(currentMonthIndex);
-      
+
       // Apply period filtering manually
       const activeStaff = transformedStaff.filter((staff) =>
         isStaffActiveInCurrentPeriod(staff, currentDateRange),
@@ -241,7 +252,8 @@ export const useStaffManagementSimpleJoin = (currentMonthIndex, options = {}) =>
     },
     onMutate: async ({ staffMembers: newStaffMembers, operation }) => {
       // Cancel outgoing refetches to prevent overriding optimistic update
-      const queryKey = SIMPLE_JOIN_QUERY_KEYS.staffWithSchedule(currentMonthIndex);
+      const queryKey =
+        SIMPLE_JOIN_QUERY_KEYS.staffWithSchedule(currentMonthIndex);
       await queryClient.cancelQueries({ queryKey });
 
       // Snapshot previous value for rollback
@@ -287,7 +299,9 @@ export const useStaffManagementSimpleJoin = (currentMonthIndex, options = {}) =>
    */
   const addStaffMutation = useMutation({
     mutationFn: async (newStaff) => {
-      console.log(`➕ Adding new staff member using simple JOIN: ${newStaff.name}`);
+      console.log(
+        `➕ Adding new staff member using simple JOIN: ${newStaff.name}`,
+      );
 
       const dbStaff = transformStaffForDatabase({
         ...newStaff,
@@ -304,7 +318,9 @@ export const useStaffManagementSimpleJoin = (currentMonthIndex, options = {}) =>
 
       if (error) throw error;
 
-      console.log(`✅ Successfully added staff member using simple JOIN: ${data.name}`);
+      console.log(
+        `✅ Successfully added staff member using simple JOIN: ${data.name}`,
+      );
       return { staffData: data };
     },
     onSuccess: () => {
@@ -317,7 +333,11 @@ export const useStaffManagementSimpleJoin = (currentMonthIndex, options = {}) =>
       console.log("✅ Simple JOIN staff member added successfully");
     },
     onError: (err) => {
-      const errorMessage = err?.message || err?.error?.message || JSON.stringify(err) || "Unknown error";
+      const errorMessage =
+        err?.message ||
+        err?.error?.message ||
+        JSON.stringify(err) ||
+        "Unknown error";
       setError(`Add staff failed (simple JOIN): ${errorMessage}`);
       console.error("❌ Simple JOIN add staff failed:", err);
     },
@@ -328,7 +348,9 @@ export const useStaffManagementSimpleJoin = (currentMonthIndex, options = {}) =>
    */
   const deleteStaffMutation = useMutation({
     mutationFn: async (staffIdToDelete) => {
-      console.log(`🗑️ Deleting staff member using simple JOIN: ${staffIdToDelete}`);
+      console.log(
+        `🗑️ Deleting staff member using simple JOIN: ${staffIdToDelete}`,
+      );
 
       // Simple delete from staff table
       const { error } = await supabase
@@ -338,7 +360,9 @@ export const useStaffManagementSimpleJoin = (currentMonthIndex, options = {}) =>
 
       if (error) throw error;
 
-      console.log(`✅ Successfully deleted staff member using simple JOIN: ${staffIdToDelete}`);
+      console.log(
+        `✅ Successfully deleted staff member using simple JOIN: ${staffIdToDelete}`,
+      );
       return { staffId: staffIdToDelete };
     },
     onSuccess: () => {
@@ -388,15 +412,15 @@ export const useStaffManagementSimpleJoin = (currentMonthIndex, options = {}) =>
   const updateStaff = useCallback(
     (staffId, updatedData, onSuccess) => {
       // Use the save mutation for single staff updates
-      const staffToUpdate = staffMembers.find(staff => staff.id === staffId);
+      const staffToUpdate = staffMembers.find((staff) => staff.id === staffId);
       if (!staffToUpdate) {
         console.error(`Staff member ${staffId} not found for update`);
         return;
       }
 
       const updatedStaff = { ...staffToUpdate, ...updatedData };
-      const allStaffWithUpdate = staffMembers.map(staff => 
-        staff.id === staffId ? updatedStaff : staff
+      const allStaffWithUpdate = staffMembers.map((staff) =>
+        staff.id === staffId ? updatedStaff : staff,
       );
 
       saveStaffMutation.mutate({
@@ -649,7 +673,10 @@ export const useStaffManagementSimpleJoin = (currentMonthIndex, options = {}) =>
     // Loading states
     loading: isStaffLoading,
     isLoading: isStaffLoading,
-    isSaving: saveStaffMutation.isPending || addStaffMutation.isPending || deleteStaffMutation.isPending,
+    isSaving:
+      saveStaffMutation.isPending ||
+      addStaffMutation.isPending ||
+      deleteStaffMutation.isPending,
 
     // Connection status
     isConnected,

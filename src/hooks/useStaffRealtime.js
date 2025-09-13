@@ -382,17 +382,21 @@ export const useStaffRealtime = (currentMonthIndex, options = {}) => {
     },
     onError: (err) => {
       // Better error handling - err might be an object
-      const errorMessage = err?.message || err?.error?.message || JSON.stringify(err) || "Unknown error";
+      const errorMessage =
+        err?.message ||
+        err?.error?.message ||
+        JSON.stringify(err) ||
+        "Unknown error";
       setError(`Add staff failed: ${errorMessage}`);
       console.error("❌ Add staff failed:", err);
-      
+
       // Log the full error details for debugging
       console.error("❌ Full error object:", {
         error: err,
         message: err?.message,
         details: err?.details,
         hint: err?.hint,
-        code: err?.code
+        code: err?.code,
       });
     },
   });

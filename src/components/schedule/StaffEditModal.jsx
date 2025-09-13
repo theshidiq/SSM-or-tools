@@ -1,5 +1,6 @@
-import React, { useEffect, useRef } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { isDateWithinWorkPeriod } from "../../utils/dateUtils";
+import { toast } from "sonner";
 
 // ShadCN UI Components
 import {
@@ -22,6 +23,7 @@ import {
 import { Card, CardContent } from "../ui/card";
 import { Badge } from "../ui/badge";
 import { RadioGroup, RadioGroupItem } from "../ui/radio-group";
+import { AlertCircle, CheckCircle2, Loader2 } from "lucide-react";
 
 const StaffEditModal = ({
   showStaffEditModal,
@@ -34,19 +36,24 @@ const StaffEditModal = ({
   setEditingStaffData,
   staffMembers,
   dateRange,
-  handleCreateStaff,
+  addStaff,
   updateStaff,
   deleteStaff,
   schedule,
   updateSchedule,
-  setStaffMembersByMonth,
   currentMonthIndex,
-  scheduleAutoSave,
-  _clearAndRefreshFromDatabase,
-  isRefreshingFromDatabase,
+  isSaving = false, // New prop to show saving state
+  error = null, // New prop to show errors
 }) => {
   // Track if user is actively editing to prevent overwriting their changes
   const [isUserEditing, setIsUserEditing] = React.useState(false);
+  
+  // Track operation states for better UX
+  const [operationState, setOperationState] = useState({
+    isProcessing: false,
+    lastOperation: null,
+    lastOperationSuccess: false,
+  });
 
   // Ref for the name input field to enable auto-focus
   const nameInputRef = useRef(null);
@@ -160,84 +167,171 @@ const StaffEditModal = ({
 
   if (!showStaffEditModal) return null;
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     if (e && e.preventDefault) {
       e.preventDefault();
     }
 
-    // Clear editing flag since user is submitting
+    // Validate required fields
+    if (!safeEditingStaffData.name?.trim()) {
+      toast.error("名前を入力してください");
+      return;
+    }
+
+    // Clear editing flag and set processing state
     setIsUserEditing(false);
+    setOperationState({
+      isProcessing: true,
+      lastOperation: isAddingNewStaff ? 'add' : 'update',
+      lastOperationSuccess: false,
+    });
 
-    if (isAddingNewStaff) {
-      handleCreateStaff(safeEditingStaffData, async () => {
-        // Save to database
-        try {
-          await scheduleAutoSave(schedule, staffMembers);
-        } catch (error) {
-          console.error("❌ Modal: Database save failed:", error);
-        }
+    try {
+      if (isAddingNewStaff) {
+        console.log(`➕ [Real-time UI] Adding new staff member: ${safeEditingStaffData.name}`);
+        
+        // Show immediate optimistic feedback
+        toast.success(`${safeEditingStaffData.name}を追加しています...`, { duration: 1000 });
+        
+        const newStaff = addStaff(safeEditingStaffData, (updatedStaffArray) => {
+          console.log("✅ [Real-time UI] Staff added successfully with immediate UI update");
+          
+          setOperationState({
+            isProcessing: false,
+            lastOperation: 'add',
+            lastOperationSuccess: true,
+          });
+          
+          // Show success feedback
+          toast.success(`${safeEditingStaffData.name}を追加しました`);
+          
+          // Keep modal open but clear form for next addition
+          setIsAddingNewStaff(true);
+          setSelectedStaffForEdit(null);
+          setEditingStaffData({
+            name: "",
+            position: "",
+            status: "社員",
+            startPeriod: null,
+            endPeriod: null,
+          });
+          
+          // Focus name input for next entry
+          setTimeout(() => {
+            if (nameInputRef.current) {
+              nameInputRef.current.focus();
+            }
+          }, 100);
+        });
+        
+      } else if (selectedStaffForEdit) {
+        console.log(`✏️ [Real-time UI] Updating staff member: ${safeEditingStaffData.name}`);
+        
+        // Show immediate optimistic feedback
+        toast.success(`${safeEditingStaffData.name}を更新しています...`, { duration: 1000 });
+        
+        updateStaff(
+          selectedStaffForEdit.id,
+          safeEditingStaffData,
+          (updatedStaffArray) => {
+            console.log("✅ [Real-time UI] Staff updated successfully with immediate UI update");
+            
+            setOperationState({
+              isProcessing: false,
+              lastOperation: 'update',
+              lastOperationSuccess: true,
+            });
+            
+            // Show success feedback
+            toast.success(`${safeEditingStaffData.name}を更新しました`);
+            
+            // Update the modal's form state to reflect the successful update
+            const updatedStaff = updatedStaffArray.find(
+              (staff) => staff.id === selectedStaffForEdit.id,
+            );
+            if (updatedStaff) {
+              // Update selected staff reference
+              setSelectedStaffForEdit(updatedStaff);
+              
+              // Update form state with latest data
+              const newEditingData = {
+                name: updatedStaff.name,
+                position: updatedStaff.position || "",
+                status: updatedStaff.status || "社員",
+                startPeriod: updatedStaff.startPeriod || null,
+                endPeriod: updatedStaff.endPeriod || null,
+              };
+              setEditingStaffData(newEditingData);
+            }
+          },
+        );
+      }
+    } catch (error) {
+      console.error("❌ [Real-time UI] Staff operation failed:", error);
+      
+      setOperationState({
+        isProcessing: false,
+        lastOperation: isAddingNewStaff ? 'add' : 'update',
+        lastOperationSuccess: false,
       });
-    } else if (selectedStaffForEdit) {
-      updateStaff(
-        selectedStaffForEdit.id,
-        safeEditingStaffData,
-        async (newStaff) => {
-          setStaffMembersByMonth((prev) => ({
-            ...prev,
-            [currentMonthIndex]: newStaff,
-          }));
-
-          // Update the modal's form state to reflect the successful update
-          const updatedStaff = newStaff.find(
-            (staff) => staff.id === selectedStaffForEdit.id,
-          );
-          if (updatedStaff) {
-            // Create new editing data object
-            const newEditingData = {
-              name: updatedStaff.name,
-              position: updatedStaff.position || "",
-              status: updatedStaff.status || "社員",
-              startPeriod: updatedStaff.startPeriod || null,
-              endPeriod: updatedStaff.endPeriod || null,
-            };
-
-            // Update both selected staff and editing data immediately
-            setSelectedStaffForEdit(updatedStaff);
-            setEditingStaffData(newEditingData);
-          }
-
-          // Save to database
-          try {
-            await scheduleAutoSave(schedule, newStaff);
-          } catch (error) {
-            console.error("❌ Modal: Database save failed:", error);
-          }
-        },
-      );
+      
+      // Show error feedback
+      const operationText = isAddingNewStaff ? '追加' : '更新';
+      toast.error(`スタッフの${operationText}に失敗しました: ${error.message}`);
     }
   };
 
-  const handleDeleteStaff = (staffId) => {
-    const confirmed = window.confirm("本当にこのスタッフを削除しますか？");
-    if (confirmed) {
+  const handleDeleteStaff = async (staffId) => {
+    const staffToDelete = staffMembers.find(s => s.id === staffId);
+    const staffName = staffToDelete?.name || 'スタッフ';
+    
+    const confirmed = window.confirm(`本当に${staffName}を削除しますか？\n\nこの操作は元に戻せません。`);
+    if (!confirmed) return;
+    
+    console.log(`🗑️ [Real-time UI] Deleting staff member: ${staffName}`);
+    
+    setOperationState({
+      isProcessing: true,
+      lastOperation: 'delete',
+      lastOperationSuccess: false,
+    });
+    
+    try {
+      // Show immediate optimistic feedback
+      toast.success(`${staffName}を削除しています...`, { duration: 1000 });
+      
       const { newStaffMembers, newSchedule } = deleteStaff(
         staffId,
         schedule,
         updateSchedule,
-        (newStaff) => {
-          setStaffMembersByMonth((prev) => ({
-            ...prev,
-            [currentMonthIndex]: newStaff,
-          }));
+        (updatedStaffArray) => {
+          console.log("✅ [Real-time UI] Staff deleted successfully with immediate UI update");
+          
+          setOperationState({
+            isProcessing: false,
+            lastOperation: 'delete',
+            lastOperationSuccess: true,
+          });
+          
+          // Show success feedback
+          toast.success(`${staffName}を削除しました`);
+          
+          // Close modal after successful deletion
+          setShowStaffEditModal(false);
+          setSelectedStaffForEdit(null);
+          setIsAddingNewStaff(false);
         },
       );
-
-      setShowStaffEditModal(false);
-      setSelectedStaffForEdit(null);
-
-      setTimeout(() => {
-        scheduleAutoSave(newSchedule, newStaffMembers);
-      }, 0);
+    } catch (error) {
+      console.error("❌ [Real-time UI] Staff deletion failed:", error);
+      
+      setOperationState({
+        isProcessing: false,
+        lastOperation: 'delete',
+        lastOperationSuccess: false,
+      });
+      
+      toast.error(`${staffName}の削除に失敗しました: ${error.message}`);
     }
   };
 
@@ -307,17 +401,6 @@ const StaffEditModal = ({
       }}
     >
       <DialogContent className="w-[95vw] max-w-6xl h-[90vh] max-h-[90vh] overflow-y-auto bg-background border-border shadow-2xl">
-        {/* Loading overlay for database refresh */}
-        {isRefreshingFromDatabase && (
-          <div className="absolute inset-0 bg-background/90 flex items-center justify-center z-[60] rounded-lg">
-            <div className="text-center">
-              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto mb-3"></div>
-              <p className="text-muted-foreground text-sm">
-                Refreshing data from database...
-              </p>
-            </div>
-          </div>
-        )}
         <DialogHeader>
           <DialogTitle className="text-xl font-bold">スタッフ管理</DialogTitle>
           <DialogDescription>
@@ -329,14 +412,35 @@ const StaffEditModal = ({
           {/* Left Panel - Staff List */}
           <div className="flex-1 lg:max-w-md space-y-4 min-h-0 flex flex-col">
             <div className="flex items-center justify-between">
-              <h3 className="text-lg font-semibold text-card-foreground">
-                スタッフ一覧
-              </h3>
+              <div className="flex items-center gap-2">
+                <h3 className="text-lg font-semibold text-card-foreground">
+                  スタッフ一覧
+                </h3>
+                {isSaving && (
+                  <div className="flex items-center gap-1 text-sm text-muted-foreground">
+                    <Loader2 className="h-3 w-3 animate-spin" />
+                    <span>同期中...</span>
+                  </div>
+                )}
+                {operationState.lastOperationSuccess && (
+                  <div className="flex items-center gap-1 text-sm text-green-600">
+                    <CheckCircle2 className="h-3 w-3" />
+                  </div>
+                )}
+              </div>
               <Button
                 onClick={startAddingNew}
-                className="bg-green-500 hover:bg-green-600"
+                disabled={operationState.isProcessing}
+                className="bg-green-500 hover:bg-green-600 disabled:opacity-50"
               >
-                新規追加
+                {operationState.isProcessing && operationState.lastOperation === 'add' ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                    追加中...
+                  </>
+                ) : (
+                  "新規追加"
+                )}
               </Button>
             </div>
 
@@ -384,13 +488,41 @@ const StaffEditModal = ({
 
           {/* Right Panel - Staff Form */}
           <div className="flex-1 space-y-4">
-            <h3 className="text-lg font-semibold text-card-foreground">
-              {isAddingNewStaff
-                ? "スタッフ追加"
-                : selectedStaffForEdit
-                  ? "スタッフ編集"
-                  : "スタッフを選択してください"}
-            </h3>
+            <div className="flex items-center justify-between">
+              <h3 className="text-lg font-semibold text-card-foreground">
+                {isAddingNewStaff
+                  ? "スタッフ追加"
+                  : selectedStaffForEdit
+                    ? "スタッフ編集"
+                    : "スタッフを選択してください"}
+              </h3>
+              
+              {/* Real-time status indicators */}
+              <div className="flex items-center gap-2">
+                {error && (
+                  <div className="flex items-center gap-1 text-sm text-red-600">
+                    <AlertCircle className="h-4 w-4" />
+                    <span>エラー</span>
+                  </div>
+                )}
+                {operationState.isProcessing && (
+                  <div className="flex items-center gap-1 text-sm text-blue-600">
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    <span>
+                      {operationState.lastOperation === 'add' && '追加中...'}
+                      {operationState.lastOperation === 'update' && '更新中...'}
+                      {operationState.lastOperation === 'delete' && '削除中...'}
+                    </span>
+                  </div>
+                )}
+                {operationState.lastOperationSuccess && !operationState.isProcessing && (
+                  <div className="flex items-center gap-1 text-sm text-green-600">
+                    <CheckCircle2 className="h-4 w-4" />
+                    <span>完了</span>
+                  </div>
+                )}
+              </div>
+            </div>
 
             {(isAddingNewStaff || selectedStaffForEdit) && (
               <div className="relative isolate">
@@ -693,20 +825,36 @@ const StaffEditModal = ({
                       <Button
                         type="button"
                         variant="destructive"
+                        disabled={operationState.isProcessing}
                         onClick={() =>
                           handleDeleteStaff(selectedStaffForEdit.id)
                         }
                       >
-                        削除
+                        {operationState.isProcessing && operationState.lastOperation === 'delete' ? (
+                          <>
+                            <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                            削除中...
+                          </>
+                        ) : (
+                          "削除"
+                        )}
                       </Button>
                     )}
 
                     <Button
                       type="button"
                       onClick={handleSubmit}
+                      disabled={operationState.isProcessing || !safeEditingStaffData.name?.trim()}
                       className="flex-1"
                     >
-                      {isAddingNewStaff ? "追加" : "更新"}
+                      {operationState.isProcessing ? (
+                        <>
+                          <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                          {isAddingNewStaff ? "追加中..." : "更新中..."}
+                        </>
+                      ) : (
+                        isAddingNewStaff ? "追加" : "更新"
+                      )}
                     </Button>
                   </div>
                 </form>

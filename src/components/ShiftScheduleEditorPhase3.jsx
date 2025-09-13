@@ -88,7 +88,11 @@ const ShiftScheduleEditorPhase3 = ({
 
   // Initialize current month index when periods are loaded (prevent race conditions)
   useEffect(() => {
-    if (!periodsLoading && realtimePeriods.length > 0 && !isInitializedRef.current) {
+    if (
+      !periodsLoading &&
+      realtimePeriods.length > 0 &&
+      !isInitializedRef.current
+    ) {
       try {
         const correctIndex = getCurrentMonthIndex(realtimePeriods);
         setCurrentMonthIndex(correctIndex);
@@ -139,8 +143,7 @@ const ShiftScheduleEditorPhase3 = ({
         currentMonthIndex < 0 ||
         currentMonthIndex >= realtimePeriods.length
       ) {
-        const newIndex =
-          currentMonthIndex < 0 ? 0 : realtimePeriods.length - 1;
+        const newIndex = currentMonthIndex < 0 ? 0 : realtimePeriods.length - 1;
         console.log(
           `📅 [Phase 3] Corrected out-of-bounds index ${currentMonthIndex} → ${newIndex}`,
         );
@@ -180,7 +183,12 @@ const ShiftScheduleEditorPhase3 = ({
     console.log(
       `🚀 [PREFETCH] State: period=${currentMonthIndex}, phase="${prefetchPhase}", staff=${staffMembers?.length || 0}, loadTime=${prefetchStats?.loadTime?.toFixed(1)}ms`,
     );
-  }, [currentMonthIndex, prefetchPhase, staffMembers?.length, prefetchStats?.loadTime]);
+  }, [
+    currentMonthIndex,
+    prefetchPhase,
+    staffMembers?.length,
+    prefetchStats?.loadTime,
+  ]);
 
   // Settings hook (unchanged)
   const {
@@ -213,46 +221,13 @@ const ShiftScheduleEditorPhase3 = ({
     endPeriod: null,
   });
 
-  // Staff management functions (now using prefetch hook)
-  const createNewStaff = useCallback(
-    (staffData, schedule, dateRange, onScheduleUpdate, onStaffUpdate) => {
-      const newStaffId = crypto.randomUUID();
-      const newStaff = {
-        id: newStaffId,
-        name: staffData.name || "新しいスタッフ",
-        position: staffData.position || "Staff",
-        color: "position-server",
-        status: staffData.status || "社員",
-        startPeriod: staffData.startPeriod,
-        endPeriod: staffData.endPeriod,
-        order: staffMembers.length,
-      };
-
-      const result = addStaffMember(newStaff, onStaffUpdate);
-      
-      // Handle schedule initialization for new staff
-      if (schedule && dateRange) {
-        const newSchedule = {
-          ...schedule,
-          [newStaffId]: {},
-        };
-        dateRange.forEach((date) => {
-          const dateKey = date.toISOString().split("T")[0];
-          newSchedule[newStaffId][dateKey] = "";
-        });
-        if (onScheduleUpdate) onScheduleUpdate(newSchedule);
-      }
-
-      return result;
-    },
-    [addStaffMember, staffMembers]
-  );
+  // Phase 4: Staff management is now handled directly by prefetch hook functions
 
   const editStaffName = useCallback(
     (staffId, newName, onSuccess) => {
       editStaffInfo(staffId, { name: newName }, onSuccess);
     },
-    [editStaffInfo]
+    [editStaffInfo],
   );
 
   // Alias for compatibility with existing code
@@ -297,13 +272,22 @@ const ShiftScheduleEditorPhase3 = ({
       period: currentPeriod,
       statistics,
     };
-  }, [schedule, currentStaff, dateRange, realtimePeriods, currentMonthIndex, statistics]);
+  }, [
+    schedule,
+    currentStaff,
+    dateRange,
+    realtimePeriods,
+    currentMonthIndex,
+    statistics,
+  ]);
 
   // Navigation handlers
   const navigateToMonth = useCallback(
     (monthIndex) => {
       if (monthIndex >= 0 && monthIndex < realtimePeriods.length) {
-        console.log(`📅 [PREFETCH] Navigating to period ${monthIndex} (instant)`);
+        console.log(
+          `📅 [PREFETCH] Navigating to period ${monthIndex} (instant)`,
+        );
         setCurrentMonthIndex(monthIndex);
       }
     },
@@ -313,7 +297,9 @@ const ShiftScheduleEditorPhase3 = ({
   const previousMonth = useCallback(() => {
     if (currentMonthIndex > 0) {
       const newIndex = currentMonthIndex - 1;
-      console.log(`📅 [PREFETCH] Previous period: ${currentMonthIndex} → ${newIndex} (instant)`);
+      console.log(
+        `📅 [PREFETCH] Previous period: ${currentMonthIndex} → ${newIndex} (instant)`,
+      );
       setCurrentMonthIndex(newIndex);
     }
   }, [currentMonthIndex]);
@@ -321,7 +307,9 @@ const ShiftScheduleEditorPhase3 = ({
   const nextMonth = useCallback(() => {
     if (currentMonthIndex < realtimePeriods.length - 1) {
       const newIndex = currentMonthIndex + 1;
-      console.log(`📅 [PREFETCH] Next period: ${currentMonthIndex} → ${newIndex} (instant)`);
+      console.log(
+        `📅 [PREFETCH] Next period: ${currentMonthIndex} → ${newIndex} (instant)`,
+      );
       setCurrentMonthIndex(newIndex);
     }
   }, [currentMonthIndex, realtimePeriods.length]);
@@ -346,7 +334,9 @@ const ShiftScheduleEditorPhase3 = ({
       if (periodIndex < 0 || periodIndex >= realtimePeriods.length) return;
 
       const periodToDelete = realtimePeriods[periodIndex];
-      console.log(`🗑️ [Phase 3] Deleting period: ${periodToDelete.label} (index ${periodIndex})`);
+      console.log(
+        `🗑️ [Phase 3] Deleting period: ${periodToDelete.label} (index ${periodIndex})`,
+      );
 
       setDeleteModal({
         isOpen: true,
@@ -356,16 +346,21 @@ const ShiftScheduleEditorPhase3 = ({
         onConfirm: async () => {
           try {
             await deletePeriod(periodIndex, realtimePeriods);
-            
+
             // Navigate to a valid period after deletion (instant with prefetch)
-            const newCurrentIndex = Math.min(periodIndex, realtimePeriods.length - 2);
+            const newCurrentIndex = Math.min(
+              periodIndex,
+              realtimePeriods.length - 2,
+            );
             if (newCurrentIndex >= 0) {
               setCurrentMonthIndex(newCurrentIndex);
             }
-            
+
             await forcePeriodsRefresh();
             setDeleteModal({ isOpen: false });
-            console.log(`✅ [Phase 3] Deleted period and navigated to index ${newCurrentIndex}`);
+            console.log(
+              `✅ [Phase 3] Deleted period and navigated to index ${newCurrentIndex}`,
+            );
           } catch (error) {
             console.error("Failed to delete period:", error);
             setDeleteModal({ isOpen: false });
@@ -378,13 +373,12 @@ const ShiftScheduleEditorPhase3 = ({
   );
 
   // Staff management handlers
-  const handleStaffUpdate = useCallback(
-    (updatedStaffData) => {
-      console.log(`👥 [Phase 3] Staff updated: ${updatedStaffData.length} members`);
-      // The normalized hooks handle the update automatically
-    },
-    [],
-  );
+  const handleStaffUpdate = useCallback((updatedStaffData) => {
+    console.log(
+      `👥 [Phase 3] Staff updated: ${updatedStaffData.length} members`,
+    );
+    // The normalized hooks handle the update automatically
+  }, []);
 
   const handleScheduleUpdate = useCallback(
     (newScheduleData, source = "auto") => {
@@ -396,7 +390,9 @@ const ShiftScheduleEditorPhase3 = ({
 
   const handleShiftUpdate = useCallback(
     (staffId, dateKey, shiftValue) => {
-      console.log(`📝 [Phase 3] Shift update: ${staffId} → ${dateKey} = "${shiftValue}"`);
+      console.log(
+        `📝 [Phase 3] Shift update: ${staffId} → ${dateKey} = "${shiftValue}"`,
+      );
       updateShift(staffId, dateKey, shiftValue);
     },
     [updateShift],
@@ -404,7 +400,11 @@ const ShiftScheduleEditorPhase3 = ({
 
   // View mode handler
   const handleViewModeChange = useCallback((newViewMode) => {
-    if (newViewMode === "table" || newViewMode === "card" || newViewMode === "stats") {
+    if (
+      newViewMode === "table" ||
+      newViewMode === "card" ||
+      newViewMode === "stats"
+    ) {
       setViewMode(newViewMode);
       console.log(`📱 [Phase 3] View mode changed to: ${newViewMode}`);
     } else {
@@ -420,7 +420,12 @@ const ShiftScheduleEditorPhase3 = ({
 
   const handlePrint = useCallback(() => {
     const currentPeriod = realtimePeriods[currentMonthIndex];
-    printSchedule(schedule, currentStaff, dateRange, currentPeriod?.label || "");
+    printSchedule(
+      schedule,
+      currentStaff,
+      dateRange,
+      currentPeriod?.label || "",
+    );
   }, [schedule, currentStaff, dateRange, realtimePeriods, currentMonthIndex]);
 
   // Loading state
@@ -464,11 +469,12 @@ const ShiftScheduleEditorPhase3 = ({
       <Card>
         <CardHeader>
           <div className="flex items-center justify-between">
-            <CardTitle className="text-2xl font-bold">
-              調理場シフト表
-            </CardTitle>
+            <CardTitle className="text-2xl font-bold">調理場シフト表</CardTitle>
             <div className="flex items-center space-x-2">
-              <Badge variant="secondary" className="bg-green-100 text-green-800">
+              <Badge
+                variant="secondary"
+                className="bg-green-100 text-green-800"
+              >
                 Phase 3: Normalized
               </Badge>
               <Badge
@@ -489,9 +495,7 @@ const ShiftScheduleEditorPhase3 = ({
       {/* Error Display - Temporarily disabled for Phase 3 testing */}
       {error && (
         <Alert className="mb-4">
-          <AlertDescription>
-            Error: {error}
-          </AlertDescription>
+          <AlertDescription>Error: {error}</AlertDescription>
         </Alert>
       )}
 
@@ -570,7 +574,7 @@ const ShiftScheduleEditorPhase3 = ({
         ) : null}
       </div>
 
-      {/* Staff Edit Modal */}
+      {/* Staff Edit Modal - Enhanced Real-time Integration */}
       {showStaffEditModal && (
         <StaffEditModal
           showStaffEditModal={showStaffEditModal}
@@ -584,11 +588,13 @@ const ShiftScheduleEditorPhase3 = ({
           setEditingStaffData={setEditingStaffData}
           isAddingNewStaff={isAddingNewStaff}
           setIsAddingNewStaff={setIsAddingNewStaff}
-          handleCreateStaff={addStaffMember}
+          addStaff={addStaffMember}
           updateStaff={editStaffInfo}
           deleteStaff={deleteStaff}
           currentMonthIndex={currentMonthIndex}
           updateSchedule={updateSchedule}
+          isSaving={isSaving}
+          error={supabaseError}
         />
       )}
 
@@ -653,13 +659,14 @@ const ShiftScheduleEditorPhase3 = ({
                   </p>
                 </div>
               </div>
-              
+
               <Separator />
-              
+
               <div>
                 <h4 className="font-medium">Data Summary</h4>
                 <p className="text-sm text-muted-foreground">
-                  Period: {currentPeriod?.label || "Unknown"} (Index: {currentMonthIndex})
+                  Period: {currentPeriod?.label || "Unknown"} (Index:{" "}
+                  {currentMonthIndex})
                 </p>
                 <p className="text-sm text-muted-foreground">
                   Staff Count: {currentStaff.length}

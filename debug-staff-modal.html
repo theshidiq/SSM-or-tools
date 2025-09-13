@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Debug Staff Modal</title>
+</head>
+<body>
+    <h1>Staff Management Modal Debug</h1>
+    <p>Open the browser console and navigate to http://localhost:3000 in another tab</p>
+    <p>Then run these commands in the console to test the modal:</p>
+    
+    <h2>Debug Commands:</h2>
+    <pre><code>
+// 1. Check if the setShowStaffEditModal function exists
+console.log('Checking for staff modal state...');
+const staffButtons = document.querySelectorAll('button');
+let staffButton = null;
+
+// Find the button with Users icon (purple color)
+for (let btn of staffButtons) {
+    const svg = btn.querySelector('svg');
+    if (svg && svg.classList && svg.classList.contains('text-purple-600')) {
+        staffButton = btn;
+        break;
+    }
+}
+
+if (staffButton) {
+    console.log('Found staff button:', staffButton);
+    console.log('Button onclick:', staffButton.onclick);
+    console.log('Button event listeners:', getEventListeners(staffButton));
+    
+    // Try clicking the button
+    console.log('Attempting to click staff button...');
+    staffButton.click();
+    
+    // Check if modal appeared
+    setTimeout(() => {
+        const modals = document.querySelectorAll('[role="dialog"], .modal, [data-state="open"]');
+        const staffModal = document.querySelector('[class*="staff" i]');
+        console.log('Modals after click:', modals);
+        console.log('Staff modal found:', staffModal);
+    }, 500);
+} else {
+    console.log('Staff button not found. Available buttons:', staffButtons);
+    
+    // Check all buttons with icons
+    const buttonsWithIcons = Array.from(staffButtons).filter(btn => btn.querySelector('svg'));
+    console.log('Buttons with icons:', buttonsWithIcons);
+}
+
+// 2. Check React component state
+console.log('Checking React fiber...');
+const rootElement = document.querySelector('#root');
+if (rootElement && rootElement._reactInternalFiber) {
+    console.log('React fiber found');
+} else if (rootElement && rootElement._reactInternalInstance) {
+    console.log('React instance found');
+} else {
+    console.log('React state not accessible');
+}
+    </code></pre>
+
+    <h2>Instructions:</h2>
+    <ol>
+        <li>Open http://localhost:3000 in a new tab</li>
+        <li>Open browser developer tools (F12)</li>
+        <li>Copy and paste the debug commands above into the console</li>
+        <li>Look for the results to see if the staff button is found and clickable</li>
+    </ol>
+
+    <script>
+        console.log('Debug page loaded. Navigate to localhost:3000 and run the debug commands in the console.');
+    </script>
+</body>
+</html>

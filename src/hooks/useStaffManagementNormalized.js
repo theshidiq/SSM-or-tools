@@ -1,6 +1,6 @@
 /**
  * Phase 3: Normalized Staff Management Hook
- * 
+ *
  * This hook provides real-time staff management operations using the normalized
  * schedule-staff relationship architecture. It integrates with the schedule_staff_assignments
  * table to provide complete staff-schedule relationship management.
@@ -28,11 +28,18 @@ export const NORMALIZED_STAFF_QUERY_KEYS = {
   staff: (period) => ["staff", "normalized", period],
   allStaff: () => ["staff", "normalized", "all"],
   staffForPeriod: (period) => ["staff", "for-period", period],
-  scheduleAssignments: (scheduleId, period) => ["schedule-assignments", scheduleId, period],
+  scheduleAssignments: (scheduleId, period) => [
+    "schedule-assignments",
+    scheduleId,
+    period,
+  ],
   connection: () => ["staff", "normalized", "connection"],
 };
 
-export const useStaffManagementNormalized = (currentMonthIndex, options = {}) => {
+export const useStaffManagementNormalized = (
+  currentMonthIndex,
+  options = {},
+) => {
   const { scheduleId = null } = options;
   const queryClient = useQueryClient();
   const subscriptionRef = useRef(null);
@@ -93,7 +100,13 @@ export const useStaffManagementNormalized = (currentMonthIndex, options = {}) =>
     error: staffQueryError,
     refetch: refetchStaff,
   } = useQuery({
-    queryKey: ["staff", "normalized", "period-filtered", currentMonthIndex, "v2"],
+    queryKey: [
+      "staff",
+      "normalized",
+      "period-filtered",
+      currentMonthIndex,
+      "v2",
+    ],
     queryFn: async () => {
       console.log(
         `🔍 Loading staff for period ${currentMonthIndex} using normalized architecture...`,
@@ -109,7 +122,7 @@ export const useStaffManagementNormalized = (currentMonthIndex, options = {}) =>
         if (error) throw error;
 
         // Phase 3: Pure database integration - no localStorage fallbacks
-        
+
         // Get current period date range for proper staff filtering
         const currentPeriodDateRange = generateDateRange(currentMonthIndex);
 
@@ -121,14 +134,22 @@ export const useStaffManagementNormalized = (currentMonthIndex, options = {}) =>
             startPeriod: staff.start_period,
             endPeriod: staff.end_period,
           };
-          
-          return isStaffActiveInCurrentPeriod(appFormatStaff, currentPeriodDateRange);
+
+          return isStaffActiveInCurrentPeriod(
+            appFormatStaff,
+            currentPeriodDateRange,
+          );
         });
 
-        console.log(`📊 Loaded ${activeStaff.length} active staff for period ${currentMonthIndex}`);
+        console.log(
+          `📊 Loaded ${activeStaff.length} active staff for period ${currentMonthIndex}`,
+        );
         return activeStaff;
       } catch (error) {
-        console.error(`❌ Error loading normalized staff for period ${currentMonthIndex}:`, error);
+        console.error(
+          `❌ Error loading normalized staff for period ${currentMonthIndex}:`,
+          error,
+        );
         throw error;
       }
     },
@@ -170,7 +191,17 @@ export const useStaffManagementNormalized = (currentMonthIndex, options = {}) =>
    */
   const staffMembers = useMemo(() => {
     // Only show default staff on initial load (no previous data)
-    if (isStaffLoading && !rawStaffData && !queryClient.getQueryData(["staff", "normalized", "period-filtered", currentMonthIndex, "v2"])) {
+    if (
+      isStaffLoading &&
+      !rawStaffData &&
+      !queryClient.getQueryData([
+        "staff",
+        "normalized",
+        "period-filtered",
+        currentMonthIndex,
+        "v2",
+      ])
+    ) {
       return defaultStaffMembersArray;
     }
 
@@ -219,34 +250,48 @@ export const useStaffManagementNormalized = (currentMonthIndex, options = {}) =>
   /**
    * Update schedule-staff assignments for normalized architecture
    */
-  const updateScheduleStaffAssignments = useCallback(async (scheduleId, staffMembers) => {
-    if (!scheduleId || !staffMembers || !Array.isArray(staffMembers)) return;
+  const updateScheduleStaffAssignments = useCallback(
+    async (scheduleId, staffMembers) => {
+      if (!scheduleId || !staffMembers || !Array.isArray(staffMembers)) return;
 
-    try {
-      console.log(`🔗 Updating schedule-staff assignments for period ${currentMonthIndex}`);
-      
-      const staffIds = staffMembers.map(staff => staff.id);
-      
-      const { error } = await supabase.rpc('update_schedule_staff_assignments', {
-        schedule_uuid: scheduleId,
-        period_idx: currentMonthIndex,
-        staff_ids: staffIds
-      });
+      try {
+        console.log(
+          `🔗 Updating schedule-staff assignments for period ${currentMonthIndex}`,
+        );
 
-      if (error) throw error;
+        const staffIds = staffMembers.map((staff) => staff.id);
 
-      console.log(`✅ Updated schedule-staff assignments: ${staffIds.length} staff assigned`);
-    } catch (error) {
-      console.error(`❌ Failed to update schedule-staff assignments:`, error);
-      throw error;
-    }
-  }, [currentMonthIndex]);
+        const { error } = await supabase.rpc(
+          "update_schedule_staff_assignments",
+          {
+            schedule_uuid: scheduleId,
+            period_idx: currentMonthIndex,
+            staff_ids: staffIds,
+          },
+        );
+
+        if (error) throw error;
+
+        console.log(
+          `✅ Updated schedule-staff assignments: ${staffIds.length} staff assigned`,
+        );
+      } catch (error) {
+        console.error(`❌ Failed to update schedule-staff assignments:`, error);
+        throw error;
+      }
+    },
+    [currentMonthIndex],
+  );
 
   /**
    * Bulk update staff members mutation with normalized relationship management
    */
   const saveStaffMutation = useMutation({
-    mutationFn: async ({ staffMembers: newStaffMembers, operation, updateAssignments = true }) => {
+    mutationFn: async ({
+      staffMembers: newStaffMembers,
+      operation,
+      updateAssignments = true,
+    }) => {
       console.log(
         `💾 Saving ${newStaffMembers.length} staff members using normalized architecture (${operation})`,
       );
@@ -270,11 +315,15 @@ export const useStaffManagementNormalized = (currentMonthIndex, options = {}) =>
       console.log(
         `✅ Successfully saved ${data.length} staff members using normalized architecture`,
       );
-      return { staffData: data, assignmentsUpdated: updateAssignments && !!scheduleId };
+      return {
+        staffData: data,
+        assignmentsUpdated: updateAssignments && !!scheduleId,
+      };
     },
     onMutate: async ({ staffMembers: newStaffMembers, operation }) => {
       // Cancel outgoing refetches to prevent overriding optimistic update
-      const queryKey = NORMALIZED_STAFF_QUERY_KEYS.staffForPeriod(currentMonthIndex);
+      const queryKey =
+        NORMALIZED_STAFF_QUERY_KEYS.staffForPeriod(currentMonthIndex);
       await queryClient.cancelQueries({ queryKey });
 
       // Snapshot previous value for rollback
@@ -311,7 +360,7 @@ export const useStaffManagementNormalized = (currentMonthIndex, options = {}) =>
           queryKey: ["staff", "normalized"],
         });
       }, 300); // 0.3 second delay
-      
+
       // Invalidate schedule-related queries if assignments were updated
       if (result.assignmentsUpdated) {
         setTimeout(() => {
@@ -334,7 +383,9 @@ export const useStaffManagementNormalized = (currentMonthIndex, options = {}) =>
    */
   const addStaffMutation = useMutation({
     mutationFn: async (newStaff) => {
-      console.log(`➕ Adding new staff member using normalized architecture: ${newStaff.name}`);
+      console.log(
+        `➕ Adding new staff member using normalized architecture: ${newStaff.name}`,
+      );
 
       const dbStaff = transformStaffForDatabase({
         ...newStaff,
@@ -353,11 +404,16 @@ export const useStaffManagementNormalized = (currentMonthIndex, options = {}) =>
 
       // Update schedule-staff assignments if scheduleId is available
       if (scheduleId) {
-        const updatedStaffList = [...staffMembers, transformStaffFromDatabase(data)];
+        const updatedStaffList = [
+          ...staffMembers,
+          transformStaffFromDatabase(data),
+        ];
         await updateScheduleStaffAssignments(scheduleId, updatedStaffList);
       }
 
-      console.log(`✅ Successfully added staff member using normalized architecture: ${data.name}`);
+      console.log(
+        `✅ Successfully added staff member using normalized architecture: ${data.name}`,
+      );
       return { staffData: data, assignmentsUpdated: !!scheduleId };
     },
     onSuccess: (result) => {
@@ -384,7 +440,11 @@ export const useStaffManagementNormalized = (currentMonthIndex, options = {}) =>
       console.log("✅ Normalized staff member added successfully");
     },
     onError: (err) => {
-      const errorMessage = err?.message || err?.error?.message || JSON.stringify(err) || "Unknown error";
+      const errorMessage =
+        err?.message ||
+        err?.error?.message ||
+        JSON.stringify(err) ||
+        "Unknown error";
       setError(`Add staff failed (normalized): ${errorMessage}`);
       console.error("❌ Normalized add staff failed:", err);
     },
@@ -395,7 +455,9 @@ export const useStaffManagementNormalized = (currentMonthIndex, options = {}) =>
    */
   const deleteStaffMutation = useMutation({
     mutationFn: async (staffIdToDelete) => {
-      console.log(`🗑️ Deleting staff member using normalized architecture: ${staffIdToDelete}`);
+      console.log(
+        `🗑️ Deleting staff member using normalized architecture: ${staffIdToDelete}`,
+      );
 
       // The database foreign key constraints will handle cleaning up assignments
       const { error } = await supabase
@@ -405,7 +467,9 @@ export const useStaffManagementNormalized = (currentMonthIndex, options = {}) =>
 
       if (error) throw error;
 
-      console.log(`✅ Successfully deleted staff member using normalized architecture: ${staffIdToDelete}`);
+      console.log(
+        `✅ Successfully deleted staff member using normalized architecture: ${staffIdToDelete}`,
+      );
       return { staffId: staffIdToDelete, assignmentsCleanedUp: true };
     },
     onSuccess: () => {
@@ -415,7 +479,7 @@ export const useStaffManagementNormalized = (currentMonthIndex, options = {}) =>
           queryKey: ["staff", "normalized"],
         });
       }, 400); // 0.4 second delay
-      
+
       // Invalidate schedule-related queries since assignments are automatically cleaned up
       setTimeout(() => {
         queryClient.invalidateQueries({
@@ -467,15 +531,15 @@ export const useStaffManagementNormalized = (currentMonthIndex, options = {}) =>
   const updateStaff = useCallback(
     (staffId, updatedData, onSuccess) => {
       // Use the save mutation for single staff updates
-      const staffToUpdate = staffMembers.find(staff => staff.id === staffId);
+      const staffToUpdate = staffMembers.find((staff) => staff.id === staffId);
       if (!staffToUpdate) {
         console.error(`Staff member ${staffId} not found for update`);
         return;
       }
 
       const updatedStaff = { ...staffToUpdate, ...updatedData };
-      const allStaffWithUpdate = staffMembers.map(staff => 
-        staff.id === staffId ? updatedStaff : staff
+      const allStaffWithUpdate = staffMembers.map((staff) =>
+        staff.id === staffId ? updatedStaff : staff,
       );
 
       saveStaffMutation.mutate({
@@ -751,7 +815,10 @@ export const useStaffManagementNormalized = (currentMonthIndex, options = {}) =>
     // Loading states
     loading: isStaffLoading,
     isLoading: isStaffLoading,
-    isSaving: saveStaffMutation.isPending || addStaffMutation.isPending || deleteStaffMutation.isPending,
+    isSaving:
+      saveStaffMutation.isPending ||
+      addStaffMutation.isPending ||
+      deleteStaffMutation.isPending,
 
     // Connection status
     isConnected,
