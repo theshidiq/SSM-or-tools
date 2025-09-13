@@ -455,14 +455,9 @@ export const useScheduleDataPrefetch = (
       );
       setError(null);
 
-      // Force a refresh from server to ensure data consistency
-      // This will update any data that might have changed on the server
-      setTimeout(() => {
-        queryClient.invalidateQueries({
-          queryKey: PREFETCH_QUERY_KEYS.allData(),
-          refetchType: "active",
-        });
-      }, 500);
+      // No need to invalidate queries - optimistic updates already provide correct data
+      // Real-time subscriptions will handle any external changes from other users
+      // Removing cache invalidation prevents staff disappearance after updates
     },
   });
 
@@ -627,13 +622,8 @@ export const useScheduleDataPrefetch = (
             lastModified: Date.now(),
           });
 
-          // Short delay for additional validation refresh
-          setTimeout(() => {
-            queryClient.invalidateQueries({
-              queryKey: PREFETCH_QUERY_KEYS.allData(),
-              refetchType: "active",
-            });
-          }, 2000);
+          // No need for validation refresh - real-time updates are already applied
+          // Removing cache invalidation prevents data overwriting and staff disappearance
         },
       )
       .subscribe();
