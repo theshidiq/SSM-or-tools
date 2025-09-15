@@ -4,10 +4,12 @@ package state
 import (
 	"errors"
 	"fmt"
+	"log"
 	"sync"
 	"time"
 
 	"shift-schedule-manager/go-server/models"
+	"shift-schedule-manager/go-server/supabase"
 )
 
 var (
@@ -25,17 +27,24 @@ type StateManager struct {
 	subscribers   map[string]*Client
 	versionCtrl   *VersionController
 	changeLogger  *ChangeLogger
-	supabaseClient interface{} // Will be typed when Supabase integration is added
+	persistence   *supabase.PersistenceLayer
 }
 
 // NewStateManager creates a new StateManager instance
 func NewStateManager() *StateManager {
+	persistence, err := supabase.NewPersistenceLayer()
+	if err != nil {
+		log.Printf("Warning: Failed to initialize Supabase persistence: %v", err)
+		persistence = nil // Continue with in-memory only
+	}
+
 	return &StateManager{
 		staffMembers:  make(map[string]*models.StaffMember),
 		changeLog:     make([]StateChange, 0, 1000),
 		subscribers:   make(map[string]*Client),
 		versionCtrl:   NewVersionController(),
 		changeLogger:  NewChangeLogger(1000),
+		persistence:   persistence,
 	}
 }
 
@@ -151,9 +160,12 @@ func (sm *StateManager) broadcastChange(staffId string, changes StaffUpdate) {
 
 // persistToSupabase persists the staff member to Supabase
 func (sm *StateManager) persistToSupabase(staffId string, staff *models.StaffMember) error {
-	// Placeholder for Supabase integration
-	// Will be implemented in Step 5
-	return nil
+	if sm.persistence == nil {
+		log.Printf("No persistence layer available, skipping Supabase sync for staff %s", staffId)
+		return nil
+	}
+
+	return sm.persistence.PersistStaff(staff)
 }
 
 // GetStaff returns a staff member by ID
@@ -283,4 +295,57 @@ func (sm *StateManager) GetChangeLog() []StateChange {
 	sm.mutex.RLock()
 	defer sm.mutex.RUnlock()
 	return sm.changeLog
+}
+
+// LoadStaffFromSupabase loads staff data from Supabase for a specific period
+func (sm *StateManager) LoadStaffFromSupabase(period int) error {
+	if sm.persistence == nil {
+		return fmt.Errorf("no persistence layer available")
+	}
+
+	staffList, err := sm.persistence.LoadAllStaffByPeriod(period)
+	if err != nil {
+		return fmt.Errorf("failed to load staff from Supabase: %w", err)
+	}
+
+	sm.mutex.Lock()
+	defer sm.mutex.Unlock()
+
+	// Add loaded staff to the state
+	for _, staff := range staffList {
+		sm.staffMembers[staff.ID] = &staff
+		// Update version if loaded version is higher
+		if staff.Version > sm.version {
+			sm.version = staff.Version
+		}
+	}
+
+	log.Printf("Loaded %d staff members from Supabase for period %d", len(staffList), period)
+	return nil
+}
+
+// SyncWithSupabase synchronizes local state with Supabase
+func (sm *StateManager) SyncWithSupabase(period int) error {
+	if sm.persistence == nil {
+		return fmt.Errorf("no persistence layer available")
+	}
+
+	sm.mutex.RLock()
+	var localStaff []models.StaffMember
+	for _, staff := range sm.staffMembers {
+		if staff.Period == period {
+			localStaff = append(localStaff, *staff)
+		}
+	}
+	sm.mutex.RUnlock()
+
+	return sm.persistence.SyncStaffData(period, localStaff)
+}
+
+// IsSupabaseHealthy checks if the Supabase connection is healthy
+func (sm *StateManager) IsSupabaseHealthy() bool {
+	if sm.persistence == nil {
+		return false
+	}
+	return sm.persistence.IsHealthy()
 }
