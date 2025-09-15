@@ -317,14 +317,19 @@ export const useStaffRealtime = (currentMonthIndex, options = {}) => {
       setError(`Staff update failed: ${err.message}`);
       console.error("❌ Staff update failed:", err);
     },
-    onSuccess: (_data) => {
-      // Invalidate queries to refresh the data
-      queryClient.invalidateQueries({
+    onSuccess: async () => {
+      // Invalidate and refetch queries to get fresh data
+      await queryClient.invalidateQueries({
         queryKey: ["staff-table"],
       });
 
+      // Wait for the fresh data to be available
+      await queryClient.refetchQueries({
+        queryKey: STAFF_REALTIME_QUERY_KEYS.staff(currentMonthIndex),
+      });
+
       setError(null);
-      console.log("✅ Staff member updated successfully");
+      console.log("✅ Staff member updated successfully and cache refreshed");
     },
   });
 
@@ -431,26 +436,75 @@ export const useStaffRealtime = (currentMonthIndex, options = {}) => {
   );
 
   const updateStaff = useCallback(
-    (staffId, updatedData, onSuccess) => {
+    async (staffId, updatedData, onSuccess) => {
       // Don't pass lastModified to database - it will be handled by updated_at
       const { lastModified, ...dbUpdatedData } = updatedData;
 
-      updateSingleStaffMutation.mutate({
-        staffId,
-        updatedData: dbUpdatedData,
-        operation: "update",
-      });
+      try {
+        // Execute the mutation and wait for completion
+        await updateSingleStaffMutation.mutateAsync({
+          staffId,
+          updatedData: dbUpdatedData,
+          operation: "update",
+        });
 
-      if (onSuccess) {
-        setTimeout(() => {
-          const updatedStaff = staffMembers.map((staff) =>
-            staff.id === staffId ? { ...staff, ...updatedData } : staff,
-          );
-          onSuccess(updatedStaff);
-        }, 100);
+        // After successful mutation, get the fresh data from React Query cache
+        if (onSuccess) {
+          // Wait a moment for the cache to be updated
+          setTimeout(async () => {
+            try {
+              // Get the latest data from React Query cache
+              const freshStaffData = queryClient.getQueryData(
+                STAFF_REALTIME_QUERY_KEYS.staff(currentMonthIndex),
+              );
+
+              if (freshStaffData && Array.isArray(freshStaffData)) {
+                // Transform database format to application format
+                const transformedStaff = freshStaffData.map(
+                  transformStaffFromDatabase,
+                );
+                console.log(`🔄 [PREFETCH] Updating staff: ${staffId}`);
+                console.log(
+                  `✅ [PREFETCH] update operation for ${transformedStaff.length} staff members`,
+                );
+                onSuccess(transformedStaff);
+              } else {
+                // Fallback: force refetch if cache is empty
+                console.log(`⚠️ Cache empty, forcing refetch for ${staffId}`);
+                await refetchStaff();
+                const refetchedData = queryClient.getQueryData(
+                  STAFF_REALTIME_QUERY_KEYS.staff(currentMonthIndex),
+                );
+                if (refetchedData) {
+                  const transformedStaff = refetchedData.map(
+                    transformStaffFromDatabase,
+                  );
+                  onSuccess(transformedStaff);
+                }
+              }
+            } catch (error) {
+              console.error("❌ Error getting fresh staff data:", error);
+              // Fallback to current staffMembers if cache fails
+              const updatedStaff = staffMembers.map((staff) =>
+                staff.id === staffId ? { ...staff, ...updatedData } : staff,
+              );
+              onSuccess(updatedStaff);
+            }
+          }, 200); // Give cache time to update
+        }
+      } catch (error) {
+        console.error("❌ Staff update failed:", error);
+        throw error;
       }
     },
-    [updateSingleStaffMutation, staffMembers],
+    [
+      updateSingleStaffMutation,
+      staffMembers,
+      queryClient,
+      currentMonthIndex,
+      transformStaffFromDatabase,
+      refetchStaff,
+    ],
   );
 
   /**

@@ -221,6 +221,19 @@ const ShiftScheduleEditorPhase3 = ({
     endPeriod: null,
   });
 
+  // Debug staffMembers changes for modal real-time updates
+  useEffect(() => {
+    if (showStaffEditModal) {
+      console.log(
+        `🔍 [Modal Debug] Staff members passed to modal: ${staffMembers.length} staff`,
+      );
+      console.log(
+        `🔍 [Modal Debug] Staff members:`,
+        staffMembers.map((s) => ({ id: s.id, name: s.name })),
+      );
+    }
+  }, [staffMembers, showStaffEditModal]);
+
   // Phase 4: Staff management is now handled directly by prefetch hook functions
 
   const editStaffName = useCallback(

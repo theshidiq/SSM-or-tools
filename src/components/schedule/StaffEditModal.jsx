@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useRef, useState, useCallback } from "react";
 import { isDateWithinWorkPeriod } from "../../utils/dateUtils";
 import { toast } from "sonner";
 
@@ -45,6 +45,14 @@ const StaffEditModal = ({
   isSaving = false, // New prop to show saving state
   error = null, // New prop to show errors
 }) => {
+  // Debug staffMembers prop changes
+  React.useEffect(() => {
+    console.log(`🔍 [StaffModal] Received staffMembers: ${staffMembers?.length || 0} staff`);
+    if (staffMembers?.length > 0) {
+      console.log(`🔍 [StaffModal] Staff list:`, staffMembers.map(s => ({id: s.id, name: s.name, lastModified: s.lastModified})));
+    }
+  }, [staffMembers]);
+
   // Track if user is actively editing to prevent overwriting their changes
   const [isUserEditing, setIsUserEditing] = React.useState(false);
   
@@ -94,8 +102,8 @@ const StaffEditModal = ({
   // Sync selectedStaffForEdit with latest staffMembers data when staffMembers updates
   // BUT only when user is not actively editing to prevent overwriting their changes
   useEffect(() => {
-    // Skip sync if user is actively editing the form
-    if (isUserEditing) {
+    // Skip sync if user is actively editing the form AND it's not right after an operation
+    if (isUserEditing && !operationState.lastOperationSuccess) {
       return;
     }
 
@@ -117,6 +125,8 @@ const StaffEditModal = ({
             JSON.stringify(selectedStaffForEdit.endPeriod);
 
         if (hasChanges) {
+          console.log(`🔄 [StaffModal] Syncing form with updated data for: ${updatedStaffData.name}`);
+
           // Update selectedStaffForEdit with latest data
           setSelectedStaffForEdit(updatedStaffData);
 
@@ -130,6 +140,9 @@ const StaffEditModal = ({
           };
 
           setEditingStaffData(newEditingData);
+
+          // Clear the editing flag since we've successfully synced
+          setIsUserEditing(false);
         }
       }
     }
@@ -139,6 +152,7 @@ const StaffEditModal = ({
     setSelectedStaffForEdit,
     setEditingStaffData,
     isUserEditing,
+    operationState.lastOperationSuccess,
   ]);
 
   // Helper function to update editing data and mark user as actively editing
@@ -146,10 +160,12 @@ const StaffEditModal = ({
     setIsUserEditing(true);
     setEditingStaffData(updateFn);
 
-    // Clear the editing flag after a short delay to allow for multiple rapid changes
+    // Clear the editing flag after a shorter delay and only if no operation is in progress
     setTimeout(() => {
-      setIsUserEditing(false);
-    }, 2000); // 2 seconds after last change
+      if (!operationState.isProcessing) {
+        setIsUserEditing(false);
+      }
+    }, 1000); // 1 second after last change
   };
 
   // Provide default values for editingStaffData to prevent crashes
@@ -236,6 +252,9 @@ const StaffEditModal = ({
           (updatedStaffArray) => {
             console.log("✅ [Real-time UI] Staff updated successfully with immediate UI update");
             
+            // UI will update naturally via React's reactivity system
+            // No need to force re-render as staffMembers prop will update
+            
             setOperationState({
               isProcessing: false,
               lastOperation: 'update',
@@ -245,14 +264,19 @@ const StaffEditModal = ({
             // Show success feedback
             toast.success(`${safeEditingStaffData.name}を更新しました`);
             
+            // Force immediate form sync by clearing editing flag and triggering update
+            setIsUserEditing(false);
+
             // Update the modal's form state to reflect the successful update
             const updatedStaff = updatedStaffArray.find(
               (staff) => staff.id === selectedStaffForEdit.id,
             );
             if (updatedStaff) {
+              console.log(`✅ [StaffModal] Force updating form with fresh data: ${updatedStaff.name}`);
+
               // Update selected staff reference
               setSelectedStaffForEdit(updatedStaff);
-              
+
               // Update form state with latest data
               const newEditingData = {
                 name: updatedStaff.name,
