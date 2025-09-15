@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState, useCallback } from "react";
 import { isDateWithinWorkPeriod } from "../../utils/dateUtils";
 import { toast } from "sonner";
+import { useFeatureFlag, checkSystemHealth } from "../../config/featureFlags";
 
 // ShadCN UI Components
 import {
@@ -63,6 +64,14 @@ const StaffEditModal = ({
     lastOperationSuccess: false,
   });
 
+  // Feature flags for enhanced behavior
+  const optimisticUpdatesEnabled = useFeatureFlag('OPTIMISTIC_UPDATES');
+  const enhancedLoggingEnabled = useFeatureFlag('ENHANCED_LOGGING');
+
+  // Optimistic update state management
+  const [optimisticStaffData, setOptimisticStaffData] = useState(null);
+  const [pendingOperation, setPendingOperation] = useState(null);
+
   // Ref for the name input field to enable auto-focus
   const nameInputRef = useRef(null);
 
@@ -99,11 +108,22 @@ const StaffEditModal = ({
     }
   }, [showStaffEditModal, selectedStaffForEdit]);
 
+  // Enhanced sync with optimistic update awareness
   // Sync selectedStaffForEdit with latest staffMembers data when staffMembers updates
-  // BUT only when user is not actively editing to prevent overwriting their changes
   useEffect(() => {
+    // Skip sync during optimistic updates to prevent conflicts
+    if (optimisticUpdatesEnabled && pendingOperation) {
+      if (enhancedLoggingEnabled) {
+        console.log(`⏸️ [Enhanced Sync] Skipping sync during optimistic update for ${pendingOperation.type} operation`);
+      }
+      return;
+    }
+
     // Skip sync if user is actively editing the form AND it's not right after an operation
     if (isUserEditing && !operationState.lastOperationSuccess) {
+      if (enhancedLoggingEnabled) {
+        console.log(`⏸️ [Enhanced Sync] Skipping sync - user is actively editing`);
+      }
       return;
     }
 
@@ -125,7 +145,9 @@ const StaffEditModal = ({
             JSON.stringify(selectedStaffForEdit.endPeriod);
 
         if (hasChanges) {
-          console.log(`🔄 [StaffModal] Syncing form with updated data for: ${updatedStaffData.name}`);
+          if (enhancedLoggingEnabled) {
+            console.log(`🔄 [Enhanced Sync] Syncing form with updated data for: ${updatedStaffData.name}`);
+          }
 
           // Update selectedStaffForEdit with latest data
           setSelectedStaffForEdit(updatedStaffData);
@@ -153,6 +175,9 @@ const StaffEditModal = ({
     setEditingStaffData,
     isUserEditing,
     operationState.lastOperationSuccess,
+    optimisticUpdatesEnabled,
+    pendingOperation,
+    enhancedLoggingEnabled,
   ]);
 
   // Helper function to update editing data and mark user as actively editing
@@ -194,6 +219,12 @@ const StaffEditModal = ({
       return;
     }
 
+    // Enhanced logging with feature flag
+    if (enhancedLoggingEnabled) {
+      console.log(`🚀 [Enhanced StaffModal] Starting ${isAddingNewStaff ? 'add' : 'update'} operation for: ${safeEditingStaffData.name}`);
+      console.log(`🚀 [Enhanced StaffModal] Optimistic updates enabled: ${optimisticUpdatesEnabled}`);
+    }
+
     // Clear editing flag and set processing state
     setIsUserEditing(false);
     setOperationState({
@@ -201,6 +232,38 @@ const StaffEditModal = ({
       lastOperation: isAddingNewStaff ? 'add' : 'update',
       lastOperationSuccess: false,
     });
+
+    // Optimistic update mechanism
+    if (optimisticUpdatesEnabled) {
+      if (enhancedLoggingEnabled) {
+        console.log(`⚡ [Optimistic Update] Applying immediate UI update for ${safeEditingStaffData.name}`);
+      }
+
+      // Store pending operation for rollback if needed
+      setPendingOperation({
+        type: isAddingNewStaff ? 'add' : 'update',
+        data: safeEditingStaffData,
+        staffId: selectedStaffForEdit?.id,
+        timestamp: Date.now()
+      });
+
+      // Apply optimistic update immediately
+      if (isAddingNewStaff) {
+        const optimisticStaff = {
+          ...safeEditingStaffData,
+          id: `temp_${Date.now()}`, // Temporary ID for optimistic update
+          isOptimistic: true // Flag to identify optimistic updates
+        };
+        setOptimisticStaffData(optimisticStaff);
+      } else {
+        // For updates, immediately reflect changes in form
+        setOptimisticStaffData({
+          ...selectedStaffForEdit,
+          ...safeEditingStaffData,
+          isOptimistic: true
+        });
+      }
+    }
 
     try {
       if (isAddingNewStaff) {
@@ -210,17 +273,23 @@ const StaffEditModal = ({
         toast.success(`${safeEditingStaffData.name}を追加しています...`, { duration: 1000 });
         
         const newStaff = addStaff(safeEditingStaffData, (updatedStaffArray) => {
-          console.log("✅ [Real-time UI] Staff added successfully with immediate UI update");
-          
+          if (enhancedLoggingEnabled) {
+            console.log("✅ [Enhanced StaffModal] Staff added successfully - confirming optimistic update");
+          }
+
+          // Clear optimistic state - real data is now available
+          setOptimisticStaffData(null);
+          setPendingOperation(null);
+
           setOperationState({
             isProcessing: false,
             lastOperation: 'add',
             lastOperationSuccess: true,
           });
-          
+
           // Show success feedback
           toast.success(`${safeEditingStaffData.name}を追加しました`);
-          
+
           // Keep modal open but clear form for next addition
           setIsAddingNewStaff(true);
           setSelectedStaffForEdit(null);
@@ -231,7 +300,7 @@ const StaffEditModal = ({
             startPeriod: null,
             endPeriod: null,
           });
-          
+
           // Focus name input for next entry
           setTimeout(() => {
             if (nameInputRef.current) {
@@ -250,21 +319,24 @@ const StaffEditModal = ({
           selectedStaffForEdit.id,
           safeEditingStaffData,
           (updatedStaffArray) => {
-            console.log("✅ [Real-time UI] Staff updated successfully with immediate UI update");
-            
-            // UI will update naturally via React's reactivity system
-            // No need to force re-render as staffMembers prop will update
-            
+            if (enhancedLoggingEnabled) {
+              console.log("✅ [Enhanced StaffModal] Staff updated successfully - confirming optimistic update");
+            }
+
+            // Clear optimistic state - real data is now available
+            setOptimisticStaffData(null);
+            setPendingOperation(null);
+
             setOperationState({
               isProcessing: false,
               lastOperation: 'update',
               lastOperationSuccess: true,
             });
-            
+
             // Show success feedback
             toast.success(`${safeEditingStaffData.name}を更新しました`);
-            
-            // Force immediate form sync by clearing editing flag and triggering update
+
+            // Force immediate form sync by clearing editing flag
             setIsUserEditing(false);
 
             // Update the modal's form state to reflect the successful update
@@ -272,7 +344,9 @@ const StaffEditModal = ({
               (staff) => staff.id === selectedStaffForEdit.id,
             );
             if (updatedStaff) {
-              console.log(`✅ [StaffModal] Force updating form with fresh data: ${updatedStaff.name}`);
+              if (enhancedLoggingEnabled) {
+                console.log(`✅ [Enhanced StaffModal] Syncing form with confirmed data: ${updatedStaff.name}`);
+              }
 
               // Update selected staff reference
               setSelectedStaffForEdit(updatedStaff);
@@ -291,17 +365,47 @@ const StaffEditModal = ({
         );
       }
     } catch (error) {
-      console.error("❌ [Real-time UI] Staff operation failed:", error);
-      
+      if (enhancedLoggingEnabled) {
+        console.error("❌ [Enhanced StaffModal] Staff operation failed - rolling back optimistic update:", error);
+      }
+
+      // Rollback optimistic update on error
+      if (optimisticUpdatesEnabled && pendingOperation) {
+        if (enhancedLoggingEnabled) {
+          console.log(`⏪ [Optimistic Rollback] Rolling back ${pendingOperation.type} operation for safety`);
+        }
+
+        // Clear optimistic state
+        setOptimisticStaffData(null);
+        setPendingOperation(null);
+
+        // Revert form to previous state if updating
+        if (!isAddingNewStaff && selectedStaffForEdit) {
+          setEditingStaffData({
+            name: selectedStaffForEdit.name,
+            position: selectedStaffForEdit.position || "",
+            status: selectedStaffForEdit.status || "社員",
+            startPeriod: selectedStaffForEdit.startPeriod || null,
+            endPeriod: selectedStaffForEdit.endPeriod || null,
+          });
+        }
+      }
+
       setOperationState({
         isProcessing: false,
         lastOperation: isAddingNewStaff ? 'add' : 'update',
         lastOperationSuccess: false,
       });
-      
-      // Show error feedback
+
+      // Show enhanced error feedback
       const operationText = isAddingNewStaff ? '追加' : '更新';
       toast.error(`スタッフの${operationText}に失敗しました: ${error.message}`);
+
+      // System health check on error
+      const healthCheck = checkSystemHealth();
+      if (healthCheck.status !== 'healthy' && enhancedLoggingEnabled) {
+        console.warn('⚠️ [System Health] System health check indicates issues:', healthCheck);
+      }
     }
   };
 
