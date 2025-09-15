@@ -107,6 +107,36 @@ services:
         monitor: 60s
         max_failure_ratio: 0.3
 
+  # Phase 1.2: Go WebSocket Server - Exact configuration from IMPLEMENTATION_PLAN_HYBRID_ARCHITECTURE.md
+  go-websocket-server:
+    build:
+      context: ./go-server
+      dockerfile: Dockerfile
+    container_name: shift-schedule-go-websocket
+    environment:
+      - SUPABASE_URL=${REACT_APP_SUPABASE_URL}
+      - SUPABASE_SERVICE_KEY=${SUPABASE_SERVICE_KEY}
+      - PORT=8080
+    networks:
+      - backend
+    depends_on:
+      - redis
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8080/health", "||", "exit", "1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+          cpus: '1.0'
+        reservations:
+          memory: 256M
+          cpus: '0.5'
+
   # Redis for caching and session management
   redis:
     image: redis:7-alpine
