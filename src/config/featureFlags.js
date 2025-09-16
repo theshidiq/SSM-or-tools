@@ -11,6 +11,7 @@ export const FEATURE_FLAGS = {
   OPTIMISTIC_UPDATES: process.env.REACT_APP_OPTIMISTIC_UPDATES === 'true',
   CONFLICT_RESOLUTION: process.env.REACT_APP_CONFLICT_RESOLUTION === 'true',
   GO_BACKEND_INTEGRATION: process.env.REACT_APP_GO_BACKEND === 'true',
+  WEBSOCKET_STAFF_MANAGEMENT: process.env.REACT_APP_WEBSOCKET_STAFF_MANAGEMENT === 'true',
   ENHANCED_LOGGING: process.env.NODE_ENV === 'development' || process.env.REACT_APP_DEBUG_MODE === 'true',
 };
 
