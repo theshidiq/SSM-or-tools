@@ -107,57 +107,57 @@ services:
         monitor: 60s
         max_failure_ratio: 0.3
 
-  # Phase 4: Performance-Optimized Go WebSocket Server with monitoring
+  # Phase 5: Production Go WebSocket Server with 3 replicas and load balancing
   go-websocket-server:
     build:
       context: ./go-server
       dockerfile: Dockerfile
-    container_name: shift-schedule-go-websocket
-    ports:
-      # Expose ports for monitoring and load testing
-      - "8080:8080"  # Main server
-      - "9090:9090"  # Prometheus metrics
+    # No external ports - nginx will proxy internally
     environment:
       - SUPABASE_URL=${REACT_APP_SUPABASE_URL}
       - SUPABASE_SERVICE_KEY=${SUPABASE_SERVICE_KEY}
-      - PORT=8080
+      - WEBSOCKET_PORT=8080  # Phase 5: Standardized WebSocket port
       - GO_ENV=production
-      # Phase 4: Performance tuning
+      # Phase 5: Production performance tuning
       - GOMAXPROCS=${GOMAXPROCS:-2}
       - GOGC=${GOGC:-100}
+      - WEBSOCKET_READ_BUFFER_SIZE=1024
+      - WEBSOCKET_WRITE_BUFFER_SIZE=1024
+      - MAX_CONNECTIONS=1000
     networks:
       - backend
-      - monitoring  # Add monitoring network
+      - monitoring
     depends_on:
       - redis
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8080/health", "||", "exit", "1"]
-      interval: 15s  # More frequent health checks
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 30s   # Phase 5: Standard health check interval
       timeout: 5s
-      retries: 5     # More retries for production stability
+      retries: 3      # Phase 5: Standard retry count
       start_period: 20s
     deploy:
-      # Phase 4: Enhanced resource allocation for performance
+      # Phase 5: Production replica configuration (3 replicas)
+      replicas: 3
       resources:
         limits:
-          memory: 1G    # Increased for connection pooling
-          cpus: '2.0'   # Increased for worker pool
+          memory: 512M    # Phase 5: Resource limits per replica
+          cpus: '1.0'     # Phase 5: CPU limit per replica
         reservations:
-          memory: 512M
-          cpus: '1.0'
-      # Phase 4: Auto-scaling configuration
+          memory: 256M
+          cpus: '0.5'
+      # Phase 5: Production deployment strategy
       restart_policy:
         condition: on-failure
-        delay: 5s
-        max_attempts: 5
+        delay: 10s
+        max_attempts: 3
         window: 120s
       update_config:
         parallelism: 1
         delay: 30s
         failure_action: rollback
         monitor: 60s
-        max_failure_ratio: 0.2
+        max_failure_ratio: 0.3
 
   # Redis for caching and session management
   redis:
