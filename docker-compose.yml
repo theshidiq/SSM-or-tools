@@ -107,35 +107,57 @@ services:
         monitor: 60s
         max_failure_ratio: 0.3
 
-  # Phase 1.2: Go WebSocket Server - Exact configuration from IMPLEMENTATION_PLAN_HYBRID_ARCHITECTURE.md
+  # Phase 4: Performance-Optimized Go WebSocket Server with monitoring
   go-websocket-server:
     build:
       context: ./go-server
       dockerfile: Dockerfile
     container_name: shift-schedule-go-websocket
+    ports:
+      # Expose ports for monitoring and load testing
+      - "8080:8080"  # Main server
+      - "9090:9090"  # Prometheus metrics
     environment:
       - SUPABASE_URL=${REACT_APP_SUPABASE_URL}
       - SUPABASE_SERVICE_KEY=${SUPABASE_SERVICE_KEY}
       - PORT=8080
+      - GO_ENV=production
+      # Phase 4: Performance tuning
+      - GOMAXPROCS=${GOMAXPROCS:-2}
+      - GOGC=${GOGC:-100}
     networks:
       - backend
+      - monitoring  # Add monitoring network
     depends_on:
       - redis
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8080/health", "||", "exit", "1"]
-      interval: 30s
+      interval: 15s  # More frequent health checks
       timeout: 5s
-      retries: 3
-      start_period: 10s
+      retries: 5     # More retries for production stability
+      start_period: 20s
     deploy:
+      # Phase 4: Enhanced resource allocation for performance
       resources:
         limits:
+          memory: 1G    # Increased for connection pooling
+          cpus: '2.0'   # Increased for worker pool
+        reservations:
           memory: 512M
           cpus: '1.0'
-        reservations:
-          memory: 256M
-          cpus: '0.5'
+      # Phase 4: Auto-scaling configuration
+      restart_policy:
+        condition: on-failure
+        delay: 5s
+        max_attempts: 5
+        window: 120s
+      update_config:
+        parallelism: 1
+        delay: 30s
+        failure_action: rollback
+        monitor: 60s
+        max_failure_ratio: 0.2
 
   # Redis for caching and session management
   redis:
@@ -192,12 +214,12 @@ services:
     profiles:
       - database
 
-  # Monitoring and logging with Prometheus (optional)
+  # Phase 4: Enhanced Prometheus monitoring with Go server integration
   prometheus:
     image: prom/prometheus:latest
     container_name: shift-schedule-prometheus
     ports:
-      - "9090:9090"
+      - "9091:9090"  # Use different port to avoid conflict with Go server
     volumes:
       - ./docker/prometheus.yml:/etc/prometheus/prometheus.yml:ro
       - prometheus_data:/prometheus
@@ -208,8 +230,15 @@ services:
       - '--web.console.templates=/etc/prometheus/consoles'
       - '--storage.tsdb.retention.time=200h'
       - '--web.enable-lifecycle'
+      - '--web.enable-admin-api'
+      # Phase 4: Enhanced configuration for performance monitoring
+      - '--query.max-concurrency=20'
+      - '--query.timeout=2m'
     networks:
       - monitoring
+      - backend  # Add backend network to scrape Go server
+    depends_on:
+      - go-websocket-server
     restart: unless-stopped
     profiles:
       - monitoring

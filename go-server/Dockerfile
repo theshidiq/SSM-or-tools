@@ -1,10 +1,13 @@
-# Phase 1.2: Docker Integration - Dockerfile for Go WebSocket Server
+# Phase 4: Performance-Optimized Go WebSocket Server Dockerfile
 FROM golang:1.21-alpine AS builder
 
-# Set working directory
+# Install build dependencies
+RUN apk --no-cache add git ca-certificates wget
+
+# Create app directory
 WORKDIR /app
 
-# Copy go mod and sum files
+# Copy go mod files
 COPY go.mod go.sum ./
 
 # Download dependencies
@@ -13,27 +16,44 @@ RUN go mod download
 # Copy source code
 COPY . .
 
-# Build the application
-RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -o main .
+# Build the application with optimizations for Phase 4
+RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build \
+    -ldflags='-w -s -extldflags "-static"' \
+    -a -installsuffix cgo \
+    -o main .
 
-# Final stage
+# Production image
 FROM alpine:latest
 
-# Install ca-certificates for HTTPS requests
-RUN apk --no-cache add ca-certificates
+# Install runtime dependencies
+RUN apk --no-cache add ca-certificates wget curl
+
+# Create non-root user for security
+RUN addgroup -g 1001 -S appgroup && \
+    adduser -u 1001 -S appuser -G appgroup
 
 # Create app directory
-WORKDIR /root/
+WORKDIR /app
 
-# Copy binary from builder stage
+# Copy binary from builder
 COPY --from=builder /app/main .
 
-# Expose port
-EXPOSE 8080
+# Change ownership to non-root user
+RUN chown -R appuser:appgroup /app
 
-# Health check
-HEALTHCHECK --interval=30s --timeout=5s --start-period=5s --retries=3 \
+# Switch to non-root user
+USER appuser
+
+# Phase 4: Expose both main server and metrics ports
+EXPOSE 8080 9090
+
+# Enhanced health check for Phase 4
+HEALTHCHECK --interval=15s --timeout=5s --start-period=20s --retries=5 \
     CMD wget --no-verbose --tries=1 --spider http://localhost:8080/health || exit 1
 
-# Run the application
+# Set environment variables for production
+ENV GO_ENV=production
+ENV PORT=8080
+
+# Start the application
 CMD ["./main"]

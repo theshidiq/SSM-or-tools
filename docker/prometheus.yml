@@ -1,0 +1,63 @@
+# Phase 4: Prometheus configuration for monitoring the performance-optimized Go WebSocket server
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+rule_files:
+  # Add alerting rules here if needed
+  # - "alert_rules.yml"
+
+scrape_configs:
+  # Phase 4: Monitor the Go WebSocket server metrics
+  - job_name: 'go-websocket-server'
+    static_configs:
+      - targets: ['go-websocket-server:9090']
+    scrape_interval: 5s  # High frequency for real-time monitoring
+    metrics_path: '/metrics'
+    honor_labels: true
+    params:
+      format: ['prometheus']
+
+  # Monitor the health endpoints
+  - job_name: 'go-server-health'
+    static_configs:
+      - targets: ['go-websocket-server:8080']
+    scrape_interval: 10s
+    metrics_path: '/health'
+    scheme: http
+
+  # Monitor Prometheus itself
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']
+
+  # Monitor Redis if needed
+  - job_name: 'redis'
+    static_configs:
+      - targets: ['redis:6379']
+    scrape_interval: 30s
+
+  # Monitor Nginx
+  - job_name: 'nginx'
+    static_configs:
+      - targets: ['nginx:80']
+    scrape_interval: 30s
+    metrics_path: '/nginx-health'
+
+# Alerting configuration (optional)
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets:
+          # Add alertmanager targets here if configured
+          # - alertmanager:9093
+
+# Remote write configuration for long-term storage (optional)
+# remote_write:
+#   - url: "https://your-remote-prometheus-url/api/v1/write"
+
+# Storage configuration
+storage:
+  tsdb:
+    retention_time: "30d"
+    retention_size: "10GB"
