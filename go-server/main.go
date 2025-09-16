@@ -1,4 +1,4 @@
-// Phase 4: Performance Optimization & Monitoring - Enhanced server with production optimizations
+// Phase 6: Optimization & Future Enhancements - Complete hybrid architecture with AI integration
 package main
 
 import (
@@ -13,9 +13,11 @@ import (
 
     "github.com/gorilla/websocket"
     "github.com/supabase/postgrest-go"
+    "shift-schedule-manager/go-server/conflict"
+    "shift-schedule-manager/go-server/models"
 )
 
-// StaffServer - Enhanced with Phase 4 performance optimizations
+// StaffServer - Enhanced with Phase 6 optimization and future enhancements
 type StaffServer struct {
     clients         map[*websocket.Conn]bool
     supabase        *postgrest.Client
@@ -30,6 +32,11 @@ type StaffServer struct {
     connectionCount int64
     messageCount    int64
     buildVersion    string
+
+    // Phase 6: Advanced features and AI integration
+    phase6Profiler   *Phase6Profiler
+    aiResolver       *conflict.AIConflictResolver
+    compressionEnabled bool
 }
 
 // WebSocket upgrader
@@ -59,7 +66,7 @@ type HealthResponse struct {
 }
 
 func main() {
-    log.Println("PHASE4: Initializing Performance-Optimized WebSocket Server...")
+    log.Println("🚀 PHASE 6: Initializing Complete Hybrid Architecture with AI Integration...")
 
     server := &StaffServer{
         clients:      make(map[*websocket.Conn]bool),
@@ -67,12 +74,18 @@ func main() {
         register:     make(chan *websocket.Conn),
         unregister:   make(chan *websocket.Conn),
         startTime:    time.Now(),
-        buildVersion: "Phase4-Performance-Optimized",
+        buildVersion: "Phase6-Complete-Hybrid-Architecture",
+        compressionEnabled: true,
     }
 
     // Phase 4: Initialize performance optimization components
     server.optimizedServer = NewOptimizedServer()
     server.optimizedServer.batcher.SetConnectionPool(server.optimizedServer.connPool)
+
+    // Phase 6: Initialize advanced features
+    server.phase6Profiler = NewPhase6Profiler()
+    server.aiResolver = conflict.NewAIConflictResolver(0.8) // 80% confidence threshold
+    log.Println("🤖 PHASE 6: AI-powered conflict resolution initialized (90%+ accuracy target)")
 
     // Initialize Supabase connection
     supabaseURL := os.Getenv("SUPABASE_URL")
@@ -82,12 +95,16 @@ func main() {
         log.Println("WARNING: SUPABASE_URL not set, running without Supabase integration")
     } else {
         server.supabase = postgrest.NewClient(supabaseURL, supabaseKey, nil)
-        log.Println("PHASE4: Supabase client initialized")
+        log.Println("🔗 PHASE 6: Supabase client initialized")
     }
 
     // Phase 4: Start performance optimization components
     server.optimizedServer.Start()
-    log.Println("PHASE4: Performance optimization components started")
+    log.Println("⚡ PHASE 6: Performance optimization components started")
+
+    // Phase 6: Start advanced monitoring
+    server.phase6Profiler.StartPerformanceMonitoring()
+    log.Println("📊 PHASE 6: Performance profiling and monitoring started")
 
     // Start WebSocket connection management hub
     go server.handleConnections()
@@ -99,6 +116,12 @@ func main() {
     http.HandleFunc("/health", server.healthCheck)
     http.HandleFunc("/metrics-summary", server.metricsSummary)
     http.HandleFunc("/performance", server.performanceStatus)
+
+    // Phase 6: Advanced optimization endpoints
+    http.HandleFunc("/phase6-status", server.phase6Status)
+    http.HandleFunc("/phase6-metrics", server.phase6Metrics)
+    http.HandleFunc("/ai-stats", server.aiStatistics)
+    http.HandleFunc("/compression-stats", server.compressionStatistics)
 
     // Basic info endpoint
     http.HandleFunc("/", server.handleRoot)
@@ -328,4 +351,91 @@ Current Status:
     )
 
     w.Write([]byte(info))
+}
+
+// Phase 6: Advanced endpoint handlers
+
+// phase6Status provides comprehensive Phase 6 optimization status
+func (s *StaffServer) phase6Status(w http.ResponseWriter, r *http.Request) {
+    w.Header().Set("Content-Type", "application/json")
+
+    metrics := s.phase6Profiler.GetPhase6Metrics()
+
+    status := map[string]interface{}{
+        "phase": "6",
+        "status": metrics.OverallStatus,
+        "success_criteria": map[string]interface{}{
+            "network_traffic_reduction": map[string]interface{}{
+                "current": metrics.NetworkTrafficReduction,
+                "target": 50.0,
+                "achieved": metrics.NetworkTrafficReduction >= 50.0,
+            },
+            "connection_stability": map[string]interface{}{
+                "current": metrics.ConnectionStability,
+                "target": 99.95,
+                "achieved": metrics.ConnectionStability >= 99.95,
+            },
+            "ai_accuracy": map[string]interface{}{
+                "current": metrics.AIAccuracy,
+                "target": 90.0,
+                "achieved": metrics.AIAccuracy >= 90.0,
+            },
+        },
+        "timestamp": metrics.Timestamp,
+        "uptime": metrics.Uptime.String(),
+    }
+
+    json.NewEncoder(w).Encode(status)
+}
+
+// phase6Metrics provides detailed Phase 6 performance metrics
+func (s *StaffServer) phase6Metrics(w http.ResponseWriter, r *http.Request) {
+    w.Header().Set("Content-Type", "application/json")
+
+    metricsData, err := s.phase6Profiler.ExportMetrics()
+    if err != nil {
+        http.Error(w, "Failed to export metrics", http.StatusInternalServerError)
+        return
+    }
+
+    w.Write(metricsData)
+}
+
+// aiStatistics provides AI conflict resolution statistics
+func (s *StaffServer) aiStatistics(w http.ResponseWriter, r *http.Request) {
+    w.Header().Set("Content-Type", "application/json")
+
+    stats := s.aiResolver.GetResolutionStatistics()
+    modelInfo := s.aiResolver.GetModelInfo()
+
+    response := map[string]interface{}{
+        "statistics": stats,
+        "model_info": modelInfo,
+        "enabled": true,
+        "confidence_threshold": 0.8,
+        "timestamp": time.Now(),
+    }
+
+    json.NewEncoder(w).Encode(response)
+}
+
+// compressionStatistics provides message compression performance data
+func (s *StaffServer) compressionStatistics(w http.ResponseWriter, r *http.Request) {
+    w.Header().Set("Content-Type", "application/json")
+
+    metrics := s.phase6Profiler.GetPhase6Metrics()
+
+    response := map[string]interface{}{
+        "compression_enabled": s.compressionEnabled,
+        "compression_stats": metrics.CompressionStats,
+        "message_stats": metrics.MessageStats,
+        "network_savings": map[string]interface{}{
+            "bytes_saved": metrics.CompressionStats.BandwidthSaved,
+            "compression_ratio": metrics.CompressionStats.CompressionRatio,
+            "traffic_reduction": metrics.NetworkTrafficReduction,
+        },
+        "timestamp": time.Now(),
+    }
+
+    json.NewEncoder(w).Encode(response)
 }
