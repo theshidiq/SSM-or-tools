@@ -1,0 +1,159 @@
+{
+  "messageTemplates": {
+    "syncRequest": {
+      "type": "SYNC_REQUEST",
+      "payload": {
+        "period": 0
+      },
+      "timestamp": "2024-01-01T12:00:00Z",
+      "clientId": "test-client-001"
+    },
+    "syncResponse": {
+      "type": "SYNC_RESPONSE",
+      "payload": {
+        "staffMembers": [],
+        "period": 0,
+        "version": 1,
+        "timestamp": "2024-01-01T12:00:00Z"
+      },
+      "timestamp": "2024-01-01T12:00:00Z",
+      "clientId": "server"
+    },
+    "staffUpdate": {
+      "type": "STAFF_UPDATE",
+      "payload": {
+        "staffId": "test-staff-id",
+        "changes": {
+          "name": "Updated Name"
+        }
+      },
+      "timestamp": "2024-01-01T12:00:00Z",
+      "clientId": "test-client-001"
+    },
+    "staffCreate": {
+      "type": "STAFF_CREATE",
+      "payload": {
+        "name": "New Staff Member",
+        "position": "Server",
+        "department": "Front of House",
+        "status": "社員",
+        "startPeriod": {
+          "year": 2024,
+          "month": 1,
+          "day": 1
+        },
+        "endPeriod": null,
+        "period": 0
+      },
+      "timestamp": "2024-01-01T12:00:00Z",
+      "clientId": "test-client-001"
+    },
+    "staffDelete": {
+      "type": "STAFF_DELETE",
+      "payload": {
+        "staffId": "test-staff-id"
+      },
+      "timestamp": "2024-01-01T12:00:00Z",
+      "clientId": "test-client-001"
+    },
+    "connectionAck": {
+      "type": "CONNECTION_ACK",
+      "payload": {
+        "status": "connected",
+        "clientId": "test-client-001"
+      },
+      "timestamp": "2024-01-01T12:00:00Z",
+      "clientId": "server"
+    },
+    "error": {
+      "type": "ERROR",
+      "payload": {
+        "message": "Test error message",
+        "code": "TEST_ERROR",
+        "details": {}
+      },
+      "timestamp": "2024-01-01T12:00:00Z",
+      "clientId": "server"
+    }
+  },
+  "testScenarios": {
+    "normalFlow": [
+      "syncRequest",
+      "syncResponse",
+      "staffCreate",
+      "staffUpdate",
+      "staffDelete"
+    ],
+    "conflictResolution": [
+      "syncRequest",
+      "syncResponse",
+      "staffUpdate",
+      "staffUpdate",
+      "staffUpdate"
+    ],
+    "errorHandling": [
+      "syncRequest",
+      "error",
+      "syncRequest",
+      "syncResponse"
+    ],
+    "rapidUpdates": [
+      "syncRequest",
+      "syncResponse",
+      "staffUpdate",
+      "staffUpdate",
+      "staffUpdate",
+      "staffUpdate",
+      "staffUpdate"
+    ]
+  },
+  "performanceTestMessages": {
+    "highFrequencyUpdate": {
+      "type": "STAFF_UPDATE",
+      "payload": {
+        "staffId": "perf-test-{{index}}",
+        "changes": {
+          "name": "Performance Test {{timestamp}}"
+        }
+      },
+      "timestamp": "{{timestamp}}",
+      "clientId": "perf-client-{{clientId}}"
+    },
+    "bulkCreate": {
+      "type": "STAFF_CREATE",
+      "payload": {
+        "name": "Bulk Staff {{index}}",
+        "position": "Test Position",
+        "department": "Test Department",
+        "status": "社員",
+        "period": 0
+      },
+      "timestamp": "{{timestamp}}",
+      "clientId": "bulk-client-{{clientId}}"
+    }
+  },
+  "raceConditionTestMessages": {
+    "concurrentUpdate": {
+      "type": "STAFF_UPDATE",
+      "payload": {
+        "staffId": "race-test-staff",
+        "changes": {
+          "name": "Concurrent Update {{clientId}} at {{timestamp}}"
+        }
+      },
+      "timestamp": "{{timestamp}}",
+      "clientId": "race-client-{{clientId}}"
+    },
+    "multiFieldUpdate": {
+      "type": "STAFF_UPDATE",
+      "payload": {
+        "staffId": "multi-field-test-staff",
+        "changes": {
+          "{{field}}": "Updated {{field}} by {{clientId}}"
+        }
+      },
+      "timestamp": "{{timestamp}}",
+      "clientId": "multi-client-{{clientId}}"
+    }
+  }
+}

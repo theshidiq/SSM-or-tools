@@ -1,0 +1,193 @@
+{
+  "mockStaffMembers": [
+    {
+      "id": "staff-001",
+      "name": "田中 太郎",
+      "position": "Chef",
+      "department": "Kitchen",
+      "status": "社員",
+      "startPeriod": {
+        "year": 2024,
+        "month": 1,
+        "day": 1
+      },
+      "endPeriod": null,
+      "version": 1,
+      "createdAt": "2024-01-01T00:00:00Z",
+      "updatedAt": "2024-01-01T00:00:00Z",
+      "period": 0
+    },
+    {
+      "id": "staff-002",
+      "name": "佐藤 花子",
+      "position": "Server",
+      "department": "Front of House",
+      "status": "社員",
+      "startPeriod": {
+        "year": 2024,
+        "month": 1,
+        "day": 15
+      },
+      "endPeriod": null,
+      "version": 1,
+      "createdAt": "2024-01-15T00:00:00Z",
+      "updatedAt": "2024-01-15T00:00:00Z",
+      "period": 0
+    },
+    {
+      "id": "staff-003",
+      "name": "山田 次郎",
+      "position": "Kitchen Assistant",
+      "department": "Kitchen",
+      "status": "パート",
+      "startPeriod": {
+        "year": 2024,
+        "month": 2,
+        "day": 1
+      },
+      "endPeriod": {
+        "year": 2024,
+        "month": 6,
+        "day": 30
+      },
+      "version": 1,
+      "createdAt": "2024-02-01T00:00:00Z",
+      "updatedAt": "2024-02-01T00:00:00Z",
+      "period": 0
+    },
+    {
+      "id": "staff-004",
+      "name": "鈴木 美香",
+      "position": "Manager",
+      "department": "Management",
+      "status": "社員",
+      "startPeriod": {
+        "year": 2023,
+        "month": 12,
+        "day": 1
+      },
+      "endPeriod": null,
+      "version": 2,
+      "createdAt": "2023-12-01T00:00:00Z",
+      "updatedAt": "2024-01-10T00:00:00Z",
+      "period": 0
+    },
+    {
+      "id": "staff-005",
+      "name": "高橋 健一",
+      "position": "Dishwasher",
+      "department": "Kitchen",
+      "status": "派遣",
+      "startPeriod": {
+        "year": 2024,
+        "month": 1,
+        "day": 20
+      },
+      "endPeriod": {
+        "year": 2024,
+        "month": 3,
+        "day": 31
+      },
+      "version": 1,
+      "createdAt": "2024-01-20T00:00:00Z",
+      "updatedAt": "2024-01-20T00:00:00Z",
+      "period": 0
+    }
+  ],
+  "testStaffTemplates": {
+    "newEmployee": {
+      "name": "",
+      "position": "",
+      "department": "",
+      "status": "社員",
+      "startPeriod": {
+        "year": 2024,
+        "month": 1,
+        "day": 1
+      },
+      "endPeriod": null,
+      "period": 0
+    },
+    "partTimeEmployee": {
+      "name": "",
+      "position": "",
+      "department": "",
+      "status": "パート",
+      "startPeriod": {
+        "year": 2024,
+        "month": 1,
+        "day": 1
+      },
+      "endPeriod": {
+        "year": 2024,
+        "month": 12,
+        "day": 31
+      },
+      "period": 0
+    },
+    "temporaryEmployee": {
+      "name": "",
+      "position": "",
+      "department": "",
+      "status": "派遣",
+      "startPeriod": {
+        "year": 2024,
+        "month": 1,
+        "day": 1
+      },
+      "endPeriod": {
+        "year": 2024,
+        "month": 6,
+        "day": 30
+      },
+      "period": 0
+    }
+  },
+  "conflictTestData": {
+    "scenario1": {
+      "localStaff": {
+        "id": "conflict-staff-1",
+        "name": "Local Name",
+        "position": "Local Position",
+        "department": "Local Department",
+        "status": "社員",
+        "version": 1,
+        "updatedAt": "2024-01-01T10:00:00Z"
+      },
+      "remoteStaff": {
+        "id": "conflict-staff-1",
+        "name": "Remote Name",
+        "position": "Remote Position",
+        "department": "Remote Department",
+        "status": "社員",
+        "version": 2,
+        "updatedAt": "2024-01-01T11:00:00Z"
+      }
+    },
+    "scenario2": {
+      "localStaff": {
+        "id": "conflict-staff-2",
+        "name": "Shared Name",
+        "position": "Local Position Only",
+        "department": "",
+        "status": "パート",
+        "version": 1,
+        "updatedAt": "2024-01-01T10:00:00Z"
+      },
+      "remoteStaff": {
+        "id": "conflict-staff-2",
+        "name": "Shared Name",
+        "position": "",
+        "department": "Remote Department Only",
+        "status": "社員",
+        "version": 2,
+        "updatedAt": "2024-01-01T11:00:00Z"
+      }
+    }
+  },
+  "performanceTestData": {
+    "bulkStaffMembers": 100,
+    "rapidUpdateCount": 50,
+    "concurrentUserCount": 10
+  }
+}

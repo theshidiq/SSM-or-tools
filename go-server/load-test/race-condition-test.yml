@@ -1,0 +1,56 @@
+# Testing Strategy Implementation: Race Condition Load Testing
+# Specific configuration to validate race condition elimination
+# Tests concurrent staff updates to ensure 100% elimination of race conditions
+
+config:
+  target: 'ws://localhost:8080'
+  phases:
+    # Gradual ramp up to test race conditions at different load levels
+    - duration: 30
+      arrivalRate: 25
+      name: "Low concurrency race testing"
+    - duration: 60
+      arrivalRate: 100
+      name: "Medium concurrency race testing"
+    - duration: 30
+      arrivalRate: 200
+      name: "High concurrency race testing"
+  engines:
+    ws:
+      query:
+        period: "1"
+
+scenarios:
+  - name: "Concurrent staff update race condition test"
+    weight: 80
+    engine: ws
+    steps:
+      - connect:
+          url: "/staff-sync"
+      - send:
+          payload: '{"type":"SYNC_REQUEST","clientId":"race-client-{{ $randomNumber() }}"}'
+      - think: 0.5
+      # Multiple rapid updates to the same staff member to test race conditions
+      - loop:
+        - send:
+            payload: '{"type":"STAFF_UPDATE","payload":{"staffId":"shared-staff-1","changes":{"name":"Race Update {{ $randomNumber() }}","version":"{{ $randomNumber() }}"}}}'
+        - think: 0.1  # Very fast updates
+        count: 15
+
+  - name: "Multi-field concurrent update test"
+    weight: 20
+    engine: ws
+    steps:
+      - connect:
+          url: "/staff-sync"
+      - send:
+          payload: '{"type":"SYNC_REQUEST","clientId":"multifield-client-{{ $randomNumber() }}"}'
+      - think: 0.5
+      # Update different fields of the same staff member simultaneously
+      - send:
+          payload: '{"type":"STAFF_UPDATE","payload":{"staffId":"multifield-staff","changes":{"name":"Name Update {{ $randomNumber() }}"}}}'
+      - send:
+          payload: '{"type":"STAFF_UPDATE","payload":{"staffId":"multifield-staff","changes":{"position":"Position Update {{ $randomNumber() }}"}}}'
+      - send:
+          payload: '{"type":"STAFF_UPDATE","payload":{"staffId":"multifield-staff","changes":{"status":"社員"}}}'
+      - think: 1

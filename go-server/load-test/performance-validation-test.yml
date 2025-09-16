@@ -1,0 +1,93 @@
+# Testing Strategy Implementation: Performance Validation Load Testing
+# Validates KPI requirements from plan lines 914-939
+# Measures UI Response Time, Real-time Sync, System Stability, and Connection Stability
+
+config:
+  target: 'ws://localhost:8080'
+  phases:
+    # Performance baseline measurement
+    - duration: 30
+      arrivalRate: 10
+      name: "Baseline performance"
+    # Target performance testing (KPI: 1000+ concurrent users)
+    - duration: 120
+      arrivalRate: 150
+      name: "Target performance validation"
+    # Peak performance testing
+    - duration: 60
+      arrivalRate: 250
+      name: "Peak performance stress test"
+  processor: "./performance-metrics.js"
+  engines:
+    ws:
+      query:
+        period: "1"
+
+scenarios:
+  - name: "UI Response Time Validation (<50ms KPI)"
+    weight: 40
+    engine: ws
+    beforeScenario: "startTimer"
+    afterScenario: "validateResponseTime"
+    steps:
+      - connect:
+          url: "/staff-sync"
+      - function: "markUpdateStart"
+      - send:
+          payload: '{"type":"STAFF_UPDATE","payload":{"staffId":"ui-response-test-{{ $randomNumber() }}","changes":{"name":"UI Test {{ $randomNumber() }}"}}}'
+      - function: "markUpdateEnd"
+      - think: 1
+
+  - name: "Real-time Sync Validation (<100ms KPI)"
+    weight: 30
+    engine: ws
+    beforeScenario: "startSyncTimer"
+    afterScenario: "validateSyncTime"
+    steps:
+      - connect:
+          url: "/staff-sync"
+      - send:
+          payload: '{"type":"SYNC_REQUEST","clientId":"sync-test-{{ $randomNumber() }}"}'
+      - function: "markSyncStart"
+      - send:
+          payload: '{"type":"STAFF_UPDATE","payload":{"staffId":"sync-test","changes":{"name":"Sync Test {{ $randomNumber() }}"}}}'
+      - function: "markSyncEnd"
+      - think: 2
+
+  - name: "Connection Stability Test (99.9% KPI)"
+    weight: 20
+    engine: ws
+    beforeScenario: "initConnection"
+    afterScenario: "validateConnection"
+    steps:
+      - connect:
+          url: "/staff-sync"
+      - send:
+          payload: '{"type":"SYNC_REQUEST","clientId":"stability-{{ $randomNumber() }}"}'
+      - loop:
+        - send:
+            payload: '{"type":"STAFF_UPDATE","payload":{"staffId":"stability-staff","changes":{"name":"Stability {{ $randomNumber() }}"}}}'
+        - think: 5
+        count: 10
+
+  - name: "System Stability Test (99.9% uptime KPI)"
+    weight: 10
+    engine: ws
+    beforeScenario: "initSystemTest"
+    afterScenario: "validateSystemStability"
+    steps:
+      - connect:
+          url: "/staff-sync"
+      - send:
+          payload: '{"type":"SYNC_REQUEST","clientId":"system-test-{{ $randomNumber() }}"}'
+      - loop:
+        - send:
+            payload: '{"type":"STAFF_CREATE","payload":{"name":"System Test {{ $randomNumber() }}","position":"Load Test","status":"社員"}}'
+        - think: 1
+        - send:
+            payload: '{"type":"STAFF_UPDATE","payload":{"staffId":"system-test-{{ $randomNumber() }}","changes":{"position":"Updated Position"}}}'
+        - think: 1
+        - send:
+            payload: '{"type":"STAFF_DELETE","payload":{"staffId":"system-test-{{ $randomNumber() }}"}}'
+        - think: 2
+        count: 5

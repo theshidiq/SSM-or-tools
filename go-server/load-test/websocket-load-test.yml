@@ -1,0 +1,29 @@
+# Testing Strategy Implementation: Load Testing (lines 842-879)
+# Artillery.io configuration for WebSocket testing
+# Exact implementation from IMPLEMENTATION_PLAN_HYBRID_ARCHITECTURE.md
+
+config:
+  target: 'ws://localhost:8080'
+  phases:
+    - duration: 60
+      arrivalRate: 50
+  engines:
+    ws:
+      query:
+        period: "1"
+
+scenarios:
+  - name: "Staff update operations"
+    weight: 100
+    engine: ws
+    steps:
+      - connect:
+          url: "/staff-sync"
+      - send:
+          payload: '{"type":"SYNC_REQUEST","clientId":"load-test-{{ $randomNumber() }}"}'
+      - think: 1
+      - loop:
+        - send:
+            payload: '{"type":"STAFF_UPDATE","payload":{"staffId":"test-{{ $randomNumber() }}","changes":{"name":"Test {{ $randomNumber() }}"}}}'
+        - think: 2
+        count: 10
