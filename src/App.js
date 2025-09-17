@@ -1,5 +1,4 @@
 import React, { useState } from "react";
-import ShiftScheduleEditorRealtime from "./components/ShiftScheduleEditorRealtime.jsx";
 import ShiftScheduleEditorPhase3 from "./components/ShiftScheduleEditorPhase3.jsx";
 // ForceDataLoader removed - obsolete with Phase 4 prefetch architecture
 import DashboardLayout from "./components/layout/DashboardLayout.jsx";
