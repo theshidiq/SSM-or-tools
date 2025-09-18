@@ -175,27 +175,9 @@ export const PeriodMigration = ({ onMigrationComplete }) => {
     performMigration();
   }, [onMigrationComplete]);
 
-  // Don't render anything - this is a background migration
-  if (migrationStatus === "completed" || migrationStatus === "error") {
-    return null;
-  }
-
-  // Show loading indicator during migration
-  return (
-    <div className="fixed inset-0 bg-background/80 backdrop-blur-sm z-50 flex items-center justify-center">
-      <div className="bg-card p-6 rounded-lg shadow-lg max-w-md text-center">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto mb-4"></div>
-        <h3 className="text-lg font-semibold mb-2">
-          {migrationStatus === "checking" && "Checking periods..."}
-          {migrationStatus === "migrating" && "Migrating periods..."}
-        </h3>
-        <p className="text-sm text-muted-foreground">
-          {migrationStatus === "checking" && "Verifying database state..."}
-          {migrationStatus === "migrating" && "Moving periods to database..."}
-        </p>
-      </div>
-    </div>
-  );
+  // Silent migration - don't show any UI during migration
+  // This eliminates the first loading message the user sees
+  return null;
 };
 
 export default PeriodMigration;

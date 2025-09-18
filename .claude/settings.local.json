@@ -12,7 +12,8 @@
       "mcp__playwright__browser_navigate",
       "mcp__playwright__browser_snapshot",
       "Bash(chmod:*)",
-      "Bash(rm:*)"
+      "Bash(rm:*)",
+      "Bash(npm run build:*)"
     ],
     "deny": []
   },

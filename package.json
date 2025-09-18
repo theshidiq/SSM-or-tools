@@ -116,6 +116,7 @@
     "playwright": "^1.55.0",
     "postcss": "^8.4.27",
     "react": ">=16.8.0",
+    "react-content-loader": "^7.1.1",
     "react-day-picker": "^9.9.0",
     "react-dom": ">=16.8.0",
     "react-error-boundary": "^4.1.2",

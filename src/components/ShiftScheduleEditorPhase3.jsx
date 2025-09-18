@@ -38,6 +38,7 @@ import { Separator } from "./ui/separator";
 import StatisticsDashboard from "./schedule/StatisticsDashboard";
 import NavigationToolbar from "./schedule/NavigationToolbar";
 import ScheduleTable from "./schedule/ScheduleTable";
+import ScheduleTableSkeleton from "./schedule/ScheduleTableSkeleton";
 import StaffCardView from "./schedule/StaffCardView";
 import StaffEditModal from "./schedule/StaffEditModal";
 import StatusModal from "./common/StatusModal";
@@ -441,18 +442,33 @@ const ShiftScheduleEditorPhase3 = ({
     );
   }, [schedule, currentStaff, dateRange, realtimePeriods, currentMonthIndex]);
 
-  // Loading state
+  // Loading state - Skip intermediate loading, go directly to skeleton
   if (periodsLoading) {
     return (
-      <div className="flex items-center justify-center min-h-screen">
+      <div className="shift-schedule-container space-y-6 p-6">
+        {/* Header skeleton */}
         <Card>
-          <CardContent className="p-6">
-            <div className="text-center">
-              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500 mx-auto mb-4"></div>
-              <p>Phase 3 システムを初期化中...</p>
+          <CardHeader>
+            <div className="flex items-center justify-between">
+              <CardTitle className="text-2xl font-bold">調理場シフト表</CardTitle>
+              <div className="flex items-center space-x-2">
+                <Badge variant="secondary" className="bg-green-100 text-green-800">
+                  Phase 3: Normalized
+                </Badge>
+                <Badge variant="default" className="bg-blue-500 text-white">
+                  Loading...
+                </Badge>
+              </div>
             </div>
-          </CardContent>
+          </CardHeader>
         </Card>
+
+        {/* Show skeleton immediately */}
+        <ScheduleTableSkeleton
+          staffCount={5}
+          dateCount={31}
+          showConnectionStatus={false}
+        />
       </div>
     );
   }
@@ -545,29 +561,37 @@ const ShiftScheduleEditorPhase3 = ({
       {/* Main Interface - Switch between views */}
       <div className="space-y-4">
         {viewMode === "table" ? (
-          <ScheduleTable
-            orderedStaffMembers={currentStaff}
-            dateRange={dateRange}
-            schedule={schedule}
-            editingColumn={editingColumn}
-            editingSpecificColumn={editingSpecificColumn}
-            editingNames={editingNames}
-            setEditingNames={setEditingNames}
-            setEditingSpecificColumn={setEditingSpecificColumn}
-            showDropdown={showDropdown}
-            setShowDropdown={setShowDropdown}
-            updateShift={handleShiftUpdate}
-            customText={customText}
-            setCustomText={setCustomText}
-            editingCell={editingCell}
-            setEditingCell={setEditingCell}
-            deleteStaff={deleteStaff}
-            staffMembers={localStaffData}
-            updateSchedule={handleScheduleUpdate}
-            currentMonthIndex={currentMonthIndex}
-            editStaffName={editStaffName}
-            isConnected={isConnected}
-          />
+          isSupabaseLoading ? (
+            <ScheduleTableSkeleton
+              staffCount={currentStaff?.length || 5}
+              dateCount={dateRange?.length || 31}
+              showConnectionStatus={false}
+            />
+          ) : (
+            <ScheduleTable
+              orderedStaffMembers={currentStaff}
+              dateRange={dateRange}
+              schedule={schedule}
+              editingColumn={editingColumn}
+              editingSpecificColumn={editingSpecificColumn}
+              editingNames={editingNames}
+              setEditingNames={setEditingNames}
+              setEditingSpecificColumn={setEditingSpecificColumn}
+              showDropdown={showDropdown}
+              setShowDropdown={setShowDropdown}
+              updateShift={handleShiftUpdate}
+              customText={customText}
+              setCustomText={setCustomText}
+              editingCell={editingCell}
+              setEditingCell={setEditingCell}
+              deleteStaff={deleteStaff}
+              staffMembers={localStaffData}
+              updateSchedule={handleScheduleUpdate}
+              currentMonthIndex={currentMonthIndex}
+              editStaffName={editStaffName}
+              isConnected={isConnected}
+            />
+          )
         ) : viewMode === "card" ? (
           <StaffCardView
             orderedStaffMembers={currentStaff}
