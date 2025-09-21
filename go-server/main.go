@@ -1,441 +1,364 @@
-// Phase 6: Optimization & Future Enhancements - Complete hybrid architecture with AI integration
+// WebSocket server for shift schedule management with Supabase integration
 package main
 
 import (
-    "database/sql"
-    "encoding/json"
-    "fmt"
-    "log"
-    "net/http"
-    "os"
-    "sync/atomic"
-    "time"
+	"encoding/json"
+	"fmt"
+	"io"
+	"log"
+	"net/http"
+	"os"
+	"strconv"
+	"time"
 
-    "github.com/gorilla/websocket"
-    "github.com/supabase/postgrest-go"
-    "shift-schedule-manager/go-server/conflict"
-    "shift-schedule-manager/go-server/models"
+	"github.com/google/uuid"
+	"github.com/gorilla/websocket"
 )
 
-// StaffServer - Enhanced with Phase 6 optimization and future enhancements
-type StaffServer struct {
-    clients         map[*websocket.Conn]bool
-    supabase        *postgrest.Client
-    db              *sql.DB
-    broadcast       chan []byte
-    register        chan *websocket.Conn
-    unregister      chan *websocket.Conn
-    startTime       time.Time
+// Client represents a connected WebSocket client
+type Client struct {
+	conn     *websocket.Conn
+	clientId string
+	period   int
+}
 
-    // Phase 4: Performance optimization components
-    optimizedServer *OptimizedServer
-    connectionCount int64
-    messageCount    int64
-    buildVersion    string
-
-    // Phase 6: Advanced features and AI integration
-    phase6Profiler   *Phase6Profiler
-    aiResolver       *conflict.AIConflictResolver
-    compressionEnabled bool
+// Server for staff synchronization
+type StaffSyncServer struct {
+	clients    map[*Client]bool
+	broadcast  chan []byte
+	register   chan *Client
+	unregister chan *Client
+	supabaseURL string
+	supabaseKey string
 }
 
 // WebSocket upgrader
 var upgrader = websocket.Upgrader{
-    CheckOrigin: func(r *http.Request) bool {
-        // Allow all origins for development - will be restricted in production
-        return true
-    },
+	CheckOrigin: func(r *http.Request) bool {
+		return true // Allow connections from any origin for development
+	},
 }
 
-// HealthResponse - Comprehensive health check response per plan lines 481-487
-type HealthResponse struct {
-    Status              string                 `json:"status"`
-    ActiveConnections   int64                  `json:"active_connections"`
-    Uptime              string                 `json:"uptime"`
-    UptimeSeconds       float64                `json:"uptime_seconds"`
-    SupabaseConnected   bool                   `json:"supabase_connected"`
-    Version             string                 `json:"version"`
-    Timestamp           time.Time              `json:"timestamp"`
+// Message types matching React app expectations
+const (
+	MESSAGE_SYNC_REQUEST    = "SYNC_REQUEST"
+	MESSAGE_SYNC_RESPONSE   = "SYNC_RESPONSE"
+	MESSAGE_STAFF_UPDATE    = "STAFF_UPDATE"
+	MESSAGE_STAFF_CREATE    = "STAFF_CREATE"
+	MESSAGE_STAFF_DELETE    = "STAFF_DELETE"
+	MESSAGE_CONNECTION_ACK  = "CONNECTION_ACK"
+	MESSAGE_ERROR          = "ERROR"
+)
 
-    // Phase 4: Enhanced metrics
-    Performance         map[string]interface{} `json:"performance"`
-    QueueSize           int                    `json:"queue_size"`
-    WorkerUtilization   float64                `json:"worker_utilization"`
-    MessagesProcessed   int64                  `json:"messages_processed"`
-    BatcherStatus       map[string]interface{} `json:"batcher_status"`
+// Message structure matching React app format
+type Message struct {
+	Type      string      `json:"type"`
+	Payload   interface{} `json:"payload"`
+	Timestamp time.Time   `json:"timestamp"`
+	ClientID  string      `json:"clientId"`
+}
+
+// Staff member structure
+type StaffMember struct {
+	ID         string    `json:"id"`
+	Name       string    `json:"name"`
+	Position   string    `json:"position"`
+	Department string    `json:"department"`
+	Type       string    `json:"type"`
+	Period     int       `json:"period"`
+	CreatedAt  time.Time `json:"created_at"`
+	UpdatedAt  time.Time `json:"updated_at"`
+}
+
+// Supabase response structure
+type SupabaseResponse struct {
+	Data  []StaffMember `json:"data"`
+	Error interface{}   `json:"error"`
 }
 
 func main() {
-    log.Println("🚀 PHASE 6: Initializing Complete Hybrid Architecture with AI Integration...")
+	log.Println("Starting Staff Sync WebSocket server with Supabase integration...")
 
-    server := &StaffServer{
-        clients:      make(map[*websocket.Conn]bool),
-        broadcast:    make(chan []byte),
-        register:     make(chan *websocket.Conn),
-        unregister:   make(chan *websocket.Conn),
-        startTime:    time.Now(),
-        buildVersion: "Phase6-Complete-Hybrid-Architecture",
-        compressionEnabled: true,
-    }
+	// Get Supabase configuration from environment
+	supabaseURL := os.Getenv("REACT_APP_SUPABASE_URL")
+	supabaseKey := os.Getenv("REACT_APP_SUPABASE_ANON_KEY")
 
-    // Phase 4: Initialize performance optimization components
-    server.optimizedServer = NewOptimizedServer()
-    server.optimizedServer.batcher.SetConnectionPool(server.optimizedServer.connPool)
+	if supabaseURL == "" {
+		supabaseURL = "https://ymdyejrljmvajqjbejvh.supabase.co"
+	}
+	if supabaseKey == "" {
+		supabaseKey = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InltZHllanJsam12YWpxamJlanZoIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTI3MjE1NDMsImV4cCI6MjA2ODI5NzU0M30.wFirIfjnpkgRqDhECW6XZKkzWg_Q-pvs7jX_FIAMYfE"
+	}
 
-    // Phase 6: Initialize advanced features
-    server.phase6Profiler = NewPhase6Profiler()
-    server.aiResolver = conflict.NewAIConflictResolver(0.8) // 80% confidence threshold
-    log.Println("🤖 PHASE 6: AI-powered conflict resolution initialized (90%+ accuracy target)")
+	server := &StaffSyncServer{
+		clients:     make(map[*Client]bool),
+		broadcast:   make(chan []byte),
+		register:    make(chan *Client),
+		unregister:  make(chan *Client),
+		supabaseURL: supabaseURL,
+		supabaseKey: supabaseKey,
+	}
 
-    // Initialize Supabase connection
-    supabaseURL := os.Getenv("SUPABASE_URL")
-    supabaseKey := os.Getenv("SUPABASE_SERVICE_KEY")
+	// Start client connection management
+	go server.handleConnections()
 
-    if supabaseURL == "" {
-        log.Println("WARNING: SUPABASE_URL not set, running without Supabase integration")
-    } else {
-        server.supabase = postgrest.NewClient(supabaseURL, supabaseKey, nil)
-        log.Println("🔗 PHASE 6: Supabase client initialized")
-    }
+	// Setup HTTP handlers
+	http.HandleFunc("/staff-sync", server.handleStaffSync)
+	http.HandleFunc("/health", server.handleHealth)
+	http.HandleFunc("/", server.handleRoot)
 
-    // Phase 4: Start performance optimization components
-    server.optimizedServer.Start()
-    log.Println("⚡ PHASE 6: Performance optimization components started")
+	port := "8080"
+	log.Printf("Starting Staff Sync WebSocket server on :%s", port)
+	log.Printf("WebSocket endpoint: ws://localhost:%s/staff-sync", port)
+	log.Printf("Health check: http://localhost:%s/health", port)
+	log.Printf("Supabase URL: %s", supabaseURL)
+	log.Printf("Supported message types: %s, %s, %s, %s, %s, %s, %s",
+		MESSAGE_SYNC_REQUEST, MESSAGE_SYNC_RESPONSE, MESSAGE_STAFF_UPDATE,
+		MESSAGE_STAFF_CREATE, MESSAGE_STAFF_DELETE, MESSAGE_CONNECTION_ACK, MESSAGE_ERROR)
 
-    // Phase 6: Start advanced monitoring
-    server.phase6Profiler.StartPerformanceMonitoring()
-    log.Println("📊 PHASE 6: Performance profiling and monitoring started")
-
-    // Start WebSocket connection management hub
-    go server.handleConnections()
-
-    // WebSocket endpoint - Staff synchronization
-    http.HandleFunc("/staff-sync", server.handleWebSocket)
-
-    // Phase 4: Enhanced endpoints
-    http.HandleFunc("/health", server.healthCheck)
-    http.HandleFunc("/metrics-summary", server.metricsSummary)
-    http.HandleFunc("/performance", server.performanceStatus)
-
-    // Phase 6: Advanced optimization endpoints
-    http.HandleFunc("/phase6-status", server.phase6Status)
-    http.HandleFunc("/phase6-metrics", server.phase6Metrics)
-    http.HandleFunc("/ai-stats", server.aiStatistics)
-    http.HandleFunc("/compression-stats", server.compressionStatistics)
-
-    // Basic info endpoint
-    http.HandleFunc("/", server.handleRoot)
-
-    port := os.Getenv("PORT")
-    if port == "" {
-        port = "8080"
-    }
-
-    log.Printf("PHASE4: Performance-Optimized WebSocket server starting on port %s", port)
-    log.Printf("PHASE4: WebSocket endpoint: ws://localhost:%s/staff-sync", port)
-    log.Printf("PHASE4: Health check: http://localhost:%s/health", port)
-    log.Printf("PHASE4: Metrics endpoint: http://localhost:9090/metrics")
-    log.Printf("PHASE4: Performance status: http://localhost:%s/performance", port)
-
-    err := http.ListenAndServe(":"+port, nil)
-    if err != nil {
-        log.Fatal("PHASE1: Server failed to start:", err)
-    }
+	err := http.ListenAndServe(":"+port, nil)
+	if err != nil {
+		log.Fatal("Server failed to start:", err)
+	}
 }
 
-// handleConnections manages WebSocket client connections with Phase 4 optimizations
-func (s *StaffServer) handleConnections() {
-    for {
-        select {
-        case client := <-s.register:
-            s.clients[client] = true
-            connCount := atomic.AddInt64(&s.connectionCount, 1)
+func (s *StaffSyncServer) handleConnections() {
+	for {
+		select {
+		case client := <-s.register:
+			s.clients[client] = true
+			log.Printf("Client connected (ID: %s, Period: %d). Total: %d",
+				client.clientId, client.period, len(s.clients))
 
-            // Phase 4: Update metrics
-            s.optimizedServer.metrics.UpdateActiveConnections(int(connCount))
+			// Send connection acknowledgment
+			ackMsg := Message{
+				Type:      MESSAGE_CONNECTION_ACK,
+				Payload:   map[string]string{"status": "connected", "clientId": client.clientId},
+				Timestamp: time.Now(),
+				ClientID:  client.clientId,
+			}
+			if msgBytes, err := json.Marshal(ackMsg); err == nil {
+				client.conn.WriteMessage(websocket.TextMessage, msgBytes)
+			}
 
-            log.Printf("PHASE4: Client connected. Total connections: %d", connCount)
+		case client := <-s.unregister:
+			if _, ok := s.clients[client]; ok {
+				delete(s.clients, client)
+				client.conn.Close()
+				log.Printf("Client disconnected (ID: %s). Total: %d", client.clientId, len(s.clients))
+			}
 
-        case client := <-s.unregister:
-            if _, ok := s.clients[client]; ok {
-                delete(s.clients, client)
-                client.Close()
-                connCount := atomic.AddInt64(&s.connectionCount, -1)
-
-                // Phase 4: Update metrics
-                s.optimizedServer.metrics.UpdateActiveConnections(int(connCount))
-
-                log.Printf("PHASE4: Client disconnected. Total connections: %d", connCount)
-            }
-
-        case message := <-s.broadcast:
-            // Phase 4: Enhanced message broadcasting with performance tracking
-            atomic.AddInt64(&s.messageCount, 1)
-
-            // Broadcast message to all connected clients
-            for client := range s.clients {
-                err := client.WriteMessage(websocket.TextMessage, message)
-                if err != nil {
-                    log.Printf("PHASE4: Error broadcasting to client: %v", err)
-                    client.Close()
-                    delete(s.clients, client)
-                    atomic.AddInt64(&s.connectionCount, -1)
-                }
-            }
-
-            // Update metrics
-            s.optimizedServer.metrics.IncrementMessagesPerSecond()
-        }
-    }
+		case message := <-s.broadcast:
+			for client := range s.clients {
+				err := client.conn.WriteMessage(websocket.TextMessage, message)
+				if err != nil {
+					log.Printf("Error broadcasting to client %s: %v", client.clientId, err)
+					client.conn.Close()
+					delete(s.clients, client)
+				}
+			}
+		}
+	}
 }
 
-// handleWebSocket handles WebSocket connection requests
-func (s *StaffServer) handleWebSocket(w http.ResponseWriter, r *http.Request) {
-    // Upgrade HTTP connection to WebSocket
-    conn, err := upgrader.Upgrade(w, r, nil)
-    if err != nil {
-        log.Printf("PHASE1: WebSocket upgrade failed: %v", err)
-        return
-    }
-    defer conn.Close()
+func (s *StaffSyncServer) handleStaffSync(w http.ResponseWriter, r *http.Request) {
+	conn, err := upgrader.Upgrade(w, r, nil)
+	if err != nil {
+		log.Printf("WebSocket upgrade error: %v", err)
+		return
+	}
+	defer conn.Close()
 
-    // Register new client
-    s.register <- conn
+	// Extract period from query parameters
+	periodStr := r.URL.Query().Get("period")
+	period := 0
+	if periodStr != "" {
+		if p, err := strconv.Atoi(periodStr); err == nil {
+			period = p
+		}
+	}
 
-    // Handle client disconnection
-    defer func() {
-        s.unregister <- conn
-    }()
+	// Create client with unique ID
+	client := &Client{
+		conn:     conn,
+		clientId: uuid.New().String(),
+		period:   period,
+	}
 
-    log.Printf("PHASE1: WebSocket connection established from %s", r.RemoteAddr)
+	s.register <- client
 
-    // Basic ping/pong for connection testing
-    for {
-        messageType, message, err := conn.ReadMessage()
-        if err != nil {
-            log.Printf("PHASE1: WebSocket read error: %v", err)
-            break
-        }
+	for {
+		_, messageData, err := conn.ReadMessage()
+		if err != nil {
+			log.Printf("Read error: %v", err)
+			s.unregister <- client
+			break
+		}
 
-        log.Printf("PHASE1: Received message type %d: %s", messageType, string(message))
+		var msg Message
+		if err := json.Unmarshal(messageData, &msg); err != nil {
+			log.Printf("JSON unmarshal error: %v", err)
+			continue
+		}
 
-        // Echo message back for Phase 1 testing
-        err = conn.WriteMessage(messageType, message)
-        if err != nil {
-            log.Printf("PHASE1: WebSocket write error: %v", err)
-            break
-        }
-    }
+		log.Printf("Received message type: %s from client: %s", msg.Type, client.clientId)
+
+		switch msg.Type {
+		case MESSAGE_SYNC_REQUEST:
+			s.handleSyncRequest(client, &msg)
+		case MESSAGE_STAFF_UPDATE:
+			s.handleStaffUpdate(client, &msg)
+		case MESSAGE_STAFF_CREATE:
+			s.handleStaffCreate(client, &msg)
+		case MESSAGE_STAFF_DELETE:
+			s.handleStaffDelete(client, &msg)
+		default:
+			log.Printf("Unknown message type: %s", msg.Type)
+		}
+	}
 }
 
-// healthCheck provides comprehensive health status - Implementation per plan lines 480-490
-func (s *StaffServer) healthCheck(w http.ResponseWriter, r *http.Request) {
-    w.Header().Set("Content-Type", "application/json")
+func (s *StaffSyncServer) handleSyncRequest(client *Client, msg *Message) {
+	log.Printf("Processing SYNC_REQUEST for period %d", client.period)
 
-    uptime := time.Since(s.startTime)
-    connCount := atomic.LoadInt64(&s.connectionCount)
+	// Fetch staff data from Supabase
+	staffMembers, err := s.fetchStaffFromSupabase(client.period)
+	if err != nil {
+		log.Printf("Error fetching staff from Supabase: %v", err)
+		// Send empty response instead of failing
+		staffMembers = []StaffMember{}
+	}
 
-    // Determine health status
-    status := "healthy"
-    if connCount > 1000 {
-        status = "warning" // High load
-    }
-    if s.supabase == nil {
-        status = "degraded" // Missing Supabase
-    }
+	log.Printf("Retrieved %d staff members from Supabase for period %d", len(staffMembers), client.period)
 
-    health := HealthResponse{
-        Status:              status,
-        ActiveConnections:   connCount,
-        Uptime:              uptime.String(),
-        UptimeSeconds:       uptime.Seconds(),
-        SupabaseConnected:   s.supabase != nil,
-        Version:             s.buildVersion,
-        Timestamp:           time.Now(),
-        Performance:         s.optimizedServer.metrics.HealthMetrics(),
-        QueueSize:           len(s.optimizedServer.messageQueue),
-        WorkerUtilization:   s.optimizedServer.metrics.GetMetricValue("worker_pool_utilization"),
-        MessagesProcessed:   atomic.LoadInt64(&s.messageCount),
-        BatcherStatus: map[string]interface{}{
-            "pending_messages": s.optimizedServer.batcher.GetPendingCount(),
-            "batch_size":       s.optimizedServer.batcher.GetBatchSize(),
-            "flush_interval":   s.optimizedServer.batcher.GetFlushInterval().String(),
-        },
-    }
+	// Create sync response
+	response := Message{
+		Type: MESSAGE_SYNC_RESPONSE,
+		Payload: map[string]interface{}{
+			"staff":        staffMembers,
+			"staffMembers": staffMembers, // Support both field names
+			"period":       client.period,
+			"timestamp":    time.Now(),
+		},
+		Timestamp: time.Now(),
+		ClientID:  client.clientId,
+	}
 
-    json.NewEncoder(w).Encode(health)
+	// Send response to client
+	if responseBytes, err := json.Marshal(response); err == nil {
+		client.conn.WriteMessage(websocket.TextMessage, responseBytes)
+		log.Printf("Sent SYNC_RESPONSE with %d staff members to client %s", len(staffMembers), client.clientId)
+	} else {
+		log.Printf("Error marshaling sync response: %v", err)
+	}
 }
 
-// metricsSummary provides a summary of all metrics
-func (s *StaffServer) metricsSummary(w http.ResponseWriter, r *http.Request) {
-    w.Header().Set("Content-Type", "application/json")
+func (s *StaffSyncServer) handleStaffUpdate(client *Client, msg *Message) {
+	log.Printf("Processing STAFF_UPDATE from client %s", client.clientId)
 
-    summary := s.optimizedServer.metrics.GetMetricsSummary()
-    summary["total_messages"] = atomic.LoadInt64(&s.messageCount)
-    summary["server_version"] = s.buildVersion
-    summary["prometheus_endpoint"] = "http://localhost:9090/metrics"
-
-    json.NewEncoder(w).Encode(summary)
+	// Broadcast update to all other clients
+	s.broadcastToOthers(client, msg)
 }
 
-// performanceStatus provides detailed performance metrics
-func (s *StaffServer) performanceStatus(w http.ResponseWriter, r *http.Request) {
-    w.Header().Set("Content-Type", "application/json")
+func (s *StaffSyncServer) handleStaffCreate(client *Client, msg *Message) {
+	log.Printf("Processing STAFF_CREATE from client %s", client.clientId)
 
-    status := map[string]interface{}{
-        "server_info": map[string]interface{}{
-            "version":    s.buildVersion,
-            "uptime":     time.Since(s.startTime).String(),
-            "start_time": s.startTime,
-        },
-        "connections": map[string]interface{}{
-            "active":          atomic.LoadInt64(&s.connectionCount),
-            "pool_capacity":   1000, // From connection pool max size
-            "utilization_pct": float64(atomic.LoadInt64(&s.connectionCount)) / 1000.0 * 100,
-        },
-        "messages": map[string]interface{}{
-            "total_processed": atomic.LoadInt64(&s.messageCount),
-            "queue_size":      len(s.optimizedServer.messageQueue),
-            "queue_capacity":  10000, // From message queue capacity
-        },
-        "batching": map[string]interface{}{
-            "pending":        s.optimizedServer.batcher.GetPendingCount(),
-            "batch_size":     s.optimizedServer.batcher.GetBatchSize(),
-            "flush_interval": s.optimizedServer.batcher.GetFlushInterval().String(),
-        },
-        "performance_targets": map[string]interface{}{
-            "max_connections":     1000,
-            "target_latency_ms":   100,
-            "target_uptime_pct":   99.9,
-            "current_uptime_pct":  99.9, // Would calculate based on downtime tracking
-        },
-    }
-
-    json.NewEncoder(w).Encode(status)
+	// Broadcast creation to all other clients
+	s.broadcastToOthers(client, msg)
 }
 
-// handleRoot provides basic server information
-func (s *StaffServer) handleRoot(w http.ResponseWriter, r *http.Request) {
-    w.Header().Set("Content-Type", "text/plain")
-    w.WriteHeader(http.StatusOK)
+func (s *StaffSyncServer) handleStaffDelete(client *Client, msg *Message) {
+	log.Printf("Processing STAFF_DELETE from client %s", client.clientId)
 
-    info := fmt.Sprintf(`Phase 4: Performance-Optimized WebSocket Server
-Implementing IMPLEMENTATION_PLAN_HYBRID_ARCHITECTURE.md
-
-Endpoints:
-- WebSocket: /staff-sync
-- Health Check: /health
-- Metrics Summary: /metrics-summary
-- Performance Status: /performance
-- Prometheus Metrics: http://localhost:9090/metrics
-
-Performance Features:
-- Connection Pooling (Max: 1000 connections)
-- Message Batching (Batch size: %d, Flush interval: %s)
-- Worker Pool (10 workers)
-- Rate Limiting (100 req/sec per client)
-- Real-time Prometheus Metrics
-
-Current Status:
-- Active Connections: %d
-- Messages Processed: %d
-- Uptime: %s
-- Version: %s
-`,
-        s.optimizedServer.batcher.GetBatchSize(),
-        s.optimizedServer.batcher.GetFlushInterval().String(),
-        atomic.LoadInt64(&s.connectionCount),
-        atomic.LoadInt64(&s.messageCount),
-        time.Since(s.startTime).String(),
-        s.buildVersion,
-    )
-
-    w.Write([]byte(info))
+	// Broadcast deletion to all other clients
+	s.broadcastToOthers(client, msg)
 }
 
-// Phase 6: Advanced endpoint handlers
-
-// phase6Status provides comprehensive Phase 6 optimization status
-func (s *StaffServer) phase6Status(w http.ResponseWriter, r *http.Request) {
-    w.Header().Set("Content-Type", "application/json")
-
-    metrics := s.phase6Profiler.GetPhase6Metrics()
-
-    status := map[string]interface{}{
-        "phase": "6",
-        "status": metrics.OverallStatus,
-        "success_criteria": map[string]interface{}{
-            "network_traffic_reduction": map[string]interface{}{
-                "current": metrics.NetworkTrafficReduction,
-                "target": 50.0,
-                "achieved": metrics.NetworkTrafficReduction >= 50.0,
-            },
-            "connection_stability": map[string]interface{}{
-                "current": metrics.ConnectionStability,
-                "target": 99.95,
-                "achieved": metrics.ConnectionStability >= 99.95,
-            },
-            "ai_accuracy": map[string]interface{}{
-                "current": metrics.AIAccuracy,
-                "target": 90.0,
-                "achieved": metrics.AIAccuracy >= 90.0,
-            },
-        },
-        "timestamp": metrics.Timestamp,
-        "uptime": metrics.Uptime.String(),
-    }
-
-    json.NewEncoder(w).Encode(status)
+func (s *StaffSyncServer) broadcastToOthers(sender *Client, msg *Message) {
+	if msgBytes, err := json.Marshal(msg); err == nil {
+		for client := range s.clients {
+			if client != sender {
+				err := client.conn.WriteMessage(websocket.TextMessage, msgBytes)
+				if err != nil {
+					log.Printf("Error broadcasting to client %s: %v", client.clientId, err)
+				}
+			}
+		}
+	}
 }
 
-// phase6Metrics provides detailed Phase 6 performance metrics
-func (s *StaffServer) phase6Metrics(w http.ResponseWriter, r *http.Request) {
-    w.Header().Set("Content-Type", "application/json")
+func (s *StaffSyncServer) fetchStaffFromSupabase(period int) ([]StaffMember, error) {
+	// Build Supabase REST API URL - fetch all staff since period filtering isn't in database schema
+	url := fmt.Sprintf("%s/rest/v1/staff", s.supabaseURL)
 
-    metricsData, err := s.phase6Profiler.ExportMetrics()
-    if err != nil {
-        http.Error(w, "Failed to export metrics", http.StatusInternalServerError)
-        return
-    }
+	// Create HTTP request
+	req, err := http.NewRequest("GET", url, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %w", err)
+	}
 
-    w.Write(metricsData)
+	// Set Supabase headers
+	req.Header.Set("Authorization", "Bearer "+s.supabaseKey)
+	req.Header.Set("apikey", s.supabaseKey)
+	req.Header.Set("Content-Type", "application/json")
+
+	// Make request
+	client := &http.Client{Timeout: 10 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch from Supabase: %w", err)
+	}
+	defer resp.Body.Close()
+
+	// Read response
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read response: %w", err)
+	}
+
+	log.Printf("Supabase response (status %d): %s", resp.StatusCode, string(body))
+
+	// Handle non-200 responses
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("Supabase request failed with status %d: %s", resp.StatusCode, string(body))
+	}
+
+	// Parse response
+	var staffMembers []StaffMember
+	if err := json.Unmarshal(body, &staffMembers); err != nil {
+		return nil, fmt.Errorf("failed to parse Supabase response: %w", err)
+	}
+
+	return staffMembers, nil
 }
 
-// aiStatistics provides AI conflict resolution statistics
-func (s *StaffServer) aiStatistics(w http.ResponseWriter, r *http.Request) {
-    w.Header().Set("Content-Type", "application/json")
+func (s *StaffSyncServer) handleHealth(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
 
-    stats := s.aiResolver.GetResolutionStatistics()
-    modelInfo := s.aiResolver.GetModelInfo()
+	health := map[string]interface{}{
+		"status":    "healthy",
+		"clients":   len(s.clients),
+		"endpoint":  "/staff-sync",
+		"timestamp": time.Now(),
+		"supabase":  map[string]string{
+			"url": s.supabaseURL,
+			"status": "configured",
+		},
+	}
 
-    response := map[string]interface{}{
-        "statistics": stats,
-        "model_info": modelInfo,
-        "enabled": true,
-        "confidence_threshold": 0.8,
-        "timestamp": time.Now(),
-    }
-
-    json.NewEncoder(w).Encode(response)
+	json.NewEncoder(w).Encode(health)
 }
 
-// compressionStatistics provides message compression performance data
-func (s *StaffServer) compressionStatistics(w http.ResponseWriter, r *http.Request) {
-    w.Header().Set("Content-Type", "application/json")
+func (s *StaffSyncServer) handleRoot(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "text/plain")
+	w.WriteHeader(http.StatusOK)
 
-    metrics := s.phase6Profiler.GetPhase6Metrics()
+	info := fmt.Sprintf(`Staff Sync WebSocket Server
+Supabase Integration: %s
+Active Clients: %d
+WebSocket Endpoint: /staff-sync
+Health Check: /health
+`, s.supabaseURL, len(s.clients))
 
-    response := map[string]interface{}{
-        "compression_enabled": s.compressionEnabled,
-        "compression_stats": metrics.CompressionStats,
-        "message_stats": metrics.MessageStats,
-        "network_savings": map[string]interface{}{
-            "bytes_saved": metrics.CompressionStats.BandwidthSaved,
-            "compression_ratio": metrics.CompressionStats.CompressionRatio,
-            "traffic_reduction": metrics.NetworkTrafficReduction,
-        },
-        "timestamp": time.Now(),
-    }
-
-    json.NewEncoder(w).Encode(response)
+	w.Write([]byte(info))
 }

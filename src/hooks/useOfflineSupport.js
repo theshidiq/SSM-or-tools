@@ -425,13 +425,22 @@ export const useOfflineSupport = (options = {}) => {
     if (syncIntervalRef.current) return; // Already started
 
     syncIntervalRef.current = setInterval(() => {
-      if (isOnline && pendingOperations.length > 0) {
-        syncPendingOperations();
+      // Don't reference pendingOperations.length in the dependency array
+      // Instead, check it dynamically inside the interval callback
+      if (isOnline) {
+        // Get current pending operations dynamically to avoid dependency loop
+        setPendingOperations((currentOps) => {
+          if (currentOps.length > 0) {
+            // Call sync function directly without dependency to break the loop
+            syncPendingOperations();
+          }
+          return currentOps; // Return unchanged to avoid state update
+        });
       }
     }, syncInterval);
 
     console.log(`⏰ Sync interval started (${syncInterval}ms)`);
-  }, [isOnline, pendingOperations.length, syncInterval, syncPendingOperations]);
+  }, [isOnline, syncInterval]); // FIXED: Removed syncPendingOperations from dependencies
 
   /**
    * Stop automatic sync interval
@@ -466,27 +475,33 @@ export const useOfflineSupport = (options = {}) => {
     if (enableOfflineMode) {
       loadPendingOperations();
       startSyncInterval();
+    } else {
+      // Ensure we stop any existing interval when disabled
+      stopSyncInterval();
     }
 
     return () => {
       stopSyncInterval();
     };
-  }, [
-    enableOfflineMode,
-    loadPendingOperations,
-    startSyncInterval,
-    stopSyncInterval,
-  ]);
+  }, [enableOfflineMode]); // FIXED: Removed function dependencies to prevent infinite loops
 
   // Auto-sync when coming back online
   useEffect(() => {
-    if (isOnline && pendingOperations.length > 0) {
+    if (isOnline) {
       // Small delay to ensure connection is stable
-      setTimeout(() => {
-        syncPendingOperations();
+      const syncTimeout = setTimeout(() => {
+        // Check for pending operations at sync time instead of in dependency
+        setPendingOperations((currentOps) => {
+          if (currentOps.length > 0) {
+            syncPendingOperations();
+          }
+          return currentOps; // Return unchanged
+        });
       }, 2000);
+
+      return () => clearTimeout(syncTimeout);
     }
-  }, [isOnline, pendingOperations.length, syncPendingOperations]);
+  }, [isOnline]); // FIXED: Removed syncPendingOperations from dependencies
 
   return {
     // Status

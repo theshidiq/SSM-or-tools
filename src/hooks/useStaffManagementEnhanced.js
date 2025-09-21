@@ -8,12 +8,13 @@ import {
   useConflictResolver,
   RESOLUTION_STRATEGIES,
 } from "../utils/conflictResolver";
-import { useStaffManagementRealtime } from "./useStaffManagementRealtime";
+import { useStaffRealtime } from "./useStaffRealtime";
 import { useAdvancedCache } from "./useAdvancedCache";
 import { useOfflineSupport, OPERATION_TYPES } from "./useOfflineSupport";
 
 export const useStaffManagementEnhanced = (currentMonthIndex, options = {}) => {
   const {
+    enabled = true, // Add enabled option to completely disable the hook
     enableAdvancedCache = true,
     enableOfflineSupport = true,
     enableConflictResolution = true,
@@ -25,7 +26,7 @@ export const useStaffManagementEnhanced = (currentMonthIndex, options = {}) => {
   } = options;
 
   // Phase 3: Supabase-first real-time staff management
-  const realtimeHook = useStaffManagementRealtime(currentMonthIndex);
+  const realtimeHook = useStaffRealtime(currentMonthIndex);
 
   // Phase 2: Advanced features
   const cacheHook = useAdvancedCache({
@@ -35,7 +36,7 @@ export const useStaffManagementEnhanced = (currentMonthIndex, options = {}) => {
   });
 
   const offlineHook = useOfflineSupport({
-    enableOfflineMode: enableOfflineSupport,
+    enableOfflineMode: enabled && enableOfflineSupport, // Only enable offline support when hook is enabled
     ...offlineOptions,
     onSyncSuccess: (synced, failed) => {
       console.log(
@@ -350,16 +351,19 @@ export const useStaffManagementEnhanced = (currentMonthIndex, options = {}) => {
     enableOfflineSupport,
   ]);
 
-  // Enhanced connection status
+  // Enhanced connection status - prioritize actual Supabase connectivity
   const connectionStatus = useMemo(() => {
-    if (!realtimeHook.isConnected) return "disconnected";
     if (realtimeHook.isSaving) return "saving";
     if (realtimeHook.isLoading) return "loading";
-    if (enableOfflineSupport && !offlineHook.isOnline) return "offline_mode";
     if (enableOfflineSupport && offlineHook.isSyncing) return "syncing";
     if (enableConflictResolution && conflictHook.activeConflicts.length > 0)
       return "conflicts";
-    return "connected";
+    // Only consider offline if both Supabase is disconnected AND browser is offline
+    if (!realtimeHook.isConnected && enableOfflineSupport && !offlineHook.isOnline)
+      return "offline_mode";
+    // If Supabase is connected, we're considered online regardless of navigator.onLine
+    if (realtimeHook.isConnected) return "connected";
+    return "disconnected";
   }, [
     realtimeHook.isConnected,
     realtimeHook.isSaving,

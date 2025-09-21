@@ -17,7 +17,8 @@ const MESSAGE_TYPES = {
   ERROR: 'ERROR'
 };
 
-export const useWebSocketStaff = (currentMonthIndex) => {
+export const useWebSocketStaff = (currentMonthIndex, options = {}) => {
+  const { enabled = true } = options;
   const [staffMembers, setStaffMembers] = useState([]);
   const [connectionStatus, setConnectionStatus] = useState('connecting');
   const [isLoading, setIsLoading] = useState(true);
@@ -25,8 +26,11 @@ export const useWebSocketStaff = (currentMonthIndex) => {
   const wsRef = useRef(null);
   const clientIdRef = useRef(crypto.randomUUID());
   const reconnectAttempts = useRef(0);
-  const maxReconnectAttempts = 5;
+  const maxReconnectAttempts = 3; // Reduced from 5 to 3
   const reconnectTimeoutRef = useRef(null);
+  const connectionFailedPermanently = useRef(false);
+  const initialConnectionTimer = useRef(null);
+  const connectionStartTime = useRef(Date.now());
 
   // Message handlers
   const handleStaffUpdate = useCallback((payload) => {
@@ -51,20 +55,78 @@ export const useWebSocketStaff = (currentMonthIndex) => {
 
   // WebSocket connection management
   const connect = useCallback(() => {
+    // Don't attempt connection if disabled via options
+    if (!enabled) {
+      console.log('🚫 Phase 3: WebSocket disabled via options, skipping connection attempt');
+      setConnectionStatus('disabled');
+      setIsLoading(false);
+      setLastError('WebSocket disabled via feature flag');
+      return;
+    }
+
+    // Don't attempt connection if permanently failed
+    if (connectionFailedPermanently.current) {
+      console.log('🚫 Phase 3: WebSocket permanently disabled, skipping connection attempt');
+      setConnectionStatus('failed_permanently');
+      setIsLoading(false);
+      return;
+    }
+
     if (wsRef.current?.readyState === WebSocket.OPEN) {
       return;
     }
 
+    // Close any existing connection before creating new one
+    if (wsRef.current && wsRef.current.readyState !== WebSocket.CLOSED) {
+      wsRef.current.close();
+      wsRef.current = null;
+    }
+
+    // Set absolute timeout for initial connection (10 seconds)
+    if (!initialConnectionTimer.current) {
+      initialConnectionTimer.current = setTimeout(() => {
+        console.log('⏰ Phase 3: WebSocket connection timeout reached, permanently disabling');
+        connectionFailedPermanently.current = true;
+        setConnectionStatus('failed_permanently');
+        setLastError('Connection timeout - falling back to database mode');
+        setIsLoading(false);
+
+        if (wsRef.current) {
+          wsRef.current.close();
+        }
+        if (reconnectTimeoutRef.current) {
+          clearTimeout(reconnectTimeoutRef.current);
+        }
+      }, 10000); // 10 second timeout
+    }
+
     try {
       const wsUrl = `ws://localhost:8080/staff-sync?period=${currentMonthIndex}`;
+      console.log(`🔌 Phase 3: Creating WebSocket connection to ${wsUrl}`);
+
       const ws = new WebSocket(wsUrl);
       wsRef.current = ws;
 
+      // Set connection timeout per attempt (3 seconds)
+      const connectionTimer = setTimeout(() => {
+        if (ws.readyState === WebSocket.CONNECTING) {
+          console.log('⏰ Phase 3: Connection attempt timeout, closing socket');
+          ws.close();
+        }
+      }, 3000);
+
       ws.onopen = () => {
         console.log('🔌 Phase 3: WebSocket connected to Go server');
+        clearTimeout(connectionTimer);
         setConnectionStatus('connected');
         setLastError(null);
         reconnectAttempts.current = 0;
+
+        // Clear the initial connection timeout since we connected successfully
+        if (initialConnectionTimer.current) {
+          clearTimeout(initialConnectionTimer.current);
+          initialConnectionTimer.current = null;
+        }
 
         // Request initial state sync
         ws.send(JSON.stringify({
@@ -90,9 +152,11 @@ export const useWebSocketStaff = (currentMonthIndex) => {
               handleStaffDelete(message.payload);
               break;
             case MESSAGE_TYPES.SYNC_RESPONSE:
-              setStaffMembers(message.payload.staffMembers || []);
+              // Handle both 'staff' (from Go server) and 'staffMembers' (legacy) fields
+              const staffData = message.payload.staff || message.payload.staffMembers || [];
+              setStaffMembers(staffData);
               setIsLoading(false);
-              console.log(`📊 Phase 3: Synced ${message.payload.staffMembers?.length || 0} staff members`);
+              console.log(`📊 Phase 3: Synced ${staffData.length} staff members from ${message.payload.period ? `period ${message.payload.period}` : 'server'}`);
               break;
             case MESSAGE_TYPES.CONNECTION_ACK:
               console.log('✅ Phase 3: Connection acknowledged by Go server');
@@ -111,12 +175,37 @@ export const useWebSocketStaff = (currentMonthIndex) => {
       };
 
       ws.onclose = (event) => {
-        console.log('🔌 Phase 3: WebSocket disconnected:', event.code, event.reason);
+        console.log(`🔌 Phase 3: WebSocket disconnected: code=${event.code}, reason='${event.reason}', wasClean=${event.wasClean}`);
+        clearTimeout(connectionTimer);
         setConnectionStatus('disconnected');
 
-        // Implement exponential backoff reconnection
+        // Check if we should permanently disable reconnection
+        if (connectionFailedPermanently.current) {
+          console.log('🚫 Phase 3: WebSocket permanently disabled, no reconnection');
+          setConnectionStatus('failed_permanently');
+          setIsLoading(false);
+          return;
+        }
+
+        // Check if we've been trying for too long (total time > 15 seconds)
+        const totalTimeElapsed = Date.now() - connectionStartTime.current;
+        if (totalTimeElapsed > 15000) {
+          console.log('⏰ Phase 3: Total connection time exceeded, permanently disabling WebSocket');
+          connectionFailedPermanently.current = true;
+          setConnectionStatus('failed_permanently');
+          setLastError('Connection failed - switching to database mode');
+          setIsLoading(false);
+          return;
+        }
+
+        // Handle different close codes
+        if (event.code === 1006) {
+          console.log('⚠️ Phase 3: Abnormal closure (1006) - likely connection race condition');
+        }
+
+        // Implement exponential backoff reconnection with stricter limits
         if (reconnectAttempts.current < maxReconnectAttempts) {
-          const delay = Math.pow(2, reconnectAttempts.current) * 1000; // 1s, 2s, 4s, 8s, 16s
+          const delay = Math.pow(2, reconnectAttempts.current) * 1000; // 1s, 2s, 4s
           reconnectAttempts.current++;
 
           console.log(`🔄 Phase 3: Reconnecting in ${delay}ms (attempt ${reconnectAttempts.current}/${maxReconnectAttempts})`);
@@ -125,13 +214,17 @@ export const useWebSocketStaff = (currentMonthIndex) => {
             connect();
           }, delay);
         } else {
-          console.error('❌ Phase 3: Max reconnection attempts reached');
-          setLastError('Connection failed after multiple attempts');
+          console.error('❌ Phase 3: Max reconnection attempts reached, permanently disabling');
+          connectionFailedPermanently.current = true;
+          setConnectionStatus('failed_permanently');
+          setLastError('Connection failed after multiple attempts - switching to database mode');
+          setIsLoading(false);
         }
       };
 
       ws.onerror = (error) => {
         console.error('❌ Phase 3: WebSocket error:', error);
+        clearTimeout(connectionTimer);
         setLastError('WebSocket connection error');
       };
 
@@ -140,17 +233,23 @@ export const useWebSocketStaff = (currentMonthIndex) => {
       setConnectionStatus('disconnected');
       setLastError('Failed to establish WebSocket connection');
     }
-  }, [currentMonthIndex, handleStaffUpdate, handleStaffCreate, handleStaffDelete]);
+  }, [enabled, currentMonthIndex, handleStaffUpdate, handleStaffCreate, handleStaffDelete]);
 
-  // Initialize WebSocket connection
+  // Initialize WebSocket connection - debounced to prevent rapid re-connections
   useEffect(() => {
-    connect();
+    const timeoutId = setTimeout(() => {
+      connect();
+    }, 100); // Small delay to prevent rapid reconnections on currentMonthIndex changes
 
     return () => {
+      clearTimeout(timeoutId);
       if (reconnectTimeoutRef.current) {
         clearTimeout(reconnectTimeoutRef.current);
       }
-      if (wsRef.current) {
+      if (initialConnectionTimer.current) {
+        clearTimeout(initialConnectionTimer.current);
+      }
+      if (wsRef.current && wsRef.current.readyState !== WebSocket.CLOSED) {
         wsRef.current.close();
       }
     };
@@ -158,6 +257,12 @@ export const useWebSocketStaff = (currentMonthIndex) => {
 
   // Staff operation methods
   const updateStaff = useCallback((staffId, changes) => {
+    if (!enabled) {
+      const error = new Error('WebSocket disabled');
+      console.log('🚫 Phase 3: Staff update blocked - WebSocket disabled');
+      return Promise.reject(error);
+    }
+
     if (wsRef.current?.readyState === WebSocket.OPEN) {
       const message = {
         type: MESSAGE_TYPES.STAFF_UPDATE,
@@ -175,9 +280,15 @@ export const useWebSocketStaff = (currentMonthIndex) => {
       console.error('❌ Phase 3: Failed to update staff - not connected');
       return Promise.reject(error);
     }
-  }, []);
+  }, [enabled]);
 
   const addStaff = useCallback((staffData) => {
+    if (!enabled) {
+      const error = new Error('WebSocket disabled');
+      console.log('🚫 Phase 3: Staff create blocked - WebSocket disabled');
+      return Promise.reject(error);
+    }
+
     if (wsRef.current?.readyState === WebSocket.OPEN) {
       const message = {
         type: MESSAGE_TYPES.STAFF_CREATE,
@@ -198,9 +309,15 @@ export const useWebSocketStaff = (currentMonthIndex) => {
       console.error('❌ Phase 3: Failed to create staff - not connected');
       return Promise.reject(error);
     }
-  }, [currentMonthIndex]);
+  }, [enabled, currentMonthIndex]);
 
   const deleteStaff = useCallback((staffId) => {
+    if (!enabled) {
+      const error = new Error('WebSocket disabled');
+      console.log('🚫 Phase 3: Staff delete blocked - WebSocket disabled');
+      return Promise.reject(error);
+    }
+
     if (wsRef.current?.readyState === WebSocket.OPEN) {
       const message = {
         type: MESSAGE_TYPES.STAFF_DELETE,
@@ -218,17 +335,22 @@ export const useWebSocketStaff = (currentMonthIndex) => {
       console.error('❌ Phase 3: Failed to delete staff - not connected');
       return Promise.reject(error);
     }
-  }, []);
+  }, [enabled]);
 
   // Manual reconnection
   const reconnect = useCallback(() => {
+    if (!enabled) {
+      console.log('🚫 Phase 3: Reconnection blocked - WebSocket disabled');
+      return;
+    }
+
     if (wsRef.current) {
       wsRef.current.close();
     }
     reconnectAttempts.current = 0;
     setConnectionStatus('connecting');
     connect();
-  }, [connect]);
+  }, [enabled, connect]);
 
   return {
     // Core data
@@ -244,6 +366,7 @@ export const useWebSocketStaff = (currentMonthIndex) => {
     isLoading,
     isConnected: connectionStatus === 'connected',
     lastError,
+    connectionFailedPermanently: connectionFailedPermanently.current,
 
     // Manual controls
     reconnect,
