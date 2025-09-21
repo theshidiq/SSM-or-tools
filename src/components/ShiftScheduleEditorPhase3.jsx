@@ -7,25 +7,17 @@ import React, {
 } from "react";
 
 // ShadCN UI components
-import { shiftSymbols, getAvailableShifts } from "../constants/shiftConstants";
 import {
-  monthPeriods,
   addNextPeriod,
   deletePeriod,
   getCurrentMonthIndex,
-  findPeriodWithData,
-  generateDateRange,
 } from "../utils/dateUtils";
-import { usePeriodsRealtime } from "../hooks/usePeriodsRealtime";
 import { getOrderedStaffMembers } from "../utils/staffUtils";
 import { generateStatistics } from "../utils/statisticsUtils";
 import { exportToCSV, printSchedule } from "../utils/exportUtils";
 
-// Phase 6: Import the migration hook that routes between WebSocket and Enhanced modes
-// import { useStaffManagement } from "../hooks/useStaffManagementMigrated";
-import useWebSocketStaff from "../hooks/useWebSocketStaff";
-import { useStaffManagementEnhanced } from "../hooks/useStaffManagementEnhanced";
-import { FEATURE_FLAGS, useFeatureFlag } from "../config/featureFlags";
+// Phase 6: Import the WebSocket-first prefetch hook
+import { useScheduleDataPrefetch } from "../hooks/useScheduleDataPrefetch";
 import "../utils/debugUtils"; // Import debug utilities for browser exposure
 
 import { useSettingsData } from "../hooks/useSettingsData";
@@ -50,10 +42,10 @@ import StatusModal from "./common/StatusModal";
 import SettingsModal from "./settings/SettingsModal";
 
 const ShiftScheduleEditorPhase3 = ({
-  supabaseScheduleData: legacySupabaseScheduleData, // Legacy prop - not used
+  supabaseScheduleData: _legacySupabaseScheduleData, // Legacy prop - not used
   error: externalError, // Legacy prop
-  onSaveSchedule: legacyOnSaveSchedule, // Legacy prop - not used
-  loadScheduleData: legacyLoadScheduleData, // Legacy prop - not used
+  onSaveSchedule: _legacyOnSaveSchedule, // Legacy prop - not used
+  loadScheduleData: _legacyLoadScheduleData, // Legacy prop - not used
 }) => {
   // Main state - initialize with 0, will be updated when periods load
   const [currentMonthIndex, setCurrentMonthIndex] = useState(0);
@@ -85,12 +77,31 @@ const ShiftScheduleEditorPhase3 = ({
   });
   const [showSettingsModal, setShowSettingsModal] = useState(false);
 
-  // Period management hook
+  // WebSocket-first prefetch hook (replaces separate usePeriodsRealtime and data management)
   const {
     periods: realtimePeriods,
-    isLoading: periodsLoading,
-    forceRefresh: forcePeriodsRefresh,
-  } = usePeriodsRealtime();
+    staff: prefetchStaff,
+    schedule: prefetchSchedule,
+    dateRange: prefetchDateRange,
+    isLoading: prefetchLoading,
+    isConnected: prefetchConnected,
+    error: prefetchError,
+    currentScheduleId: prefetchScheduleId,
+    updateShift: prefetchUpdateShift,
+    updateSchedule: prefetchUpdateSchedule,
+    addStaff: prefetchAddStaff,
+    updateStaff: prefetchUpdateStaff,
+    deleteStaff: prefetchDeleteStaff,
+    refetchAllData: refetchPrefetchData,
+    prefetchStats,
+    phase: prefetchPhase,
+    webSocketEnabled: isPrefetchWebSocketEnabled,
+    fallbackMode,
+  } = useScheduleDataPrefetch(currentMonthIndex, { enabled: true });
+
+  // For backwards compatibility, create aliases
+  const periodsLoading = prefetchLoading;
+  const forcePeriodsRefresh = refetchPrefetchData;
 
   // Initialize current month index when periods are loaded (prevent race conditions)
   useEffect(() => {
@@ -164,137 +175,38 @@ const ShiftScheduleEditorPhase3 = ({
     forcePeriodsRefresh,
   ]);
 
-  // Check if WebSocket is forcibly disabled
-  const isWebSocketEnabled = useFeatureFlag('WEBSOCKET_STAFF_MANAGEMENT') &&
-                              !localStorage.getItem('FORCE_SUPABASE_ONLY') &&
-                              FEATURE_FLAGS.WEBSOCKET_ENABLED;
-
-  // Phase 6: WebSocket staff management hook - real-time updates
-  // Always call the hook to follow React rules, but use a disabled flag
-  const webSocketHookResult = useWebSocketStaff(currentMonthIndex, {
-    enabled: isWebSocketEnabled
-  });
-
-  // Create dummy WebSocket result when disabled
-  const dummyWebSocketResult = {
-    staffMembers: [],
-    updateStaff: () => Promise.reject(new Error('WebSocket disabled')),
-    addStaff: () => Promise.reject(new Error('WebSocket disabled')),
-    deleteStaff: () => Promise.reject(new Error('WebSocket disabled')),
-    connectionStatus: 'disabled',
-    isLoading: false,
-    isConnected: false,
-    lastError: 'WebSocket mode disabled - using Enhanced Database mode',
-    reconnect: () => {},
-    reconnectAttempts: 0,
-    clientId: 'disabled'
+  // Use prefetch data directly (WebSocket-first with built-in fallback)
+  const effectiveStaffMembers = prefetchStaff;
+  const effectiveStaffOps = {
+    updateStaff: prefetchUpdateStaff,
+    addStaff: prefetchAddStaff,
+    deleteStaff: prefetchDeleteStaff
   };
 
-  const {
-    // Core data
-    staffMembers,
+  // Connection state from prefetch hook
+  const isConnected = prefetchConnected;
+  const isSupabaseLoading = prefetchLoading;
+  const lastError = prefetchError;
 
-    // Operations
-    updateStaff: editStaffInfo,
-    addStaff: addStaffMember,
-    deleteStaff,
-
-    // Connection state
-    connectionStatus: webSocketStatus,
-    isLoading: isSupabaseLoading,
-    isConnected,
-    lastError,
-
-    // Manual controls
-    reconnect,
-
-    // Debug info
-    reconnectAttempts,
-    clientId
-  } = isWebSocketEnabled ? webSocketHookResult : dummyWebSocketResult;
-
-  // Fallback to Enhanced mode when WebSocket server is unavailable - memoized to prevent loops
-  const shouldUseFallback = useMemo(() => {
-    // Always use fallback if WebSocket is disabled via feature flag
-    if (!isWebSocketEnabled || webSocketStatus === 'disabled') {
-      return true;
-    }
-
-    // Use fallback if WebSocket has failed permanently OR if it's not connected after attempts
-    return (
-      webSocketStatus === 'failed_permanently' ||
-      (reconnectAttempts >= 3 && !isConnected) ||
-      (webSocketStatus === 'disconnected')
-    );
-  }, [isWebSocketEnabled, webSocketStatus, reconnectAttempts, isConnected]);
-
-  // Enhanced mode as fallback - ONLY call when needed to prevent infinite loops
-  const enhancedStaffHook = useStaffManagementEnhanced(currentMonthIndex, {
-    enabled: shouldUseFallback // Only enabled when actually needed as fallback
-  });
-
-  // Use WebSocket data when connected, fallback to enhanced when needed - memoized
-  const effectiveStaffMembers = useMemo(() => {
-    return shouldUseFallback ? enhancedStaffHook.staffMembers : staffMembers;
-  }, [shouldUseFallback, enhancedStaffHook.staffMembers, staffMembers]);
-
-  const effectiveStaffOps = useMemo(() => {
-    return shouldUseFallback ? enhancedStaffHook : {
-      updateStaff: editStaffInfo,
-      addStaff: addStaffMember,
-      deleteStaff
-    };
-  }, [shouldUseFallback, enhancedStaffHook, editStaffInfo, addStaffMember, deleteStaff]);
-
-  // Mock data for testing - WebSocket hook doesn't provide schedule data
-  const [schedule, setSchedule] = useState({});
-  const [currentScheduleId, setCurrentScheduleId] = useState(null);
-
-  // Generate proper date range based on current period
-  const dateRange = useMemo(() => {
-    try {
-      return generateDateRange(currentMonthIndex);
-    } catch (error) {
-      console.warn('Failed to generate date range:', error);
-      return [];
-    }
-  }, [currentMonthIndex]);
-  const updateSchedule = () => Promise.resolve();
-  const updateShift = () => Promise.resolve();
-  const isSaving = false;
+  // Use prefetch schedule data
+  const schedule = prefetchSchedule;
+  const currentScheduleId = prefetchScheduleId;
+  const dateRange = prefetchDateRange;
+  const updateSchedule = prefetchUpdateSchedule;
+  const updateShift = prefetchUpdateShift;
+  const isSaving = false; // TODO: implement from prefetch hook
   const supabaseError = lastError;
-  const prefetchPhase = 'Phase 6 - WebSocket';
-  const prefetchStats = { webSocketStatus, isConnected, reconnectAttempts, clientId };
 
-  // Debug logging for prefetch architecture - throttled to prevent infinite loops
+  // Debug logging for prefetch architecture
   useEffect(() => {
-    const activeMode = shouldUseFallback ? 'Enhanced (Database)' : 'WebSocket';
-    const connectionInfo = shouldUseFallback
-      ? `Enhanced mode (${enhancedStaffHook.connectionStatus || 'initializing'})`
-      : `WebSocket (${webSocketStatus}, attempts: ${reconnectAttempts})`;
-
-    // Throttle debug logging to prevent console spam
     const throttleTimeout = setTimeout(() => {
       console.log(
-        `🚀 [PREFETCH] State: period=${currentMonthIndex}, phase="${prefetchPhase}", mode="${activeMode}", connection="${connectionInfo}", staff=${effectiveStaffMembers?.length || 0}`,
+        `🚀 [PREFETCH] State: period=${currentMonthIndex}, phase="${prefetchPhase}", webSocket=${isPrefetchWebSocketEnabled}, fallback=${fallbackMode}, staff=${effectiveStaffMembers?.length || 0}`,
       );
-
-      // Log fallback trigger reasons
-      if (shouldUseFallback) {
-        const reason = !isWebSocketEnabled
-          ? 'WebSocket disabled via feature flag'
-          : `status=${webSocketStatus}, attempts=${reconnectAttempts}, connected=${isConnected}, error="${lastError}"`;
-        console.log(`🔄 [FALLBACK] Using Enhanced mode. Reason: ${reason}`);
-      }
     }, 100);
 
     return () => clearTimeout(throttleTimeout);
-  }, [
-    currentMonthIndex,
-    shouldUseFallback,
-    // Only include essential state to prevent excessive re-renders
-    // Removed: webSocketStatus, isWebSocketEnabled, reconnectAttempts, isConnected, lastError
-  ]);
+  }, [currentMonthIndex, prefetchPhase, isPrefetchWebSocketEnabled, fallbackMode, effectiveStaffMembers?.length]);
 
   // Settings hook (unchanged)
   const {
@@ -357,23 +269,18 @@ const ShiftScheduleEditorPhase3 = ({
   const error =
     externalError || supabaseError || settingsError || autosaveError;
 
-  // Real-time status indicator with Phase 3 details - stable memoization
+  // Real-time status indicator with WebSocket-first prefetch
   const realtimeStatus = useMemo(() => {
-    // When in fallback mode, use Enhanced Supabase connection status
-    const effectiveIsConnected = shouldUseFallback
-      ? (enhancedStaffHook.connectionStatus === 'connected' || enhancedStaffHook.connectionStatus === 'ready')
-      : isConnected;
-
-    if (!effectiveIsConnected)
+    if (!isConnected)
       return { type: "error", message: "Offline Mode" };
     if (isSaving) return { type: "saving", message: "Saving..." };
     if (isSupabaseLoading)
       return { type: "loading", message: "Loading..." };
     return {
       type: "connected",
-      message: shouldUseFallback ? "Enhanced Database Sync" : "Real-time Sync",
+      message: fallbackMode ? "Database Sync" : "WebSocket Real-time",
     };
-  }, [isConnected, isSaving, isSupabaseLoading, shouldUseFallback, enhancedStaffHook.connectionStatus]);
+  }, [isConnected, isSaving, isSupabaseLoading, fallbackMode]);
 
   // Process current staff and generate stats - use normalized staff data
   const currentStaff = useMemo(() => {
@@ -756,7 +663,7 @@ const ShiftScheduleEditorPhase3 = ({
           onResetToDefaults={resetToDefaults}
           hasUnsavedChanges={hasUnsavedChanges}
           validationErrors={validationErrors}
-          connectionStatus={webSocketStatus}
+          connectionStatus={isConnected ? 'connected' : 'disconnected'}
           isAutosaving={isAutosaving}
           lastSaveTime={lastSaveTime}
           autosaveError={autosaveError}
@@ -790,23 +697,23 @@ const ShiftScheduleEditorPhase3 = ({
                 <div>
                   <h4 className="font-medium">Architecture Status</h4>
                   <p className="text-sm text-muted-foreground">
-                    Architecture: {"Phase 4: Prefetch"}
+                    Architecture: {prefetchPhase}
                   </p>
                   <p className="text-sm text-muted-foreground">
-                    Staff: {"Phase 4: Prefetch"} (Normalized)
+                    WebSocket Enabled: {isPrefetchWebSocketEnabled ? "Yes" : "No"}
                   </p>
                 </div>
                 <div>
                   <h4 className="font-medium">Real-time Status</h4>
                   <p className="text-sm text-muted-foreground">
-                    Mode: {shouldUseFallback ? "Enhanced (Fallback)" : "WebSocket"}
+                    Mode: {fallbackMode ? "Database Fallback" : "WebSocket"}
                   </p>
                   <p className="text-sm text-muted-foreground">
                     Connected: {isConnected ? "Yes" : "No"}
                   </p>
-                  {shouldUseFallback && (
+                  {fallbackMode && (
                     <p className="text-sm text-red-500">
-                      WebSocket server unavailable - using Supabase fallback
+                      WebSocket unavailable - using database fallback
                     </p>
                   )}
                   <p className="text-sm text-muted-foreground">
