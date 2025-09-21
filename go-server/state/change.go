@@ -4,7 +4,7 @@ package state
 import (
 	"time"
 
-	"shift-schedule-manager/go-server/models"
+	"shift-schedule-go-server/models"
 )
 
 // ChangeLogger handles logging of state changes

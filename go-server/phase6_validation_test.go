@@ -13,8 +13,8 @@ import (
 	"testing"
 	"time"
 
-	"shift-schedule-manager/go-server/conflict"
-	"shift-schedule-manager/go-server/models"
+	"shift-schedule-go-server/conflict"
+	"shift-schedule-go-server/models"
 )
 
 // Phase6ValidationSuite runs comprehensive Phase 6 success criteria tests

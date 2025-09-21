@@ -60,14 +60,18 @@ type Message struct {
 
 // Staff member structure
 type StaffMember struct {
-	ID         string    `json:"id"`
-	Name       string    `json:"name"`
-	Position   string    `json:"position"`
-	Department string    `json:"department"`
-	Type       string    `json:"type"`
-	Period     int       `json:"period"`
-	CreatedAt  time.Time `json:"created_at"`
-	UpdatedAt  time.Time `json:"updated_at"`
+	ID          string      `json:"id"`
+	Name        string      `json:"name"`
+	Position    string      `json:"position"`
+	Department  string      `json:"department"`
+	Type        string      `json:"type"`
+	Status      string      `json:"status"`
+	Period      int         `json:"period"`
+	StaffOrder  int         `json:"staff_order"`
+	StartPeriod interface{} `json:"start_period"`
+	EndPeriod   interface{} `json:"end_period"`
+	CreatedAt   time.Time   `json:"created_at"`
+	UpdatedAt   time.Time   `json:"updated_at"`
 }
 
 // Supabase response structure
@@ -288,8 +292,18 @@ func (s *StaffSyncServer) broadcastToOthers(sender *Client, msg *Message) {
 }
 
 func (s *StaffSyncServer) fetchStaffFromSupabase(period int) ([]StaffMember, error) {
-	// Build Supabase REST API URL - fetch all staff since period filtering isn't in database schema
-	url := fmt.Sprintf("%s/rest/v1/staff", s.supabaseURL)
+	// First, get the period dates from the periods table
+	periodDates, err := s.fetchPeriodDates(period)
+	if err != nil {
+		log.Printf("Warning: Could not fetch period dates for period %d: %v", period, err)
+		// Fallback to fetching all staff if period lookup fails
+		return s.fetchAllStaff()
+	}
+
+	log.Printf("Fetching staff for period %d (%s to %s)", period, periodDates.StartDate, periodDates.EndDate)
+
+	// Build Supabase REST API URL - fetch all active staff
+	url := fmt.Sprintf("%s/rest/v1/staff?is_active=eq.true&select=id,name,position,department,type,status,start_period,end_period,staff_order,created_at,updated_at", s.supabaseURL)
 
 	// Create HTTP request
 	req, err := http.NewRequest("GET", url, nil)
@@ -316,7 +330,7 @@ func (s *StaffSyncServer) fetchStaffFromSupabase(period int) ([]StaffMember, err
 		return nil, fmt.Errorf("failed to read response: %w", err)
 	}
 
-	log.Printf("Supabase response (status %d): %s", resp.StatusCode, string(body))
+	log.Printf("Supabase staff response (status %d)", resp.StatusCode)
 
 	// Handle non-200 responses
 	if resp.StatusCode != http.StatusOK {
@@ -324,6 +338,192 @@ func (s *StaffSyncServer) fetchStaffFromSupabase(period int) ([]StaffMember, err
 	}
 
 	// Parse response
+	var allStaff []StaffMember
+	if err := json.Unmarshal(body, &allStaff); err != nil {
+		return nil, fmt.Errorf("failed to parse Supabase response: %w", err)
+	}
+
+	// Filter staff members who are active during this period
+	var filteredStaff []StaffMember
+	for _, staff := range allStaff {
+		if s.isStaffActiveInPeriod(staff, periodDates) {
+			// Set the period field for the response
+			staff.Period = period
+			filteredStaff = append(filteredStaff, staff)
+		}
+	}
+
+	log.Printf("Filtered %d active staff members for period %d from %d total staff",
+		len(filteredStaff), period, len(allStaff))
+
+	return filteredStaff, nil
+}
+
+// PeriodDates represents the start and end dates of a period
+type PeriodDates struct {
+	StartDate string
+	EndDate   string
+}
+
+// fetchPeriodDates gets the start and end dates for a given period index
+func (s *StaffSyncServer) fetchPeriodDates(period int) (*PeriodDates, error) {
+	// Build URL to fetch periods ordered by start_date
+	url := fmt.Sprintf("%s/rest/v1/periods?select=start_date,end_date&order=start_date.asc", s.supabaseURL)
+
+	// Create HTTP request
+	req, err := http.NewRequest("GET", url, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %w", err)
+	}
+
+	// Set Supabase headers
+	req.Header.Set("Authorization", "Bearer "+s.supabaseKey)
+	req.Header.Set("apikey", s.supabaseKey)
+	req.Header.Set("Content-Type", "application/json")
+
+	// Make request
+	client := &http.Client{Timeout: 10 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch periods: %w", err)
+	}
+	defer resp.Body.Close()
+
+	// Read response
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read periods response: %w", err)
+	}
+
+	// Handle non-200 responses
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("periods request failed with status %d: %s", resp.StatusCode, string(body))
+	}
+
+	// Parse response
+	var periods []struct {
+		StartDate string `json:"start_date"`
+		EndDate   string `json:"end_date"`
+	}
+	if err := json.Unmarshal(body, &periods); err != nil {
+		return nil, fmt.Errorf("failed to parse periods response: %w", err)
+	}
+
+	// Check if period index is valid
+	if period < 0 || period >= len(periods) {
+		return nil, fmt.Errorf("period index %d is out of range (0-%d)", period, len(periods)-1)
+	}
+
+	return &PeriodDates{
+		StartDate: periods[period].StartDate,
+		EndDate:   periods[period].EndDate,
+	}, nil
+}
+
+// isStaffActiveInPeriod checks if a staff member is active during the given period
+func (s *StaffSyncServer) isStaffActiveInPeriod(staff StaffMember, periodDates *PeriodDates) bool {
+	// Parse period dates
+	periodStart, err := time.Parse("2006-01-02", periodDates.StartDate)
+	if err != nil {
+		log.Printf("Error parsing period start date %s: %v", periodDates.StartDate, err)
+		return true // Default to including staff if date parsing fails
+	}
+
+	periodEnd, err := time.Parse("2006-01-02", periodDates.EndDate)
+	if err != nil {
+		log.Printf("Error parsing period end date %s: %v", periodDates.EndDate, err)
+		return true // Default to including staff if date parsing fails
+	}
+
+	// If staff has no start_period, they're always active
+	if staff.StartPeriod == nil {
+		// Check end_period if it exists
+		if staff.EndPeriod != nil {
+			staffEndDate := s.periodJSONToDate(staff.EndPeriod)
+			if staffEndDate != nil && staffEndDate.Before(periodStart) {
+				return false // Staff ended before this period
+			}
+		}
+		return true
+	}
+
+	// Parse staff start period
+	staffStartDate := s.periodJSONToDate(staff.StartPeriod)
+	if staffStartDate == nil {
+		return true // Default to including if start date parsing fails
+	}
+
+	// Staff starts after this period ends
+	if staffStartDate.After(periodEnd) {
+		return false
+	}
+
+	// Check staff end period if it exists
+	if staff.EndPeriod != nil {
+		staffEndDate := s.periodJSONToDate(staff.EndPeriod)
+		if staffEndDate != nil && staffEndDate.Before(periodStart) {
+			return false // Staff ended before this period starts
+		}
+	}
+
+	return true // Staff is active during this period
+}
+
+// periodJSONToDate converts a JSONB period to a time.Time
+func (s *StaffSyncServer) periodJSONToDate(periodJSON interface{}) *time.Time {
+	periodMap, ok := periodJSON.(map[string]interface{})
+	if !ok {
+		return nil
+	}
+
+	year, ok := periodMap["year"].(float64)
+	if !ok {
+		return nil
+	}
+
+	month, ok := periodMap["month"].(float64)
+	if !ok {
+		return nil
+	}
+
+	day := float64(1) // Default to first day of month
+	if d, exists := periodMap["day"].(float64); exists {
+		day = d
+	}
+
+	date := time.Date(int(year), time.Month(month), int(day), 0, 0, 0, 0, time.UTC)
+	return &date
+}
+
+// fetchAllStaff fetches all staff without period filtering (fallback)
+func (s *StaffSyncServer) fetchAllStaff() ([]StaffMember, error) {
+	url := fmt.Sprintf("%s/rest/v1/staff?is_active=eq.true&select=*", s.supabaseURL)
+
+	req, err := http.NewRequest("GET", url, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %w", err)
+	}
+
+	req.Header.Set("Authorization", "Bearer "+s.supabaseKey)
+	req.Header.Set("apikey", s.supabaseKey)
+	req.Header.Set("Content-Type", "application/json")
+
+	client := &http.Client{Timeout: 10 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch from Supabase: %w", err)
+	}
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read response: %w", err)
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("Supabase request failed with status %d: %s", resp.StatusCode, string(body))
+	}
+
 	var staffMembers []StaffMember
 	if err := json.Unmarshal(body, &staffMembers); err != nil {
 		return nil, fmt.Errorf("failed to parse Supabase response: %w", err)

@@ -5,8 +5,8 @@ import (
 	"testing"
 	"time"
 
-	"shift-schedule-manager/go-server/models"
-	"shift-schedule-manager/go-server/state"
+	"shift-schedule-go-server/models"
+	"shift-schedule-go-server/state"
 )
 
 func TestStateManager_CreateAndGetStaff(t *testing.T) {

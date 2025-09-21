@@ -5,8 +5,8 @@ import (
 	"testing"
 	"time"
 
-	"shift-schedule-manager/go-server/conflict"
-	"shift-schedule-manager/go-server/models"
+	"shift-schedule-go-server/conflict"
+	"shift-schedule-go-server/models"
 )
 
 func TestConflictResolver_LastWriterWins(t *testing.T) {

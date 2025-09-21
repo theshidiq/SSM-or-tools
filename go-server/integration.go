@@ -9,11 +9,11 @@ import (
 	"time"
 
 	"github.com/gorilla/websocket"
-	"shift-schedule-manager/go-server/client"
-	"shift-schedule-manager/go-server/conflict"
-	"shift-schedule-manager/go-server/models"
-	"shift-schedule-manager/go-server/state"
-	"shift-schedule-manager/go-server/supabase"
+	"shift-schedule-go-server/client"
+	"shift-schedule-go-server/conflict"
+	"shift-schedule-go-server/models"
+	"shift-schedule-go-server/state"
+	"shift-schedule-go-server/supabase"
 )
 
 // Phase2System integrates all Phase 2 components

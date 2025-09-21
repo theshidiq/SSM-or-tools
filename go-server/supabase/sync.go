@@ -6,7 +6,7 @@ import (
 	"log"
 	"time"
 
-	"shift-schedule-manager/go-server/models"
+	"shift-schedule-go-server/models"
 )
 
 // SyncManager handles data synchronization between local state and Supabase

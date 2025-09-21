@@ -6,7 +6,7 @@ import (
 	"time"
 
 	"github.com/gorilla/websocket"
-	"shift-schedule-manager/go-server/models"
+	"shift-schedule-go-server/models"
 )
 
 // StateChange represents a change in the system state

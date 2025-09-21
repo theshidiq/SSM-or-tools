@@ -8,8 +8,8 @@ import (
 	"sync"
 	"time"
 
-	"shift-schedule-manager/go-server/models"
-	"shift-schedule-manager/go-server/supabase"
+	"shift-schedule-go-server/models"
+	"shift-schedule-go-server/supabase"
 )
 
 var (

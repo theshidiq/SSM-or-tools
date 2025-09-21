@@ -8,8 +8,8 @@ import (
 	"strings"
 	"time"
 
-	"shift-schedule-manager/go-server/conflict"
-	"shift-schedule-manager/go-server/models"
+	"shift-schedule-go-server/conflict"
+	"shift-schedule-go-server/models"
 )
 
 // Phase6ValidationResults stores comprehensive validation results

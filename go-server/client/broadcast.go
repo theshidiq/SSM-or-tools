@@ -2,11 +2,10 @@
 package client
 
 import (
-	"encoding/json"
 	"log"
 	"time"
 
-	"shift-schedule-manager/go-server/state"
+	"shift-schedule-go-server/state"
 )
 
 // BroadcastEvent broadcasts an event to all subscribed clients

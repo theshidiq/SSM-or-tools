@@ -6,8 +6,8 @@ import (
 	"testing"
 	"time"
 
-	"shift-schedule-manager/go-server/conflict"
-	"shift-schedule-manager/go-server/models"
+	"shift-schedule-go-server/conflict"
+	"shift-schedule-go-server/models"
 )
 
 // TestStaffUpdateConflictResolution - Exact implementation from official plan lines 795-806

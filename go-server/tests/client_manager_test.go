@@ -6,8 +6,8 @@ import (
 	"time"
 
 	"github.com/gorilla/websocket"
-	"shift-schedule-manager/go-server/client"
-	"shift-schedule-manager/go-server/state"
+	"shift-schedule-go-server/client"
+	"shift-schedule-go-server/state"
 )
 
 // MockWebSocketConn is a mock WebSocket connection for testing

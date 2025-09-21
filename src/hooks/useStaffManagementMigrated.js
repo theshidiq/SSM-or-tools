@@ -4,6 +4,8 @@
  * Enables safe rollout of WebSocket-based staff management
  */
 
+/* eslint-disable react-hooks/rules-of-hooks */
+
 import { useFeatureFlag } from '../config/featureFlags';
 import useWebSocketStaff from './useWebSocketStaff';
 import { useStaffManagementEnhanced } from './useStaffManagementEnhanced';
@@ -16,22 +18,26 @@ export const useStaffManagement = (currentMonthIndex, options = {}) => {
   const enableWebSocketMode = useFeatureFlag('WEBSOCKET_STAFF_MANAGEMENT');
   const enhancedLogging = useFeatureFlag('ENHANCED_LOGGING');
 
+  // Call both hooks but only return the active one
+  const webSocketResult = useWebSocketStaff(currentMonthIndex);
+  const enhancedResult = useStaffManagementEnhanced(currentMonthIndex, options);
+
   if (enhancedLogging) {
-    console.log(`🔧 Phase 3: Staff Management Mode - ${enableWebSocketMode ? 'WebSocket' : 'Enhanced'}`);
+    console.log(`🔧 Phase 6: Staff Management Mode - ${enableWebSocketMode ? 'WebSocket' : 'Enhanced'}`);
   }
 
   if (enableWebSocketMode) {
     // Phase 3: New simplified WebSocket approach
     if (enhancedLogging) {
-      console.log('🚀 Phase 3: Using WebSocket Staff Management');
+      console.log('🚀 Phase 6: Using WebSocket Staff Management');
     }
-    return useWebSocketStaff(currentMonthIndex);
+    return webSocketResult;
   } else {
     // Phase 2: Existing complex enhanced approach
     if (enhancedLogging) {
-      console.log('🔄 Phase 3: Using Enhanced Staff Management (fallback)');
+      console.log('🔄 Phase 6: Using Enhanced Staff Management (fallback)');
     }
-    return useStaffManagementEnhanced(currentMonthIndex, options);
+    return enhancedResult;
   }
 };
 
@@ -39,12 +45,15 @@ export const useStaffManagement = (currentMonthIndex, options = {}) => {
  * Migration utilities for debugging and system health
  */
 export const getMigrationStatus = () => {
-  const webSocketEnabled = useFeatureFlag('WEBSOCKET_STAFF_MANAGEMENT');
+  // Check feature flags directly from environment/localStorage instead of using hooks
+  const webSocketEnabled =
+    localStorage.getItem('WEBSOCKET_STAFF_MANAGEMENT') === 'true' ||
+    process.env.REACT_APP_WEBSOCKET_STAFF_MANAGEMENT === 'true';
 
   return {
     mode: webSocketEnabled ? 'websocket' : 'enhanced',
     webSocketEnabled,
-    phase: webSocketEnabled ? 'Phase 3' : 'Phase 2',
+    phase: webSocketEnabled ? 'Phase 6' : 'Phase 2',
     features: {
       realTimeSync: webSocketEnabled,
       complexStateManagement: !webSocketEnabled,

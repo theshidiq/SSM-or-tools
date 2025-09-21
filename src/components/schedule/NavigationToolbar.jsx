@@ -350,7 +350,7 @@ const NavigationToolbar = ({
                         monthPeriods[currentMonthIndex]
                           ? monthPeriods[currentMonthIndex].label
                           : periodsLoading
-                            ? "Loading..."
+                            ? "——————"
                             : "No Periods"}
                       </span>
                     </Button>

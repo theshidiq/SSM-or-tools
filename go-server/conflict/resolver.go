@@ -2,7 +2,7 @@
 package conflict
 
 import (
-	"shift-schedule-manager/go-server/models"
+	"shift-schedule-go-server/models"
 )
 
 // ConflictResolver - Exact implementation from official plan lines 205-207

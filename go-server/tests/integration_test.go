@@ -5,10 +5,10 @@ import (
 	"testing"
 	"time"
 
-	"shift-schedule-manager/go-server/client"
-	"shift-schedule-manager/go-server/conflict"
-	"shift-schedule-manager/go-server/models"
-	"shift-schedule-manager/go-server/state"
+	"shift-schedule-go-server/client"
+	"shift-schedule-go-server/conflict"
+	"shift-schedule-go-server/models"
+	"shift-schedule-go-server/state"
 )
 
 func TestIntegration_StateManagerWithConflictResolution(t *testing.T) {

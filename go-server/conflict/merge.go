@@ -4,7 +4,7 @@ package conflict
 import (
 	"time"
 
-	"shift-schedule-manager/go-server/models"
+	"shift-schedule-go-server/models"
 )
 
 // MergeResult contains the result of a merge operation

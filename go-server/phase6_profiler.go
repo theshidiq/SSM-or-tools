@@ -10,7 +10,7 @@ import (
 	"sync"
 	"time"
 
-	"shift-schedule-manager/go-server/models"
+	"shift-schedule-go-server/models"
 )
 
 // Phase6Profiler - Comprehensive performance monitoring and optimization

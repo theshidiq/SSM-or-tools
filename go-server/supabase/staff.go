@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"log"
 
-	"shift-schedule-manager/go-server/models"
+	"shift-schedule-go-server/models"
 )
 
 // StaffRepository handles staff member operations with Supabase

@@ -6,7 +6,7 @@ import (
 	"sync"
 	"time"
 
-	"shift-schedule-manager/go-server/state"
+	"shift-schedule-go-server/state"
 )
 
 // SubscriptionManager manages client subscriptions to different event types

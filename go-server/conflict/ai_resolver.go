@@ -8,9 +8,17 @@ import (
 	"fmt"
 	"log"
 	"math"
-	"shift-schedule-manager/go-server/models"
+	"shift-schedule-go-server/models"
 	"time"
 )
+
+// Conflict represents a comprehensive conflict between two data states
+type Conflict struct {
+	Local    *models.StaffMember `json:"local"`
+	Remote   *models.StaffMember `json:"remote"`
+	Details  []ConflictDetail    `json:"details"`
+	ClientID string              `json:"client_id"`
+}
 
 var (
 	ErrLowConfidence = errors.New("prediction confidence below threshold")

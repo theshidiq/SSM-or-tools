@@ -7,7 +7,7 @@ import (
 	"sync"
 	"time"
 
-	"shift-schedule-manager/go-server/models"
+	"shift-schedule-go-server/models"
 )
 
 // PersistenceLayer handles all data persistence operations
