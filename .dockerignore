@@ -43,7 +43,7 @@ Thumbs.db
 coverage/
 .nyc_output/
 test-results/
-playwright-report/
+# Chrome MCP testing via Claude Code (no local files)
 test-results.xml
 
 # Logs
@@ -76,7 +76,7 @@ storybook-static/
 jest.config.*
 vitest.config.*
 cypress.json
-playwright.config.*
+chrome-mcp.config.js
 lighthouse-report.html
 
 # Deployment files
@@ -98,7 +98,7 @@ ai-test-*.json
 ai-test-summary-*.txt
 performance_monitoring.sql
 browser-console-monitor.js
-playwright-*.js
+# Chrome MCP testing handled through Claude Code
 
 # Database files
 *.sql

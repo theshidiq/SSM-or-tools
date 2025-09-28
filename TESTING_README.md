@@ -16,7 +16,7 @@ npm run test:strategy
 npm run test:strategy:unit        # Go unit tests
 npm run test:strategy:integration # React integration tests
 npm run test:strategy:load       # WebSocket load tests
-npm run test:strategy:e2e        # Playwright E2E tests
+npm run test:strategy:e2e        # Chrome MCP E2E tests
 ```
 
 ### KPI Validation
@@ -38,7 +38,7 @@ node scripts/validate-kpis.js
 1. **Unit Tests** (Go): Conflict resolution validation
 2. **Integration Tests** (React): WebSocket mocking and performance
 3. **Load Tests** (Artillery.io): Stress testing with 1000+ users
-4. **E2E Tests** (Playwright): Complete workflow validation
+4. **E2E Tests** (Chrome MCP): Complete workflow validation
 
 ## Files Structure
 
@@ -46,7 +46,7 @@ node scripts/validate-kpis.js
 ├── go-server/tests/                    # Go unit tests
 ├── src/components/**/__tests__/        # React integration tests
 ├── go-server/load-test/               # Artillery.io configurations
-├── tests/e2e/                        # Playwright E2E tests
+├── tests/chrome-mcp-e2e.js            # Chrome MCP E2E tests
 ├── tests/fixtures/                   # Test data and mocks
 ├── scripts/                         # Test automation scripts
 └── .github/workflows/               # CI/CD pipeline

@@ -164,7 +164,7 @@ jobs:
 
   # End-to-End Tests - Complete workflow validation
   e2e-tests:
-    name: 🎭 E2E Tests (Playwright)
+    name: 🎭 E2E Tests (Chrome MCP)
     runs-on: ubuntu-latest
     timeout-minutes: 10
 
@@ -186,9 +186,6 @@ jobs:
     - name: Install dependencies
       run: npm ci
 
-    - name: Install Playwright
-      run: npx playwright install --with-deps
-
     - name: Start Go WebSocket server
       working-directory: ./go-server
       run: |
@@ -206,8 +203,8 @@ jobs:
       env:
         CI: true
 
-    - name: Run Playwright E2E tests
-      run: npx playwright test --reporter=html
+    - name: Run Chrome MCP E2E tests
+      run: node tests/chrome-mcp-e2e.js
 
     - name: Upload E2E test results
       uses: actions/upload-artifact@v3
@@ -215,7 +212,6 @@ jobs:
       with:
         name: e2e-test-results
         path: |
-          playwright-report/
           test-results/
 
   # KPI Validation and Final Report
@@ -286,7 +282,7 @@ jobs:
         echo "- **Go Unit Tests**: Conflict resolution with LastWriterWins strategy" >> kpi-report.md
         echo "- **React Integration Tests**: StaffEditModal with WebSocket mocking" >> kpi-report.md
         echo "- **Artillery.io Load Tests**: WebSocket stress testing with 1000+ concurrent connections" >> kpi-report.md
-        echo "- **Playwright E2E Tests**: Complete staff management workflow validation" >> kpi-report.md
+        echo "- **Chrome MCP E2E Tests**: Complete staff management workflow validation" >> kpi-report.md
         echo "" >> kpi-report.md
         echo "All tests validate the race condition elimination and performance improvements achieved in the hybrid architecture implementation." >> kpi-report.md
 

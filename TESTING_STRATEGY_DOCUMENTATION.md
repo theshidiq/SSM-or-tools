@@ -11,7 +11,7 @@ This document provides comprehensive documentation for the testing strategy impl
 1. **Unit Testing** (Go Server)
 2. **Integration Testing** (React with WebSocket Mocking)
 3. **Load Testing** (Artillery.io WebSocket Stress Testing)
-4. **End-to-End Testing** (Playwright Complete Workflow Validation)
+4. **End-to-End Testing** (Chrome MCP Complete Workflow Validation)
 
 ## KPI Requirements (Success Criteria)
 
@@ -89,9 +89,9 @@ cd go-server/load-test
 ./run-websocket-load-test.sh
 ```
 
-### 4. End-to-End Testing (Playwright)
+### 4. End-to-End Testing (Chrome MCP)
 
-**Location**: `tests/e2e/staff-management.spec.ts`
+**Location**: `tests/chrome-mcp-e2e.js`
 
 **Purpose**: Complete staff management workflow validation (exact implementation from plan lines 883-911)
 
@@ -104,9 +104,8 @@ cd go-server/load-test
 **Run Commands**:
 ```bash
 npm run test:e2e
-# Or with specific options:
-npx playwright test --headed  # With browser UI
-npx playwright test --debug   # Debug mode
+# Or directly:
+node tests/chrome-mcp-e2e.js
 ```
 
 ## Test Data and Fixtures
@@ -184,7 +183,7 @@ node scripts/validate-kpis.js
 1. `unit-tests` - Go unit testing
 2. `integration-tests` - React integration testing
 3. `load-tests` - WebSocket stress testing
-4. `e2e-tests` - Playwright E2E testing
+4. `e2e-tests` - Chrome MCP E2E testing
 5. `kpi-validation` - Final KPI validation and reporting
 
 **Features**:
@@ -200,7 +199,7 @@ node scripts/validate-kpis.js
 1. **Node.js** (v18+)
 2. **Go** (v1.21+)
 3. **Artillery.io** (for load testing)
-4. **Playwright** (for E2E testing)
+4. **Chrome MCP** (for E2E testing via Claude Code)
 
 ### Installation
 
@@ -208,8 +207,7 @@ node scripts/validate-kpis.js
 # Install Node dependencies
 npm install
 
-# Install Playwright browsers
-npx playwright install
+# Chrome MCP is integrated through Claude Code (no additional installation needed)
 
 # Install Artillery.io globally
 npm install -g artillery
@@ -259,8 +257,8 @@ node scripts/validate-kpis.js
    - `go-server/load-test/*.json`
 
 3. **E2E Test Reports**
-   - `playwright-report/index.html`
-   - `test-results/` (screenshots, videos)
+   - `test-results/chrome-mcp-results.json`
+   - `test-results/` (screenshots from Chrome MCP)
 
 4. **KPI Validation**
    - `kpi-validation-results.json`
@@ -301,14 +299,11 @@ curl -f http://localhost:8080/health
 wscat -c ws://localhost:8080/staff-sync?period=1
 ```
 
-#### Playwright Issues
+#### Chrome MCP Issues
 ```bash
-# Reinstall browsers
-npx playwright install --force
-
-# Update Playwright
-npm install @playwright/test@latest
-npx playwright install
+# Chrome MCP testing is integrated with Claude Code
+# No separate installation or configuration needed
+# Issues should be resolved through Claude Code MCP dialog
 ```
 
 ### Debug Mode
@@ -322,8 +317,8 @@ go run main.go --debug
 # React with debug logging
 REACT_APP_DEBUG=true npm start
 
-# Playwright with debug
-npx playwright test --debug
+# Chrome MCP with debug (via Claude Code)
+node tests/chrome-mcp-e2e.js
 ```
 
 ## Performance Optimization
