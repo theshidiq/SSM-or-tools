@@ -110,18 +110,22 @@ const ShiftScheduleEditorPhase3 = ({
       realtimePeriods.length > 0 &&
       !isInitializedRef.current
     ) {
-      try {
-        const correctIndex = getCurrentMonthIndex(realtimePeriods);
-        setCurrentMonthIndex(correctIndex);
-        isInitializedRef.current = true; // Mark as initialized to prevent subsequent updates
-        console.log(
-          `📅 [Phase 3] Initial period index set to ${correctIndex} (${realtimePeriods[correctIndex]?.label})`,
-        );
-      } catch (error) {
-        console.warn("Failed to get current month index, using 0:", error);
-        setCurrentMonthIndex(0);
-        isInitializedRef.current = true;
-      }
+      const initializeIndex = async () => {
+        try {
+          const correctIndex = await getCurrentMonthIndex(realtimePeriods);
+          setCurrentMonthIndex(correctIndex);
+          isInitializedRef.current = true; // Mark as initialized to prevent subsequent updates
+          console.log(
+            `📅 [Phase 3] Initial period index set to ${correctIndex} (${realtimePeriods[correctIndex]?.label})`,
+          );
+        } catch (error) {
+          console.warn("Failed to get current month index, using 0:", error);
+          setCurrentMonthIndex(0);
+          isInitializedRef.current = true;
+        }
+      };
+
+      initializeIndex();
     }
   }, [periodsLoading, realtimePeriods]);
 

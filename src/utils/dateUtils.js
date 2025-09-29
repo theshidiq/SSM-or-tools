@@ -1,40 +1,79 @@
 import { addDays, format } from "date-fns";
 import { supabase } from "./supabase";
 
-// Default month periods configuration (21st to 20th of next month)
+// Function to generate initial periods dynamically (21st to 20th of next month)
 // Using UTC dates to ensure consistent ISO string representation
-const defaultMonthPeriods = [
-  {
-    start: new Date(Date.UTC(2025, 0, 21)),
-    end: new Date(Date.UTC(2025, 1, 20)),
-    label: "1月・2月",
-  }, // Jan-Feb
-  {
-    start: new Date(Date.UTC(2025, 1, 21)),
-    end: new Date(Date.UTC(2025, 2, 20)),
-    label: "2月・3月",
-  }, // Feb-Mar
-  {
-    start: new Date(Date.UTC(2025, 2, 21)),
-    end: new Date(Date.UTC(2025, 3, 20)),
-    label: "3月・4月",
-  }, // Mar-Apr
-  {
-    start: new Date(Date.UTC(2025, 3, 21)),
-    end: new Date(Date.UTC(2025, 4, 20)),
-    label: "4月・5月",
-  }, // Apr-May
-  {
-    start: new Date(Date.UTC(2025, 4, 21)),
-    end: new Date(Date.UTC(2025, 5, 20)),
-    label: "5月・6月",
-  }, // May-Jun
-  {
-    start: new Date(Date.UTC(2025, 5, 21)),
-    end: new Date(Date.UTC(2025, 6, 20)),
-    label: "6月・7月",
-  }, // Jun-Jul
-];
+const generateInitialPeriods = (startYear = null, periodCount = 12) => {
+  const periods = [];
+  const monthNames = [
+    "", "1月", "2月", "3月", "4月", "5月", "6月",
+    "7月", "8月", "9月", "10月", "11月", "12月"
+  ];
+
+  const today = new Date();
+  const currentDate = new Date(Date.UTC(today.getFullYear(), today.getMonth(), today.getDate()));
+
+  // Determine starting year and month based on current date
+  let currentYear = startYear || currentDate.getFullYear();
+  let currentMonth;
+
+  if (startYear) {
+    // If specific start year provided, start from January
+    currentMonth = 0;
+  } else {
+    // Start from a period that would contain today's date
+    // If today is after the 20th, we're in the period that started this month
+    // If today is before the 21st, we're in the period that started last month
+    if (currentDate.getDate() >= 21) {
+      currentMonth = currentDate.getMonth();
+    } else {
+      currentMonth = currentDate.getMonth() - 1;
+      if (currentMonth < 0) {
+        currentMonth = 11;
+        currentYear = currentYear - 1;
+      }
+    }
+  }
+
+  console.log(`🏗️ Generating ${periodCount} periods starting from ${currentYear}-${currentMonth + 1} (today: ${currentDate.toISOString().split("T")[0]})`);
+
+  for (let i = 0; i < periodCount; i++) {
+    const startDate = new Date(Date.UTC(currentYear, currentMonth, 21));
+
+    // Calculate next month for end date
+    let nextMonth = currentMonth + 1;
+    let nextYear = currentYear;
+
+    if (nextMonth > 11) {
+      nextMonth = 0;
+      nextYear = currentYear + 1;
+    }
+
+    const endDate = new Date(Date.UTC(nextYear, nextMonth, 20));
+
+    // Generate label
+    const startMonthName = monthNames[currentMonth + 1];
+    const endMonthName = monthNames[nextMonth + 1];
+    const label = `${startMonthName}・${endMonthName}`;
+
+    periods.push({
+      start: startDate,
+      end: endDate,
+      label: label,
+    });
+
+    console.log(`🏗️ Generated period ${i}: ${label} (${startDate.toISOString().split("T")[0]} to ${endDate.toISOString().split("T")[0]})`);
+
+    // Move to next month
+    currentMonth++;
+    if (currentMonth > 11) {
+      currentMonth = 0;
+      currentYear++;
+    }
+  }
+
+  return periods;
+};
 
 // Storage key for localStorage migration tracking
 const PERIODS_STORAGE_KEY = "shift_manager_periods";
@@ -70,7 +109,8 @@ const migratePeriodsToSupabase = async () => {
         "periods_ever_initialized",
       );
       if (!hasEverHadPeriods) {
-        for (const period of defaultMonthPeriods) {
+        const initialPeriods = generateInitialPeriods();
+        for (const period of initialPeriods) {
           await supabase.rpc("add_period", {
             p_start_date: period.start.toISOString().split("T")[0],
             p_end_date: period.end.toISOString().split("T")[0],
@@ -137,9 +177,9 @@ const loadPeriodsFromSupabase = async () => {
       }));
     }
 
-    // Last fallback to default periods
+    // Last fallback to generate initial periods dynamically
     const hasEverHadPeriods = localStorage.getItem("periods_ever_initialized");
-    return hasEverHadPeriods ? [] : [...defaultMonthPeriods];
+    return hasEverHadPeriods ? [] : generateInitialPeriods();
   }
 };
 
@@ -562,13 +602,20 @@ export const isDateWithinWorkPeriod = (date, staff) => {
 };
 
 // Function to get the current month index based on today's date
-export const getCurrentMonthIndex = (periods = null) => {
+export const getCurrentMonthIndex = async (periods = null) => {
   // Use provided periods or fall back to cache
-  const periodsToUse = periods || periodsCache;
+  let periodsToUse = periods || periodsCache;
 
-  // Handle case where no periods exist
+  // Handle case where no periods exist - auto-initialize from database
   if (!periodsToUse || periodsToUse.length === 0) {
-    return 0; // Default to 0 when no periods exist
+    console.log("📅 No periods available, loading from database...");
+    await initializePeriodsCache();
+    periodsToUse = periodsCache;
+
+    if (periodsToUse.length === 0) {
+      console.log("📅 No periods in database, using default periods...");
+      return 0; // Default to 0 when no periods exist
+    }
   }
 
   const today = new Date();
@@ -576,10 +623,23 @@ export const getCurrentMonthIndex = (periods = null) => {
     Date.UTC(today.getFullYear(), today.getMonth(), today.getDate()),
   );
 
+  // Debug: Log all periods to understand what we have
+  console.log(`📅 Debugging getCurrentMonthIndex for ${todayUTC.toISOString().split("T")[0]}`);
+  console.log(`📅 Total periods available: ${periodsToUse.length}`);
+  periodsToUse.forEach((period, index) => {
+    const startDate = new Date(period.start);
+    const endDate = new Date(period.end);
+    const containsToday = todayUTC >= startDate && todayUTC <= endDate;
+    console.log(`📅 Period ${index}: ${period.label} (${startDate.toISOString().split("T")[0]} to ${endDate.toISOString().split("T")[0]}) - Contains today: ${containsToday}`);
+  });
+
   // Find the period that contains today's date
   for (let i = 0; i < periodsToUse.length; i++) {
     const period = periodsToUse[i];
-    if (todayUTC >= period.start && todayUTC <= period.end) {
+    const periodStart = new Date(period.start);
+    const periodEnd = new Date(period.end);
+
+    if (todayUTC >= periodStart && todayUTC <= periodEnd) {
       console.log(
         `📅 Today (${todayUTC.toISOString().split("T")[0]}) falls in period ${i}: ${period.label}`,
       );
@@ -588,22 +648,201 @@ export const getCurrentMonthIndex = (periods = null) => {
   }
 
   // If today's date doesn't fall in any existing period, check if it's before the first period
-  if (periodsToUse.length > 0 && todayUTC < periodsToUse[0].start) {
-    console.log(
-      `📅 Today is before all periods, using first period (${periodsToUse[0].label})`,
-    );
-    return 0;
+  if (periodsToUse.length > 0) {
+    const firstPeriodStart = new Date(periodsToUse[0].start);
+    if (todayUTC < firstPeriodStart) {
+      console.log(
+        `📅 Today is before all periods, using first period (${periodsToUse[0].label})`,
+      );
+      return 0;
+    }
   }
 
-  // If today's date is after all periods, return the last period
+  // If today's date is after all periods, automatically extend periods to cover today
+  if (periodsToUse.length > 0) {
+    const lastPeriod = periodsToUse[periodsToUse.length - 1];
+    const lastEndDate = new Date(lastPeriod.end);
+
+    if (todayUTC > lastEndDate) {
+      console.log(
+        `📅 Today (${todayUTC.toISOString().split("T")[0]}) is after all periods (last ends ${lastEndDate.toISOString().split("T")[0]}), auto-extending...`,
+      );
+
+      let extendedPeriods = 0;
+      let currentLastEndDate = lastEndDate;
+
+      // Keep adding periods until we cover today's date
+      while (todayUTC > currentLastEndDate) {
+        try {
+          const newPeriodIndex = await addNextPeriod();
+          extendedPeriods++;
+
+          // Refresh cache to get the new period
+          await refreshPeriodsCache();
+          periodsToUse = periodsCache;
+
+          if (periodsToUse.length === 0) {
+            console.error("📅 Failed to extend periods - cache is empty");
+            return 0;
+          }
+
+          currentLastEndDate = new Date(periodsToUse[periodsToUse.length - 1].end);
+          console.log(`📅 Extended to period ending ${currentLastEndDate.toISOString().split("T")[0]}`);
+
+          // Safety check to prevent infinite loop
+          if (extendedPeriods > 12) {
+            console.warn("📅 Extended more than 12 periods, stopping to prevent infinite loop");
+            break;
+          }
+        } catch (error) {
+          console.error("📅 Failed to extend periods:", error);
+          break;
+        }
+      }
+
+      if (extendedPeriods > 0) {
+        console.log(`📅 Auto-extended ${extendedPeriods} periods to cover current date`);
+
+        // Now find the period that contains today's date
+        for (let i = 0; i < periodsToUse.length; i++) {
+          const period = periodsToUse[i];
+          const periodStart = new Date(period.start);
+          const periodEnd = new Date(period.end);
+
+          if (todayUTC >= periodStart && todayUTC <= periodEnd) {
+            console.log(
+              `📅 Today (${todayUTC.toISOString().split("T")[0]}) now falls in period ${i}: ${period.label}`,
+            );
+            return i;
+          }
+        }
+      }
+    }
+  }
+
+  // Gap detection: Check if today falls between existing periods (gap filling)
+  if (periodsToUse.length > 1) {
+    for (let i = 0; i < periodsToUse.length - 1; i++) {
+      const currentPeriod = periodsToUse[i];
+      const nextPeriod = periodsToUse[i + 1];
+      const currentEnd = new Date(currentPeriod.end);
+      const nextStart = new Date(nextPeriod.start);
+
+      // Check if today falls in a gap between periods
+      if (todayUTC > currentEnd && todayUTC < nextStart) {
+        console.log(
+          `📅 Today falls in gap between period ${i} (${currentPeriod.label}, ends ${currentEnd.toISOString().split("T")[0]}) ` +
+          `and period ${i + 1} (${nextPeriod.label}, starts ${nextStart.toISOString().split("T")[0]})`
+        );
+
+        // Calculate the missing period dates
+        const missingStart = new Date(currentEnd);
+        missingStart.setUTCDate(missingStart.getUTCDate() + 1); // Day after current period ends
+
+        const missingEnd = new Date(nextStart);
+        missingEnd.setUTCDate(missingEnd.getUTCDate() - 1); // Day before next period starts
+
+        // Generate missing period label
+        const startMonth = missingStart.getUTCMonth() + 1;
+        const endMonth = missingEnd.getUTCMonth() + 1;
+        const monthNames = [
+          "", "1月", "2月", "3月", "4月", "5月", "6月",
+          "7月", "8月", "9月", "10月", "11月", "12月"
+        ];
+        const missingLabel = `${monthNames[startMonth]}・${monthNames[endMonth]}`;
+
+        console.log(
+          `📅 Adding missing period: ${missingLabel} (${missingStart.toISOString().split("T")[0]} to ${missingEnd.toISOString().split("T")[0]})`
+        );
+
+        try {
+          // Add the missing period to fill the gap
+          const { data, error } = await supabase.rpc("add_period", {
+            p_start_date: missingStart.toISOString().split("T")[0],
+            p_end_date: missingEnd.toISOString().split("T")[0],
+            p_label: missingLabel,
+          });
+
+          if (error) {
+            console.error("📅 Failed to add missing period:", error);
+          } else {
+            console.log("📅 Successfully added missing period:", data);
+
+            // Refresh cache to include the new period
+            await refreshPeriodsCache();
+            periodsToUse = periodsCache;
+
+            // Now find the period that contains today's date
+            for (let j = 0; j < periodsToUse.length; j++) {
+              const period = periodsToUse[j];
+              const periodStart = new Date(period.start);
+              const periodEnd = new Date(period.end);
+
+              if (todayUTC >= periodStart && todayUTC <= periodEnd) {
+                console.log(
+                  `📅 Today (${todayUTC.toISOString().split("T")[0]}) now falls in filled gap period ${j}: ${period.label}`,
+                );
+                return j;
+              }
+            }
+          }
+        } catch (addError) {
+          console.error("📅 Error adding missing period:", addError);
+        }
+
+        break; // Only try to fill one gap at a time
+      }
+    }
+  }
+
+  // Last resort: Try to find the closest period to today's date
+  if (periodsToUse.length > 0) {
+    let closestPeriod = 0;
+    let smallestDiff = Math.abs(todayUTC - new Date(periodsToUse[0].start));
+
+    for (let i = 1; i < periodsToUse.length; i++) {
+      const period = periodsToUse[i];
+      const periodStart = new Date(period.start);
+      const periodEnd = new Date(period.end);
+
+      // Calculate distance to this period (0 if today is within the period)
+      let diff;
+      if (todayUTC >= periodStart && todayUTC <= periodEnd) {
+        diff = 0; // Today is within this period
+      } else if (todayUTC < periodStart) {
+        diff = periodStart - todayUTC; // Today is before this period
+      } else {
+        diff = todayUTC - periodEnd; // Today is after this period
+      }
+
+      if (diff < smallestDiff) {
+        smallestDiff = diff;
+        closestPeriod = i;
+      }
+    }
+
+    if (smallestDiff === 0) {
+      console.log(
+        `📅 Found exact match: Today falls in period ${closestPeriod}: ${periodsToUse[closestPeriod].label}`,
+      );
+      return closestPeriod;
+    } else {
+      console.log(
+        `📅 Using closest period ${closestPeriod}: ${periodsToUse[closestPeriod].label} (distance: ${smallestDiff}ms)`,
+      );
+      return closestPeriod;
+    }
+  }
+
+  // Final fallback: return last available period
   console.log(
-    `📅 Today is after all periods, using last period (${periodsToUse[periodsToUse.length - 1].label})`,
+    `📅 Fallback: using last available period (${periodsToUse[periodsToUse.length - 1]?.label || 'undefined'})`,
   );
-  return periodsToUse.length - 1;
+  return Math.max(0, periodsToUse.length - 1);
 };
 
 // Function to find period with data, prioritizing Supabase data over localStorage
-export const findPeriodWithData = (supabaseData = null) => {
+export const findPeriodWithData = async (supabaseData = null) => {
   // Handle case where no periods exist or cache not initialized
   if (!cacheInitialized || periodsCache.length === 0) {
     console.warn("No periods available for finding data");
@@ -645,7 +884,7 @@ export const findPeriodWithData = (supabaseData = null) => {
   }
 
   // Fallback to current date-based period
-  const fallbackPeriod = getCurrentMonthIndex();
+  const fallbackPeriod = await getCurrentMonthIndex();
   return fallbackPeriod;
 };
 
@@ -787,7 +1026,8 @@ export const resetPeriodsToDefault = async () => {
     }
 
     // Add default periods to database
-    for (const period of defaultMonthPeriods) {
+    const initialPeriods = generateInitialPeriods();
+    for (const period of initialPeriods) {
       await supabase.rpc("add_period", {
         p_start_date: period.start.toISOString().split("T")[0],
         p_end_date: period.end.toISOString().split("T")[0],
@@ -805,7 +1045,8 @@ export const resetPeriodsToDefault = async () => {
 
     // Fallback: reset cache only
     periodsCache.length = 0; // Clear existing array
-    periodsCache.push(...defaultMonthPeriods.map((p) => ({ ...p }))); // Add default periods
+    const initialPeriods = generateInitialPeriods();
+    periodsCache.push(...initialPeriods.map((p) => ({ ...p }))); // Add default periods
     console.log("⚠️ Periods reset to default in cache only (database failed)");
     return false;
   }
