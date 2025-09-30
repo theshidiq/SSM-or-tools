@@ -273,18 +273,26 @@ const ShiftScheduleEditorPhase3 = ({
   const error =
     externalError || supabaseError || settingsError || autosaveError;
 
-  // Real-time status indicator with WebSocket-first prefetch
+  // Real-time status indicator with WebSocket-first prefetch + Phase 4 instant navigation indicator
   const realtimeStatus = useMemo(() => {
+    // Phase 4: Show instant navigation status when all periods are prefetched
+    const hasAllPeriodsData = prefetchStats?.memoryUsage?.periodCount > 0;
+    const isInstantNavEnabled = !fallbackMode && hasAllPeriodsData;
+
     if (!isConnected)
-      return { type: "error", message: "Offline Mode" };
-    if (isSaving) return { type: "saving", message: "Saving..." };
-    if (isSupabaseLoading)
-      return { type: "loading", message: "Loading..." };
+      return { type: "error", message: "Offline Mode", instantNav: false };
+    if (isSaving) return { type: "saving", message: "Saving...", instantNav: isInstantNavEnabled };
+    if (isSupabaseLoading && !hasAllPeriodsData)
+      return { type: "loading", message: "Loading...", instantNav: false };
+
+    // Phase 4: Show instant navigation status
     return {
       type: "connected",
-      message: fallbackMode ? "Database Sync" : "WebSocket Real-time",
+      message: isInstantNavEnabled ? "⚡ Instant Navigation" : "Database Sync",
+      instantNav: isInstantNavEnabled,
+      periodsCached: prefetchStats?.memoryUsage?.periodCount || 0,
     };
-  }, [isConnected, isSaving, isSupabaseLoading, fallbackMode]);
+  }, [isConnected, isSaving, isSupabaseLoading, fallbackMode, prefetchStats]);
 
   // Process current staff and generate stats - use normalized staff data
   const currentStaff = useMemo(() => {
@@ -316,14 +324,33 @@ const ShiftScheduleEditorPhase3 = ({
     statistics,
   ]);
 
-  // Navigation handlers
+  // Phase 4: Navigation state for smooth transitions
+  const [isNavigating, setIsNavigating] = useState(false);
+  const navigationTimeoutRef = useRef(null);
+
+  // Phase 4: Enhanced navigation with smooth transitions
   const navigateToMonth = useCallback(
     (monthIndex) => {
       if (monthIndex >= 0 && monthIndex < realtimePeriods.length) {
         console.log(
           `📅 [PREFETCH] Navigating to period ${monthIndex} (instant)`,
         );
+
+        // Phase 4: Trigger transition animation
+        setIsNavigating(true);
+
+        // Clear any existing timeout
+        if (navigationTimeoutRef.current) {
+          clearTimeout(navigationTimeoutRef.current);
+        }
+
+        // Navigate instantly (data is already cached)
         setCurrentMonthIndex(monthIndex);
+
+        // Reset navigation state after animation completes
+        navigationTimeoutRef.current = setTimeout(() => {
+          setIsNavigating(false);
+        }, 200); // Match CSS transition duration
       }
     },
     [realtimePeriods.length],
@@ -335,9 +362,9 @@ const ShiftScheduleEditorPhase3 = ({
       console.log(
         `📅 [PREFETCH] Previous period: ${currentMonthIndex} → ${newIndex} (instant)`,
       );
-      setCurrentMonthIndex(newIndex);
+      navigateToMonth(newIndex); // Use enhanced navigation
     }
-  }, [currentMonthIndex]);
+  }, [currentMonthIndex, navigateToMonth]);
 
   const nextMonth = useCallback(() => {
     if (currentMonthIndex < realtimePeriods.length - 1) {
@@ -345,9 +372,18 @@ const ShiftScheduleEditorPhase3 = ({
       console.log(
         `📅 [PREFETCH] Next period: ${currentMonthIndex} → ${newIndex} (instant)`,
       );
-      setCurrentMonthIndex(newIndex);
+      navigateToMonth(newIndex); // Use enhanced navigation
     }
-  }, [currentMonthIndex, realtimePeriods.length]);
+  }, [currentMonthIndex, realtimePeriods.length, navigateToMonth]);
+
+  // Phase 4: Cleanup navigation timeout on unmount
+  useEffect(() => {
+    return () => {
+      if (navigationTimeoutRef.current) {
+        clearTimeout(navigationTimeoutRef.current);
+      }
+    };
+  }, []);
 
   // Add next period handler
   const handleAddNextPeriod = useCallback(async () => {
@@ -515,7 +551,7 @@ const ShiftScheduleEditorPhase3 = ({
 
   return (
     <div className="shift-schedule-container space-y-6 p-6">
-      {/* Header with Phase 3 indicator */}
+      {/* Header with Phase 4 instant navigation indicator */}
       <Card>
         <CardHeader>
           <div className="flex items-center justify-between">
@@ -525,18 +561,35 @@ const ShiftScheduleEditorPhase3 = ({
                 variant="secondary"
                 className="bg-green-100 text-green-800"
               >
-                Phase 3: Normalized
+                Phase 4: Instant Navigation
               </Badge>
+              {/* Phase 4: Connection status with instant nav indicator */}
               <Badge
                 variant={isConnected ? "default" : "destructive"}
                 className={
                   isConnected
-                    ? "bg-green-500 text-white"
+                    ? realtimeStatus.instantNav
+                      ? "bg-gradient-to-r from-green-500 to-blue-500 text-white animate-pulse"
+                      : "bg-green-500 text-white"
                     : "bg-red-500 text-white"
+                }
+                title={realtimeStatus.instantNav
+                  ? `All ${realtimeStatus.periodsCached} periods cached - Navigation is instant!`
+                  : realtimeStatus.message
                 }
               >
                 {realtimeStatus.message}
               </Badge>
+              {/* Phase 4: Cache status indicator */}
+              {realtimeStatus.instantNav && prefetchStats?.memoryUsage && (
+                <Badge
+                  variant="outline"
+                  className="bg-blue-50 text-blue-700 border-blue-300"
+                  title={`Memory: ${prefetchStats.memoryUsage.estimatedMemoryKB} KB | Cache Hit Rate: ${prefetchStats.cacheStats?.hitRate || 'N/A'}`}
+                >
+                  📦 {prefetchStats.memoryUsage.periodCount} periods cached
+                </Badge>
+              )}
             </div>
           </div>
         </CardHeader>
@@ -579,10 +632,21 @@ const ShiftScheduleEditorPhase3 = ({
         isSaving={isSaving}
       />
 
-      {/* Main Interface - Switch between views */}
-      <div className="space-y-4">
+      {/* Main Interface - Switch between views with Phase 4 smooth transitions */}
+      <div
+        className={`space-y-4 transition-opacity duration-200 ${
+          isNavigating ? 'opacity-50' : 'opacity-100'
+        }`}
+        style={{
+          // Phase 4: Respect user's motion preferences
+          transition: window.matchMedia('(prefers-reduced-motion: reduce)').matches
+            ? 'none'
+            : 'opacity 200ms ease-in-out'
+        }}
+      >
         {viewMode === "table" ? (
-          isSupabaseLoading ? (
+          // Phase 4: Only show skeleton during initial load, not during navigation
+          isSupabaseLoading && !prefetchStats?.memoryUsage?.periodCount ? (
             <ScheduleTableSkeleton
               staffCount={currentStaff?.length || 5}
               dateCount={dateRange?.length || 31}
@@ -626,7 +690,7 @@ const ShiftScheduleEditorPhase3 = ({
           <StatisticsDashboard
             data={statsData}
             currentPeriod={currentPeriod}
-            isLoading={isSupabaseLoading}
+            isLoading={isSupabaseLoading && !prefetchStats?.memoryUsage?.periodCount}
             settings={settings}
           />
         ) : null}
@@ -723,6 +787,12 @@ const ShiftScheduleEditorPhase3 = ({
                   <p className="text-sm text-muted-foreground">
                     Schedule ID: {currentScheduleId || "None"}
                   </p>
+                  {/* Phase 4: Instant navigation status */}
+                  {realtimeStatus.instantNav && (
+                    <p className="text-sm text-green-600 font-medium">
+                      ⚡ Instant Navigation Enabled
+                    </p>
+                  )}
                 </div>
               </div>
 
@@ -740,6 +810,25 @@ const ShiftScheduleEditorPhase3 = ({
                 <p className="text-sm text-muted-foreground">
                   Date Range: {dateRange?.length || 0} days
                 </p>
+                {/* Phase 4: Cache performance metrics */}
+                {prefetchStats?.cacheStats && (
+                  <>
+                    <Separator className="my-2" />
+                    <h4 className="font-medium mt-2">Cache Performance (Phase 4)</h4>
+                    <p className="text-sm text-muted-foreground">
+                      Hit Rate: {prefetchStats.cacheStats.hitRate}
+                    </p>
+                    <p className="text-sm text-muted-foreground">
+                      Cache Hits: {prefetchStats.cacheStats.cacheHits} | Misses: {prefetchStats.cacheStats.cacheMisses}
+                    </p>
+                    <p className="text-sm text-muted-foreground">
+                      Memory: {prefetchStats.memoryUsage?.estimatedMemoryKB || 'N/A'} KB
+                    </p>
+                    <p className="text-sm text-muted-foreground">
+                      Periods Cached: {prefetchStats.memoryUsage?.periodCount || 0}
+                    </p>
+                  </>
+                )}
               </div>
             </div>
           </CardContent>
