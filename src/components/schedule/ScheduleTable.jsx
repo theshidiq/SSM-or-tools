@@ -66,6 +66,7 @@ const ScheduleTable = ({
   hasPendingChanges = false,
   isConnected = true,
   offlineQueue = [],
+  hasAllPeriodsData = false,
 }) => {
   // Prepare date keys for selection hook
   const dateKeys = dateRange.map((date) => date.toISOString().split("T")[0]);
@@ -599,9 +600,10 @@ const ScheduleTable = ({
   return (
     <div className="relative">
       {/* Connection and Queue Status Indicator */}
-      {(!isConnected || hasPendingChanges) && (
+      {/* FIX: Only show offline when truly disconnected AND no cached data available */}
+      {((!isConnected && !hasAllPeriodsData) || hasPendingChanges) && (
         <div className="mb-2 flex items-center gap-2 px-3 py-2 bg-yellow-50 border-l-4 border-yellow-400 rounded-r-md">
-          {!isConnected && (
+          {!isConnected && !hasAllPeriodsData && (
             <div className="flex items-center gap-2 text-red-600">
               <div className="w-2 h-2 bg-red-500 rounded-full animate-pulse"></div>
               <span className="text-sm font-medium">オフライン</span>
@@ -615,7 +617,7 @@ const ScheduleTable = ({
               </span>
             </div>
           )}
-          {!isConnected && hasPendingChanges && (
+          {!isConnected && !hasAllPeriodsData && hasPendingChanges && (
             <span className="text-xs text-gray-600">
               接続復旧時に自動保存されます
             </span>

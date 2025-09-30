@@ -677,6 +677,7 @@ const ShiftScheduleEditorPhase3 = ({
               currentMonthIndex={currentMonthIndex}
               editStaffName={editStaffName}
               isConnected={isConnected}
+              hasAllPeriodsData={prefetchStats?.memoryUsage?.periodCount > 0}
             />
           )
         ) : viewMode === "card" ? (
