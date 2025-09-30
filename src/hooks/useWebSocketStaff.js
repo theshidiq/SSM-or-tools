@@ -283,15 +283,23 @@ export const useWebSocketStaff = (currentMonthIndex, options = {}) => {
           return;
         }
 
-        // Check if we've been trying for too long (total time > 15 seconds)
-        const totalTimeElapsed = Date.now() - connectionStartTime.current;
-        if (totalTimeElapsed > 15000) {
-          console.log('⏰ Phase 3: Total connection time exceeded, permanently disabling WebSocket');
-          connectionFailedPermanently.current = true;
-          setConnectionStatus('failed_permanently');
-          setLastError('Connection failed - switching to database mode');
-          setIsLoading(false);
-          return;
+        // FIX: Only apply total time check if we haven't successfully loaded data yet
+        // Once allPeriodsLoaded is true, connection should stay persistent indefinitely
+        const hasLoadedData = allPeriodsLoadedRef.current || (!prefetchAllPeriods && reconnectAttempts.current === 0);
+
+        if (!hasLoadedData) {
+          // Check if we've been trying for too long (total time > 15 seconds)
+          const totalTimeElapsed = Date.now() - connectionStartTime.current;
+          if (totalTimeElapsed > 15000) {
+            console.log('⏰ Phase 3: Initial connection time exceeded, permanently disabling WebSocket');
+            connectionFailedPermanently.current = true;
+            setConnectionStatus('failed_permanently');
+            setLastError('Connection failed - switching to database mode');
+            setIsLoading(false);
+            return;
+          }
+        } else {
+          console.log('🔄 Phase 3: Connection lost after successful data load - will attempt reconnection indefinitely');
         }
 
         // Handle different close codes

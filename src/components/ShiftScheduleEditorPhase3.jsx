@@ -279,13 +279,15 @@ const ShiftScheduleEditorPhase3 = ({
     const hasAllPeriodsData = prefetchStats?.memoryUsage?.periodCount > 0;
     const isInstantNavEnabled = !fallbackMode && hasAllPeriodsData;
 
-    if (!isConnected)
+    // FIX: If all periods are cached, navigation is instant even if momentarily disconnected
+    // Only show offline when truly disconnected AND no cached data available
+    if (!isConnected && !hasAllPeriodsData)
       return { type: "error", message: "Offline Mode", instantNav: false };
     if (isSaving) return { type: "saving", message: "Saving...", instantNav: isInstantNavEnabled };
     if (isSupabaseLoading && !hasAllPeriodsData)
       return { type: "loading", message: "Loading...", instantNav: false };
 
-    // Phase 4: Show instant navigation status
+    // Phase 4: Show instant navigation status (even if momentarily disconnected, cache keeps it working)
     return {
       type: "connected",
       message: isInstantNavEnabled ? "⚡ Instant Navigation" : "Database Sync",
