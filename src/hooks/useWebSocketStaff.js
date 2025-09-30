@@ -10,6 +10,8 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 const MESSAGE_TYPES = {
   SYNC_REQUEST: 'SYNC_REQUEST',
   SYNC_RESPONSE: 'SYNC_RESPONSE',
+  SYNC_ALL_PERIODS_REQUEST: 'SYNC_ALL_PERIODS_REQUEST',
+  SYNC_ALL_PERIODS_RESPONSE: 'SYNC_ALL_PERIODS_RESPONSE',
   STAFF_UPDATE: 'STAFF_UPDATE',
   STAFF_CREATE: 'STAFF_CREATE',
   STAFF_DELETE: 'STAFF_DELETE',
@@ -18,8 +20,14 @@ const MESSAGE_TYPES = {
 };
 
 export const useWebSocketStaff = (currentMonthIndex, options = {}) => {
-  const { enabled = true } = options;
+  const { enabled = true, prefetchAllPeriods = true } = options;
+
+  // Multi-period data structure - stores staff data for all periods
+  const [allPeriodsStaff, setAllPeriodsStaff] = useState({});
+
+  // Legacy single-period state for backward compatibility
   const [staffMembers, setStaffMembers] = useState([]);
+
   const [connectionStatus, setConnectionStatus] = useState('connecting');
   const [isLoading, setIsLoading] = useState(true);
   const [lastError, setLastError] = useState(null);
@@ -32,26 +40,70 @@ export const useWebSocketStaff = (currentMonthIndex, options = {}) => {
   const initialConnectionTimer = useRef(null);
   const connectionStartTime = useRef(Date.now());
 
-  // Message handlers
+  // Track if we've successfully loaded all periods data
+  const allPeriodsLoadedRef = useRef(false);
+
+  // Message handlers - updated to support multi-period architecture
   const handleStaffUpdate = useCallback((payload) => {
-    setStaffMembers(prev =>
-      prev.map(staff =>
-        staff.id === payload.staffId
-          ? { ...staff, ...payload.changes }
-          : staff
-      )
-    );
-  }, []);
+    const staffId = payload.staffId || payload.id;
+    const changes = payload.changes || payload;
+
+    if (prefetchAllPeriods && allPeriodsLoadedRef.current) {
+      // Update staff across all relevant periods
+      setAllPeriodsStaff(prev => {
+        const updated = { ...prev };
+        Object.keys(updated).forEach(periodIndex => {
+          updated[periodIndex] = updated[periodIndex].map(staff =>
+            staff.id === staffId ? { ...staff, ...changes } : staff
+          );
+        });
+        return updated;
+      });
+    } else {
+      // Legacy single-period update
+      setStaffMembers(prev =>
+        prev.map(staff =>
+          staff.id === staffId ? { ...staff, ...changes } : staff
+        )
+      );
+    }
+  }, [prefetchAllPeriods]);
 
   const handleStaffCreate = useCallback((payload) => {
-    setStaffMembers(prev => [...prev, payload]);
-  }, []);
+    const newStaff = payload;
+    const targetPeriod = payload.period !== undefined ? payload.period : currentMonthIndex;
+
+    if (prefetchAllPeriods && allPeriodsLoadedRef.current) {
+      // Add to specific period in multi-period structure
+      setAllPeriodsStaff(prev => ({
+        ...prev,
+        [targetPeriod]: [...(prev[targetPeriod] || []), newStaff]
+      }));
+    } else {
+      // Legacy single-period create
+      setStaffMembers(prev => [...prev, newStaff]);
+    }
+  }, [prefetchAllPeriods, currentMonthIndex]);
 
   const handleStaffDelete = useCallback((payload) => {
-    setStaffMembers(prev =>
-      prev.filter(staff => staff.id !== payload.staffId)
-    );
-  }, []);
+    const staffId = payload.staffId || payload.id;
+
+    if (prefetchAllPeriods && allPeriodsLoadedRef.current) {
+      // Delete from all periods
+      setAllPeriodsStaff(prev => {
+        const updated = { ...prev };
+        Object.keys(updated).forEach(periodIndex => {
+          updated[periodIndex] = updated[periodIndex].filter(staff => staff.id !== staffId);
+        });
+        return updated;
+      });
+    } else {
+      // Legacy single-period delete
+      setStaffMembers(prev =>
+        prev.filter(staff => staff.id !== staffId)
+      );
+    }
+  }, [prefetchAllPeriods]);
 
   // WebSocket connection management
   const connect = useCallback(() => {
@@ -101,8 +153,12 @@ export const useWebSocketStaff = (currentMonthIndex, options = {}) => {
     }
 
     try {
-      const wsUrl = `ws://localhost:8080/staff-sync?period=${currentMonthIndex}`;
-      console.log(`🔌 Phase 3: Creating WebSocket connection to ${wsUrl}`);
+      // Remove period parameter from URL for persistent connection
+      const wsUrl = prefetchAllPeriods
+        ? 'ws://localhost:8080/staff-sync'
+        : `ws://localhost:8080/staff-sync?period=${currentMonthIndex}`;
+
+      console.log(`🔌 Phase 3: Creating WebSocket connection to ${wsUrl} (prefetchAllPeriods: ${prefetchAllPeriods})`);
 
       const ws = new WebSocket(wsUrl);
       wsRef.current = ws;
@@ -128,13 +184,25 @@ export const useWebSocketStaff = (currentMonthIndex, options = {}) => {
           initialConnectionTimer.current = null;
         }
 
-        // Request initial state sync
-        ws.send(JSON.stringify({
-          type: MESSAGE_TYPES.SYNC_REQUEST,
-          payload: { period: currentMonthIndex },
-          timestamp: new Date().toISOString(),
-          clientId: clientIdRef.current
-        }));
+        // Request initial state sync - use all-periods if enabled
+        if (prefetchAllPeriods) {
+          console.log('📤 Phase 3: Requesting ALL PERIODS sync');
+          ws.send(JSON.stringify({
+            type: MESSAGE_TYPES.SYNC_ALL_PERIODS_REQUEST,
+            payload: { clientId: clientIdRef.current },
+            timestamp: new Date().toISOString(),
+            clientId: clientIdRef.current
+          }));
+        } else {
+          // Legacy single-period sync
+          console.log(`📤 Phase 3: Requesting single period sync (period ${currentMonthIndex})`);
+          ws.send(JSON.stringify({
+            type: MESSAGE_TYPES.SYNC_REQUEST,
+            payload: { period: currentMonthIndex },
+            timestamp: new Date().toISOString(),
+            clientId: clientIdRef.current
+          }));
+        }
       };
 
       ws.onmessage = (event) => {
@@ -151,12 +219,33 @@ export const useWebSocketStaff = (currentMonthIndex, options = {}) => {
             case MESSAGE_TYPES.STAFF_DELETE:
               handleStaffDelete(message.payload);
               break;
+            case MESSAGE_TYPES.SYNC_ALL_PERIODS_RESPONSE:
+              // Handle multi-period sync response from Go server
+              const periodsData = message.payload.periods || {};
+              const totalPeriods = message.payload.totalPeriods || Object.keys(periodsData).length;
+
+              console.log(`📊 Phase 3: Received ALL PERIODS sync - ${totalPeriods} periods`);
+
+              // Convert string keys to numbers and store all periods data
+              const normalizedPeriodsData = {};
+              Object.keys(periodsData).forEach(key => {
+                const periodIndex = parseInt(key, 10);
+                normalizedPeriodsData[periodIndex] = periodsData[key] || [];
+                console.log(`  📅 Period ${periodIndex}: ${normalizedPeriodsData[periodIndex].length} staff members`);
+              });
+
+              setAllPeriodsStaff(normalizedPeriodsData);
+              allPeriodsLoadedRef.current = true;
+              setIsLoading(false);
+
+              console.log('✅ Phase 3: All periods data loaded and cached');
+              break;
             case MESSAGE_TYPES.SYNC_RESPONSE:
               // Handle both 'staff' (from Go server) and 'staffMembers' (legacy) fields
               const staffData = message.payload.staff || message.payload.staffMembers || [];
               setStaffMembers(staffData);
               setIsLoading(false);
-              console.log(`📊 Phase 3: Synced ${staffData.length} staff members from ${message.payload.period ? `period ${message.payload.period}` : 'server'}`);
+              console.log(`📊 Phase 3: Synced ${staffData.length} staff members from ${message.payload.period !== undefined ? `period ${message.payload.period}` : 'server'}`);
               break;
             case MESSAGE_TYPES.CONNECTION_ACK:
               console.log('✅ Phase 3: Connection acknowledged by Go server');
@@ -233,13 +322,22 @@ export const useWebSocketStaff = (currentMonthIndex, options = {}) => {
       setConnectionStatus('disconnected');
       setLastError('Failed to establish WebSocket connection');
     }
-  }, [enabled, currentMonthIndex, handleStaffUpdate, handleStaffCreate, handleStaffDelete]);
+  }, [enabled, prefetchAllPeriods, handleStaffUpdate, handleStaffCreate, handleStaffDelete]); // Removed currentMonthIndex - connection now persistent
+
+  // Client-side period filtering - sync staffMembers from allPeriodsStaff when period changes
+  useEffect(() => {
+    if (prefetchAllPeriods && allPeriodsLoadedRef.current) {
+      const currentPeriodStaff = allPeriodsStaff[currentMonthIndex] || [];
+      console.log(`🔄 Phase 3: Client-side period filter - switching to period ${currentMonthIndex} (${currentPeriodStaff.length} staff members)`);
+      setStaffMembers(currentPeriodStaff);
+    }
+  }, [currentMonthIndex, allPeriodsStaff, prefetchAllPeriods]);
 
   // Initialize WebSocket connection - debounced to prevent rapid re-connections
   useEffect(() => {
     const timeoutId = setTimeout(() => {
       connect();
-    }, 100); // Small delay to prevent rapid reconnections on currentMonthIndex changes
+    }, 100); // Small delay to prevent rapid reconnections
 
     return () => {
       clearTimeout(timeoutId);
@@ -353,8 +451,12 @@ export const useWebSocketStaff = (currentMonthIndex, options = {}) => {
   }, [enabled, connect]);
 
   return {
-    // Core data
+    // Core data - backward compatible API
     staffMembers,
+
+    // Multi-period data (Phase 2 enhancement)
+    allPeriodsStaff,
+    allPeriodsLoaded: allPeriodsLoadedRef.current,
 
     // Operations
     updateStaff,
@@ -373,7 +475,8 @@ export const useWebSocketStaff = (currentMonthIndex, options = {}) => {
 
     // Debug info
     reconnectAttempts: reconnectAttempts.current,
-    clientId: clientIdRef.current
+    clientId: clientIdRef.current,
+    prefetchMode: prefetchAllPeriods
   };
 };
 
