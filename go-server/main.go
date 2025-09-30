@@ -41,13 +41,15 @@ var upgrader = websocket.Upgrader{
 
 // Message types matching React app expectations
 const (
-	MESSAGE_SYNC_REQUEST    = "SYNC_REQUEST"
-	MESSAGE_SYNC_RESPONSE   = "SYNC_RESPONSE"
-	MESSAGE_STAFF_UPDATE    = "STAFF_UPDATE"
-	MESSAGE_STAFF_CREATE    = "STAFF_CREATE"
-	MESSAGE_STAFF_DELETE    = "STAFF_DELETE"
-	MESSAGE_CONNECTION_ACK  = "CONNECTION_ACK"
-	MESSAGE_ERROR          = "ERROR"
+	MESSAGE_SYNC_REQUEST              = "SYNC_REQUEST"
+	MESSAGE_SYNC_RESPONSE             = "SYNC_RESPONSE"
+	MESSAGE_SYNC_ALL_PERIODS_REQUEST  = "SYNC_ALL_PERIODS_REQUEST"
+	MESSAGE_SYNC_ALL_PERIODS_RESPONSE = "SYNC_ALL_PERIODS_RESPONSE"
+	MESSAGE_STAFF_UPDATE              = "STAFF_UPDATE"
+	MESSAGE_STAFF_CREATE              = "STAFF_CREATE"
+	MESSAGE_STAFF_DELETE              = "STAFF_DELETE"
+	MESSAGE_CONNECTION_ACK            = "CONNECTION_ACK"
+	MESSAGE_ERROR                     = "ERROR"
 )
 
 // Message structure matching React app format
@@ -116,9 +118,9 @@ func main() {
 	log.Printf("WebSocket endpoint: ws://localhost:%s/staff-sync", port)
 	log.Printf("Health check: http://localhost:%s/health", port)
 	log.Printf("Supabase URL: %s", supabaseURL)
-	log.Printf("Supported message types: %s, %s, %s, %s, %s, %s, %s",
-		MESSAGE_SYNC_REQUEST, MESSAGE_SYNC_RESPONSE, MESSAGE_STAFF_UPDATE,
-		MESSAGE_STAFF_CREATE, MESSAGE_STAFF_DELETE, MESSAGE_CONNECTION_ACK, MESSAGE_ERROR)
+	log.Printf("Supported message types: %s, %s, %s, %s, %s, %s, %s, %s, %s",
+		MESSAGE_SYNC_REQUEST, MESSAGE_SYNC_RESPONSE, MESSAGE_SYNC_ALL_PERIODS_REQUEST, MESSAGE_SYNC_ALL_PERIODS_RESPONSE,
+		MESSAGE_STAFF_UPDATE, MESSAGE_STAFF_CREATE, MESSAGE_STAFF_DELETE, MESSAGE_CONNECTION_ACK, MESSAGE_ERROR)
 
 	err := http.ListenAndServe(":"+port, nil)
 	if err != nil {
@@ -210,6 +212,8 @@ func (s *StaffSyncServer) handleStaffSync(w http.ResponseWriter, r *http.Request
 		switch msg.Type {
 		case MESSAGE_SYNC_REQUEST:
 			s.handleSyncRequest(client, &msg)
+		case MESSAGE_SYNC_ALL_PERIODS_REQUEST:
+			s.handleSyncAllPeriodsRequest(client, &msg)
 		case MESSAGE_STAFF_UPDATE:
 			s.handleStaffUpdate(client, &msg)
 		case MESSAGE_STAFF_CREATE:
@@ -257,6 +261,58 @@ func (s *StaffSyncServer) handleSyncRequest(client *Client, msg *Message) {
 	}
 }
 
+func (s *StaffSyncServer) handleSyncAllPeriodsRequest(client *Client, msg *Message) {
+	log.Printf("Processing SYNC_ALL_PERIODS_REQUEST from client %s", client.clientId)
+
+	// Fetch all periods staff data
+	allPeriodsStaff, err := s.fetchAllPeriodsStaff()
+	if err != nil {
+		log.Printf("Error fetching all periods staff: %v", err)
+		// Send error response
+		errorResponse := Message{
+			Type: MESSAGE_ERROR,
+			Payload: map[string]interface{}{
+				"error":   "Failed to fetch all periods staff",
+				"details": err.Error(),
+			},
+			Timestamp: time.Now(),
+			ClientID:  client.clientId,
+		}
+		if errorBytes, marshalErr := json.Marshal(errorResponse); marshalErr == nil {
+			client.conn.WriteMessage(websocket.TextMessage, errorBytes)
+		}
+		return
+	}
+
+	// Count total staff across all periods
+	totalStaff := 0
+	for _, staff := range allPeriodsStaff {
+		totalStaff += len(staff)
+	}
+
+	log.Printf("Retrieved %d staff members across %d periods", totalStaff, len(allPeriodsStaff))
+
+	// Create sync all periods response
+	response := Message{
+		Type: MESSAGE_SYNC_ALL_PERIODS_RESPONSE,
+		Payload: map[string]interface{}{
+			"periods":      allPeriodsStaff,
+			"totalPeriods": len(allPeriodsStaff),
+			"timestamp":    time.Now(),
+		},
+		Timestamp: time.Now(),
+		ClientID:  client.clientId,
+	}
+
+	// Send response to client
+	if responseBytes, err := json.Marshal(response); err == nil {
+		client.conn.WriteMessage(websocket.TextMessage, responseBytes)
+		log.Printf("Sent SYNC_ALL_PERIODS_RESPONSE with %d periods to client %s", len(allPeriodsStaff), client.clientId)
+	} else {
+		log.Printf("Error marshaling sync all periods response: %v", err)
+	}
+}
+
 func (s *StaffSyncServer) handleStaffUpdate(client *Client, msg *Message) {
 	log.Printf("Processing STAFF_UPDATE from client %s", client.clientId)
 
@@ -288,6 +344,39 @@ func (s *StaffSyncServer) broadcastToOthers(sender *Client, msg *Message) {
 				}
 			}
 		}
+	}
+}
+
+// broadcastToAllPeriods broadcasts a staff update to all clients where the staff member is active
+// This is used when staff updates affect multiple periods
+func (s *StaffSyncServer) broadcastToAllPeriods(sender *Client, msg *Message, affectedPeriods []int) {
+	if msgBytes, err := json.Marshal(msg); err == nil {
+		broadcastCount := 0
+		for client := range s.clients {
+			if client != sender {
+				// If no specific periods provided, broadcast to all clients
+				if len(affectedPeriods) == 0 {
+					if err := client.conn.WriteMessage(websocket.TextMessage, msgBytes); err != nil {
+						log.Printf("Error broadcasting to client %s: %v", client.clientId, err)
+					} else {
+						broadcastCount++
+					}
+				} else {
+					// Check if client's period is in affected periods
+					for _, period := range affectedPeriods {
+						if client.period == period {
+							if err := client.conn.WriteMessage(websocket.TextMessage, msgBytes); err != nil {
+								log.Printf("Error broadcasting to client %s (period %d): %v", client.clientId, period, err)
+							} else {
+								broadcastCount++
+							}
+							break
+						}
+					}
+				}
+			}
+		}
+		log.Printf("Broadcasted %s to %d clients across %d periods", msg.Type, broadcastCount, len(affectedPeriods))
 	}
 }
 
@@ -357,6 +446,104 @@ func (s *StaffSyncServer) fetchStaffFromSupabase(period int) ([]StaffMember, err
 		len(filteredStaff), period, len(allStaff))
 
 	return filteredStaff, nil
+}
+
+// fetchAllPeriodsStaff fetches staff data for all periods in a single query
+func (s *StaffSyncServer) fetchAllPeriodsStaff() (map[int][]StaffMember, error) {
+	log.Printf("Fetching staff data for ALL periods...")
+
+	// First, fetch all periods to know how many we have
+	allPeriods, err := s.fetchAllPeriods()
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch periods: %w", err)
+	}
+
+	if len(allPeriods) == 0 {
+		log.Printf("No periods found in database")
+		return make(map[int][]StaffMember), nil
+	}
+
+	log.Printf("Found %d periods in database", len(allPeriods))
+
+	// Fetch all active staff members (single query)
+	allStaff, err := s.fetchAllStaff()
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch all staff: %w", err)
+	}
+
+	log.Printf("Fetched %d total staff members", len(allStaff))
+
+	// Group staff by period index
+	staffByPeriod := make(map[int][]StaffMember)
+
+	// For each period, filter staff members who are active during that period
+	for periodIndex, periodDates := range allPeriods {
+		var periodStaff []StaffMember
+		for _, staff := range allStaff {
+			if s.isStaffActiveInPeriod(staff, &periodDates) {
+				// Create a copy of staff with period field set
+				staffCopy := staff
+				staffCopy.Period = periodIndex
+				periodStaff = append(periodStaff, staffCopy)
+			}
+		}
+		staffByPeriod[periodIndex] = periodStaff
+		log.Printf("Period %d: %d active staff members", periodIndex, len(periodStaff))
+	}
+
+	log.Printf("Successfully grouped staff across %d periods", len(staffByPeriod))
+	return staffByPeriod, nil
+}
+
+// fetchAllPeriods fetches all periods from the database
+func (s *StaffSyncServer) fetchAllPeriods() (map[int]PeriodDates, error) {
+	url := fmt.Sprintf("%s/rest/v1/periods?select=start_date,end_date&order=start_date.asc", s.supabaseURL)
+
+	req, err := http.NewRequest("GET", url, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %w", err)
+	}
+
+	req.Header.Set("Authorization", "Bearer "+s.supabaseKey)
+	req.Header.Set("apikey", s.supabaseKey)
+	req.Header.Set("Content-Type", "application/json")
+
+	client := &http.Client{Timeout: 10 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch periods: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("periods request failed with status %d: %s", resp.StatusCode, string(body))
+	}
+
+	var periods []struct {
+		StartDate string `json:"start_date"`
+		EndDate   string `json:"end_date"`
+	}
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read response: %w", err)
+	}
+
+	if err := json.Unmarshal(body, &periods); err != nil {
+		return nil, fmt.Errorf("failed to parse periods response: %w", err)
+	}
+
+	// Convert to map with period index as key
+	periodMap := make(map[int]PeriodDates)
+	for i, period := range periods {
+		periodMap[i] = PeriodDates{
+			StartDate: period.StartDate,
+			EndDate:   period.EndDate,
+		}
+	}
+
+	return periodMap, nil
 }
 
 // PeriodDates represents the start and end dates of a period
