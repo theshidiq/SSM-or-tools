@@ -178,6 +178,13 @@ export const useWebSocketStaff = (currentMonthIndex, options = {}) => {
         setLastError(null);
         reconnectAttempts.current = 0;
 
+        // Reset connection start time for persistent connection
+        // This prevents permanent disconnection in prefetch mode
+        connectionStartTime.current = Date.now();
+
+        // Reset permanent failure flag on successful connection
+        connectionFailedPermanently.current = false;
+
         // Clear the initial connection timeout since we connected successfully
         if (initialConnectionTimer.current) {
           clearTimeout(initialConnectionTimer.current);
