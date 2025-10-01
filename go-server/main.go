@@ -2,6 +2,7 @@
 package main
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -316,21 +317,132 @@ func (s *StaffSyncServer) handleSyncAllPeriodsRequest(client *Client, msg *Messa
 func (s *StaffSyncServer) handleStaffUpdate(client *Client, msg *Message) {
 	log.Printf("Processing STAFF_UPDATE from client %s", client.clientId)
 
-	// Broadcast update to all other clients
+	// Extract staff update data from payload
+	payload, ok := msg.Payload.(map[string]interface{})
+	if !ok {
+		log.Printf("❌ Invalid STAFF_UPDATE payload format")
+		return
+	}
+
+	staffId, ok := payload["staffId"].(string)
+	if !ok {
+		log.Printf("❌ Missing staffId in STAFF_UPDATE payload")
+		return
+	}
+
+	changes, ok := payload["changes"].(map[string]interface{})
+	if !ok {
+		log.Printf("❌ Missing changes in STAFF_UPDATE payload")
+		return
+	}
+
+	// Save to Supabase database
+	if err := s.updateStaffInSupabase(staffId, changes); err != nil {
+		log.Printf("❌ Failed to save staff update to Supabase: %v", err)
+
+		// Send error response to client
+		errorResponse := Message{
+			Type: MESSAGE_ERROR,
+			Payload: map[string]interface{}{
+				"error":   "Failed to save staff update",
+				"details": err.Error(),
+				"staffId": staffId,
+			},
+			Timestamp: time.Now(),
+			ClientID:  client.clientId,
+		}
+		if errorBytes, marshalErr := json.Marshal(errorResponse); marshalErr == nil {
+			client.conn.WriteMessage(websocket.TextMessage, errorBytes)
+		}
+		return
+	}
+
+	log.Printf("✅ Successfully saved staff update to Supabase: %s", staffId)
+
+	// Broadcast update to all other clients AFTER successful database save
 	s.broadcastToOthers(client, msg)
 }
 
 func (s *StaffSyncServer) handleStaffCreate(client *Client, msg *Message) {
 	log.Printf("Processing STAFF_CREATE from client %s", client.clientId)
 
-	// Broadcast creation to all other clients
+	// Extract staff creation data from payload
+	payload, ok := msg.Payload.(map[string]interface{})
+	if !ok {
+		log.Printf("❌ Invalid STAFF_CREATE payload format")
+		return
+	}
+
+	// Save to Supabase database
+	createdStaff, err := s.createStaffInSupabase(payload)
+	if err != nil {
+		log.Printf("❌ Failed to create staff in Supabase: %v", err)
+
+		// Send error response to client
+		errorResponse := Message{
+			Type: MESSAGE_ERROR,
+			Payload: map[string]interface{}{
+				"error":   "Failed to create staff",
+				"details": err.Error(),
+			},
+			Timestamp: time.Now(),
+			ClientID:  client.clientId,
+		}
+		if errorBytes, marshalErr := json.Marshal(errorResponse); marshalErr == nil {
+			client.conn.WriteMessage(websocket.TextMessage, errorBytes)
+		}
+		return
+	}
+
+	log.Printf("✅ Successfully created staff in Supabase: %s (%s)", createdStaff.Name, createdStaff.ID)
+
+	// Update message payload with created staff ID
+	msg.Payload = createdStaff
+
+	// Broadcast creation to all other clients AFTER successful database save
 	s.broadcastToOthers(client, msg)
 }
 
 func (s *StaffSyncServer) handleStaffDelete(client *Client, msg *Message) {
 	log.Printf("Processing STAFF_DELETE from client %s", client.clientId)
 
-	// Broadcast deletion to all other clients
+	// Extract staff deletion data from payload
+	payload, ok := msg.Payload.(map[string]interface{})
+	if !ok {
+		log.Printf("❌ Invalid STAFF_DELETE payload format")
+		return
+	}
+
+	staffId, ok := payload["staffId"].(string)
+	if !ok {
+		log.Printf("❌ Missing staffId in STAFF_DELETE payload")
+		return
+	}
+
+	// Delete from Supabase database (soft delete by setting is_active=false)
+	if err := s.deleteStaffInSupabase(staffId); err != nil {
+		log.Printf("❌ Failed to delete staff from Supabase: %v", err)
+
+		// Send error response to client
+		errorResponse := Message{
+			Type: MESSAGE_ERROR,
+			Payload: map[string]interface{}{
+				"error":   "Failed to delete staff",
+				"details": err.Error(),
+				"staffId": staffId,
+			},
+			Timestamp: time.Now(),
+			ClientID:  client.clientId,
+		}
+		if errorBytes, marshalErr := json.Marshal(errorResponse); marshalErr == nil {
+			client.conn.WriteMessage(websocket.TextMessage, errorBytes)
+		}
+		return
+	}
+
+	log.Printf("✅ Successfully deleted staff from Supabase: %s", staffId)
+
+	// Broadcast deletion to all other clients AFTER successful database save
 	s.broadcastToOthers(client, msg)
 }
 
@@ -717,6 +829,227 @@ func (s *StaffSyncServer) fetchAllStaff() ([]StaffMember, error) {
 	}
 
 	return staffMembers, nil
+}
+
+// updateStaffInSupabase updates a staff member in Supabase database
+func (s *StaffSyncServer) updateStaffInSupabase(staffId string, changes map[string]interface{}) error {
+	url := fmt.Sprintf("%s/rest/v1/staff?id=eq.%s", s.supabaseURL, staffId)
+
+	// Prepare update data - only include fields that are being changed
+	updateData := make(map[string]interface{})
+
+	// Map common field names
+	if name, ok := changes["name"]; ok {
+		updateData["name"] = name
+	}
+	if position, ok := changes["position"]; ok {
+		updateData["position"] = position
+	}
+	if department, ok := changes["department"]; ok {
+		updateData["department"] = department
+	}
+	if status, ok := changes["status"]; ok {
+		updateData["status"] = status
+	}
+	if staffType, ok := changes["type"]; ok {
+		updateData["type"] = staffType
+	}
+	if startPeriod, ok := changes["startPeriod"]; ok {
+		updateData["start_period"] = startPeriod
+	}
+	if endPeriod, ok := changes["endPeriod"]; ok {
+		updateData["end_period"] = endPeriod
+	}
+	if staffOrder, ok := changes["staff_order"]; ok {
+		updateData["staff_order"] = staffOrder
+	}
+
+	// Always update the updated_at timestamp
+	updateData["updated_at"] = time.Now().UTC().Format(time.RFC3339)
+
+	// Marshal update data to JSON
+	jsonData, err := json.Marshal(updateData)
+	if err != nil {
+		return fmt.Errorf("failed to marshal update data: %w", err)
+	}
+
+	// Create PATCH request
+	req, err := http.NewRequest("PATCH", url, bytes.NewBuffer(jsonData))
+	if err != nil {
+		return fmt.Errorf("failed to create request: %w", err)
+	}
+
+	req.Header.Set("Authorization", "Bearer "+s.supabaseKey)
+	req.Header.Set("apikey", s.supabaseKey)
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Prefer", "return=minimal")
+
+	// Make request
+	client := &http.Client{Timeout: 10 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		return fmt.Errorf("failed to update in Supabase: %w", err)
+	}
+	defer resp.Body.Close()
+
+	// Read response for error reporting
+	body, _ := io.ReadAll(resp.Body)
+
+	// Check response status
+	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusNoContent {
+		return fmt.Errorf("Supabase update failed with status %d: %s", resp.StatusCode, string(body))
+	}
+
+	log.Printf("✅ Updated staff %s in Supabase database", staffId)
+	return nil
+}
+
+// createStaffInSupabase creates a new staff member in Supabase database
+func (s *StaffSyncServer) createStaffInSupabase(staffData map[string]interface{}) (*StaffMember, error) {
+	url := fmt.Sprintf("%s/rest/v1/staff", s.supabaseURL)
+
+	// Prepare staff creation data
+	createData := make(map[string]interface{})
+
+	// Generate UUID if not provided
+	staffId, ok := staffData["id"].(string)
+	if !ok || staffId == "" {
+		staffId = uuid.New().String()
+	}
+	createData["id"] = staffId
+
+	// Required fields
+	if name, ok := staffData["name"]; ok {
+		createData["name"] = name
+	} else {
+		return nil, fmt.Errorf("name is required")
+	}
+
+	// Optional fields with defaults
+	if position, ok := staffData["position"]; ok {
+		createData["position"] = position
+	}
+	if department, ok := staffData["department"]; ok {
+		createData["department"] = department
+	}
+	if status, ok := staffData["status"]; ok {
+		createData["status"] = status
+	} else {
+		createData["status"] = "社員" // Default status
+	}
+	if staffType, ok := staffData["type"]; ok {
+		createData["type"] = staffType
+	}
+	if startPeriod, ok := staffData["startPeriod"]; ok {
+		createData["start_period"] = startPeriod
+	}
+	if endPeriod, ok := staffData["endPeriod"]; ok {
+		createData["end_period"] = endPeriod
+	}
+	if staffOrder, ok := staffData["staff_order"]; ok {
+		createData["staff_order"] = staffOrder
+	}
+
+	// Set default values
+	createData["is_active"] = true
+	createData["created_at"] = time.Now().UTC().Format(time.RFC3339)
+	createData["updated_at"] = time.Now().UTC().Format(time.RFC3339)
+
+	// Marshal creation data to JSON
+	jsonData, err := json.Marshal(createData)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal create data: %w", err)
+	}
+
+	// Create POST request
+	req, err := http.NewRequest("POST", url, bytes.NewBuffer(jsonData))
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %w", err)
+	}
+
+	req.Header.Set("Authorization", "Bearer "+s.supabaseKey)
+	req.Header.Set("apikey", s.supabaseKey)
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Prefer", "return=representation")
+
+	// Make request
+	client := &http.Client{Timeout: 10 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create in Supabase: %w", err)
+	}
+	defer resp.Body.Close()
+
+	// Read response
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read create response: %w", err)
+	}
+
+	// Check response status
+	if resp.StatusCode != http.StatusCreated && resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("Supabase create failed with status %d: %s", resp.StatusCode, string(body))
+	}
+
+	// Parse created staff member
+	var createdStaff []StaffMember
+	if err := json.Unmarshal(body, &createdStaff); err != nil {
+		return nil, fmt.Errorf("failed to parse created staff response: %w", err)
+	}
+
+	if len(createdStaff) == 0 {
+		return nil, fmt.Errorf("no staff member returned from create")
+	}
+
+	log.Printf("✅ Created staff %s (%s) in Supabase database", createdStaff[0].Name, createdStaff[0].ID)
+	return &createdStaff[0], nil
+}
+
+// deleteStaffInSupabase soft-deletes a staff member in Supabase database
+func (s *StaffSyncServer) deleteStaffInSupabase(staffId string) error {
+	url := fmt.Sprintf("%s/rest/v1/staff?id=eq.%s", s.supabaseURL, staffId)
+
+	// Soft delete by setting is_active to false
+	updateData := map[string]interface{}{
+		"is_active":  false,
+		"updated_at": time.Now().UTC().Format(time.RFC3339),
+	}
+
+	// Marshal update data to JSON
+	jsonData, err := json.Marshal(updateData)
+	if err != nil {
+		return fmt.Errorf("failed to marshal delete data: %w", err)
+	}
+
+	// Create PATCH request
+	req, err := http.NewRequest("PATCH", url, bytes.NewBuffer(jsonData))
+	if err != nil {
+		return fmt.Errorf("failed to create request: %w", err)
+	}
+
+	req.Header.Set("Authorization", "Bearer "+s.supabaseKey)
+	req.Header.Set("apikey", s.supabaseKey)
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Prefer", "return=minimal")
+
+	// Make request
+	client := &http.Client{Timeout: 10 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		return fmt.Errorf("failed to delete in Supabase: %w", err)
+	}
+	defer resp.Body.Close()
+
+	// Read response for error reporting
+	body, _ := io.ReadAll(resp.Body)
+
+	// Check response status
+	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusNoContent {
+		return fmt.Errorf("Supabase delete failed with status %d: %s", resp.StatusCode, string(body))
+	}
+
+	log.Printf("✅ Deleted (soft) staff %s in Supabase database", staffId)
+	return nil
 }
 
 func (s *StaffSyncServer) handleHealth(w http.ResponseWriter, r *http.Request) {
