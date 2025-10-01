@@ -45,6 +45,7 @@ const StaffEditModal = ({
   currentMonthIndex,
   isSaving = false, // New prop to show saving state
   error = null, // New prop to show errors
+  invalidateAllPeriodsCache = null, // Phase 3: Cache invalidation for database refresh
 }) => {
   // Debug staffMembers prop changes
   React.useEffect(() => {
@@ -287,6 +288,12 @@ const StaffEditModal = ({
             lastOperationSuccess: true,
           });
 
+          // Phase 3: Invalidate React Query cache to trigger database refresh
+          if (invalidateAllPeriodsCache) {
+            console.log('🔄 [StaffModal-Refresh] Invalidating cache after staff add to refresh from database');
+            invalidateAllPeriodsCache();
+          }
+
           // Show success feedback
           toast.success(`${safeEditingStaffData.name}を追加しました`);
 
@@ -332,6 +339,12 @@ const StaffEditModal = ({
               lastOperation: 'update',
               lastOperationSuccess: true,
             });
+
+            // Phase 3: Invalidate React Query cache to trigger database refresh
+            if (invalidateAllPeriodsCache) {
+              console.log('🔄 [StaffModal-Refresh] Invalidating cache to refresh from database');
+              invalidateAllPeriodsCache();
+            }
 
             // Show success feedback
             toast.success(`${safeEditingStaffData.name}を更新しました`);
@@ -434,16 +447,22 @@ const StaffEditModal = ({
         updateSchedule,
         (updatedStaffArray) => {
           console.log("✅ [Real-time UI] Staff deleted successfully with immediate UI update");
-          
+
           setOperationState({
             isProcessing: false,
             lastOperation: 'delete',
             lastOperationSuccess: true,
           });
-          
+
+          // Phase 3: Invalidate React Query cache to trigger database refresh
+          if (invalidateAllPeriodsCache) {
+            console.log('🔄 [StaffModal-Refresh] Invalidating cache after staff delete to refresh from database');
+            invalidateAllPeriodsCache();
+          }
+
           // Show success feedback
           toast.success(`${staffName}を削除しました`);
-          
+
           // Close modal after successful deletion
           setShowStaffEditModal(false);
           setSelectedStaffForEdit(null);

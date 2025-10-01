@@ -93,6 +93,7 @@ const ShiftScheduleEditorPhase3 = ({
     updateStaff: prefetchUpdateStaff,
     deleteStaff: prefetchDeleteStaff,
     refetchAllData: refetchPrefetchData,
+    invalidateAllPeriodsCache, // Phase 3: Cache invalidation for database refresh
     prefetchStats,
     phase: prefetchPhase,
     webSocketEnabled: isPrefetchWebSocketEnabled,
@@ -720,6 +721,7 @@ const ShiftScheduleEditorPhase3 = ({
           updateSchedule={updateSchedule}
           isSaving={isSaving}
           error={supabaseError}
+          invalidateAllPeriodsCache={invalidateAllPeriodsCache} // Phase 3: Cache refresh for database sync
         />
       )}
 
