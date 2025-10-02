@@ -77,6 +77,24 @@ type StaffMember struct {
 	UpdatedAt   time.Time   `json:"updated_at"`
 }
 
+// ToReactFormat converts Supabase snake_case to React camelCase
+func (s *StaffMember) ToReactFormat() map[string]interface{} {
+	return map[string]interface{}{
+		"id":          s.ID,
+		"name":        s.Name,
+		"position":    s.Position,
+		"department":  s.Department,
+		"type":        s.Type,
+		"status":      s.Status,
+		"period":      s.Period,
+		"staffOrder":  s.StaffOrder,    // camelCase for React
+		"startPeriod": s.StartPeriod,   // camelCase for React
+		"endPeriod":   s.EndPeriod,     // camelCase for React
+		"createdAt":   s.CreatedAt,     // camelCase for React
+		"updatedAt":   s.UpdatedAt,     // camelCase for React
+	}
+}
+
 // Supabase response structure
 type SupabaseResponse struct {
 	Data  []StaffMember `json:"data"`
@@ -293,11 +311,22 @@ func (s *StaffSyncServer) handleSyncAllPeriodsRequest(client *Client, msg *Messa
 
 	log.Printf("Retrieved %d staff members across %d periods", totalStaff, len(allPeriodsStaff))
 
-	// Create sync all periods response
+	// Convert all staff to React format (snake_case → camelCase)
+	formattedPeriodsStaff := make(map[string][]map[string]interface{})
+	for periodIndex, staffList := range allPeriodsStaff {
+		var formattedStaffList []map[string]interface{}
+		for _, staff := range staffList {
+			formattedStaffList = append(formattedStaffList, staff.ToReactFormat())
+		}
+		// Convert int key to string for JSON compatibility
+		formattedPeriodsStaff[fmt.Sprintf("%d", periodIndex)] = formattedStaffList
+	}
+
+	// Create sync all periods response with formatted data
 	response := Message{
 		Type: MESSAGE_SYNC_ALL_PERIODS_RESPONSE,
 		Payload: map[string]interface{}{
-			"periods":      allPeriodsStaff,
+			"periods":      formattedPeriodsStaff, // Now in camelCase for React
 			"totalPeriods": len(allPeriodsStaff),
 			"timestamp":    time.Now(),
 		},
@@ -359,8 +388,31 @@ func (s *StaffSyncServer) handleStaffUpdate(client *Client, msg *Message) {
 
 	log.Printf("✅ Successfully saved staff update to Supabase: %s", staffId)
 
-	// Broadcast update to all other clients AFTER successful database save
-	s.broadcastToOthers(client, msg)
+	// Fetch fresh data from Supabase to ensure we broadcast the actual database state
+	updatedStaff, err := s.fetchStaffById(staffId)
+	if err != nil {
+		log.Printf("⚠️ Failed to fetch updated staff from Supabase: %v (falling back to original message)", err)
+		// Fallback: broadcast original message
+		s.broadcastToAll(msg)
+		return
+	}
+
+	// Create updated message with fresh database data in React-compatible format
+	// The client expects the full staff object as "changes" with camelCase field names
+	freshMsg := Message{
+		Type: MESSAGE_STAFF_UPDATE,
+		Payload: map[string]interface{}{
+			"staffId": staffId,
+			"id":      staffId,
+			"changes": updatedStaff.ToReactFormat(), // Convert to camelCase for React
+		},
+		Timestamp: time.Now(),
+		ClientID:  msg.ClientID,
+	}
+
+	// Broadcast fresh data to ALL clients (including the updating client)
+	s.broadcastToAll(&freshMsg)
+	log.Printf("📡 Broadcasted fresh staff data to all clients including sender")
 }
 
 func (s *StaffSyncServer) handleStaffCreate(client *Client, msg *Message) {
@@ -396,11 +448,17 @@ func (s *StaffSyncServer) handleStaffCreate(client *Client, msg *Message) {
 
 	log.Printf("✅ Successfully created staff in Supabase: %s (%s)", createdStaff.Name, createdStaff.ID)
 
-	// Update message payload with created staff ID
-	msg.Payload = createdStaff
+	// Create message with fresh created staff data in React-compatible format
+	freshMsg := Message{
+		Type:      MESSAGE_STAFF_CREATE,
+		Payload:   createdStaff.ToReactFormat(), // Convert to camelCase for React
+		Timestamp: time.Now(),
+		ClientID:  msg.ClientID,
+	}
 
-	// Broadcast creation to all other clients AFTER successful database save
-	s.broadcastToOthers(client, msg)
+	// Broadcast fresh data to ALL clients (including the creating client)
+	s.broadcastToAll(&freshMsg)
+	log.Printf("📡 Broadcasted fresh created staff to all clients including sender")
 }
 
 func (s *StaffSyncServer) handleStaffDelete(client *Client, msg *Message) {
@@ -442,8 +500,19 @@ func (s *StaffSyncServer) handleStaffDelete(client *Client, msg *Message) {
 
 	log.Printf("✅ Successfully deleted staff from Supabase: %s", staffId)
 
-	// Broadcast deletion to all other clients AFTER successful database save
-	s.broadcastToOthers(client, msg)
+	// Create message with deletion confirmation
+	freshMsg := Message{
+		Type: MESSAGE_STAFF_DELETE,
+		Payload: map[string]interface{}{
+			"staffId": staffId,
+		},
+		Timestamp: time.Now(),
+		ClientID:  msg.ClientID,
+	}
+
+	// Broadcast deletion to ALL clients (including the deleting client)
+	s.broadcastToAll(&freshMsg)
+	log.Printf("📡 Broadcasted staff deletion to all clients including sender")
 }
 
 func (s *StaffSyncServer) broadcastToOthers(sender *Client, msg *Message) {
@@ -454,6 +523,18 @@ func (s *StaffSyncServer) broadcastToOthers(sender *Client, msg *Message) {
 				if err != nil {
 					log.Printf("Error broadcasting to client %s: %v", client.clientId, err)
 				}
+			}
+		}
+	}
+}
+
+// broadcastToAll broadcasts a message to ALL connected clients (including sender)
+func (s *StaffSyncServer) broadcastToAll(msg *Message) {
+	if msgBytes, err := json.Marshal(msg); err == nil {
+		for client := range s.clients {
+			err := client.conn.WriteMessage(websocket.TextMessage, msgBytes)
+			if err != nil {
+				log.Printf("Error broadcasting to client %s: %v", client.clientId, err)
 			}
 		}
 	}
@@ -829,6 +910,47 @@ func (s *StaffSyncServer) fetchAllStaff() ([]StaffMember, error) {
 	}
 
 	return staffMembers, nil
+}
+
+// fetchStaffById fetches a single staff member by ID from Supabase
+func (s *StaffSyncServer) fetchStaffById(staffId string) (*StaffMember, error) {
+	url := fmt.Sprintf("%s/rest/v1/staff?id=eq.%s&select=*", s.supabaseURL, staffId)
+
+	req, err := http.NewRequest("GET", url, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %w", err)
+	}
+
+	req.Header.Set("Authorization", "Bearer "+s.supabaseKey)
+	req.Header.Set("apikey", s.supabaseKey)
+	req.Header.Set("Content-Type", "application/json")
+
+	client := &http.Client{Timeout: 10 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch from Supabase: %w", err)
+	}
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read response: %w", err)
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("Supabase request failed with status %d: %s", resp.StatusCode, string(body))
+	}
+
+	var staffMembers []StaffMember
+	if err := json.Unmarshal(body, &staffMembers); err != nil {
+		return nil, fmt.Errorf("failed to parse Supabase response: %w", err)
+	}
+
+	if len(staffMembers) == 0 {
+		return nil, fmt.Errorf("staff member with ID %s not found", staffId)
+	}
+
+	return &staffMembers[0], nil
 }
 
 // updateStaffInSupabase updates a staff member in Supabase database

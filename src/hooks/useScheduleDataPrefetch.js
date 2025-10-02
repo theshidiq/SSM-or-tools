@@ -438,6 +438,8 @@ export const useScheduleDataPrefetch = (
               );
               console.log('⚡ [PHASE3-CACHE] Optimistic cache update after staff update');
 
+              // Call onSuccess immediately with optimistic data
+              // Modal will handle fetching fresh data after cache invalidation
               if (onSuccess) onSuccess(webSocketStaff.staffMembers);
             })
             .catch(error => {
@@ -652,10 +654,11 @@ export const useScheduleDataPrefetch = (
     // Phase 3: Cache management utilities
     updatePeriodStaffCache,
     invalidateAllPeriodsCache: () => {
+      console.log('🔄 [PHASE3-CACHE] Invalidating all periods cache');
       queryClient.invalidateQueries({
         queryKey: PREFETCH_QUERY_KEYS.allPeriodsStaff()
       });
-      console.log('🔄 [PHASE3-CACHE] Manually invalidated all periods cache');
+      console.log('✅ [PHASE3-CACHE] Cache invalidated');
     },
 
     // Utility functions

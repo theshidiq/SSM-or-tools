@@ -135,6 +135,19 @@ const StaffEditModal = ({
       );
 
       if (updatedStaffData) {
+        // FIX: Enhanced logging to debug form refresh issue
+        console.log(`🔍 [Enhanced Sync] Checking for changes:`, {
+          staffId: selectedStaffForEdit.id,
+          currentName: selectedStaffForEdit.name,
+          newName: updatedStaffData.name,
+          currentPosition: selectedStaffForEdit.position,
+          newPosition: updatedStaffData.position,
+          currentStatus: selectedStaffForEdit.status,
+          newStatus: updatedStaffData.status,
+          hasLastModified: !!updatedStaffData.lastModified,
+          lastModified: updatedStaffData.lastModified
+        });
+
         // Check if the data has actually changed to avoid unnecessary updates
         const hasChanges =
           updatedStaffData.name !== selectedStaffForEdit.name ||
@@ -146,9 +159,7 @@ const StaffEditModal = ({
             JSON.stringify(selectedStaffForEdit.endPeriod);
 
         if (hasChanges) {
-          if (enhancedLoggingEnabled) {
-            console.log(`🔄 [Enhanced Sync] Syncing form with updated data for: ${updatedStaffData.name}`);
-          }
+          console.log(`🔄 [Enhanced Sync] Changes detected! Syncing form with updated data for: ${updatedStaffData.name}`);
 
           // Update selectedStaffForEdit with latest data
           setSelectedStaffForEdit(updatedStaffData);
@@ -166,7 +177,13 @@ const StaffEditModal = ({
 
           // Clear the editing flag since we've successfully synced
           setIsUserEditing(false);
+
+          console.log(`✅ [Enhanced Sync] Form synced successfully with:`, newEditingData);
+        } else {
+          console.log(`⏭️ [Enhanced Sync] No changes detected, skipping sync`);
         }
+      } else {
+        console.warn(`⚠️ [Enhanced Sync] Staff ${selectedStaffForEdit.id} not found in staffMembers array`);
       }
     }
   }, [
@@ -340,7 +357,7 @@ const StaffEditModal = ({
               lastOperationSuccess: true,
             });
 
-            // Phase 3: Invalidate React Query cache to trigger database refresh
+            // Phase 3: Invalidate React Query cache to trigger re-render with fresh data
             if (invalidateAllPeriodsCache) {
               console.log('🔄 [StaffModal-Refresh] Invalidating cache to refresh from database');
               invalidateAllPeriodsCache();
@@ -349,31 +366,11 @@ const StaffEditModal = ({
             // Show success feedback
             toast.success(`${safeEditingStaffData.name}を更新しました`);
 
-            // Force immediate form sync by clearing editing flag
+            // FIX: Clear editing flag to allow useEffect sync to run
+            // The useEffect (lines 114-182) will sync the form with fresh staffMembers
             setIsUserEditing(false);
 
-            // Update the modal's form state to reflect the successful update
-            const updatedStaff = updatedStaffArray.find(
-              (staff) => staff.id === selectedStaffForEdit.id,
-            );
-            if (updatedStaff) {
-              if (enhancedLoggingEnabled) {
-                console.log(`✅ [Enhanced StaffModal] Syncing form with confirmed data: ${updatedStaff.name}`);
-              }
-
-              // Update selected staff reference
-              setSelectedStaffForEdit(updatedStaff);
-
-              // Update form state with latest data
-              const newEditingData = {
-                name: updatedStaff.name,
-                position: updatedStaff.position || "",
-                status: updatedStaff.status || "社員",
-                startPeriod: updatedStaff.startPeriod || null,
-                endPeriod: updatedStaff.endPeriod || null,
-              };
-              setEditingStaffData(newEditingData);
-            }
+            console.log(`🔄 [StaffModal-Refresh] Form will sync automatically via useEffect when staffMembers updates`);
           },
         );
       }
