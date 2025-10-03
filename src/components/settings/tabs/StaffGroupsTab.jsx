@@ -98,8 +98,18 @@ const StaffGroupsTab = ({
   }, [deleteConfirmation, deleteSuccess]);
 
   // Fix: Memoize derived arrays to prevent unnecessary re-renders
+  // Transform WebSocket multi-table format to localStorage-compatible format
   const staffGroups = useMemo(
-    () => settings?.staffGroups || [],
+    () => {
+      const groups = settings?.staffGroups || [];
+      // Ensure all groups have a members array (WebSocket multi-table backend compatibility)
+      return groups.map(group => ({
+        ...group,
+        // Extract members from groupConfig if stored there (multi-table backend)
+        // Otherwise use members directly, or default to empty array
+        members: group.members || group.groupConfig?.members || []
+      }));
+    },
     [settings?.staffGroups],
   );
   const conflictRules = useMemo(
@@ -265,7 +275,7 @@ const StaffGroupsTab = ({
       name: "New Group",
       description: "",
       color: getNextAvailableColor(),
-      members: [],
+      members: [], // Always initialize members array (WebSocket multi-table backend compatibility)
     };
     setEditingGroup(newGroup.id);
     updateStaffGroups([...staffGroups, newGroup]);
@@ -376,8 +386,8 @@ const StaffGroupsTab = ({
       ...group,
       members:
         group.id === groupId
-          ? [...new Set([...group.members, staffId])] // Use Set to avoid duplicates
-          : group.members,
+          ? [...new Set([...(group.members || []), staffId])] // Use Set to avoid duplicates, handle undefined members
+          : (group.members || []),
     }));
     updateStaffGroups(updatedGroups);
   };
@@ -385,7 +395,7 @@ const StaffGroupsTab = ({
   const removeStaffFromGroup = (groupId, staffId) => {
     const updatedGroups = staffGroups.map((group) =>
       group.id === groupId
-        ? { ...group, members: group.members.filter((id) => id !== staffId) }
+        ? { ...group, members: (group.members || []).filter((id) => id !== staffId) }
         : group,
     );
     updateStaffGroups(updatedGroups);
@@ -429,7 +439,8 @@ const StaffGroupsTab = ({
     if (!group) return false;
 
     // Staff cannot backup a group they are already a member of
-    return !group.members.includes(staffId);
+    // Handle undefined members array (WebSocket multi-table backend compatibility)
+    return !(group.members || []).includes(staffId);
   };
 
   // Get backup assignments for a specific group
@@ -794,7 +805,8 @@ const StaffGroupsTab = ({
 
   const renderGroupCard = (group) => {
     const isEditing = editingGroup === group.id;
-    const groupMembers = group.members.map(getStaffById).filter(Boolean);
+    // Defensive check: handle undefined/null members array (WebSocket multi-table backend compatibility)
+    const groupMembers = (group.members || []).map(getStaffById).filter(Boolean);
 
     return (
       <div
