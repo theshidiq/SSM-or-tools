@@ -42,6 +42,7 @@ var upgrader = websocket.Upgrader{
 
 // Message types matching React app expectations
 const (
+	// Staff management messages
 	MESSAGE_SYNC_REQUEST              = "SYNC_REQUEST"
 	MESSAGE_SYNC_RESPONSE             = "SYNC_RESPONSE"
 	MESSAGE_SYNC_ALL_PERIODS_REQUEST  = "SYNC_ALL_PERIODS_REQUEST"
@@ -49,6 +50,21 @@ const (
 	MESSAGE_STAFF_UPDATE              = "STAFF_UPDATE"
 	MESSAGE_STAFF_CREATE              = "STAFF_CREATE"
 	MESSAGE_STAFF_DELETE              = "STAFF_DELETE"
+
+	// Settings management messages (multi-table architecture)
+	MESSAGE_SETTINGS_SYNC_REQUEST        = "SETTINGS_SYNC_REQUEST"
+	MESSAGE_SETTINGS_SYNC_RESPONSE       = "SETTINGS_SYNC_RESPONSE"
+	MESSAGE_SETTINGS_UPDATE_STAFF_GROUPS = "SETTINGS_UPDATE_STAFF_GROUPS"
+	MESSAGE_SETTINGS_UPDATE_DAILY_LIMITS = "SETTINGS_UPDATE_DAILY_LIMITS"
+	MESSAGE_SETTINGS_UPDATE_MONTHLY_LIMITS = "SETTINGS_UPDATE_MONTHLY_LIMITS"
+	MESSAGE_SETTINGS_UPDATE_PRIORITY_RULES = "SETTINGS_UPDATE_PRIORITY_RULES"
+	MESSAGE_SETTINGS_UPDATE_ML_CONFIG    = "SETTINGS_UPDATE_ML_CONFIG"
+	MESSAGE_SETTINGS_MIGRATE             = "SETTINGS_MIGRATE"
+	MESSAGE_SETTINGS_RESET               = "SETTINGS_RESET"
+	MESSAGE_SETTINGS_CREATE_VERSION      = "SETTINGS_CREATE_VERSION"
+	MESSAGE_SETTINGS_ACTIVATE_VERSION    = "SETTINGS_ACTIVATE_VERSION"
+
+	// Common messages
 	MESSAGE_CONNECTION_ACK            = "CONNECTION_ACK"
 	MESSAGE_ERROR                     = "ERROR"
 )
@@ -229,6 +245,7 @@ func (s *StaffSyncServer) handleStaffSync(w http.ResponseWriter, r *http.Request
 		log.Printf("Received message type: %s from client: %s", msg.Type, client.clientId)
 
 		switch msg.Type {
+		// Staff management handlers
 		case MESSAGE_SYNC_REQUEST:
 			s.handleSyncRequest(client, &msg)
 		case MESSAGE_SYNC_ALL_PERIODS_REQUEST:
@@ -239,6 +256,30 @@ func (s *StaffSyncServer) handleStaffSync(w http.ResponseWriter, r *http.Request
 			s.handleStaffCreate(client, &msg)
 		case MESSAGE_STAFF_DELETE:
 			s.handleStaffDelete(client, &msg)
+
+		// Settings management handlers (multi-table architecture)
+		case MESSAGE_SETTINGS_SYNC_REQUEST:
+			s.handleSettingsSyncRequest(client, &msg)
+		case MESSAGE_SETTINGS_UPDATE_STAFF_GROUPS:
+			s.handleStaffGroupsUpdate(client, &msg)
+		case MESSAGE_SETTINGS_UPDATE_DAILY_LIMITS:
+			s.handleDailyLimitsUpdate(client, &msg)
+		case MESSAGE_SETTINGS_UPDATE_MONTHLY_LIMITS:
+			s.handleMonthlyLimitsUpdate(client, &msg)
+		case MESSAGE_SETTINGS_UPDATE_PRIORITY_RULES:
+			s.handlePriorityRulesUpdate(client, &msg)
+		case MESSAGE_SETTINGS_UPDATE_ML_CONFIG:
+			s.handleMLConfigUpdate(client, &msg)
+		case MESSAGE_SETTINGS_MIGRATE:
+			s.handleSettingsMigrate(client, &msg)
+		case MESSAGE_SETTINGS_RESET:
+			s.handleSettingsReset(client, &msg)
+		// TODO: Implement version control handlers
+		// case MESSAGE_SETTINGS_CREATE_VERSION:
+		// 	s.handleCreateConfigVersion(client, &msg)
+		// case MESSAGE_SETTINGS_ACTIVATE_VERSION:
+		// 	s.handleActivateConfigVersion(client, &msg)
+
 		default:
 			log.Printf("Unknown message type: %s", msg.Type)
 		}
