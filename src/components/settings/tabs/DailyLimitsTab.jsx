@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import {
   Plus,
   Trash2,
@@ -53,13 +53,52 @@ const DailyLimitsTab = ({
   const [isDeleting, setIsDeleting] = useState(false);
   const [showAddForm, setShowAddForm] = useState(false);
 
-  // Ensure dailyLimits and monthlyLimits are arrays (defensive programming)
-  const dailyLimits = Array.isArray(settings?.dailyLimits)
-    ? settings.dailyLimits
-    : [];
-  const monthlyLimits = Array.isArray(settings?.monthlyLimits)
-    ? settings.monthlyLimits
-    : [];
+  // Fix: Memoize derived arrays to prevent unnecessary re-renders
+  // Transform WebSocket multi-table format to localStorage-compatible format
+  const dailyLimits = useMemo(
+    () => {
+      const limits = settings?.dailyLimits || [];
+      // Ensure all limits have required properties (WebSocket multi-table backend compatibility)
+      return limits.map(limit => ({
+        ...limit,
+        // Extract properties from limitConfig if stored there (multi-table backend)
+        // Otherwise use properties directly, or default to safe values
+        daysOfWeek: limit.daysOfWeek || limit.limitConfig?.daysOfWeek || [],
+        targetIds: limit.targetIds || limit.limitConfig?.targetIds || [],
+        shiftType: limit.shiftType || limit.limitConfig?.shiftType || 'any',
+        maxCount: limit.maxCount ?? limit.limitConfig?.maxCount ?? 0,
+        scope: limit.scope || limit.limitConfig?.scope || 'all',
+        isHardConstraint: limit.isHardConstraint ?? limit.limitConfig?.isHardConstraint ?? true,
+        penaltyWeight: limit.penaltyWeight ?? limit.limitConfig?.penaltyWeight ?? 10,
+        description: limit.description || limit.limitConfig?.description || '',
+      }));
+    },
+    [settings?.dailyLimits],
+  );
+
+  const monthlyLimits = useMemo(
+    () => {
+      const limits = settings?.monthlyLimits || [];
+      // Ensure all limits have required properties (WebSocket multi-table backend compatibility)
+      return limits.map(limit => ({
+        ...limit,
+        // Extract properties from limitConfig if stored there (multi-table backend)
+        // Otherwise use properties directly, or default to safe values
+        limitType: limit.limitType || limit.limitConfig?.limitType || 'max_off_days',
+        maxCount: limit.maxCount ?? limit.limitConfig?.maxCount ?? 0,
+        scope: limit.scope || limit.limitConfig?.scope || 'all',
+        targetIds: limit.targetIds || limit.limitConfig?.targetIds || [],
+        distributionRules: limit.distributionRules || limit.limitConfig?.distributionRules || {
+          maxConsecutive: 2,
+          preferWeekends: false,
+        },
+        isHardConstraint: limit.isHardConstraint ?? limit.limitConfig?.isHardConstraint ?? false,
+        penaltyWeight: limit.penaltyWeight ?? limit.limitConfig?.penaltyWeight ?? 5,
+        description: limit.description || limit.limitConfig?.description || '',
+      }));
+    },
+    [settings?.monthlyLimits],
+  );
 
   // Add escape key listener to exit edit mode
   useEffect(() => {
@@ -241,9 +280,11 @@ const DailyLimitsTab = ({
     const limit = dailyLimits.find((l) => l.id === limitId);
     if (!limit) return;
 
-    const updatedDays = limit.daysOfWeek.includes(dayId)
-      ? limit.daysOfWeek.filter((d) => d !== dayId)
-      : [...limit.daysOfWeek, dayId];
+    // Defensive: Ensure daysOfWeek is an array
+    const currentDays = Array.isArray(limit.daysOfWeek) ? limit.daysOfWeek : [];
+    const updatedDays = currentDays.includes(dayId)
+      ? currentDays.filter((d) => d !== dayId)
+      : [...currentDays, dayId];
 
     updateDailyLimit(limitId, { daysOfWeek: updatedDays });
   };
@@ -289,6 +330,9 @@ const DailyLimitsTab = ({
   };
 
   const renderDaySelector = (limit) => {
+    // Defensive: Ensure daysOfWeek is an array
+    const daysOfWeek = Array.isArray(limit.daysOfWeek) ? limit.daysOfWeek : [];
+
     return (
       <div className="space-y-2">
         <label className="text-sm font-medium text-gray-700">
@@ -300,7 +344,7 @@ const DailyLimitsTab = ({
               key={day.id}
               onClick={() => toggleDayOfWeek(limit.id, day.id)}
               className={`px-3 py-2 text-sm font-medium rounded-lg transition-colors ${
-                limit.daysOfWeek.includes(day.id)
+                daysOfWeek.includes(day.id)
                   ? "bg-blue-100 text-blue-700 border-2 border-blue-300"
                   : "bg-gray-100 text-gray-600 border-2 border-gray-200 hover:bg-gray-200"
               }`}
@@ -311,9 +355,9 @@ const DailyLimitsTab = ({
         </div>
         <p className="text-xs text-gray-500">
           Selected days:{" "}
-          {limit.daysOfWeek.length === 7
+          {daysOfWeek.length === 7
             ? "All days"
-            : `${limit.daysOfWeek.length} days`}
+            : `${daysOfWeek.length} days`}
         </p>
       </div>
     );
@@ -324,6 +368,9 @@ const DailyLimitsTab = ({
 
     const options = getTargetOptions(limit.scope);
     const updateFunc = isMonthly ? updateMonthlyLimit : updateDailyLimit;
+
+    // Defensive: Ensure targetIds is an array
+    const targetIds = Array.isArray(limit.targetIds) ? limit.targetIds : [];
 
     return (
       <div className="space-y-2">
@@ -338,11 +385,11 @@ const DailyLimitsTab = ({
             >
               <input
                 type="checkbox"
-                checked={limit.targetIds.includes(option.id)}
+                checked={targetIds.includes(option.id)}
                 onChange={(e) => {
                   const updatedTargets = e.target.checked
-                    ? [...limit.targetIds, option.id]
-                    : limit.targetIds.filter((id) => id !== option.id);
+                    ? [...targetIds, option.id]
+                    : targetIds.filter((id) => id !== option.id);
                   updateFunc(limit.id, { targetIds: updatedTargets });
                 }}
                 className="w-4 h-4 text-blue-600 rounded focus:ring-blue-500"
@@ -351,7 +398,7 @@ const DailyLimitsTab = ({
             </label>
           ))}
         </div>
-        {limit.targetIds.length === 0 && (
+        {targetIds.length === 0 && (
           <p className="text-xs text-red-600">
             At least one target must be selected
           </p>
@@ -363,17 +410,21 @@ const DailyLimitsTab = ({
   // Helper function to get target display text
   const getTargetDisplayText = (limit) => {
     if (limit.scope === "all") return "";
+
+    // Defensive: Ensure targetIds is an array
+    const targetIds = Array.isArray(limit.targetIds) ? limit.targetIds : [];
+
     if (limit.scope === "individual") {
       const selectedStaff = staffMembers.filter((staff) =>
-        limit.targetIds.includes(staff.id),
+        targetIds.includes(staff.id),
       );
       return selectedStaff.length > 0
         ? selectedStaff.map((staff) => staff.name).join(", ")
         : "No staff selected";
     }
     if (limit.scope === "staff_status") {
-      return limit.targetIds.length > 0
-        ? limit.targetIds.join(", ")
+      return targetIds.length > 0
+        ? targetIds.join(", ")
         : "No status selected";
     }
     return limit.scope;
@@ -564,9 +615,10 @@ const DailyLimitsTab = ({
           <div className="flex items-center gap-4 text-sm text-gray-600">
             <span className="flex items-center gap-1">
               <Calendar size={14} />
-              {limit.daysOfWeek.length === 7
+              {/* Defensive: Ensure daysOfWeek is an array */}
+              {Array.isArray(limit.daysOfWeek) && limit.daysOfWeek.length === 7
                 ? "All days"
-                : `${limit.daysOfWeek.length} days`}
+                : `${Array.isArray(limit.daysOfWeek) ? limit.daysOfWeek.length : 0} days`}
             </span>
             <span
               className={`px-2 py-1 rounded text-xs ${
