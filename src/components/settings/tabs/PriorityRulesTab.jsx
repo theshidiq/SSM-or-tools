@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useMemo } from "react";
 import {
   Plus,
   Trash2,
@@ -71,9 +71,36 @@ const PriorityRulesTab = ({
   const [selectedStaff, setSelectedStaff] = useState("all");
   const [conflictingRules, setConflictingRules] = useState([]);
 
-  // Ensure priorityRules is always an array - handle legacy object format
-  const rawPriorityRules = settings?.priorityRules || [];
-  const priorityRules = Array.isArray(rawPriorityRules) ? rawPriorityRules : []; // For now, treat legacy object format as empty array until migration is complete
+  // Fix: Memoize derived arrays to prevent unnecessary re-renders
+  // Transform WebSocket multi-table format to localStorage-compatible format
+  const priorityRules = useMemo(
+    () => {
+      const rules = settings?.priorityRules || [];
+      // Ensure all rules have required properties (WebSocket multi-table backend compatibility)
+      // Handle legacy object format - convert to array if needed
+      const rulesArray = Array.isArray(rules) ? rules : [];
+
+      return rulesArray.map(rule => ({
+        ...rule,
+        // Extract properties from ruleConfig if stored there (multi-table backend)
+        // Otherwise use properties directly, or default to safe values
+        daysOfWeek: rule.daysOfWeek || rule.ruleConfig?.daysOfWeek || [],
+        targetIds: rule.targetIds || rule.ruleConfig?.targetIds || [],
+        shiftType: rule.shiftType || rule.ruleConfig?.shiftType || 'early',
+        ruleType: rule.ruleType || rule.ruleConfig?.ruleType || 'preferred_shift',
+        staffId: rule.staffId || rule.ruleConfig?.staffId || '',
+        priorityLevel: rule.priorityLevel ?? rule.ruleConfig?.priorityLevel ?? 4,
+        preferenceStrength: rule.preferenceStrength ?? rule.ruleConfig?.preferenceStrength ?? 1.0,
+        isHardConstraint: rule.isHardConstraint ?? rule.ruleConfig?.isHardConstraint ?? true,
+        penaltyWeight: rule.penaltyWeight ?? rule.ruleConfig?.penaltyWeight ?? 100,
+        effectiveFrom: rule.effectiveFrom ?? rule.ruleConfig?.effectiveFrom ?? null,
+        effectiveUntil: rule.effectiveUntil ?? rule.ruleConfig?.effectiveUntil ?? null,
+        isActive: rule.isActive ?? rule.ruleConfig?.isActive ?? true,
+        description: rule.description || rule.ruleConfig?.description || '',
+      }));
+    },
+    [settings?.priorityRules],
+  );
 
   // Add escape key listener to exit edit mode
   useEffect(() => {
@@ -108,9 +135,11 @@ const PriorityRulesTab = ({
 
         // Check if rules apply to same staff and have conflicting requirements
         if (rule1.staffId === rule2.staffId) {
-          const daysOverlap = rule1.daysOfWeek.some((day) =>
-            rule2.daysOfWeek.includes(day),
-          );
+          // Defensive: Ensure daysOfWeek is an array
+          const days1 = Array.isArray(rule1.daysOfWeek) ? rule1.daysOfWeek : [];
+          const days2 = Array.isArray(rule2.daysOfWeek) ? rule2.daysOfWeek : [];
+
+          const daysOverlap = days1.some((day) => days2.includes(day));
           const shiftsConflict =
             (rule1.ruleType === "preferred_shift" &&
               rule2.ruleType === "avoid_shift" &&
@@ -151,24 +180,18 @@ const PriorityRulesTab = ({
       isActive: true,
     };
     startEditingRule(newRule.id, newRule);
-    // Ensure we always work with an array
-    const rulesArray = Array.isArray(priorityRules) ? priorityRules : [];
-    updatePriorityRules([...rulesArray, newRule]);
+    updatePriorityRules([...priorityRules, newRule]);
   };
 
   const updateRule = (ruleId, updates) => {
-    // Ensure we always work with an array
-    const rulesArray = Array.isArray(priorityRules) ? priorityRules : [];
-    const updatedRules = rulesArray.map((rule) =>
+    const updatedRules = priorityRules.map((rule) =>
       rule.id === ruleId ? { ...rule, ...updates } : rule,
     );
     updatePriorityRules(updatedRules);
   };
 
   const deleteRule = (ruleId) => {
-    // Ensure we always work with an array
-    const rulesArray = Array.isArray(priorityRules) ? priorityRules : [];
-    const rule = rulesArray.find((r) => r.id === ruleId);
+    const rule = priorityRules.find((r) => r.id === ruleId);
     if (rule) {
       setDeleteConfirmation({ id: ruleId, name: rule.name });
     }
@@ -180,9 +203,7 @@ const PriorityRulesTab = ({
     setIsDeleting(true);
     try {
       const { id } = deleteConfirmation;
-      // Ensure we always work with an array
-      const rulesArray = Array.isArray(priorityRules) ? priorityRules : [];
-      const updatedRules = rulesArray.filter((rule) => rule.id !== id);
+      const updatedRules = priorityRules.filter((rule) => rule.id !== id);
       updatePriorityRules(updatedRules);
 
       setDeleteConfirmation(null);
@@ -200,10 +221,8 @@ const PriorityRulesTab = ({
   const getStaffById = (id) => staffMembers.find((staff) => staff.id === id);
 
   const getRulesByStaff = (staffId) => {
-    // Ensure we always work with an array
-    const rulesArray = Array.isArray(priorityRules) ? priorityRules : [];
-    if (staffId === "all") return rulesArray;
-    return rulesArray.filter((rule) => rule.staffId === staffId);
+    if (staffId === "all") return priorityRules;
+    return priorityRules.filter((rule) => rule.staffId === staffId);
   };
 
   // Start editing a rule and save original data for cancel
@@ -224,8 +243,7 @@ const PriorityRulesTab = ({
   // Cancel changes and restore original data
   const handleCancelEdit = useCallback(() => {
     if (originalRuleData && editingRule) {
-      const rulesArray = Array.isArray(priorityRules) ? priorityRules : [];
-      const updatedRules = rulesArray.map((rule) =>
+      const updatedRules = priorityRules.map((rule) =>
         rule.id === editingRule ? originalRuleData : rule,
       );
       updatePriorityRules(updatedRules);
@@ -235,14 +253,14 @@ const PriorityRulesTab = ({
   }, [originalRuleData, editingRule, priorityRules, updatePriorityRules]);
 
   const toggleDayOfWeek = (ruleId, dayId) => {
-    // Ensure we always work with an array
-    const rulesArray = Array.isArray(priorityRules) ? priorityRules : [];
-    const rule = rulesArray.find((r) => r.id === ruleId);
+    const rule = priorityRules.find((r) => r.id === ruleId);
     if (!rule) return;
 
-    const updatedDays = rule.daysOfWeek.includes(dayId)
-      ? rule.daysOfWeek.filter((d) => d !== dayId)
-      : [...rule.daysOfWeek, dayId];
+    // Defensive: Ensure daysOfWeek is an array
+    const currentDays = Array.isArray(rule.daysOfWeek) ? rule.daysOfWeek : [];
+    const updatedDays = currentDays.includes(dayId)
+      ? currentDays.filter((d) => d !== dayId)
+      : [...currentDays, dayId];
 
     updateRule(ruleId, { daysOfWeek: updatedDays });
   };
@@ -275,6 +293,9 @@ const PriorityRulesTab = ({
   };
 
   const renderDaySelector = (rule) => {
+    // Defensive: Ensure daysOfWeek is an array
+    const daysOfWeek = Array.isArray(rule.daysOfWeek) ? rule.daysOfWeek : [];
+
     return (
       <div className="space-y-2">
         <label className="text-sm font-medium text-gray-700">
@@ -286,7 +307,7 @@ const PriorityRulesTab = ({
               key={day.id}
               onClick={() => toggleDayOfWeek(rule.id, day.id)}
               className={`px-3 py-2 text-sm font-medium rounded-lg transition-colors ${
-                rule.daysOfWeek.includes(day.id)
+                daysOfWeek.includes(day.id)
                   ? "bg-blue-100 text-blue-700 border-2 border-blue-300"
                   : "bg-gray-100 text-gray-600 border-2 border-gray-200 hover:bg-gray-200"
               }`}
@@ -295,7 +316,7 @@ const PriorityRulesTab = ({
             </button>
           ))}
         </div>
-        {rule.daysOfWeek.length === 0 && (
+        {daysOfWeek.length === 0 && (
           <p className="text-xs text-red-600">
             At least one day must be selected
           </p>
@@ -358,7 +379,8 @@ const PriorityRulesTab = ({
               )}
               <p className="text-sm text-gray-600">
                 {staff?.name} • {ruleType?.label}
-                {rule.daysOfWeek.length > 0 &&
+                {/* Defensive: Ensure daysOfWeek is an array */}
+                {Array.isArray(rule.daysOfWeek) && rule.daysOfWeek.length > 0 &&
                   ` • ${rule.daysOfWeek.length} days`}
               </p>
             </div>
@@ -490,7 +512,8 @@ const PriorityRulesTab = ({
         {!isEditing && (
           <div className="space-y-3">
             {/* Days Display */}
-            {rule.daysOfWeek.length > 0 && (
+            {/* Defensive: Ensure daysOfWeek is an array */}
+            {Array.isArray(rule.daysOfWeek) && rule.daysOfWeek.length > 0 && (
               <div className="flex items-center gap-2">
                 <Calendar size={16} className="text-gray-500" />
                 <div className="flex gap-1">
