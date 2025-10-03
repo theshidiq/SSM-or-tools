@@ -497,7 +497,6 @@ export const useWebSocketSettings = (options = {}) => {
 
       wsRef.current.send(JSON.stringify(message));
       console.log('📤 Phase 3 Settings: Sent settings migration (localStorage → multi-table)');
-      migrationAttempted.current = true;
 
       return Promise.resolve();
     } else {
