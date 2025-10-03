@@ -47,11 +47,10 @@ const MESSAGE_TYPES = {
  *
  * @param {Object} options Configuration options
  * @param {boolean} options.enabled Whether to enable WebSocket connection
- * @param {boolean} options.autoMigrate Whether to auto-migrate from localStorage
  * @returns {Object} Settings state and operations
  */
 export const useWebSocketSettings = (options = {}) => {
-  const { enabled = true, autoMigrate = true } = options;
+  const { enabled = true } = options;
 
   // State management - aggregated from multi-table backend
   const [settings, setSettings] = useState(null);
@@ -68,7 +67,6 @@ export const useWebSocketSettings = (options = {}) => {
   const reconnectTimeoutRef = useRef(null);
   const connectionFailedPermanently = useRef(false);
   const initialConnectionTimer = useRef(null);
-  const migrationAttempted = useRef(false);
 
   /**
    * Handle SETTINGS_SYNC_RESPONSE message
@@ -95,10 +93,8 @@ export const useWebSocketSettings = (options = {}) => {
       });
       console.log('📌 Active config version:', versionData?.versionNumber);
 
-      // If this was a migration response, mark as complete
+      // If this was a migration response
       if (payload.migrated) {
-        localStorage.setItem('settings-migrated-to-backend', 'true');
-        migrationAttempted.current = true;
         console.log('✅ Settings migration completed (localStorage → multi-table)');
       }
 
@@ -214,17 +210,6 @@ export const useWebSocketSettings = (options = {}) => {
           timestamp: new Date().toISOString(),
           clientId: clientIdRef.current
         }));
-
-        // Check for auto-migration
-        if (autoMigrate && !migrationAttempted.current) {
-          const migrationFlag = localStorage.getItem('settings-migrated-to-backend');
-          const localSettings = localStorage.getItem('shift-schedule-settings');
-
-          if (!migrationFlag && localSettings) {
-            console.log('🔄 Phase 3 Settings: Auto-migration enabled, will migrate after sync');
-            // Migration will be triggered after receiving initial sync response
-          }
-        }
       };
 
       ws.onmessage = (event) => {
@@ -234,30 +219,6 @@ export const useWebSocketSettings = (options = {}) => {
           switch (message.type) {
             case MESSAGE_TYPES.SETTINGS_SYNC_RESPONSE:
               handleSettingsSyncResponse(message.payload);
-
-              // Trigger auto-migration if needed
-              if (autoMigrate && !migrationAttempted.current) {
-                const migrationFlag = localStorage.getItem('settings-migrated-to-backend');
-                const localSettings = localStorage.getItem('shift-schedule-settings');
-
-                if (!migrationFlag && localSettings) {
-                  try {
-                    const parsedSettings = JSON.parse(localSettings);
-                    console.log('🔄 Phase 3 Settings: Starting auto-migration from localStorage');
-
-                    ws.send(JSON.stringify({
-                      type: MESSAGE_TYPES.SETTINGS_MIGRATE,
-                      payload: { settings: parsedSettings },
-                      timestamp: new Date().toISOString(),
-                      clientId: clientIdRef.current
-                    }));
-
-                    migrationAttempted.current = true;
-                  } catch (parseError) {
-                    console.error('❌ Failed to parse localStorage settings for migration:', parseError);
-                  }
-                }
-              }
               break;
 
             case MESSAGE_TYPES.CONNECTION_ACK:
@@ -320,7 +281,7 @@ export const useWebSocketSettings = (options = {}) => {
       setConnectionStatus('disconnected');
       setLastError('Failed to establish WebSocket connection');
     }
-  }, [enabled, autoMigrate, handleSettingsSyncResponse, handleError]);
+  }, [enabled, handleSettingsSyncResponse, handleError]);
 
   // Initialize WebSocket connection
   useEffect(() => {

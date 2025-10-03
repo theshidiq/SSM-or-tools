@@ -30,8 +30,7 @@ export const useSettingsData = (autosaveEnabled = true) => {
     isLoading: wsLoading,
     lastError: wsError
   } = useWebSocketSettings({
-    enabled: WEBSOCKET_SETTINGS_ENABLED,
-    autoMigrate: true
+    enabled: WEBSOCKET_SETTINGS_ENABLED
   });
 
   // Determine active backend mode
