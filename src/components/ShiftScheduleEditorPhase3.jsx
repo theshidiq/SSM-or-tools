@@ -690,15 +690,18 @@ const ShiftScheduleEditorPhase3 = ({
             onShiftUpdate={handleShiftUpdate}
             settings={settings}
           />
-        ) : viewMode === "stats" ? (
-          <StatisticsDashboard
-            data={statsData}
-            currentPeriod={currentPeriod}
-            isLoading={isSupabaseLoading && !prefetchStats?.memoryUsage?.periodCount}
-            settings={settings}
-          />
         ) : null}
       </div>
+
+      {/* Statistics Dashboard - Always visible below editor/view tabs */}
+      {viewMode !== "stats" && (
+        <StatisticsDashboard
+          data={statsData}
+          currentPeriod={currentPeriod}
+          isLoading={isSupabaseLoading && !prefetchStats?.memoryUsage?.periodCount}
+          settings={settings}
+        />
+      )}
 
       {/* Staff Edit Modal - Enhanced Real-time Integration */}
       {showStaffEditModal && (
