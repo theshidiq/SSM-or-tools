@@ -828,11 +828,14 @@ const ScheduleTable = ({
                 <TableRow key={dateKey} className="hover:bg-muted/50">
                   {/* Date Cell (Sticky Left Column) */}
                   <TableCell
-                    className="text-center font-medium border-r-2 border-border sticky left-0 bg-background cursor-pointer hover:bg-muted/50"
+                    className="text-center font-medium border-r-2 border-border cursor-pointer hover:bg-muted/50"
                     style={{
+                      position: "sticky",
+                      left: 0,
                       minWidth: "40px",
                       width: "40px",
-                      zIndex: 300,
+                      zIndex: 400,
+                      backgroundColor: "hsl(var(--background))",
                     }}
                     onClick={(e) => {
                       e.stopPropagation();
@@ -1019,8 +1022,14 @@ const ScheduleTable = ({
           <TableFooter>
             <TableRow className="bg-yellow-100 border-t-2 border-border">
               <TableCell
-                className="text-center font-bold text-xs border-r-2 border-border sticky left-0 bg-yellow-100 py-2"
-                style={{ zIndex: 300, color: "#dc2626" }}
+                className="text-center font-bold text-xs border-r-2 border-border py-2"
+                style={{
+                  position: "sticky",
+                  left: 0,
+                  zIndex: 400,
+                  backgroundColor: "rgb(254 249 195)",
+                  color: "#dc2626",
+                }}
               >
                 休日数
               </TableCell>
