@@ -723,13 +723,14 @@ const ScheduleTable = ({
           <TableHeader style={{ position: "sticky", top: 0, zIndex: 500, backgroundColor: "hsl(var(--background))" }}>
             <TableRow>
               <TableHead
-                className="bg-primary text-primary-foreground min-w-[40px] border-r-2 border-border font-bold hover:text-white"
+                className="bg-primary text-primary-foreground min-w-[40px] border-r-2 border-border font-bold hover:text-white relative"
                 style={{
                   minWidth: "40px",
                   width: "40px",
                   maxWidth: "40px",
                   position: "sticky",
                   top: 0,
+                  zIndex: 501,
                   backgroundColor: "hsl(var(--primary))",
                 }}
               >
@@ -760,6 +761,7 @@ const ScheduleTable = ({
                       maxWidth: "40px",
                       position: "sticky",
                       top: 0,
+                      zIndex: 501,
                       backgroundColor: "hsl(var(--primary))",
                     }}
                   >
