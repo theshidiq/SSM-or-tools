@@ -720,7 +720,7 @@ const ScheduleTable = ({
           style={{ minWidth: `${40 + (orderedStaffMembers?.length || 0) * 40}px` }}
         >
           {/* Sticky Header Row: Staff Names as Column Headers */}
-          <TableHeader className="sticky top-0 bg-background shadow-sm" style={{ zIndex: 500 }}>
+          <TableHeader style={{ position: "sticky", top: 0, zIndex: 500, backgroundColor: "hsl(var(--background))" }}>
             <TableRow>
               <TableHead
                 className="bg-primary text-primary-foreground min-w-[40px] border-r-2 border-border font-bold hover:text-white"
@@ -728,6 +728,9 @@ const ScheduleTable = ({
                   minWidth: "40px",
                   width: "40px",
                   maxWidth: "40px",
+                  position: "sticky",
+                  top: 0,
+                  backgroundColor: "hsl(var(--primary))",
                 }}
               >
                 <div className="flex items-center justify-center gap-1 py-0.5">
@@ -755,7 +758,9 @@ const ScheduleTable = ({
                       minWidth: "40px",
                       width: "40px",
                       maxWidth: "40px",
-                      position: "relative",
+                      position: "sticky",
+                      top: 0,
+                      backgroundColor: "hsl(var(--primary))",
                     }}
                   >
                     <div className="flex flex-col items-center justify-center py-1 px-1 h-full">
