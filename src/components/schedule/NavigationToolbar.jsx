@@ -473,7 +473,7 @@ const NavigationToolbar = ({
               onValueChange={onViewModeChange}
               className="w-auto"
             >
-              <TabsList className="grid w-full grid-cols-3">
+              <TabsList className="grid w-full grid-cols-2">
                 <TabsTrigger
                   value="table"
                   className="flex items-center gap-2 japanese-text"
@@ -487,13 +487,6 @@ const NavigationToolbar = ({
                 >
                   <Eye size={16} />
                   ビュー
-                </TabsTrigger>
-                <TabsTrigger
-                  value="stats"
-                  className="flex items-center gap-2 japanese-text"
-                >
-                  <BarChart3 size={16} />
-                  統計
                 </TabsTrigger>
               </TabsList>
             </Tabs>
