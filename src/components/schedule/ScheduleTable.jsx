@@ -18,7 +18,6 @@ import { Button } from "../ui/button";
 import { Badge } from "../ui/badge";
 import { Separator } from "../ui/separator";
 import {
-  Table,
   TableBody,
   TableCell,
   TableFooter,
@@ -716,8 +715,8 @@ const ScheduleTable = ({
           e.currentTarget.focus();
         }}
       >
-        <Table
-          className="shift-table w-full text-sm relative"
+        <table
+          className="shift-table w-full text-sm relative border-collapse"
           style={{ minWidth: `${40 + (orderedStaffMembers?.length || 0) * 40}px` }}
         >
           {/* Sticky Header Row: Staff Names as Column Headers */}
@@ -1079,7 +1078,7 @@ const ScheduleTable = ({
               })}
             </TableRow>
           </TableFooter>
-        </Table>
+        </table>
       </div>
 
       {/* Context Menu */}
