@@ -21,6 +21,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "../ui/card";
 
 // Import tab components
 import { useSettingsCache } from "../../hooks/useConfigurationCache";
+import { useSettingsData } from "../../hooks/useSettingsData";
 import StaffGroupsTab from "./tabs/StaffGroupsTab";
 import DailyLimitsTab from "./tabs/DailyLimitsTab";
 import PriorityRulesTab from "./tabs/PriorityRulesTab";
@@ -61,6 +62,16 @@ const SettingsModal = ({
   onToggleAutosave,
   lastSaveTime = null,
 }) => {
+  // Backend mode and version info from useSettingsData
+  const {
+    backendMode,
+    isConnectedToBackend,
+    connectionStatus,
+    currentVersion,
+    versionName,
+    isVersionLocked,
+  } = useSettingsData();
+
   const [activeTab, setActiveTab] = useState("staff-groups");
   const [isVisible, setIsVisible] = useState(false);
   const [resetConfirmation, setResetConfirmation] = useState(false);
@@ -218,8 +229,50 @@ const SettingsModal = ({
               設定
             </Badge>
           </DialogTitle>
+
+          {/* Backend Status Indicator */}
+          <div className="flex items-center justify-between mt-2">
+            {backendMode === "websocket-multitable" ? (
+              <Badge
+                variant="default"
+                className="bg-green-100 text-green-800 border-green-300"
+              >
+                <span className="mr-1">🟢</span>
+                Real-time Multi-Table Sync
+              </Badge>
+            ) : (
+              <Badge
+                variant="secondary"
+                className="bg-amber-100 text-amber-800 border-amber-300"
+              >
+                <span className="mr-1">📱</span>
+                Local Storage Mode
+              </Badge>
+            )}
+
+            {backendMode === "websocket-multitable" && currentVersion && (
+              <div className="flex items-center gap-2 text-xs text-gray-600">
+                <span>Version {currentVersion}</span>
+                {versionName && (
+                  <span className="text-gray-500">• {versionName}</span>
+                )}
+                {isVersionLocked && (
+                  <span className="text-red-600">🔒 Locked</span>
+                )}
+              </div>
+            )}
+          </div>
+
           <DialogDescription>
             Configure ML models, business rules, and system settings
+            {backendMode === "websocket-multitable" && (
+              <span className="ml-2 text-xs text-gray-500">
+                • Status:{" "}
+                {connectionStatus === "connected"
+                  ? "✅ Connected"
+                  : "⏳ Connecting..."}
+              </span>
+            )}
           </DialogDescription>
         </DialogHeader>
 
