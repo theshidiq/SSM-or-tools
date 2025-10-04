@@ -721,7 +721,7 @@ const ScheduleTable = ({
           style={{ minWidth: `${40 + (orderedStaffMembers?.length || 0) * 40}px` }}
         >
           {/* Sticky Header Row: Staff Names as Column Headers */}
-          <TableHeader className="sticky top-0 z-50">
+          <TableHeader className="sticky top-0 z-50 bg-background shadow-sm">
             <TableRow>
               <TableHead
                 className="bg-primary text-primary-foreground min-w-[40px] border-r-2 border-border sticky left-0 font-bold hover:text-white"
