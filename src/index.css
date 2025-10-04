@@ -218,20 +218,27 @@
   .shift-table thead {
     position: sticky !important;
     top: 0 !important;
-    z-index: 300 !important;
+    z-index: 500 !important;
   }
 
   .shift-table thead tr {
-    position: sticky !important;
-    top: 0 !important;
-    z-index: 300 !important;
+    /* REMOVED: position: sticky causes nested sticky context issues */
+    /* The th cells below have sticky positioning, which is sufficient */
   }
 
-  .shift-table th {
+  .shift-table th:not(.sticky-header-cell) {
     @apply px-4 py-4 bg-muted text-muted-foreground text-left text-xs font-semibold uppercase tracking-wider border-b border-border;
+  }
+
+  .shift-table th.sticky-header-cell {
     position: sticky !important;
     top: 0 !important;
-    z-index: 250 !important;
+    z-index: 501 !important;
+  }
+
+  /* Date column header (first column) needs higher z-index to appear above date body cells */
+  .shift-table th.sticky-header-cell:first-child {
+    z-index: 600 !important;
   }
 
   .shift-table td {
