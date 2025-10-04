@@ -723,8 +723,12 @@ const ScheduleTable = ({
           <TableHeader className="sticky top-0 bg-background shadow-sm" style={{ zIndex: 500 }}>
             <TableRow>
               <TableHead
-                className="bg-primary text-primary-foreground min-w-[40px] border-r-2 border-border sticky left-0 font-bold hover:text-white"
-                style={{ zIndex: 600, width: "40px", boxShadow: "2px 0 4px rgba(0, 0, 0, 0.1)" }}
+                className="bg-primary text-primary-foreground min-w-[40px] border-r-2 border-border font-bold hover:text-white"
+                style={{
+                  minWidth: "40px",
+                  width: "40px",
+                  maxWidth: "40px",
+                }}
               >
                 <div className="flex items-center justify-center gap-1 py-0.5">
                   <span className="text-xs font-bold">日付</span>
