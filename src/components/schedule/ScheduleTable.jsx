@@ -696,7 +696,7 @@ const ScheduleTable = ({
 
       <div
         ref={tableRef}
-        className="table-container overflow-auto"
+        className="table-container overflow-auto relative"
         style={{ maxHeight: "calc(100vh - 110px)" }}
         tabIndex={0}
         onMouseUp={() => {
@@ -717,7 +717,7 @@ const ScheduleTable = ({
         }}
       >
         <Table
-          className="shift-table w-full text-sm"
+          className="shift-table w-full text-sm relative"
           style={{ minWidth: `${40 + (orderedStaffMembers?.length || 0) * 40}px` }}
         >
           {/* Sticky Header Row: Staff Names as Column Headers */}
