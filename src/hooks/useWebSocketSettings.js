@@ -42,6 +42,22 @@ const MESSAGE_TYPES = {
   ERROR: 'ERROR'
 };
 
+// Message types to silently ignore (handled by other hooks on same WebSocket)
+const IGNORED_MESSAGE_TYPES = [
+  'SHIFT_SYNC_RESPONSE',
+  'SHIFT_UPDATE',
+  'SHIFT_SYNC_REQUEST',
+  'SHIFT_BROADCAST',
+  'SHIFT_BULK_UPDATE',
+  'SYNC_REQUEST',
+  'SYNC_RESPONSE',
+  'SYNC_ALL_PERIODS_REQUEST',
+  'SYNC_ALL_PERIODS_RESPONSE',
+  'STAFF_UPDATE',
+  'STAFF_CREATE',
+  'STAFF_DELETE'
+];
+
 /**
  * WebSocket Settings Hook
  *
@@ -230,7 +246,10 @@ export const useWebSocketSettings = (options = {}) => {
               break;
 
             default:
-              console.warn('⚠️ Phase 3 Settings: Unknown message type:', message.type);
+              // Silently ignore messages handled by other hooks (staff, shifts)
+              if (!IGNORED_MESSAGE_TYPES.includes(message.type)) {
+                console.warn('⚠️ Phase 3 Settings: Unknown message type:', message.type);
+              }
           }
         } catch (error) {
           console.error('❌ Phase 3 Settings: Failed to parse WebSocket message:', error);

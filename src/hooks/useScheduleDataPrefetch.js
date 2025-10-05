@@ -33,6 +33,7 @@ import {
 } from "../utils/staffUtils";
 import { defaultStaffMembersArray } from "../constants/staffConstants";
 import { useWebSocketStaff } from "./useWebSocketStaff";
+import { useWebSocketShifts } from "./useWebSocketShifts";
 import { FEATURE_FLAGS } from "../config/featureFlags";
 
 // WebSocket-first query keys with multi-period support
@@ -63,20 +64,27 @@ export const useScheduleDataPrefetch = (
                               !localStorage.getItem('FORCE_SUPABASE_ONLY') &&
                               enabled;
 
+  // Schedule management state (must be initialized before hooks that use it)
+  const [schedule, setSchedule] = useState({});
+  const [currentScheduleId, setCurrentScheduleId] = useState(scheduleId);
+
   // WebSocket staff hook - handles real-time staff operations with multi-period prefetch
   const webSocketStaff = useWebSocketStaff(currentMonthIndex, {
     enabled: isWebSocketEnabled,
     prefetchAllPeriods: true // Phase 3: Enable all-periods prefetch
   });
 
+  // WebSocket shifts hook - handles real-time shift updates
+  const webSocketShifts = useWebSocketShifts(currentMonthIndex, currentScheduleId, {
+    enabled: isWebSocketEnabled && !!currentScheduleId,
+    autoReconnect: true,
+    enableOfflineQueue: true,
+  });
+
   // Phase 3: Performance monitoring
   const cacheHitCountRef = useRef(0);
   const cacheMissCountRef = useRef(0);
   const lastCacheUpdateRef = useRef(Date.now());
-
-  // Schedule management state (Supabase for now, could be moved to WebSocket later)
-  const [schedule, setSchedule] = useState({});
-  const [currentScheduleId, setCurrentScheduleId] = useState(scheduleId);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
 
@@ -246,6 +254,82 @@ export const useScheduleDataPrefetch = (
       setIsLoading(false);
     }
   }, [currentScheduleData]);
+
+  // Auto-create schedule if it doesn't exist for the current period
+  useEffect(() => {
+    const createScheduleForPeriod = async () => {
+      // Check if schedule is still loading
+      if (scheduleLoading) {
+        console.log('⏳ [WEBSOCKET-PREFETCH] Schedule still loading, waiting...');
+        return;
+      }
+
+      // Wait for query to actually run (data will be undefined until query executes)
+      if (!currentScheduleData) {
+        console.log('⏳ [WEBSOCKET-PREFETCH] Schedule data not yet available, waiting for query...');
+        return;
+      }
+
+      // Only create if query completed and found no schedule
+      if (currentScheduleData.scheduleId) {
+        console.log(`✅ [WEBSOCKET-PREFETCH] Schedule already exists: ${currentScheduleData.scheduleId}`);
+        return;
+      }
+
+      try {
+        console.log(`🆕 [WEBSOCKET-PREFETCH] Creating new schedule for period ${currentMonthIndex}`);
+
+        // Create new schedule in Supabase
+        const { data: newSchedule, error: createError } = await supabase
+          .from('schedules')
+          .insert([
+            {
+              schedule_data: {},
+              created_at: new Date().toISOString(),
+              updated_at: new Date().toISOString(),
+            }
+          ])
+          .select()
+          .single();
+
+        if (createError) throw createError;
+
+        // Create schedule_staff_assignment for this period
+        const { error: assignmentError } = await supabase
+          .from('schedule_staff_assignments')
+          .insert([
+            {
+              schedule_id: newSchedule.id,
+              period_index: currentMonthIndex,
+            }
+          ]);
+
+        if (assignmentError) throw assignmentError;
+
+        console.log(`✅ [WEBSOCKET-PREFETCH] Created schedule ${newSchedule.id} for period ${currentMonthIndex}`);
+
+        // Update local state with new schedule ID
+        setCurrentScheduleId(newSchedule.id);
+        setSchedule({});
+
+        // Invalidate and refetch to get the new schedule
+        queryClient.invalidateQueries(PREFETCH_QUERY_KEYS.scheduleData(currentMonthIndex));
+      } catch (error) {
+        console.error(`❌ [WEBSOCKET-PREFETCH] Failed to create schedule for period ${currentMonthIndex}:`, error);
+        setError(`スケジュールの作成に失敗しました: ${error.message}`);
+      }
+    };
+
+    createScheduleForPeriod();
+  }, [currentScheduleData, scheduleLoading, currentMonthIndex, queryClient]);
+
+  // Sync WebSocket shift data with local schedule state
+  useEffect(() => {
+    if (webSocketShifts.isConnected && Object.keys(webSocketShifts.scheduleData).length > 0) {
+      console.log('🔄 [WEBSOCKET-PREFETCH] Syncing WebSocket shift data to local state');
+      setSchedule(webSocketShifts.scheduleData);
+    }
+  }, [webSocketShifts.scheduleData, webSocketShifts.isConnected]);
 
   // Overall loading state
   const isPrefetching = periodsLoading || scheduleLoading || webSocketStaff.isLoading;
@@ -506,15 +590,84 @@ export const useScheduleDataPrefetch = (
   }, [isWebSocketEnabled, webSocketStaff.connectionStatus, webSocketStaff.staffMembers, webSocketStaff.allPeriodsStaff, webSocketStaff.addStaff, webSocketStaff.updateStaff, webSocketStaff.deleteStaff, queryClient]);
 
   /**
-   * Schedule operations (still via Supabase for now)
+   * Schedule operations (WebSocket-first with Supabase fallback)
    */
   const scheduleOperations = useMemo(() => ({
-    updateShift: (staffId, dateKey, shiftValue) => {
+    updateShift: async (staffId, dateKey, shiftValue) => {
+      // Create schedule on-demand if it doesn't exist
       if (!currentScheduleId) {
-        console.warn('⚠️ [WEBSOCKET-PREFETCH] No schedule found for shift update');
-        return Promise.reject(new Error('No schedule ID'));
+        console.warn('⏳ [WEBSOCKET-PREFETCH] No schedule ID, creating schedule on-demand...');
+
+        try {
+          // Create new schedule in Supabase
+          const { data: newSchedule, error: createError } = await supabase
+            .from('schedules')
+            .insert([
+              {
+                schedule_data: {},
+                created_at: new Date().toISOString(),
+                updated_at: new Date().toISOString(),
+              }
+            ])
+            .select()
+            .single();
+
+          if (createError) throw createError;
+
+          // Create schedule_staff_assignment for this period
+          const { error: assignmentError } = await supabase
+            .from('schedule_staff_assignments')
+            .insert([
+              {
+                schedule_id: newSchedule.id,
+                period_index: currentMonthIndex,
+              }
+            ]);
+
+          if (assignmentError) throw assignmentError;
+
+          console.log(`✅ [WEBSOCKET-PREFETCH] Created schedule ${newSchedule.id} on-demand for period ${currentMonthIndex}`);
+
+          // Update local state
+          setCurrentScheduleId(newSchedule.id);
+          setSchedule({});
+
+          // Invalidate cache to refetch with new schedule
+          queryClient.invalidateQueries(PREFETCH_QUERY_KEYS.scheduleData(currentMonthIndex));
+
+          // Continue with the update using the newly created schedule ID
+          // (fall through to normal update logic below)
+        } catch (error) {
+          console.error('❌ [WEBSOCKET-PREFETCH] Failed to create schedule on-demand:', error);
+          return Promise.reject(new Error(`Failed to create schedule: ${error.message}`));
+        }
       }
 
+      // WebSocket-first shift update
+      if (isWebSocketEnabled && webSocketShifts.isConnected) {
+        console.log(
+          `📝 [WEBSOCKET-PREFETCH] WebSocket shift update: ${staffId} → ${dateKey} = "${shiftValue}"`,
+        );
+
+        // Use WebSocket for real-time update
+        return webSocketShifts.updateShift(staffId, dateKey, shiftValue)
+          .then(() => {
+            console.log('✅ [WEBSOCKET-PREFETCH] Shift updated via WebSocket');
+            // Optimistically update local state (WebSocket hook already does this)
+            setSchedule(webSocketShifts.scheduleData);
+          })
+          .catch((error) => {
+            console.error('❌ [WEBSOCKET-PREFETCH] WebSocket shift update failed:', error);
+            // Fallback to Supabase on error
+            return scheduleOperations.updateShiftViaSupabase(staffId, dateKey, shiftValue);
+          });
+      }
+
+      // Fallback to Supabase direct update
+      return scheduleOperations.updateShiftViaSupabase(staffId, dateKey, shiftValue);
+    },
+
+    updateShiftViaSupabase: (staffId, dateKey, shiftValue) => {
       // Create updated schedule
       const newSchedule = {
         ...schedule,
@@ -525,7 +678,7 @@ export const useScheduleDataPrefetch = (
       };
 
       console.log(
-        `📝 [WEBSOCKET-PREFETCH] Updating shift: ${staffId} → ${dateKey} = "${shiftValue}"`,
+        `📝 [WEBSOCKET-PREFETCH] Supabase shift update: ${staffId} → ${dateKey} = "${shiftValue}"`,
       );
 
       // Save with optimistic update
@@ -541,7 +694,28 @@ export const useScheduleDataPrefetch = (
         return Promise.reject(new Error('No schedule ID'));
       }
 
-      console.log(`📅 [WEBSOCKET-PREFETCH] Updating entire schedule`);
+      // WebSocket-first bulk update
+      if (isWebSocketEnabled && webSocketShifts.isConnected) {
+        console.log(`📅 [WEBSOCKET-PREFETCH] WebSocket bulk schedule update`);
+
+        return webSocketShifts.bulkUpdateSchedule(newScheduleData)
+          .then(() => {
+            console.log('✅ [WEBSOCKET-PREFETCH] Schedule bulk updated via WebSocket');
+            setSchedule(webSocketShifts.scheduleData);
+          })
+          .catch((error) => {
+            console.error('❌ [WEBSOCKET-PREFETCH] WebSocket bulk update failed:', error);
+            // Fallback to Supabase
+            return scheduleOperations.updateScheduleViaSupabase(newScheduleData, staffForSave);
+          });
+      }
+
+      // Fallback to Supabase
+      return scheduleOperations.updateScheduleViaSupabase(newScheduleData, staffForSave);
+    },
+
+    updateScheduleViaSupabase: (newScheduleData, staffForSave = null) => {
+      console.log(`📅 [WEBSOCKET-PREFETCH] Supabase bulk schedule update`);
 
       return saveScheduleMutation.mutateAsync({
         scheduleData: newScheduleData,
@@ -549,7 +723,7 @@ export const useScheduleDataPrefetch = (
         staffMembers: staffForSave || processedStaffMembers,
       });
     },
-  }), [schedule, currentScheduleId, processedStaffMembers, saveScheduleMutation]);
+  }), [schedule, currentScheduleId, processedStaffMembers, saveScheduleMutation, isWebSocketEnabled, webSocketShifts]);
 
   // Setup real-time schedule subscriptions
   useEffect(() => {
@@ -678,12 +852,26 @@ export const useScheduleDataPrefetch = (
       // Phase 3: Cache and memory metrics
       cacheStats: getCacheStats(),
       memoryUsage: getMemoryUsage(),
+
+      // Shift WebSocket metrics
+      shiftWebSocketStatus: webSocketShifts.connectionStatus,
+      shiftOfflineQueue: webSocketShifts.offlineQueueLength,
+      shiftReconnectAttempts: webSocketShifts.reconnectAttempts,
     },
 
     // Architecture identification
     isPrefetch: true,
-    phase: "Phase 3: Multi-Period State Management with React Query Cache",
+    phase: "Phase 4: Real-time Shift Updates with WebSocket Integration",
     webSocketEnabled: isWebSocketEnabled,
     fallbackMode: !isWebSocketEnabled || webSocketStaff.connectionStatus !== 'connected',
+
+    // Shift WebSocket operations
+    shiftWebSocket: {
+      syncSchedule: webSocketShifts.syncSchedule,
+      connectionStatus: webSocketShifts.connectionStatus,
+      isConnected: webSocketShifts.isConnected,
+      isSyncing: webSocketShifts.isSyncing,
+      clientId: webSocketShifts.clientId,
+    },
   };
 };

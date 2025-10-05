@@ -19,6 +19,26 @@ const MESSAGE_TYPES = {
   ERROR: 'ERROR'
 };
 
+// Message types to silently ignore (handled by other hooks on same WebSocket)
+const IGNORED_MESSAGE_TYPES = [
+  'SHIFT_SYNC_RESPONSE',
+  'SHIFT_UPDATE',
+  'SHIFT_SYNC_REQUEST',
+  'SHIFT_BROADCAST',
+  'SHIFT_BULK_UPDATE',
+  'SETTINGS_SYNC_REQUEST',
+  'SETTINGS_SYNC_RESPONSE',
+  'SETTINGS_UPDATE_STAFF_GROUPS',
+  'SETTINGS_UPDATE_DAILY_LIMITS',
+  'SETTINGS_UPDATE_MONTHLY_LIMITS',
+  'SETTINGS_UPDATE_PRIORITY_RULES',
+  'SETTINGS_UPDATE_ML_CONFIG',
+  'SETTINGS_RESET',
+  'SETTINGS_MIGRATE',
+  'SETTINGS_CREATE_VERSION',
+  'SETTINGS_ACTIVATE_VERSION'
+];
+
 export const useWebSocketStaff = (currentMonthIndex, options = {}) => {
   const { enabled = true, prefetchAllPeriods = true } = options;
 
@@ -262,7 +282,10 @@ export const useWebSocketStaff = (currentMonthIndex, options = {}) => {
               setLastError(message.payload.message);
               break;
             default:
-              console.warn('⚠️ Phase 3: Unknown message type:', message.type);
+              // Silently ignore messages handled by other hooks (shifts, settings)
+              if (!IGNORED_MESSAGE_TYPES.includes(message.type)) {
+                console.warn('⚠️ Phase 3: Unknown message type:', message.type);
+              }
           }
         } catch (error) {
           console.error('❌ Phase 3: Failed to parse WebSocket message:', error);

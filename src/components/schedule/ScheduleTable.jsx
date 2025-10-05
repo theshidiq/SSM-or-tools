@@ -723,7 +723,7 @@ const ScheduleTable = ({
           <TableHeader style={{ position: "sticky", top: 0, zIndex: 500, backgroundColor: "hsl(var(--background))" }}>
             <TableRow>
               <TableHead
-                className="bg-primary text-primary-foreground min-w-[40px] border-r-2 border-border font-bold hover:text-white sticky-header-cell"
+                className="bg-gray-700 text-white min-w-[40px] border-r-2 border-border font-bold hover:bg-gray-600 sticky-header-cell"
                 style={{
                   minWidth: "40px",
                   width: "40px",
@@ -732,7 +732,7 @@ const ScheduleTable = ({
                   top: 0,
                   left: 0,
                   zIndex: 503,
-                  backgroundColor: "hsl(var(--primary))",
+                  backgroundColor: "#374151",
                 }}
               >
                 <div className="flex items-center justify-center gap-1 py-0.5">
@@ -746,7 +746,7 @@ const ScheduleTable = ({
                 return (
                   <TableHead
                     key={staff.id}
-                    className={`bg-primary text-primary-foreground text-center sticky-header-cell border-r border-border cursor-pointer font-bold hover:bg-primary/80 hover:text-white ${
+                    className={`bg-gray-700 text-white text-center sticky-header-cell border-r border-border cursor-pointer font-bold hover:bg-gray-600 ${
                       staffIndex === (orderedStaffMembers?.length || 0) - 1
                         ? "border-r-2"
                         : ""
@@ -763,7 +763,7 @@ const ScheduleTable = ({
                       position: "sticky",
                       top: 0,
                       zIndex: 501,
-                      backgroundColor: "hsl(var(--primary))",
+                      backgroundColor: "#374151",
                     }}
                   >
                     <div className="flex flex-col items-center justify-center py-1 px-1 h-full">
@@ -901,8 +901,7 @@ const ScheduleTable = ({
                           padding: "0",
                         }}
                       >
-                        <Button
-                          variant="ghost"
+                        <div
                           className={`w-full h-full flex items-center justify-center p-0 transition-all duration-200 relative ${
                             !isActiveForDate
                               ? "cursor-not-allowed text-muted-foreground"
@@ -988,6 +987,81 @@ const ScheduleTable = ({
                               : getCellDisplayValue(cellValue, staff)}
                           </span>
 
+                          {/* Shift Dropdown */}
+                          {showDropdown === cellKey && isActiveForDate && (
+                            <div
+                              className="shift-dropdown absolute bg-white border border-gray-300 rounded-lg shadow-lg z-50 min-w-[120px]"
+                              style={getDropdownPosition(staffIndex, dateIndex, orderedStaffMembers?.length || 0, dateRange?.length || 0)}
+                              onClick={(e) => e.stopPropagation()}
+                            >
+                              <div className="py-1">
+                                {/* Normal/Blank Shift Option */}
+                                <button
+                                  onClick={() => handleShiftSelect(staff.id, dateKey, 'normal')}
+                                  className="w-full text-left px-3 py-2 text-base hover:bg-gray-50 border-b border-gray-100 flex items-center gap-2"
+                                >
+                                  <span className="text-gray-600 font-medium">（空白）</span>
+                                  <span className="text-gray-500">Normal Shift</span>
+                                </button>
+
+                                {/* Other Shift Options */}
+                                {getAvailableShifts(staff.status).filter(key => key !== 'normal').map(shiftKey => {
+                                  const shift = shiftSymbols[shiftKey];
+                                  return (
+                                    <button
+                                      key={shiftKey}
+                                      onClick={() => handleShiftSelect(staff.id, dateKey, shiftKey)}
+                                      className="w-full text-left px-3 py-2 text-base hover:bg-gray-50 flex items-center gap-2"
+                                    >
+                                      <span className={`font-bold ${shift.color}`}>
+                                        {shift.symbol}
+                                      </span>
+                                      <span className="text-gray-700">
+                                        {shift.label}
+                                      </span>
+                                    </button>
+                                  );
+                                })}
+
+                                {/* Custom Text Input */}
+                                <div className="border-t border-gray-100 p-2">
+                                  <div className="flex flex-col gap-2">
+                                    <Input
+                                      type="text"
+                                      value={customInputText}
+                                      onChange={(e) => setCustomInputText(e.target.value)}
+                                      onKeyDown={(e) => {
+                                        if (e.key === 'Enter') {
+                                          handleCustomTextSave(staff.id, dateKey);
+                                        } else if (e.key === 'Escape') {
+                                          handleCustomTextCancel();
+                                        }
+                                      }}
+                                      className="w-full px-2 py-1 text-sm border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
+                                      placeholder="カスタムテキスト..."
+                                    />
+                                    <div className="flex items-center gap-1">
+                                      <Button
+                                        onClick={handleCustomTextCancel}
+                                        className="flex-1 px-4 py-2 text-sm text-white bg-red-600 hover:bg-red-700 flex items-center justify-center transition-colors duration-200"
+                                        title="キャンセル"
+                                      >
+                                        <X size={16} />
+                                      </Button>
+                                      <Button
+                                        onClick={() => handleCustomTextSave(staff.id, dateKey)}
+                                        className="flex-1 px-4 py-2 text-sm text-white bg-green-600 hover:bg-green-700 flex items-center justify-center transition-colors duration-200"
+                                        title="保存"
+                                      >
+                                        <Check size={16} />
+                                      </Button>
+                                    </div>
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+                          )}
+
                           {/* Selection indicator for selected cells */}
                           {isCellSelected(staff.id, dateKey) &&
                             isActiveForDate && (
@@ -1022,7 +1096,7 @@ const ScheduleTable = ({
                             }
                             return null;
                           })()}
-                        </Button>
+                        </div>
                       </TableCell>
                     );
                   })}

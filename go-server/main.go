@@ -64,6 +64,13 @@ const (
 	MESSAGE_SETTINGS_CREATE_VERSION      = "SETTINGS_CREATE_VERSION"
 	MESSAGE_SETTINGS_ACTIVATE_VERSION    = "SETTINGS_ACTIVATE_VERSION"
 
+	// Shift management messages (real-time schedule updates)
+	MESSAGE_SHIFT_UPDATE         = "SHIFT_UPDATE"
+	MESSAGE_SHIFT_SYNC_REQUEST   = "SHIFT_SYNC_REQUEST"
+	MESSAGE_SHIFT_SYNC_RESPONSE  = "SHIFT_SYNC_RESPONSE"
+	MESSAGE_SHIFT_BROADCAST      = "SHIFT_BROADCAST"
+	MESSAGE_SHIFT_BULK_UPDATE    = "SHIFT_BULK_UPDATE"
+
 	// Common messages
 	MESSAGE_CONNECTION_ACK            = "CONNECTION_ACK"
 	MESSAGE_ERROR                     = "ERROR"
@@ -153,9 +160,14 @@ func main() {
 	log.Printf("WebSocket endpoint: ws://localhost:%s/staff-sync", port)
 	log.Printf("Health check: http://localhost:%s/health", port)
 	log.Printf("Supabase URL: %s", supabaseURL)
-	log.Printf("Supported message types: %s, %s, %s, %s, %s, %s, %s, %s, %s",
-		MESSAGE_SYNC_REQUEST, MESSAGE_SYNC_RESPONSE, MESSAGE_SYNC_ALL_PERIODS_REQUEST, MESSAGE_SYNC_ALL_PERIODS_RESPONSE,
-		MESSAGE_STAFF_UPDATE, MESSAGE_STAFF_CREATE, MESSAGE_STAFF_DELETE, MESSAGE_CONNECTION_ACK, MESSAGE_ERROR)
+	log.Printf("Supported message types:")
+	log.Printf("  Staff: %s, %s, %s, %s",
+		MESSAGE_SYNC_REQUEST, MESSAGE_STAFF_UPDATE, MESSAGE_STAFF_CREATE, MESSAGE_STAFF_DELETE)
+	log.Printf("  Settings: %s, %s, %s, %s",
+		MESSAGE_SETTINGS_SYNC_REQUEST, MESSAGE_SETTINGS_UPDATE_STAFF_GROUPS, MESSAGE_SETTINGS_UPDATE_DAILY_LIMITS, MESSAGE_SETTINGS_MIGRATE)
+	log.Printf("  Shifts: %s, %s, %s",
+		MESSAGE_SHIFT_UPDATE, MESSAGE_SHIFT_SYNC_REQUEST, MESSAGE_SHIFT_BULK_UPDATE)
+	log.Printf("  Common: %s, %s", MESSAGE_CONNECTION_ACK, MESSAGE_ERROR)
 
 	err := http.ListenAndServe(":"+port, nil)
 	if err != nil {
@@ -279,6 +291,14 @@ func (s *StaffSyncServer) handleStaffSync(w http.ResponseWriter, r *http.Request
 		// 	s.handleCreateConfigVersion(client, &msg)
 		// case MESSAGE_SETTINGS_ACTIVATE_VERSION:
 		// 	s.handleActivateConfigVersion(client, &msg)
+
+		// Shift management handlers (real-time schedule updates)
+		case MESSAGE_SHIFT_UPDATE:
+			s.handleShiftUpdate(client, &msg)
+		case MESSAGE_SHIFT_SYNC_REQUEST:
+			s.handleShiftSyncRequest(client, &msg)
+		case MESSAGE_SHIFT_BULK_UPDATE:
+			s.handleShiftBulkUpdate(client, &msg)
 
 		default:
 			log.Printf("Unknown message type: %s", msg.Type)
