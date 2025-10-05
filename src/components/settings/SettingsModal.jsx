@@ -91,13 +91,10 @@ const SettingsModal = ({
       onSettingsChange(newSettings);
     }
 
-    // Refresh configuration cache based on what changed
-    if (changedSection) {
-      await onSettingSaved(changedSection);
-    } else {
-      await onSettingsBulkSaved();
-    }
-  }, [onSettingsChange, onSettingSaved, onSettingsBulkSaved]);
+    // Skip cache refresh to prevent infinite loops
+    // The cache will be refreshed on next load
+    // TODO: Investigate why cache refresh triggers infinite loop
+  }, [onSettingsChange]);
 
   useEffect(() => {
     if (isOpen) {
