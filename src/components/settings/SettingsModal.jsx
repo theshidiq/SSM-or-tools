@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useCallback } from "react";
 import { X, RotateCcw, AlertTriangle, Check } from "lucide-react";
 
 // ShadCN UI Components
@@ -85,7 +85,7 @@ const SettingsModal = ({
     useSettingsCache();
 
   // Enhanced settings change handler that also refreshes cache
-  const handleSettingsChange = async (newSettings, changedSection = null) => {
+  const handleSettingsChange = useCallback(async (newSettings, changedSection = null) => {
     // Call the original settings change handler
     if (onSettingsChange) {
       onSettingsChange(newSettings);
@@ -97,7 +97,7 @@ const SettingsModal = ({
     } else {
       await onSettingsBulkSaved();
     }
-  };
+  }, [onSettingsChange, onSettingSaved, onSettingsBulkSaved]);
 
   useEffect(() => {
     if (isOpen) {
