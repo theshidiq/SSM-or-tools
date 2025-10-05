@@ -793,8 +793,8 @@ const StaffGroupsTab = ({
     };
 
     return (
-      <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[40000]">
-        <div className="bg-white rounded-xl w-full max-w-md p-6 shadow-2xl">
+      <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[70000]">
+        <div className="bg-white rounded-xl w-full max-w-md p-6 shadow-2xl relative z-[70001]">
           <div className="flex items-center justify-between mb-4">
             <h3 className="text-lg font-semibold text-gray-800">
               Add Staff to {group?.name}
