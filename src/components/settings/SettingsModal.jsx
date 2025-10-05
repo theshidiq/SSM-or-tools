@@ -84,17 +84,9 @@ const SettingsModal = ({
   const { onSettingSaved, onSettingsBulkSaved, cacheStatus, isRefreshing } =
     useSettingsCache();
 
-  // Enhanced settings change handler that also refreshes cache
-  const handleSettingsChange = useCallback(async (newSettings, changedSection = null) => {
-    // Call the original settings change handler
-    if (onSettingsChange) {
-      onSettingsChange(newSettings);
-    }
-
-    // Skip cache refresh to prevent infinite loops
-    // The cache will be refreshed on next load
-    // TODO: Investigate why cache refresh triggers infinite loop
-  }, [onSettingsChange]);
+  // Don't wrap onSettingsChange - pass it directly to avoid infinite loops
+  // The wrapper was causing handleSettingsChange to recreate, which triggered
+  // ref updates in StaffGroupsTab, causing infinite loops
 
   useEffect(() => {
     if (isOpen) {
@@ -186,7 +178,7 @@ const SettingsModal = ({
   const renderTabContent = () => {
     const commonProps = {
       settings,
-      onSettingsChange: handleSettingsChange,
+      onSettingsChange, // Pass directly without wrapping to avoid infinite loops
       staffMembers,
       validationErrors: validationErrors[activeTab] || {},
       currentScheduleId, // Phase 2: Pass schedule ID for validation
