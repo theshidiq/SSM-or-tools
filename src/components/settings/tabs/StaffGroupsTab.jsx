@@ -101,14 +101,16 @@ const StaffGroupsTab = ({
   });
 
   // Synchronize local state with ref to handle parent re-renders
-  useEffect(() => {
-    if (modalStateRef.current.deleteConfirmation && !deleteConfirmation) {
-      setDeleteConfirmation(modalStateRef.current.deleteConfirmation);
-    }
-    if (modalStateRef.current.deleteSuccess && !deleteSuccess) {
-      setDeleteSuccess(modalStateRef.current.deleteSuccess);
-    }
-  }, [deleteConfirmation, deleteSuccess]);
+  // Remove this useEffect - it causes infinite loop by setting state that it depends on
+  // Modal state should be managed directly without this synchronization
+  // useEffect(() => {
+  //   if (modalStateRef.current.deleteConfirmation && !deleteConfirmation) {
+  //     setDeleteConfirmation(modalStateRef.current.deleteConfirmation);
+  //   }
+  //   if (modalStateRef.current.deleteSuccess && !deleteSuccess) {
+  //     setDeleteSuccess(modalStateRef.current.deleteSuccess);
+  //   }
+  // }, [deleteConfirmation, deleteSuccess]);
 
   // Fix: Memoize derived arrays to prevent unnecessary re-renders
   // Transform WebSocket multi-table format to localStorage-compatible format
