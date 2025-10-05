@@ -725,6 +725,7 @@ const ShiftScheduleEditorPhase3 = ({
           isSaving={isSaving}
           error={supabaseError}
           invalidateAllPeriodsCache={invalidateAllPeriodsCache} // Phase 3: Cache refresh for database sync
+          currentScheduleId={currentScheduleId} // Phase 3: WebSocket shift integration
         />
       )}
 
@@ -745,6 +746,8 @@ const ShiftScheduleEditorPhase3 = ({
           autosaveError={autosaveError}
           isAutosaveEnabled={isAutosaveEnabled}
           setIsAutosaveEnabled={setIsAutosaveEnabled}
+          currentScheduleId={currentScheduleId} // Phase 2: Schedule validation
+          staffMembers={effectiveStaffMembers} // Phase 2: Staff data for validation
         />
       )}
 

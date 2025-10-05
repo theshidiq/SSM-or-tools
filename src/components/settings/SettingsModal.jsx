@@ -61,6 +61,8 @@ const SettingsModal = ({
   isAutosaveEnabled = true,
   onToggleAutosave,
   lastSaveTime = null,
+  // Phase 2: Schedule validation
+  currentScheduleId = null,
 }) => {
   // Backend mode and version info from useSettingsData
   const {
@@ -190,6 +192,7 @@ const SettingsModal = ({
       onSettingsChange: handleSettingsChange,
       staffMembers,
       validationErrors: validationErrors[activeTab] || {},
+      currentScheduleId, // Phase 2: Pass schedule ID for validation
     };
 
     switch (activeTab) {

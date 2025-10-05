@@ -18,8 +18,11 @@ import {
   Shield,
   ChevronDown,
 } from "lucide-react";
+import { toast } from "sonner";
 import ConfirmationModal from "../shared/ConfirmationModal";
+import ConflictsModal from "../shared/ConflictsModal";
 import { useBackupStaffService } from "../../../hooks/useBackupStaffService";
+import { useScheduleValidation } from "../../../hooks/useScheduleValidation";
 
 const PRESET_COLORS = [
   "#3B82F6",
@@ -59,6 +62,7 @@ const StaffGroupsTab = ({
   onSettingsChange,
   staffMembers = [],
   validationErrors = {},
+  currentScheduleId = null, // Phase 2: Schedule ID for validation
 }) => {
   const [editingGroup, setEditingGroup] = useState(null);
   const [originalGroupData, setOriginalGroupData] = useState(null);
@@ -68,6 +72,14 @@ const StaffGroupsTab = ({
   const [deleteConfirmation, setDeleteConfirmation] = useState(null); // null or { groupId, groupName }
   const [isDeleting, setIsDeleting] = useState(false);
   const [deleteSuccess, setDeleteSuccess] = useState(false); // Track if delete was successful
+
+  // Phase 2: Validation state
+  const [validationConflicts, setValidationConflicts] = useState([]);
+  const [showConflictsModal, setShowConflictsModal] = useState(false);
+  const [isValidating, setIsValidating] = useState(false);
+
+  // Schedule validation hook
+  const { validateStaffGroups } = useScheduleValidation(currentScheduleId);
 
   // Backup staff service hook for database integration
   const {
@@ -198,8 +210,41 @@ const StaffGroupsTab = ({
   }, [staffGroups, conflictRules, updateConflictRules]);
 
   const updateStaffGroups = useCallback(
-    async (newGroups) => {
+    async (newGroups, skipValidation = false) => {
       try {
+        // Phase 2: Validate against current schedule before saving (unless skipped)
+        if (!skipValidation && currentScheduleId) {
+          setIsValidating(true);
+          try {
+            const conflicts = await validateStaffGroups(newGroups);
+
+            if (conflicts.length > 0) {
+              // Show warning toast with conflict count
+              toast.warning(
+                `Warning: ${conflicts.length} schedule conflict${conflicts.length !== 1 ? 's' : ''} detected`,
+                {
+                  description: 'Some group members are working on the same dates',
+                  action: {
+                    label: 'View Conflicts',
+                    onClick: () => {
+                      setValidationConflicts(conflicts);
+                      setShowConflictsModal(true);
+                    }
+                  },
+                  duration: 6000
+                }
+              );
+
+              console.log('⚠️ Staff groups validation detected conflicts:', conflicts);
+            }
+          } catch (validationError) {
+            console.error('❌ Staff groups validation failed:', validationError);
+            // Continue with save even if validation fails
+          } finally {
+            setIsValidating(false);
+          }
+        }
+
         // Create a completely new settings object to ensure proper state update
         const updatedSettings = {
           ...settings,
@@ -212,7 +257,7 @@ const StaffGroupsTab = ({
         throw error;
       }
     },
-    [settings, onSettingsChange],
+    [settings, onSettingsChange, currentScheduleId, validateStaffGroups],
   );
 
   // Cancel changes and restore original data
@@ -1048,6 +1093,24 @@ const StaffGroupsTab = ({
         variant={deleteSuccess ? "info" : "danger"}
         isLoading={isDeleting}
       />
+
+      {/* Phase 2: Validation Conflicts Modal */}
+      <ConflictsModal
+        isOpen={showConflictsModal}
+        onClose={() => setShowConflictsModal(false)}
+        conflicts={validationConflicts}
+        type="staff_groups"
+        staffMembers={staffMembers}
+        title="Staff Group Conflicts Detected"
+      />
+
+      {/* Validation Loading Indicator */}
+      {isValidating && (
+        <div className="fixed bottom-4 right-4 bg-blue-600 text-white px-4 py-3 rounded-lg shadow-lg flex items-center gap-3 z-50">
+          <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+          <span className="font-medium">Validating schedule...</span>
+        </div>
+      )}
     </div>
   );
 };

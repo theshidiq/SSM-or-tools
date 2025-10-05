@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState, useCallback } from "react";
 import { isDateWithinWorkPeriod } from "../../utils/dateUtils";
 import { toast } from "sonner";
 import { useFeatureFlag, checkSystemHealth } from "../../config/featureFlags";
+import { useWebSocketShifts } from "../../hooks/useWebSocketShifts";
 
 // ShadCN UI Components
 import {
@@ -46,6 +47,7 @@ const StaffEditModal = ({
   isSaving = false, // New prop to show saving state
   error = null, // New prop to show errors
   invalidateAllPeriodsCache = null, // Phase 3: Cache invalidation for database refresh
+  currentScheduleId = null, // Schedule ID for WebSocket integration
 }) => {
   // Debug staffMembers prop changes
   React.useEffect(() => {
@@ -72,6 +74,13 @@ const StaffEditModal = ({
   // Optimistic update state management
   const [optimisticStaffData, setOptimisticStaffData] = useState(null);
   const [pendingOperation, setPendingOperation] = useState(null);
+
+  // WebSocket integration for real-time shift synchronization
+  const webSocketShifts = useWebSocketShifts(currentMonthIndex, currentScheduleId, {
+    enabled: !!currentScheduleId,
+    autoReconnect: true,
+    enableOfflineQueue: true,
+  });
 
   // Ref for the name input field to enable auto-focus
   const nameInputRef = useRef(null);
@@ -334,17 +343,38 @@ const StaffEditModal = ({
         });
         
       } else if (selectedStaffForEdit) {
-        console.log(`✏️ [Real-time UI] Updating staff member: ${safeEditingStaffData.name}`);
-        
+        console.log(`✏️ [StaffModal-Update] Updating staff member: ${safeEditingStaffData.name}`);
+
         // Show immediate optimistic feedback
         toast.success(`${safeEditingStaffData.name}を更新しています...`, { duration: 1000 });
-        
+
+        // Check if staff type changed (requires schedule validation)
+        const staffTypeChanged = safeEditingStaffData.status !== selectedStaffForEdit.status;
+        if (staffTypeChanged) {
+          console.log(`🔄 [StaffModal-Update] Staff type changed: ${selectedStaffForEdit.status} → ${safeEditingStaffData.status}`);
+
+          // Validate schedule constraints for new staff type
+          const hasScheduleData = schedule && schedule[selectedStaffForEdit.id];
+          if (hasScheduleData) {
+            const shiftCount = Object.values(schedule[selectedStaffForEdit.id]).filter(
+              shift => shift && shift !== '×'
+            ).length;
+
+            if (shiftCount > 0) {
+              console.log(`📊 [StaffModal-Update] Staff has ${shiftCount} existing shifts - may require validation`);
+              toast.info(`雇用形態変更: ${shiftCount}件のシフトがあります`, {
+                description: 'スケジュールを確認してください'
+              });
+            }
+          }
+        }
+
         updateStaff(
           selectedStaffForEdit.id,
           safeEditingStaffData,
           (updatedStaffArray) => {
             if (enhancedLoggingEnabled) {
-              console.log("✅ [Enhanced StaffModal] Staff updated successfully - confirming optimistic update");
+              console.log("✅ [StaffModal-Update] Staff updated successfully");
             }
 
             // Clear optimistic state - real data is now available
@@ -357,20 +387,29 @@ const StaffEditModal = ({
               lastOperationSuccess: true,
             });
 
+            // If staff type changed and WebSocket connected, trigger schedule re-validation
+            if (staffTypeChanged && webSocketShifts.isConnected && currentScheduleId) {
+              console.log(`🔄 [StaffModal-Update] Triggering schedule sync after staff type change`);
+
+              // Request full schedule sync to ensure consistency
+              webSocketShifts.syncSchedule().catch(error => {
+                console.warn(`⚠️ [StaffModal-Update] Schedule sync failed:`, error);
+              });
+            }
+
             // Phase 3: Invalidate React Query cache to trigger re-render with fresh data
             if (invalidateAllPeriodsCache) {
-              console.log('🔄 [StaffModal-Refresh] Invalidating cache to refresh from database');
+              console.log('🔄 [StaffModal-Update] Invalidating cache to refresh from database');
               invalidateAllPeriodsCache();
             }
 
             // Show success feedback
             toast.success(`${safeEditingStaffData.name}を更新しました`);
 
-            // FIX: Clear editing flag to allow useEffect sync to run
-            // The useEffect (lines 114-182) will sync the form with fresh staffMembers
+            // Clear editing flag to allow useEffect sync to run
             setIsUserEditing(false);
 
-            console.log(`🔄 [StaffModal-Refresh] Form will sync automatically via useEffect when staffMembers updates`);
+            console.log(`🔄 [StaffModal-Update] Form will sync automatically via useEffect when staffMembers updates`);
           },
         );
       }
@@ -422,28 +461,64 @@ const StaffEditModal = ({
   const handleDeleteStaff = async (staffId) => {
     const staffToDelete = staffMembers.find(s => s.id === staffId);
     const staffName = staffToDelete?.name || 'スタッフ';
-    
-    const confirmed = window.confirm(`本当に${staffName}を削除しますか？\n\nこの操作は元に戻せません。`);
+
+    const confirmed = window.confirm(
+      `本当に${staffName}を削除しますか？\n\n` +
+      `この操作により：\n` +
+      `• スタッフ情報が削除されます\n` +
+      `• スケジュールデータが削除されます\n` +
+      `• この操作は元に戻せません`
+    );
     if (!confirmed) return;
-    
-    console.log(`🗑️ [Real-time UI] Deleting staff member: ${staffName}`);
-    
+
+    console.log(`🗑️ [StaffModal-Delete] Deleting staff member: ${staffName}`);
+
     setOperationState({
       isProcessing: true,
       lastOperation: 'delete',
       lastOperationSuccess: false,
     });
-    
+
     try {
       // Show immediate optimistic feedback
       toast.success(`${staffName}を削除しています...`, { duration: 1000 });
-      
+
+      // Step 1: Delete staff via WebSocket
       const { newStaffMembers, newSchedule } = deleteStaff(
         staffId,
         schedule,
         updateSchedule,
-        (updatedStaffArray) => {
-          console.log("✅ [Real-time UI] Staff deleted successfully with immediate UI update");
+        async (updatedStaffArray) => {
+          console.log("✅ [StaffModal-Delete] Staff deleted from database");
+
+          // Step 2: Clean up schedule data for this staff across current period
+          if (currentScheduleId && schedule && schedule[staffId]) {
+            console.log(`🧹 [StaffModal-Delete] Cleaning up schedule data for ${staffName}`);
+
+            // Create updated schedule without deleted staff
+            const updatedScheduleData = { ...schedule };
+            delete updatedScheduleData[staffId];
+
+            // Step 3: Broadcast schedule update via WebSocket
+            if (webSocketShifts.isConnected) {
+              try {
+                await webSocketShifts.bulkUpdate([{
+                  staffId,
+                  updates: {}, // Empty updates = delete all shifts for this staff
+                  reason: 'STAFF_DELETED'
+                }]);
+                console.log(`📡 [StaffModal-Delete] Schedule cleanup broadcasted via WebSocket`);
+              } catch (wsError) {
+                console.warn(`⚠️ [StaffModal-Delete] WebSocket broadcast failed, using local update:`, wsError);
+                // Fallback to local update if WebSocket fails
+                updateSchedule(updatedScheduleData);
+              }
+            } else {
+              // WebSocket not connected, use direct update
+              console.log(`📝 [StaffModal-Delete] WebSocket not connected, using direct schedule update`);
+              updateSchedule(updatedScheduleData);
+            }
+          }
 
           setOperationState({
             isProcessing: false,
@@ -451,9 +526,9 @@ const StaffEditModal = ({
             lastOperationSuccess: true,
           });
 
-          // Phase 3: Invalidate React Query cache to trigger database refresh
+          // Step 4: Invalidate React Query cache to trigger database refresh
           if (invalidateAllPeriodsCache) {
-            console.log('🔄 [StaffModal-Refresh] Invalidating cache after staff delete to refresh from database');
+            console.log('🔄 [StaffModal-Delete] Invalidating cache to refresh from database');
             invalidateAllPeriodsCache();
           }
 
@@ -467,14 +542,14 @@ const StaffEditModal = ({
         },
       );
     } catch (error) {
-      console.error("❌ [Real-time UI] Staff deletion failed:", error);
-      
+      console.error("❌ [StaffModal-Delete] Staff deletion failed:", error);
+
       setOperationState({
         isProcessing: false,
         lastOperation: 'delete',
         lastOperationSuccess: false,
       });
-      
+
       toast.error(`${staffName}の削除に失敗しました: ${error.message}`);
     }
   };

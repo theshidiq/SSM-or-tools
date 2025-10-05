@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from "react";
+import React, { useState, useEffect, useMemo, useCallback } from "react";
 import {
   Plus,
   Trash2,
@@ -9,11 +9,14 @@ import {
   Check,
   XCircle,
 } from "lucide-react";
+import { toast } from "sonner";
 import FormField from "../shared/FormField";
 import NumberInput from "../shared/NumberInput";
 import ToggleSwitch from "../shared/ToggleSwitch";
 import Slider from "../shared/Slider";
 import ConfirmationModal from "../shared/ConfirmationModal";
+import ConflictsModal from "../shared/ConflictsModal";
+import { useScheduleValidation } from "../../../hooks/useScheduleValidation";
 
 const DAYS_OF_WEEK = [
   { id: 0, label: "Sunday", short: "Sun" },
@@ -43,6 +46,7 @@ const DailyLimitsTab = ({
   onSettingsChange,
   staffMembers = [],
   validationErrors = {},
+  currentScheduleId = null, // Phase 2: Schedule ID for validation
 }) => {
   const [editingLimit, setEditingLimit] = useState(null);
   const [originalLimitData, setOriginalLimitData] = useState(null);
@@ -52,6 +56,14 @@ const DailyLimitsTab = ({
   const [deleteConfirmation, setDeleteConfirmation] = useState(null); // { type: 'daily'|'monthly', id, name }
   const [isDeleting, setIsDeleting] = useState(false);
   const [showAddForm, setShowAddForm] = useState(false);
+
+  // Phase 2: Validation state
+  const [validationViolations, setValidationViolations] = useState([]);
+  const [showViolationsModal, setShowViolationsModal] = useState(false);
+  const [isValidating, setIsValidating] = useState(false);
+
+  // Schedule validation hook
+  const { validateDailyLimits } = useScheduleValidation(currentScheduleId);
 
   // Fix: Memoize derived arrays to prevent unnecessary re-renders
   // Transform WebSocket multi-table format to localStorage-compatible format
@@ -116,12 +128,53 @@ const DailyLimitsTab = ({
     return () => document.removeEventListener("keydown", handleKeyDown);
   }, [editingLimit, editingMonthlyLimit]);
 
-  const updateDailyLimits = (newLimits) => {
-    onSettingsChange({
-      ...settings,
-      dailyLimits: newLimits,
-    });
-  };
+  const updateDailyLimits = useCallback(
+    async (newLimits, skipValidation = false) => {
+      try {
+        // Phase 2: Validate against current schedule before saving (unless skipped)
+        if (!skipValidation && currentScheduleId) {
+          setIsValidating(true);
+          try {
+            const violations = await validateDailyLimits(newLimits, staffMembers);
+
+            if (violations.length > 0) {
+              // Show warning toast with violation count
+              toast.warning(
+                `Warning: ${violations.length} daily limit violation${violations.length !== 1 ? 's' : ''} detected`,
+                {
+                  description: 'Current schedule exceeds new daily limits',
+                  action: {
+                    label: 'View Violations',
+                    onClick: () => {
+                      setValidationViolations(violations);
+                      setShowViolationsModal(true);
+                    }
+                  },
+                  duration: 6000
+                }
+              );
+
+              console.log('⚠️ Daily limits validation detected violations:', violations);
+            }
+          } catch (validationError) {
+            console.error('❌ Daily limits validation failed:', validationError);
+            // Continue with save even if validation fails
+          } finally {
+            setIsValidating(false);
+          }
+        }
+
+        onSettingsChange({
+          ...settings,
+          dailyLimits: newLimits,
+        });
+      } catch (error) {
+        console.error("Error updating daily limits:", error);
+        throw error;
+      }
+    },
+    [settings, onSettingsChange, currentScheduleId, validateDailyLimits, staffMembers]
+  );
 
   const updateMonthlyLimits = (newLimits) => {
     onSettingsChange({
@@ -1022,6 +1075,24 @@ const DailyLimitsTab = ({
         variant="danger"
         isLoading={isDeleting}
       />
+
+      {/* Phase 2: Validation Violations Modal */}
+      <ConflictsModal
+        isOpen={showViolationsModal}
+        onClose={() => setShowViolationsModal(false)}
+        conflicts={validationViolations}
+        type="daily_limits"
+        staffMembers={staffMembers}
+        title="Daily Limit Violations Detected"
+      />
+
+      {/* Validation Loading Indicator */}
+      {isValidating && (
+        <div className="fixed bottom-4 right-4 bg-blue-600 text-white px-4 py-3 rounded-lg shadow-lg flex items-center gap-3 z-50">
+          <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+          <span className="font-medium">Validating schedule...</span>
+        </div>
+      )}
     </div>
   );
 };
