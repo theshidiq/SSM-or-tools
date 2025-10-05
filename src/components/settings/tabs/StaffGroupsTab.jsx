@@ -163,26 +163,31 @@ const StaffGroupsTab = ({
   );
 
   // Automatically ensure all groups have intra-group conflict rules enabled
-  // Use a ref to prevent interference with delete operations
+  // Use a ref to prevent interference with delete operations and infinite loops
   const lastProcessedGroupIdsRef = useRef(new Set());
   const onSettingsChangeRef = useRef(onSettingsChange);
   const settingsRef = useRef(settings);
+  const staffGroupsRef = useRef(staffGroups);
 
   // Update refs when props change
   useEffect(() => {
     onSettingsChangeRef.current = onSettingsChange;
     settingsRef.current = settings;
-  }, [onSettingsChange, settings]);
+    staffGroupsRef.current = staffGroups;
+  }, [onSettingsChange, settings, staffGroups]);
+
+  // Use useMemo to create a stable groupIds string that only changes when actual group IDs change
+  const groupIdsString = useMemo(() => {
+    return JSON.stringify(staffGroups.map((g) => g.id).sort());
+  }, [staffGroups]);
 
   useEffect(() => {
     const currentGroupIds = new Set(staffGroups.map((g) => g.id));
     const lastProcessedIds = lastProcessedGroupIdsRef.current;
 
     // Only process if the group IDs actually changed (not just a re-render)
-    if (
-      JSON.stringify([...currentGroupIds].sort()) ===
-      JSON.stringify([...lastProcessedIds].sort())
-    ) {
+    const lastProcessedString = JSON.stringify([...lastProcessedIds].sort());
+    if (groupIdsString === lastProcessedString) {
       return;
     }
 
@@ -223,7 +228,7 @@ const StaffGroupsTab = ({
 
     // Update the ref with current group IDs
     lastProcessedGroupIdsRef.current = currentGroupIds;
-  }, [staffGroups]); // Only depend on staffGroups
+  }, [groupIdsString]); // Only depend on the memoized group IDs string
 
   const updateStaffGroups = useCallback(
     async (newGroups, skipValidation = false) => {
