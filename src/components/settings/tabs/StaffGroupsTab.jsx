@@ -793,11 +793,23 @@ const StaffGroupsTab = ({
       onClose();
     };
 
+    const handleBackdropClick = (e) => {
+      // Only close if clicking the backdrop itself, not child elements
+      if (e.target === e.currentTarget) {
+        onClose();
+      }
+    };
+
+    const handleCloseClick = (e) => {
+      e.stopPropagation();
+      onClose();
+    };
+
     // Render modal using React Portal to escape parent stacking context
     return ReactDOM.createPortal(
       <div
         className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[70000]"
-        onClick={onClose}
+        onClick={handleBackdropClick}
       >
         <div
           className="bg-white rounded-xl w-full max-w-md p-6 shadow-2xl relative z-[70001]"
@@ -808,7 +820,7 @@ const StaffGroupsTab = ({
               Add Staff to {group?.name}
             </h3>
             <button
-              onClick={onClose}
+              onClick={handleCloseClick}
               className="p-1 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded transition-colors"
             >
               <X size={20} />
@@ -845,7 +857,7 @@ const StaffGroupsTab = ({
 
           <div className="mt-6 flex justify-end">
             <button
-              onClick={onClose}
+              onClick={handleCloseClick}
               className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors"
             >
               Close

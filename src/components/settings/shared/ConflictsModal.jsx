@@ -181,11 +181,23 @@ const ConflictsModal = ({
     );
   };
 
+  const handleBackdropClick = (e) => {
+    // Only close if clicking the backdrop itself, not child elements
+    if (e.target === e.currentTarget) {
+      onClose();
+    }
+  };
+
+  const handleCloseClick = (e) => {
+    e.stopPropagation();
+    onClose();
+  };
+
   // Use React Portal to render outside parent DOM hierarchy and bypass stacking context
   return ReactDOM.createPortal(
     <div
       className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[70000]"
-      onClick={onClose}
+      onClick={handleBackdropClick}
     >
       <div
         className="bg-white rounded-xl w-full max-w-4xl max-h-[85vh] flex flex-col shadow-2xl relative z-[70001]"
@@ -205,7 +217,7 @@ const ConflictsModal = ({
             </div>
           </div>
           <button
-            onClick={onClose}
+            onClick={handleCloseClick}
             className="p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
           >
             <X size={20} />
@@ -264,7 +276,7 @@ const ConflictsModal = ({
             )}
           </div>
           <button
-            onClick={onClose}
+            onClick={handleCloseClick}
             className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium"
           >
             Close
