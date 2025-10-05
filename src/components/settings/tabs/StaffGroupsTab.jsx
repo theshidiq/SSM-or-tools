@@ -182,6 +182,11 @@ const StaffGroupsTab = ({
   }, [staffGroups]);
 
   useEffect(() => {
+    // TEMPORARILY DISABLED to debug infinite loop issue
+    // This automatic synchronization will be re-enabled after fixing the modal click issue
+    return;
+
+    /*
     const currentGroupIds = new Set(staffGroups.map((g) => g.id));
     const lastProcessedIds = lastProcessedGroupIdsRef.current;
 
@@ -194,15 +199,15 @@ const StaffGroupsTab = ({
     // Get current conflict rules from settings ref to avoid infinite loop
     const currentSettings = settingsRef.current;
     const currentConflictRules = currentSettings?.conflictRules || [];
-    const updatedRules = [...currentConflictRules];
-    let hasChanges = false;
 
+    // Check if we actually need to add any new rules
+    const missingRules = [];
     staffGroups.forEach((group) => {
       const ruleId = `intra-${group.id}`;
       const existingRule = currentConflictRules.find((rule) => rule.id === ruleId);
 
       if (!existingRule) {
-        const newRule = {
+        missingRules.push({
           id: ruleId,
           name: `${group.name} Intra-Group Conflict Prevention`,
           type: "intra_group_conflict",
@@ -212,22 +217,30 @@ const StaffGroupsTab = ({
           penaltyWeight: 15,
           description:
             "Prevents staff in the same group from having identical shifts on the same day",
-        };
-        updatedRules.push(newRule);
-        hasChanges = true;
+        });
       }
     });
 
-    if (hasChanges) {
-      // Use ref to avoid dependency on onSettingsChange
-      onSettingsChangeRef.current({
-        ...currentSettings,
-        conflictRules: updatedRules,
-      });
+    // Only update if we have missing rules to add
+    if (missingRules.length > 0) {
+      const updatedRules = [...currentConflictRules, ...missingRules];
+
+      // Double-check that the rules are actually different before updating
+      const currentRulesString = JSON.stringify(currentConflictRules.map(r => r.id).sort());
+      const updatedRulesString = JSON.stringify(updatedRules.map(r => r.id).sort());
+
+      if (currentRulesString !== updatedRulesString) {
+        // Use ref to avoid dependency on onSettingsChange
+        onSettingsChangeRef.current({
+          ...currentSettings,
+          conflictRules: updatedRules,
+        });
+      }
     }
 
     // Update the ref with current group IDs
     lastProcessedGroupIdsRef.current = currentGroupIds;
+    */
   }, [groupIdsString]); // Only depend on the memoized group IDs string
 
   const updateStaffGroups = useCallback(
