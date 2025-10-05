@@ -183,8 +183,14 @@ const ConflictsModal = ({
 
   // Use React Portal to render outside parent DOM hierarchy and bypass stacking context
   return ReactDOM.createPortal(
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[70000]">
-      <div className="bg-white rounded-xl w-full max-w-4xl max-h-[85vh] flex flex-col shadow-2xl relative z-[70001]">
+    <div
+      className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[70000]"
+      onClick={onClose}
+    >
+      <div
+        className="bg-white rounded-xl w-full max-w-4xl max-h-[85vh] flex flex-col shadow-2xl relative z-[70001]"
+        onClick={(e) => e.stopPropagation()}
+      >
         {/* Header */}
         <div className="flex items-center justify-between p-6 border-b border-gray-200">
           <div className="flex items-center gap-3">

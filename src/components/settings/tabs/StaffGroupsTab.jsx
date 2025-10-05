@@ -795,8 +795,14 @@ const StaffGroupsTab = ({
 
     // Render modal using React Portal to escape parent stacking context
     return ReactDOM.createPortal(
-      <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[70000]">
-        <div className="bg-white rounded-xl w-full max-w-md p-6 shadow-2xl relative z-[70001]">
+      <div
+        className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[70000]"
+        onClick={onClose}
+      >
+        <div
+          className="bg-white rounded-xl w-full max-w-md p-6 shadow-2xl relative z-[70001]"
+          onClick={(e) => e.stopPropagation()}
+        >
           <div className="flex items-center justify-between mb-4">
             <h3 className="text-lg font-semibold text-gray-800">
               Add Staff to {group?.name}
