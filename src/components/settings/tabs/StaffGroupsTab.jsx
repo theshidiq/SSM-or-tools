@@ -139,18 +139,25 @@ const StaffGroupsTab = ({
   );
 
   // Keep settings in sync with hook backup assignments
+  const lastBackupAssignmentsRef = useRef(JSON.stringify([]));
+
   useEffect(() => {
+    const currentBackupString = JSON.stringify(hookBackupAssignments);
+
+    // Only update if backup assignments actually changed
     if (
       hookBackupAssignments.length > 0 &&
-      JSON.stringify(hookBackupAssignments) !==
-        JSON.stringify(settings?.backupAssignments)
+      currentBackupString !== lastBackupAssignmentsRef.current
     ) {
-      onSettingsChange({
-        ...settings,
+      lastBackupAssignmentsRef.current = currentBackupString;
+
+      // Use ref to avoid infinite loop
+      onSettingsChangeRef.current({
+        ...settingsRef.current,
         backupAssignments: hookBackupAssignments,
       });
     }
-  }, [hookBackupAssignments, settings, onSettingsChange]);
+  }, [hookBackupAssignments]);
 
   const updateConflictRules = useCallback(
     (newRules) => {
@@ -182,11 +189,6 @@ const StaffGroupsTab = ({
   }, [staffGroups]);
 
   useEffect(() => {
-    // TEMPORARILY DISABLED to debug infinite loop issue
-    // This automatic synchronization will be re-enabled after fixing the modal click issue
-    return;
-
-    /*
     const currentGroupIds = new Set(staffGroups.map((g) => g.id));
     const lastProcessedIds = lastProcessedGroupIdsRef.current;
 
@@ -240,7 +242,6 @@ const StaffGroupsTab = ({
 
     // Update the ref with current group IDs
     lastProcessedGroupIdsRef.current = currentGroupIds;
-    */
   }, [groupIdsString]); // Only depend on the memoized group IDs string
 
   const updateStaffGroups = useCallback(
