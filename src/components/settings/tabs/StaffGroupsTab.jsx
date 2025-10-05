@@ -163,12 +163,13 @@ const StaffGroupsTab = ({
 
   const updateConflictRules = useCallback(
     (newRules) => {
-      onSettingsChange({
-        ...settings,
+      // Use refs to avoid infinite loop
+      onSettingsChangeRef.current({
+        ...settingsRef.current,
         conflictRules: [...newRules], // Create new array reference
       });
     },
-    [settings, onSettingsChange],
+    [], // No dependencies - uses refs
   );
 
   // Automatically ensure all groups have intra-group conflict rules enabled
@@ -282,19 +283,23 @@ const StaffGroupsTab = ({
           }
         }
 
+        // Use ref to get current settings to avoid infinite loop
+        const currentSettings = settingsRef.current;
+
         // Create a completely new settings object to ensure proper state update
         const updatedSettings = {
-          ...settings,
+          ...currentSettings,
           staffGroups: [...newGroups], // Create a new array reference
         };
 
-        onSettingsChange(updatedSettings);
+        // Use ref to avoid dependency on onSettingsChange
+        onSettingsChangeRef.current(updatedSettings);
       } catch (error) {
         console.error("Error updating staff groups:", error);
         throw error;
       }
     },
-    [settings, onSettingsChange, currentScheduleId, validateStaffGroups],
+    [currentScheduleId, validateStaffGroups],
   );
 
   // Cancel changes and restore original data
