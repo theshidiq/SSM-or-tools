@@ -735,17 +735,14 @@ const ShiftScheduleEditorPhase3 = ({
           isOpen={showSettingsModal}
           onClose={() => setShowSettingsModal(false)}
           settings={settings}
-          onSettingsUpdate={updateSettings}
-          onSaveSettings={saveSettings}
-          onResetToDefaults={resetToDefaults}
-          hasUnsavedChanges={hasUnsavedChanges}
+          onSettingsChange={updateSettings}
+          onResetConfig={resetToDefaults}
           validationErrors={validationErrors}
-          connectionStatus={isConnected ? 'connected' : 'disconnected'}
-          isAutosaving={isAutosaving}
+          isAutoSaving={isAutosaving}
           lastSaveTime={lastSaveTime}
           autosaveError={autosaveError}
           isAutosaveEnabled={isAutosaveEnabled}
-          setIsAutosaveEnabled={setIsAutosaveEnabled}
+          onToggleAutosave={setIsAutosaveEnabled}
           currentScheduleId={currentScheduleId} // Phase 2: Schedule validation
           staffMembers={effectiveStaffMembers} // Phase 2: Staff data for validation
         />
