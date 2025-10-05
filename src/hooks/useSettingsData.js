@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { configService } from "../services/ConfigurationService";
 import { useAutosave } from "./useAutosave";
 import { useWebSocketSettings } from "./useWebSocketSettings";
@@ -13,6 +13,9 @@ export const useSettingsData = (autosaveEnabled = true) => {
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
   const [validationErrors, setValidationErrors] = useState({});
   const [isAutosaveEnabled, setIsAutosaveEnabled] = useState(autosaveEnabled);
+
+  // Ref to hold current settings to prevent infinite loops
+  const settingsRef = useRef(settings);
 
   // WebSocket multi-table integration
   const {
@@ -72,6 +75,11 @@ export const useSettingsData = (autosaveEnabled = true) => {
       setError(null);
     }
   }, [useWebSocket, wsSettings, wsVersion]);
+
+  // Sync settings to ref to prevent infinite loops in updateSettings
+  useEffect(() => {
+    settingsRef.current = settings;
+  }, [settings]);
 
   // Load settings from localStorage via configService (localStorage mode only)
   const loadSettings = useCallback(() => {
@@ -149,7 +157,7 @@ export const useSettingsData = (autosaveEnabled = true) => {
     if (useWebSocket) {
       console.log('🔄 Updating settings via WebSocket multi-table backend');
 
-      const oldSettings = settings || {};
+      const oldSettings = settingsRef.current || {};
 
       // Detect and update staff groups
       if (JSON.stringify(oldSettings.staffGroups) !== JSON.stringify(newSettings.staffGroups)) {
@@ -199,7 +207,6 @@ export const useSettingsData = (autosaveEnabled = true) => {
     }
   }, [
     useWebSocket,
-    settings,
     wsUpdateStaffGroups,
     wsUpdateDailyLimits,
     wsUpdateMonthlyLimits,
