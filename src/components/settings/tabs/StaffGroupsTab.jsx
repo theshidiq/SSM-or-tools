@@ -178,12 +178,14 @@ const StaffGroupsTab = ({
       return;
     }
 
-    const updatedRules = [...conflictRules];
+    // Get current conflict rules from settings directly to avoid infinite loop
+    const currentConflictRules = settings?.conflictRules || [];
+    const updatedRules = [...currentConflictRules];
     let hasChanges = false;
 
     staffGroups.forEach((group) => {
       const ruleId = `intra-${group.id}`;
-      const existingRule = conflictRules.find((rule) => rule.id === ruleId);
+      const existingRule = currentConflictRules.find((rule) => rule.id === ruleId);
 
       if (!existingRule) {
         const newRule = {
@@ -203,12 +205,16 @@ const StaffGroupsTab = ({
     });
 
     if (hasChanges) {
-      updateConflictRules(updatedRules);
+      // Use onSettingsChange directly to avoid dependency on updateConflictRules
+      onSettingsChange({
+        ...settings,
+        conflictRules: updatedRules,
+      });
     }
 
     // Update the ref with current group IDs
     lastProcessedGroupIdsRef.current = currentGroupIds;
-  }, [staffGroups, conflictRules, updateConflictRules]);
+  }, [staffGroups, settings, onSettingsChange]);
 
   const updateStaffGroups = useCallback(
     async (newGroups, skipValidation = false) => {
