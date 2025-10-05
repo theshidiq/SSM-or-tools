@@ -5,6 +5,7 @@ import React, {
   useMemo,
   useRef,
 } from "react";
+import ReactDOM from "react-dom";
 import {
   Plus,
   Trash2,
@@ -780,7 +781,7 @@ const StaffGroupsTab = ({
     );
   };
 
-  // Staff Selection Modal Component
+  // Staff Selection Modal Component (using Portal for proper z-index stacking)
   const StaffSelectionModal = ({ groupId, isOpen, onClose }) => {
     if (!isOpen || !groupId) return null;
 
@@ -792,7 +793,8 @@ const StaffGroupsTab = ({
       onClose();
     };
 
-    return (
+    // Render modal using React Portal to escape parent stacking context
+    return ReactDOM.createPortal(
       <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[70000]">
         <div className="bg-white rounded-xl w-full max-w-md p-6 shadow-2xl relative z-[70001]">
           <div className="flex items-center justify-between mb-4">
@@ -844,7 +846,8 @@ const StaffGroupsTab = ({
             </button>
           </div>
         </div>
-      </div>
+      </div>,
+      document.body
     );
   };
 

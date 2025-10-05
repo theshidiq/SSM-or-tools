@@ -1,4 +1,5 @@
 import React, { useMemo, useCallback } from 'react';
+import ReactDOM from 'react-dom';
 import { X, AlertTriangle, Calendar, Users, TrendingUp } from 'lucide-react';
 import { format, parseISO } from 'date-fns';
 import { ja } from 'date-fns/locale';
@@ -180,7 +181,8 @@ const ConflictsModal = ({
     );
   };
 
-  return (
+  // Use React Portal to render outside parent DOM hierarchy and bypass stacking context
+  return ReactDOM.createPortal(
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[70000]">
       <div className="bg-white rounded-xl w-full max-w-4xl max-h-[85vh] flex flex-col shadow-2xl relative z-[70001]">
         {/* Header */}
@@ -263,7 +265,8 @@ const ConflictsModal = ({
           </button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 };
 
