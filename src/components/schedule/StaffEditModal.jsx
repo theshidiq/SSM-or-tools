@@ -75,6 +75,10 @@ const StaffEditModal = ({
   const [optimisticStaffData, setOptimisticStaffData] = useState(null);
   const [pendingOperation, setPendingOperation] = useState(null);
 
+  // Delete confirmation modal state
+  const [showDeleteConfirmModal, setShowDeleteConfirmModal] = useState(false);
+  const [staffToDelete, setStaffToDelete] = useState(null);
+
   // WebSocket integration for real-time shift synchronization
   const webSocketShifts = useWebSocketShifts(currentMonthIndex, currentScheduleId, {
     enabled: !!currentScheduleId,
@@ -458,18 +462,28 @@ const StaffEditModal = ({
     }
   };
 
-  const handleDeleteStaff = async (staffId) => {
-    const staffToDelete = staffMembers.find(s => s.id === staffId);
-    const staffName = staffToDelete?.name || 'スタッフ';
+  // Open delete confirmation modal
+  const openDeleteConfirmation = (staffId) => {
+    const staff = staffMembers.find(s => s.id === staffId);
+    setStaffToDelete(staff);
+    setShowDeleteConfirmModal(true);
+  };
 
-    const confirmed = window.confirm(
-      `本当に${staffName}を削除しますか？\n\n` +
-      `この操作により：\n` +
-      `• スタッフ情報が削除されます\n` +
-      `• スケジュールデータが削除されます\n` +
-      `• この操作は元に戻せません`
-    );
-    if (!confirmed) return;
+  // Close delete confirmation modal
+  const closeDeleteConfirmation = () => {
+    setShowDeleteConfirmModal(false);
+    setStaffToDelete(null);
+  };
+
+  // Actual delete handler after confirmation
+  const handleDeleteStaff = async () => {
+    if (!staffToDelete) return;
+
+    const staffId = staffToDelete.id;
+    const staffName = staffToDelete.name || 'スタッフ';
+
+    // Close confirmation modal
+    closeDeleteConfirmation();
 
     console.log(`🗑️ [StaffModal-Delete] Deleting staff member: ${staffName}`);
 
@@ -608,6 +622,7 @@ const StaffEditModal = ({
   };
 
   return (
+    <>
     <Dialog
       open={showStaffEditModal}
       onOpenChange={(open) => {
@@ -1046,17 +1061,10 @@ const StaffEditModal = ({
                         variant="destructive"
                         disabled={operationState.isProcessing}
                         onClick={() =>
-                          handleDeleteStaff(selectedStaffForEdit.id)
+                          openDeleteConfirmation(selectedStaffForEdit.id)
                         }
                       >
-                        {operationState.isProcessing && operationState.lastOperation === 'delete' ? (
-                          <>
-                            <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                            削除中...
-                          </>
-                        ) : (
-                          "削除"
-                        )}
+                        削除
                       </Button>
                     )}
 
@@ -1083,6 +1091,63 @@ const StaffEditModal = ({
         </div>
       </DialogContent>
     </Dialog>
+
+      {/* Delete Confirmation Modal */}
+      <Dialog open={showDeleteConfirmModal} onOpenChange={setShowDeleteConfirmModal}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="text-lg font-semibold">
+              本当に{staffToDelete?.name || 'このスタッフ'}を削除しますか？
+            </DialogTitle>
+            <DialogDescription className="sr-only">
+              スタッフ削除の確認
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4 py-4">
+            <p className="text-sm text-gray-700">この操作により：</p>
+            <ul className="space-y-2 text-sm text-gray-600">
+              <li className="flex items-start gap-2">
+                <span className="text-red-500 mt-0.5">•</span>
+                <span>スタッフ情報が削除されます</span>
+              </li>
+              <li className="flex items-start gap-2">
+                <span className="text-red-500 mt-0.5">•</span>
+                <span>スケジュールデータが削除されます</span>
+              </li>
+              <li className="flex items-start gap-2">
+                <span className="text-red-500 mt-0.5">•</span>
+                <span className="font-medium text-red-600">この操作は元に戻せません</span>
+              </li>
+            </ul>
+          </div>
+
+          <div className="flex justify-end gap-3">
+            <Button
+              variant="outline"
+              onClick={closeDeleteConfirmation}
+              disabled={operationState.isProcessing}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={handleDeleteStaff}
+              disabled={operationState.isProcessing}
+            >
+              {operationState.isProcessing && operationState.lastOperation === 'delete' ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                  削除中...
+                </>
+              ) : (
+                "OK"
+              )}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+    </>
   );
 };
 
