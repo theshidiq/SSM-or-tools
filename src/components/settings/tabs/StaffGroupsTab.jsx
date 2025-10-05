@@ -165,6 +165,12 @@ const StaffGroupsTab = ({
   // Automatically ensure all groups have intra-group conflict rules enabled
   // Use a ref to prevent interference with delete operations
   const lastProcessedGroupIdsRef = useRef(new Set());
+  const onSettingsChangeRef = useRef(onSettingsChange);
+
+  // Update ref when onSettingsChange changes
+  useEffect(() => {
+    onSettingsChangeRef.current = onSettingsChange;
+  }, [onSettingsChange]);
 
   useEffect(() => {
     const currentGroupIds = new Set(staffGroups.map((g) => g.id));
@@ -205,8 +211,8 @@ const StaffGroupsTab = ({
     });
 
     if (hasChanges) {
-      // Use onSettingsChange directly to avoid dependency on updateConflictRules
-      onSettingsChange({
+      // Use ref to avoid dependency on onSettingsChange
+      onSettingsChangeRef.current({
         ...settings,
         conflictRules: updatedRules,
       });
@@ -214,7 +220,7 @@ const StaffGroupsTab = ({
 
     // Update the ref with current group IDs
     lastProcessedGroupIdsRef.current = currentGroupIds;
-  }, [staffGroups, settings, onSettingsChange]);
+  }, [staffGroups, settings]);
 
   const updateStaffGroups = useCallback(
     async (newGroups, skipValidation = false) => {
