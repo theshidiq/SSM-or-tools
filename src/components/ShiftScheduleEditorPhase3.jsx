@@ -47,6 +47,8 @@ const ShiftScheduleEditorPhase3 = ({
   error: externalError, // Legacy prop
   onSaveSchedule: _legacyOnSaveSchedule, // Legacy prop - not used
   loadScheduleData: _legacyLoadScheduleData, // Legacy prop - not used
+  showSettingsModal: externalShowSettingsModal, // External control from App.js
+  setShowSettingsModal: externalSetShowSettingsModal, // External control from App.js
 }) => {
   // Main state - initialize with 0, will be updated when periods load
   const [currentMonthIndex, setCurrentMonthIndex] = useState(0);
@@ -76,7 +78,10 @@ const ShiftScheduleEditorPhase3 = ({
     title: "",
     message: "",
   });
-  const [showSettingsModal, setShowSettingsModal] = useState(false);
+
+  // Use external showSettingsModal state if provided, otherwise use internal state
+  const showSettingsModal = externalShowSettingsModal !== undefined ? externalShowSettingsModal : false;
+  const setShowSettingsModal = externalSetShowSettingsModal || (() => {});
 
   // WebSocket-first prefetch hook (replaces separate usePeriodsRealtime and data management)
   const {

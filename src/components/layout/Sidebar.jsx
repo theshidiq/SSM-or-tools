@@ -13,14 +13,14 @@ import { Badge } from "../ui/badge";
 import { Button } from "../ui/button";
 import { Separator } from "../ui/separator";
 
-const Sidebar = ({ currentView = "schedule", onViewChange }) => {
+const Sidebar = ({ currentView = "schedule", onViewChange, onShowSettings }) => {
   const menuItems = [
     { id: "schedule", label: "Schedule", icon: Calendar, type: "nav" },
     { id: "monitor", label: "Monitor", icon: Monitor, type: "nav" },
     { id: "calendar", label: "Calendar", icon: CalendarDays, type: "nav" },
     { id: "menu", label: "Menu", icon: Menu, type: "nav" },
     { id: "alergi", label: "Alergi", icon: AlertTriangle, type: "nav" },
-    { id: "settings", label: "Settings", icon: Settings, type: "nav" },
+    { id: "settings", label: "Settings", icon: Settings, type: "modal" }, // Changed to modal type
   ];
 
   return (
@@ -54,7 +54,15 @@ const Sidebar = ({ currentView = "schedule", onViewChange }) => {
               return (
                 <button
                   key={item.id}
-                  onClick={() => onViewChange?.(item.id)}
+                  onClick={() => {
+                    if (item.type === "modal" && item.id === "settings") {
+                      // Open Settings modal instead of navigating
+                      onShowSettings?.();
+                    } else {
+                      // Normal navigation
+                      onViewChange?.(item.id);
+                    }
+                  }}
                   className={`group w-full flex items-center gap-3 px-3 py-2.5 rounded-md text-sm font-medium transition-all duration-200 ${
                     isActive
                       ? "bg-primary text-primary-foreground shadow-sm"

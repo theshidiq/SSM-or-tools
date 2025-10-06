@@ -958,16 +958,18 @@ const StaffGroupsTab = ({
               Members ({groupMembers.length})
             </div>
             <select
-              value=""
+              defaultValue=""
               onChange={(e) => {
-                if (e.target.value) {
-                  addStaffToGroup(group.id, e.target.value);
+                const selectedStaffId = e.target.value;
+                if (selectedStaffId) {
+                  addStaffToGroup(group.id, selectedStaffId);
                   // Success toast
-                  const staff = staffMembers.find(s => s.id === e.target.value);
+                  const staff = staffMembers.find(s => s.id === selectedStaffId);
                   if (staff) {
                     toast.success(`Added ${staff.name} to ${group.name}`);
                   }
-                  e.target.value = ""; // Reset to placeholder
+                  // Reset dropdown to placeholder
+                  e.target.value = "";
                 }
               }}
               className="text-xs px-2 py-1.5 border border-gray-300 rounded-lg text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer transition-colors"

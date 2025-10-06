@@ -16,6 +16,7 @@ function AppContent() {
   } = useSupabase();
 
   const [migrationComplete, setMigrationComplete] = useState(false);
+  const [showSettingsModal, setShowSettingsModal] = useState(false);
 
   // Phase 4: Use prefetch architecture directly - no forced data needed
   const effectiveScheduleData = scheduleData;
@@ -25,7 +26,7 @@ function AppContent() {
       {/* Period Migration - handles localStorage to database migration */}
       <PeriodMigration onMigrationComplete={() => setMigrationComplete(true)} />
 
-      <DashboardLayout>
+      <DashboardLayout onShowSettings={() => setShowSettingsModal(true)}>
         {/* PHASE 4 PREFETCH ARCHITECTURE - Production Implementation */}
         <ShiftScheduleEditorPhase3
           supabaseScheduleData={effectiveScheduleData}
@@ -33,6 +34,8 @@ function AppContent() {
           error={error}
           onSaveSchedule={saveScheduleData}
           loadScheduleData={loadScheduleData}
+          showSettingsModal={showSettingsModal}
+          setShowSettingsModal={setShowSettingsModal}
         />
       </DashboardLayout>
     </>

@@ -19,7 +19,9 @@
       "mcp__chrome-devtools__new_page",
       "mcp__chrome-devtools__evaluate_script",
       "Bash(lsof:*)",
-      "Bash(xargs kill:*)"
+      "Bash(xargs kill:*)",
+      "Bash(npm run lint:*)",
+      "Bash(curl:*)"
     ],
     "deny": []
   },

@@ -1,7 +1,7 @@
 import React, { useState } from "react";
 import Sidebar from "./Sidebar";
 
-const DashboardLayout = ({ children }) => {
+const DashboardLayout = ({ children, onShowSettings }) => {
   const [currentView, setCurrentView] = useState("schedule");
 
   const handleViewChange = (view) => {
@@ -34,7 +34,11 @@ const DashboardLayout = ({ children }) => {
   return (
     <div className="flex h-screen bg-gray-50">
       {/* Sidebar */}
-      <Sidebar currentView={currentView} onViewChange={handleViewChange} />
+      <Sidebar
+        currentView={currentView}
+        onViewChange={handleViewChange}
+        onShowSettings={onShowSettings}
+      />
 
       {/* Main Content */}
       <div className="flex-1 flex flex-col overflow-hidden">
