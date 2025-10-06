@@ -21,6 +21,7 @@ import { useScheduleDataPrefetch } from "../hooks/useScheduleDataPrefetch";
 import "../utils/debugUtils"; // Import debug utilities for browser exposure
 
 import { useSettingsData } from "../hooks/useSettingsData";
+import { SettingsProvider } from "../contexts/SettingsContext";
 // Phase 3: Removed localStorage-dependent utilities for pure database integration
 // - manualInputTestSuite (development testing only)
 // - dataIntegrityMonitor (uses localStorage fallbacks)
@@ -553,7 +554,8 @@ const ShiftScheduleEditorPhase3 = ({
   const currentPeriod = realtimePeriods[currentMonthIndex];
 
   return (
-    <div className="shift-schedule-container space-y-6 p-6">
+    <SettingsProvider>
+      <div className="shift-schedule-container space-y-6 p-6">
       {/* Header with Phase 4 instant navigation indicator */}
       <Card>
         <CardHeader>
@@ -761,7 +763,8 @@ const ShiftScheduleEditorPhase3 = ({
         />
       )}
 
-    </div>
+      </div>
+    </SettingsProvider>
   );
 };
 
