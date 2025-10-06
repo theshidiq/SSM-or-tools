@@ -176,8 +176,7 @@ const SettingsModal = ({
 
   const renderTabContent = () => {
     const commonProps = {
-      settings,
-      onSettingsChange: updateSettings, // From useSettings() hook
+      // Phase 3: settings & updateSettings now from Context (not passed as props)
       staffMembers,
       validationErrors: validationErrors[activeTab] || {},
       currentScheduleId, // Phase 2: Pass schedule ID for validation

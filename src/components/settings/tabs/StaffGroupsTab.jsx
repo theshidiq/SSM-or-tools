@@ -24,6 +24,7 @@ import ConfirmationModal from "../shared/ConfirmationModal";
 import ConflictsModal from "../shared/ConflictsModal";
 import { useBackupStaffService } from "../../../hooks/useBackupStaffService";
 import { useScheduleValidation } from "../../../hooks/useScheduleValidation";
+import { useSettings } from "../../../contexts/SettingsContext";
 
 const PRESET_COLORS = [
   "#3B82F6",
@@ -59,12 +60,13 @@ const PRESET_COLORS = [
 ];
 
 const StaffGroupsTab = ({
-  settings,
-  onSettingsChange,
   staffMembers = [],
   validationErrors = {},
   currentScheduleId = null, // Phase 2: Schedule ID for validation
 }) => {
+  // Phase 3: Get settings from Context instead of props (eliminates prop drilling)
+  const { settings, updateSettings } = useSettings();
+
   const [editingGroup, setEditingGroup] = useState(null);
   const [originalGroupData, setOriginalGroupData] = useState(null);
   const [draggedStaff, setDraggedStaff] = useState(null);
@@ -175,16 +177,16 @@ const StaffGroupsTab = ({
   // Automatically ensure all groups have intra-group conflict rules enabled
   // Use a ref to prevent interference with delete operations and infinite loops
   const lastProcessedGroupIdsRef = useRef(new Set());
-  const onSettingsChangeRef = useRef(onSettingsChange);
+  const onSettingsChangeRef = useRef(updateSettings); // Phase 3: updateSettings from Context
   const settingsRef = useRef(settings);
   const staffGroupsRef = useRef(staffGroups);
 
-  // Update refs when props change
+  // Update refs when context values change (Phase 3: updateSettings is stable from Context)
   useEffect(() => {
-    onSettingsChangeRef.current = onSettingsChange;
+    onSettingsChangeRef.current = updateSettings;
     settingsRef.current = settings;
     staffGroupsRef.current = staffGroups;
-  }, [onSettingsChange, settings, staffGroups]);
+  }, [updateSettings, settings, staffGroups]);
 
   // Use useMemo to create a stable groupIds string that only changes when actual group IDs change
   const groupIdsString = useMemo(() => {
