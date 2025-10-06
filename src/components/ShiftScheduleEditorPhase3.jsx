@@ -731,20 +731,11 @@ const ShiftScheduleEditorPhase3 = ({
         />
       )}
 
-      {/* Settings Modal */}
+      {/* Settings Modal - Phase 2: Using Context API (11 props removed, 73% reduction) */}
       {showSettingsModal && (
         <SettingsModal
           isOpen={showSettingsModal}
           onClose={() => setShowSettingsModal(false)}
-          settings={settings}
-          onSettingsChange={updateSettings}
-          onResetConfig={resetToDefaults}
-          validationErrors={validationErrors}
-          isAutoSaving={isAutosaving}
-          lastSaveTime={lastSaveTime}
-          autosaveError={autosaveError}
-          isAutosaveEnabled={isAutosaveEnabled}
-          onToggleAutosave={setIsAutosaveEnabled}
           currentScheduleId={currentScheduleId} // Phase 2: Schedule validation
           staffMembers={effectiveStaffMembers} // Phase 2: Staff data for validation
         />

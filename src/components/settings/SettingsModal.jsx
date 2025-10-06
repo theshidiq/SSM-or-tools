@@ -21,7 +21,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "../ui/card";
 
 // Import tab components
 import { useSettingsCache } from "../../hooks/useConfigurationCache";
-import { useSettingsData } from "../../hooks/useSettingsData";
+import { useSettings } from "../../contexts/SettingsContext";
 import StaffGroupsTab from "./tabs/StaffGroupsTab";
 import DailyLimitsTab from "./tabs/DailyLimitsTab";
 import PriorityRulesTab from "./tabs/PriorityRulesTab";
@@ -45,34 +45,33 @@ const TABS = [
 const SettingsModal = ({
   isOpen,
   onClose,
-  isAutoSaving = false,
-  error = null,
-  // Settings data
-  settings,
-  onSettingsChange,
-  // Staff data for reference
+  // Staff data for reference (from parent - different data source)
   staffMembers = [],
-  // Configuration management
-  onResetConfig,
-  // Validation and preview
-  validationErrors = {},
-  // Autosave state
-  autosaveError = null,
-  isAutosaveEnabled = true,
-  onToggleAutosave,
-  lastSaveTime = null,
-  // Phase 2: Schedule validation
+  // Phase 2: Schedule validation (from parent navigation state)
   currentScheduleId = null,
 }) => {
-  // Backend mode and version info from useSettingsData
+  // Get all settings data from React Context (replaces prop drilling)
   const {
+    // Settings state
+    settings,
+    updateSettings,
+    resetToDefaults,
+    validationErrors,
+    error,
+    // Autosave state
+    isAutosaving,
+    autosaveError,
+    isAutosaveEnabled,
+    setIsAutosaveEnabled,
+    lastSaveTime,
+    // Backend mode and version info
     backendMode,
     isConnectedToBackend,
     connectionStatus,
     currentVersion,
     versionName,
     isVersionLocked,
-  } = useSettingsData();
+  } = useSettings();
 
   const [activeTab, setActiveTab] = useState("staff-groups");
   const [isVisible, setIsVisible] = useState(false);
@@ -162,7 +161,7 @@ const SettingsModal = ({
   const handleResetConfirm = async () => {
     setIsResetting(true);
     try {
-      onResetConfig();
+      resetToDefaults();
       setResetConfirmation(false);
     } catch (error) {
       console.error("Error resetting configuration:", error);
@@ -178,7 +177,7 @@ const SettingsModal = ({
   const renderTabContent = () => {
     const commonProps = {
       settings,
-      onSettingsChange, // Pass directly without wrapping to avoid infinite loops
+      onSettingsChange: updateSettings, // From useSettings() hook
       staffMembers,
       validationErrors: validationErrors[activeTab] || {},
       currentScheduleId, // Phase 2: Pass schedule ID for validation
@@ -319,7 +318,7 @@ const SettingsModal = ({
         <div className="flex items-center justify-between px-6 py-4 border-t border-gray-200 bg-gray-50 flex-shrink-0">
           <div className="flex items-center gap-4">
             {/* Autosave Status */}
-            {isAutoSaving && (
+            {isAutosaving && (
               <div className="flex items-center gap-2 text-blue-600">
                 <div className="w-4 h-4 border-2 border-blue-200 border-t-blue-600 rounded-full animate-spin"></div>
                 <span className="text-sm font-medium">Auto-saving...</span>
@@ -335,7 +334,7 @@ const SettingsModal = ({
               </div>
             )}
 
-            {!isAutoSaving && !autosaveError && lastSaveTime && (
+            {!isAutosaving && !autosaveError && lastSaveTime && (
               <div className="flex items-center gap-2 text-green-600">
                 <Check size={16} />
                 <span className="text-sm">
@@ -345,18 +344,16 @@ const SettingsModal = ({
             )}
 
             {/* Autosave Toggle */}
-            {onToggleAutosave && (
-              <div className="flex items-center space-x-2">
-                <Switch
-                  id="autosave"
-                  checked={isAutosaveEnabled}
-                  onCheckedChange={onToggleAutosave}
-                />
-                <Label htmlFor="autosave" className="text-sm">
-                  Auto-save
-                </Label>
-              </div>
-            )}
+            <div className="flex items-center space-x-2">
+              <Switch
+                id="autosave"
+                checked={isAutosaveEnabled}
+                onCheckedChange={setIsAutosaveEnabled}
+              />
+              <Label htmlFor="autosave" className="text-sm">
+                Auto-save
+              </Label>
+            </div>
 
             <Button
               onClick={handleReset}
