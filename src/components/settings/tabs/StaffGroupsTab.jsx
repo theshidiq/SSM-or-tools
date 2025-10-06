@@ -59,6 +59,120 @@ const PRESET_COLORS = [
   "#064E3B",
 ];
 
+// Staff Selection Modal Component (moved outside to prevent re-creation on each render)
+const StaffSelectionModal = React.memo(({
+  groupId,
+  isOpen,
+  onClose,
+  availableStaff,
+  group,
+  onAddStaff
+}) => {
+  console.log('🔵 [StaffSelectionModal] Render:', {
+    groupId,
+    isOpen,
+    hasOnClose: !!onClose,
+    staffCount: availableStaff?.length || 0,
+    timestamp: new Date().toISOString()
+  });
+
+  if (!isOpen || !groupId) {
+    console.log('🔵 [StaffSelectionModal] Not rendering - isOpen:', isOpen, 'groupId:', groupId);
+    return null;
+  }
+
+  const handleBackdropClick = (e) => {
+    console.log('🟡 [handleBackdropClick] Backdrop clicked:', {
+      target: e.target,
+      currentTarget: e.currentTarget,
+      timestamp: new Date().toISOString()
+    });
+
+    if (e.target === e.currentTarget) {
+      console.log('🟡 [handleBackdropClick] Calling onClose() - valid backdrop click');
+      onClose();
+      console.log('🟡 [handleBackdropClick] onClose() called');
+    } else {
+      console.log('🟡 [handleBackdropClick] Ignoring - clicked child element');
+    }
+  };
+
+  const handleCloseClick = (e) => {
+    console.log('🔴 [handleCloseClick] Close button clicked:', {
+      timestamp: new Date().toISOString(),
+      hasOnClose: !!onClose
+    });
+
+    e.stopPropagation();
+
+    console.log('🔴 [handleCloseClick] Calling onClose()...');
+    onClose();
+    console.log('🔴 [handleCloseClick] onClose() called - modal should close now');
+  };
+
+  return ReactDOM.createPortal(
+    <div
+      className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[70000]"
+      onClick={handleBackdropClick}
+    >
+      <div
+        className="bg-white rounded-xl w-full max-w-md p-6 shadow-2xl relative z-[70001]"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-lg font-semibold text-gray-800">
+            Add Staff to {group?.name}
+          </h3>
+          <button
+            onClick={handleCloseClick}
+            className="p-1 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded transition-colors"
+          >
+            <X size={20} />
+          </button>
+        </div>
+
+        {availableStaff.length === 0 ? (
+          <div className="text-center py-8">
+            <Users size={48} className="mx-auto text-gray-400 mb-3" />
+            <p className="text-gray-600 mb-2">No available staff</p>
+            <p className="text-sm text-gray-500">
+              All active staff are already in this group
+            </p>
+          </div>
+        ) : (
+          <div className="space-y-2 max-h-64 overflow-y-auto">
+            {availableStaff.map((staff) => (
+              <button
+                key={staff.id}
+                onClick={() => onAddStaff(staff.id)}
+                className="w-full flex items-center gap-3 p-3 bg-gray-50 hover:bg-blue-50 rounded-lg transition-colors text-left"
+              >
+                <div className="w-10 h-10 bg-gray-300 rounded-full flex items-center justify-center text-sm font-medium">
+                  {staff.name?.charAt(0)}
+                </div>
+                <div className="flex-1">
+                  <p className="font-medium text-gray-800">{staff.name}</p>
+                </div>
+                <UserPlus size={18} className="text-blue-600" />
+              </button>
+            ))}
+          </div>
+        )}
+
+        <div className="mt-6 flex justify-end">
+          <button
+            onClick={handleCloseClick}
+            className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors"
+          >
+            Close
+          </button>
+        </div>
+      </div>
+    </div>,
+    document.body
+  );
+});
+
 const StaffGroupsTab = ({
   staffMembers = [],
   validationErrors = {},
@@ -859,143 +973,49 @@ const StaffGroupsTab = ({
     );
   };
 
-  // Staff Selection Modal Component (using Portal for proper z-index stacking)
-  const StaffSelectionModal = ({ groupId, isOpen, onClose }) => {
-    console.log('🔵 [StaffSelectionModal] Render:', {
-      groupId,
-      isOpen,
-      hasOnClose: !!onClose,
+  // Prepare modal props with useCallback to prevent unnecessary re-renders
+  const handleModalAddStaff = useCallback((staffId) => {
+    const staff = staffMembers.find(s => s.id === staffId);
+    const group = staffGroups.find((g) => g.id === showStaffModal);
+
+    console.log('🟢 [handleModalAddStaff] START:', {
+      staffId,
+      groupId: showStaffModal,
+      groupName: group?.name,
       timestamp: new Date().toISOString()
     });
 
-    if (!isOpen || !groupId) {
-      console.log('🔵 [StaffSelectionModal] Not rendering - isOpen:', isOpen, 'groupId:', groupId);
-      return null;
+    console.log('🟢 [handleModalAddStaff] Calling addStaffToGroup...');
+    addStaffToGroup(showStaffModal, staffId);
+    console.log('🟢 [handleModalAddStaff] addStaffToGroup completed');
+
+    // Show success feedback
+    if (staff) {
+      console.log('🟢 [handleModalAddStaff] Showing success toast for:', staff.name);
+      toast.success(`Added ${staff.name} to ${group?.name}`, {
+        duration: 2000
+      });
     }
 
-    const availableStaff = getAvailableStaffForGroup(groupId);
-    const group = staffGroups.find((g) => g.id === groupId);
+    console.log('🟢 [handleModalAddStaff] END - Modal should stay open');
+  }, [showStaffModal, staffMembers, staffGroups, addStaffToGroup]);
 
-    const handleAddStaff = (staffId) => {
-      console.log('🟢 [handleAddStaff] START:', {
-        staffId,
-        groupId,
-        groupName: group?.name,
-        timestamp: new Date().toISOString()
-      });
+  const handleCloseModal = useCallback(() => {
+    console.log('🔴 [handleCloseModal] Closing modal for group:', showStaffModal);
+    setShowStaffModal(null);
+    console.log('🔴 [handleCloseModal] setShowStaffModal(null) called');
+  }, [showStaffModal]);
 
-      const staff = staffMembers.find(s => s.id === staffId);
+  // Calculate modal data
+  const modalGroup = useMemo(() =>
+    staffGroups.find((g) => g.id === showStaffModal),
+    [staffGroups, showStaffModal]
+  );
 
-      console.log('🟢 [handleAddStaff] Calling addStaffToGroup...');
-      addStaffToGroup(groupId, staffId);
-      console.log('🟢 [handleAddStaff] addStaffToGroup completed');
-
-      // Show success feedback
-      if (staff) {
-        console.log('🟢 [handleAddStaff] Showing success toast for:', staff.name);
-        toast.success(`Added ${staff.name} to ${group?.name}`, {
-          duration: 2000
-        });
-      }
-
-      console.log('🟢 [handleAddStaff] END - Modal should stay open');
-      // Don't close modal - let user add multiple staff or close manually
-      // This prevents race condition between settings update and modal close
-    };
-
-    const handleBackdropClick = (e) => {
-      console.log('🟡 [handleBackdropClick] Backdrop clicked:', {
-        target: e.target,
-        currentTarget: e.currentTarget,
-        timestamp: new Date().toISOString()
-      });
-
-      // Only close if clicking the backdrop itself, not child elements
-      if (e.target === e.currentTarget) {
-        console.log('🟡 [handleBackdropClick] Calling onClose() - valid backdrop click');
-        onClose();
-        console.log('🟡 [handleBackdropClick] onClose() called');
-      } else {
-        console.log('🟡 [handleBackdropClick] Ignoring - clicked child element');
-      }
-    };
-
-    const handleCloseClick = (e) => {
-      console.log('🔴 [handleCloseClick] Close button clicked:', {
-        timestamp: new Date().toISOString(),
-        hasOnClose: !!onClose
-      });
-
-      e.stopPropagation();
-
-      console.log('🔴 [handleCloseClick] Calling onClose()...');
-      onClose();
-      console.log('🔴 [handleCloseClick] onClose() called - modal should close now');
-    };
-
-    // Render modal using React Portal to escape parent stacking context
-    return ReactDOM.createPortal(
-      <div
-        className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[70000]"
-        onClick={handleBackdropClick}
-      >
-        <div
-          className="bg-white rounded-xl w-full max-w-md p-6 shadow-2xl relative z-[70001]"
-          onClick={(e) => e.stopPropagation()}
-        >
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="text-lg font-semibold text-gray-800">
-              Add Staff to {group?.name}
-            </h3>
-            <button
-              onClick={handleCloseClick}
-              className="p-1 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded transition-colors"
-            >
-              <X size={20} />
-            </button>
-          </div>
-
-          {availableStaff.length === 0 ? (
-            <div className="text-center py-8">
-              <Users size={48} className="mx-auto text-gray-400 mb-3" />
-              <p className="text-gray-600 mb-2">No available staff</p>
-              <p className="text-sm text-gray-500">
-                All active staff are already in this group
-              </p>
-            </div>
-          ) : (
-            <div className="space-y-2 max-h-64 overflow-y-auto">
-              {availableStaff.map((staff) => (
-                <button
-                  key={staff.id}
-                  onClick={() => handleAddStaff(staff.id)}
-                  className="w-full flex items-center gap-3 p-3 bg-gray-50 hover:bg-blue-50 rounded-lg transition-colors text-left"
-                >
-                  <div className="w-10 h-10 bg-gray-300 rounded-full flex items-center justify-center text-sm font-medium">
-                    {staff.name?.charAt(0)}
-                  </div>
-                  <div className="flex-1">
-                    <p className="font-medium text-gray-800">{staff.name}</p>
-                  </div>
-                  <UserPlus size={18} className="text-blue-600" />
-                </button>
-              ))}
-            </div>
-          )}
-
-          <div className="mt-6 flex justify-end">
-            <button
-              onClick={handleCloseClick}
-              className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors"
-            >
-              Close
-            </button>
-          </div>
-        </div>
-      </div>,
-      document.body
-    );
-  };
+  const modalAvailableStaff = useMemo(() =>
+    showStaffModal ? getAvailableStaffForGroup(showStaffModal) : [],
+    [showStaffModal, getAvailableStaffForGroup]
+  );
 
   const renderGroupCard = (group) => {
     const isEditing = editingGroup === group.id;
@@ -1221,7 +1241,10 @@ const StaffGroupsTab = ({
       <StaffSelectionModal
         groupId={showStaffModal}
         isOpen={showStaffModal !== null}
-        onClose={() => setShowStaffModal(null)}
+        onClose={handleCloseModal}
+        availableStaff={modalAvailableStaff}
+        group={modalGroup}
+        onAddStaff={handleModalAddStaff}
       />
 
       {/* Delete Confirmation Modal */}
