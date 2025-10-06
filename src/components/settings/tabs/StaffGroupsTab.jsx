@@ -438,7 +438,7 @@ const StaffGroupsTab = ({
       // Auto-close the confirmation modal after showing success message
       setTimeout(() => {
         // Update settings AFTER the success message is shown and modal is closing
-        onSettingsChange(updatedSettings);
+        updateSettings(updatedSettings);
 
         // Clean up modal state
         setDeleteConfirmation(null);
