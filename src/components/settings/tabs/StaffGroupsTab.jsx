@@ -59,6 +59,25 @@ const PRESET_COLORS = [
   "#064E3B",
 ];
 
+// Custom comparison function for React.memo
+const arePropsEqual = (prevProps, nextProps) => {
+  // Compare primitive props
+  if (prevProps.groupId !== nextProps.groupId) return false;
+  if (prevProps.isOpen !== nextProps.isOpen) return false;
+
+  // Compare array by content (staff IDs), not reference
+  if (prevProps.availableStaff?.length !== nextProps.availableStaff?.length) return false;
+  const prevIds = prevProps.availableStaff?.map(s => s.id).join(',') || '';
+  const nextIds = nextProps.availableStaff?.map(s => s.id).join(',') || '';
+  if (prevIds !== nextIds) return false;
+
+  // Compare group by ID, not reference
+  if (prevProps.group?.id !== nextProps.group?.id) return false;
+
+  // Functions are stable via useCallback, so we trust them
+  return true;
+};
+
 // Staff Selection Modal Component (moved outside to prevent re-creation on each render)
 const StaffSelectionModal = React.memo(({
   groupId,
@@ -172,7 +191,7 @@ const StaffSelectionModal = React.memo(({
     </div>,
     document.body
   );
-});
+}, arePropsEqual); // Add custom comparison function
 
 // Add displayName for better debugging
 StaffSelectionModal.displayName = 'StaffSelectionModal';
@@ -1017,10 +1036,31 @@ const StaffGroupsTab = ({
     [staffGroups, showStaffModal]
   );
 
-  const modalAvailableStaff = useMemo(() =>
-    showStaffModal ? getAvailableStaffForGroup(showStaffModal) : [],
-    [showStaffModal, getAvailableStaffForGroup]
-  );
+  const modalAvailableStaff = useMemo(() => {
+    if (!showStaffModal) return [];
+
+    // Compute active staff inline to avoid creating new array references
+    const activeStaff = staffMembers.filter((staff) => {
+      if (staff.endPeriod) {
+        const staffEndDate = new Date(
+          Date.UTC(
+            staff.endPeriod.year,
+            staff.endPeriod.month - 1,
+            staff.endPeriod.day || 31,
+          ),
+        );
+        const today = new Date();
+        return staffEndDate >= today;
+      }
+      return true;
+    });
+
+    // Filter out staff already in the group
+    const group = staffGroups.find((g) => g.id === showStaffModal);
+    const groupMemberIds = new Set(group?.members || []);
+
+    return activeStaff.filter((staff) => !groupMemberIds.has(staff.id));
+  }, [showStaffModal, staffMembers, staffGroups]);
 
   const renderGroupCard = (group) => {
     const isEditing = editingGroup === group.id;
