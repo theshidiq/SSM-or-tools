@@ -832,8 +832,18 @@ const StaffGroupsTab = ({
     const group = staffGroups.find((g) => g.id === groupId);
 
     const handleAddStaff = (staffId) => {
+      const staff = staffMembers.find(s => s.id === staffId);
       addStaffToGroup(groupId, staffId);
-      onClose();
+
+      // Show success feedback
+      if (staff) {
+        toast.success(`Added ${staff.name} to ${group?.name}`, {
+          duration: 2000
+        });
+      }
+
+      // Don't close modal - let user add multiple staff or close manually
+      // This prevents race condition between settings update and modal close
     };
 
     const handleBackdropClick = (e) => {
