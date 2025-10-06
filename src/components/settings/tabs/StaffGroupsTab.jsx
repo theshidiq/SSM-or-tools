@@ -5,7 +5,6 @@ import React, {
   useMemo,
   useRef,
 } from "react";
-import ReactDOM from "react-dom";
 import {
   Plus,
   Trash2,
@@ -59,142 +58,6 @@ const PRESET_COLORS = [
   "#064E3B",
 ];
 
-// Custom comparison function for React.memo
-const arePropsEqual = (prevProps, nextProps) => {
-  // Compare primitive props
-  if (prevProps.groupId !== nextProps.groupId) return false;
-  if (prevProps.isOpen !== nextProps.isOpen) return false;
-
-  // Compare array by content (staff IDs), not reference
-  if (prevProps.availableStaff?.length !== nextProps.availableStaff?.length) return false;
-  const prevIds = prevProps.availableStaff?.map(s => s.id).join(',') || '';
-  const nextIds = nextProps.availableStaff?.map(s => s.id).join(',') || '';
-  if (prevIds !== nextIds) return false;
-
-  // Compare group by ID, not reference
-  if (prevProps.group?.id !== nextProps.group?.id) return false;
-
-  // Functions are stable via useCallback, so we trust them
-  return true;
-};
-
-// Staff Selection Modal Component (moved outside to prevent re-creation on each render)
-const StaffSelectionModal = React.memo(({
-  groupId,
-  isOpen,
-  onClose,
-  availableStaff,
-  group,
-  onAddStaff
-}) => {
-  console.log('🔵 [StaffSelectionModal] Render:', {
-    groupId,
-    isOpen,
-    hasOnClose: !!onClose,
-    staffCount: availableStaff?.length || 0,
-    availableStaffRef: availableStaff, // Log reference to detect changes
-    timestamp: new Date().toISOString()
-  });
-
-  if (!isOpen || !groupId) {
-    console.log('🔵 [StaffSelectionModal] Not rendering - isOpen:', isOpen, 'groupId:', groupId);
-    return null;
-  }
-
-  const handleBackdropClick = (e) => {
-    console.log('🟡 [handleBackdropClick] Backdrop clicked:', {
-      target: e.target,
-      currentTarget: e.currentTarget,
-      timestamp: new Date().toISOString()
-    });
-
-    if (e.target === e.currentTarget) {
-      console.log('🟡 [handleBackdropClick] Calling onClose() - valid backdrop click');
-      onClose();
-      console.log('🟡 [handleBackdropClick] onClose() called');
-    } else {
-      console.log('🟡 [handleBackdropClick] Ignoring - clicked child element');
-    }
-  };
-
-  const handleCloseClick = (e) => {
-    console.log('🔴 [handleCloseClick] Close button clicked:', {
-      timestamp: new Date().toISOString(),
-      hasOnClose: !!onClose
-    });
-
-    e.stopPropagation();
-
-    console.log('🔴 [handleCloseClick] Calling onClose()...');
-    onClose();
-    console.log('🔴 [handleCloseClick] onClose() called - modal should close now');
-  };
-
-  return ReactDOM.createPortal(
-    <div
-      className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[70000]"
-      onClick={handleBackdropClick}
-    >
-      <div
-        className="bg-white rounded-xl w-full max-w-md p-6 shadow-2xl relative z-[70001]"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="flex items-center justify-between mb-4">
-          <h3 className="text-lg font-semibold text-gray-800">
-            Add Staff to {group?.name}
-          </h3>
-          <button
-            onClick={handleCloseClick}
-            className="p-1 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded transition-colors"
-          >
-            <X size={20} />
-          </button>
-        </div>
-
-        {availableStaff.length === 0 ? (
-          <div className="text-center py-8">
-            <Users size={48} className="mx-auto text-gray-400 mb-3" />
-            <p className="text-gray-600 mb-2">No available staff</p>
-            <p className="text-sm text-gray-500">
-              All active staff are already in this group
-            </p>
-          </div>
-        ) : (
-          <div className="space-y-2 max-h-64 overflow-y-auto">
-            {availableStaff.map((staff) => (
-              <button
-                key={staff.id}
-                onClick={() => onAddStaff(staff.id)}
-                className="w-full flex items-center gap-3 p-3 bg-gray-50 hover:bg-blue-50 rounded-lg transition-colors text-left"
-              >
-                <div className="w-10 h-10 bg-gray-300 rounded-full flex items-center justify-center text-sm font-medium">
-                  {staff.name?.charAt(0)}
-                </div>
-                <div className="flex-1">
-                  <p className="font-medium text-gray-800">{staff.name}</p>
-                </div>
-                <UserPlus size={18} className="text-blue-600" />
-              </button>
-            ))}
-          </div>
-        )}
-
-        <div className="mt-6 flex justify-end">
-          <button
-            onClick={handleCloseClick}
-            className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors"
-          >
-            Close
-          </button>
-        </div>
-      </div>
-    </div>,
-    document.body
-  );
-}, arePropsEqual); // Add custom comparison function
-
-// Add displayName for better debugging
-StaffSelectionModal.displayName = 'StaffSelectionModal';
 
 const StaffGroupsTab = ({
   staffMembers = [],
@@ -208,7 +71,6 @@ const StaffGroupsTab = ({
   const [originalGroupData, setOriginalGroupData] = useState(null);
   const [draggedStaff, setDraggedStaff] = useState(null);
   const [dragOverGroup, setDragOverGroup] = useState(null);
-  const [showStaffModal, setShowStaffModal] = useState(null); // null or groupId
   const [deleteConfirmation, setDeleteConfirmation] = useState(null); // null or { groupId, groupName }
   const [isDeleting, setIsDeleting] = useState(false);
   const [deleteSuccess, setDeleteSuccess] = useState(false); // Track if delete was successful
@@ -232,16 +94,6 @@ const StaffGroupsTab = ({
     refreshBackupAssignments,
     getAvailableBackupStaff: hookGetAvailableBackupStaff,
   } = useBackupStaffService();
-
-  // DEBUG: Track modal state changes
-  useEffect(() => {
-    console.log('🎯 [showStaffModal] State changed:', {
-      showStaffModal,
-      isOpen: !!showStaffModal,
-      groupId: showStaffModal,
-      timestamp: new Date().toISOString()
-    });
-  }, [showStaffModal]);
 
   // Use ref to persist modal state across parent re-renders
   const modalStateRef = useRef({
@@ -997,71 +849,6 @@ const StaffGroupsTab = ({
     );
   };
 
-  // Prepare modal props with useCallback to prevent unnecessary re-renders
-  const handleModalAddStaff = useCallback((staffId) => {
-    const staff = staffMembers.find(s => s.id === staffId);
-    const group = staffGroups.find((g) => g.id === showStaffModal);
-
-    console.log('🟢 [handleModalAddStaff] START:', {
-      staffId,
-      groupId: showStaffModal,
-      groupName: group?.name,
-      timestamp: new Date().toISOString()
-    });
-
-    console.log('🟢 [handleModalAddStaff] Calling addStaffToGroup...');
-    addStaffToGroup(showStaffModal, staffId);
-    console.log('🟢 [handleModalAddStaff] addStaffToGroup completed');
-
-    // Show success feedback
-    if (staff) {
-      console.log('🟢 [handleModalAddStaff] Showing success toast for:', staff.name);
-      toast.success(`Added ${staff.name} to ${group?.name}`, {
-        duration: 2000
-      });
-    }
-
-    console.log('🟢 [handleModalAddStaff] END - Modal should stay open');
-  }, [showStaffModal, staffMembers, staffGroups, addStaffToGroup]);
-
-  const handleCloseModal = useCallback(() => {
-    console.log('🔴 [handleCloseModal] Closing modal for group:', showStaffModal);
-    setShowStaffModal(null);
-    console.log('🔴 [handleCloseModal] setShowStaffModal(null) called');
-  }, [showStaffModal]);
-
-  // Calculate modal data
-  const modalGroup = useMemo(() =>
-    staffGroups.find((g) => g.id === showStaffModal),
-    [staffGroups, showStaffModal]
-  );
-
-  const modalAvailableStaff = useMemo(() => {
-    if (!showStaffModal) return [];
-
-    // Compute active staff inline to avoid creating new array references
-    const activeStaff = staffMembers.filter((staff) => {
-      if (staff.endPeriod) {
-        const staffEndDate = new Date(
-          Date.UTC(
-            staff.endPeriod.year,
-            staff.endPeriod.month - 1,
-            staff.endPeriod.day || 31,
-          ),
-        );
-        const today = new Date();
-        return staffEndDate >= today;
-      }
-      return true;
-    });
-
-    // Filter out staff already in the group
-    const group = staffGroups.find((g) => g.id === showStaffModal);
-    const groupMemberIds = new Set(group?.members || []);
-
-    return activeStaff.filter((staff) => !groupMemberIds.has(staff.id));
-  }, [showStaffModal, staffMembers, staffGroups]);
-
   const renderGroupCard = (group) => {
     const isEditing = editingGroup === group.id;
     // Defensive check: handle undefined/null members array (WebSocket multi-table backend compatibility)
@@ -1170,14 +957,31 @@ const StaffGroupsTab = ({
               <Users size={16} />
               Members ({groupMembers.length})
             </div>
-            <button
-              onClick={() => setShowStaffModal(group.id)}
-              className="flex items-center gap-1 px-2 py-1 text-xs font-medium text-blue-600 bg-blue-50 hover:bg-blue-100 rounded-lg transition-colors"
+            <select
+              value=""
+              onChange={(e) => {
+                if (e.target.value) {
+                  addStaffToGroup(group.id, e.target.value);
+                  // Success toast
+                  const staff = staffMembers.find(s => s.id === e.target.value);
+                  if (staff) {
+                    toast.success(`Added ${staff.name} to ${group.name}`);
+                  }
+                  e.target.value = ""; // Reset to placeholder
+                }
+              }}
+              className="text-xs px-2 py-1.5 border border-gray-300 rounded-lg text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer transition-colors"
               title="Add staff to group"
             >
-              <UserPlus size={14} />
-              Add Staff
-            </button>
+              <option value="" disabled className="text-gray-500">
+                ➕ Add staff...
+              </option>
+              {getAvailableStaffForGroup(group.id).map((staff) => (
+                <option key={staff.id} value={staff.id} className="text-gray-900">
+                  {staff.name}
+                </option>
+              ))}
+            </select>
           </div>
 
           <div className="space-y-1.5 max-h-32 overflow-y-auto">
@@ -1281,16 +1085,6 @@ const StaffGroupsTab = ({
 
       {/* Backup Management Section */}
       <BackupManagementSection />
-
-      {/* Staff Selection Modal */}
-      <StaffSelectionModal
-        groupId={showStaffModal}
-        isOpen={showStaffModal !== null}
-        onClose={handleCloseModal}
-        availableStaff={modalAvailableStaff}
-        group={modalGroup}
-        onAddStaff={handleModalAddStaff}
-      />
 
       {/* Delete Confirmation Modal */}
       <ConfirmationModal
