@@ -36,6 +36,26 @@ export const useSettingsData = (autosaveEnabled = true) => {
     enabled: WEBSOCKET_SETTINGS_ENABLED
   });
 
+  // Store WebSocket callbacks in refs to keep updateSettings stable
+  const wsCallbacksRef = useRef({
+    wsUpdateStaffGroups,
+    wsUpdateDailyLimits,
+    wsUpdateMonthlyLimits,
+    wsUpdatePriorityRules,
+    wsUpdateMLConfig
+  });
+
+  // Update refs when callbacks change
+  useEffect(() => {
+    wsCallbacksRef.current = {
+      wsUpdateStaffGroups,
+      wsUpdateDailyLimits,
+      wsUpdateMonthlyLimits,
+      wsUpdatePriorityRules,
+      wsUpdateMLConfig
+    };
+  }, [wsUpdateStaffGroups, wsUpdateDailyLimits, wsUpdateMonthlyLimits, wsUpdatePriorityRules, wsUpdateMLConfig]);
+
   // Determine active backend mode
   const useWebSocket = WEBSOCKET_SETTINGS_ENABLED && wsConnected;
 
@@ -158,12 +178,13 @@ export const useSettingsData = (autosaveEnabled = true) => {
       console.log('🔄 Updating settings via WebSocket multi-table backend');
 
       const oldSettings = settingsRef.current || {};
+      const callbacks = wsCallbacksRef.current;
 
       // Detect and update staff groups
       if (JSON.stringify(oldSettings.staffGroups) !== JSON.stringify(newSettings.staffGroups)) {
         console.log('  - Updating staff_groups table');
         newSettings.staffGroups?.forEach(group => {
-          wsUpdateStaffGroups(group);
+          callbacks.wsUpdateStaffGroups(group);
         });
       }
 
@@ -171,7 +192,7 @@ export const useSettingsData = (autosaveEnabled = true) => {
       if (JSON.stringify(oldSettings.dailyLimits) !== JSON.stringify(newSettings.dailyLimits)) {
         console.log('  - Updating daily_limits table');
         newSettings.dailyLimits?.forEach(limit => {
-          wsUpdateDailyLimits(limit);
+          callbacks.wsUpdateDailyLimits(limit);
         });
       }
 
@@ -179,7 +200,7 @@ export const useSettingsData = (autosaveEnabled = true) => {
       if (JSON.stringify(oldSettings.monthlyLimits) !== JSON.stringify(newSettings.monthlyLimits)) {
         console.log('  - Updating monthly_limits table');
         newSettings.monthlyLimits?.forEach(limit => {
-          wsUpdateMonthlyLimits(limit);
+          callbacks.wsUpdateMonthlyLimits(limit);
         });
       }
 
@@ -187,14 +208,14 @@ export const useSettingsData = (autosaveEnabled = true) => {
       if (JSON.stringify(oldSettings.priorityRules) !== JSON.stringify(newSettings.priorityRules)) {
         console.log('  - Updating priority_rules table');
         newSettings.priorityRules?.forEach(rule => {
-          wsUpdatePriorityRules(rule);
+          callbacks.wsUpdatePriorityRules(rule);
         });
       }
 
       // Detect and update ML parameters
       if (JSON.stringify(oldSettings.mlParameters) !== JSON.stringify(newSettings.mlParameters)) {
         console.log('  - Updating ml_model_configs table');
-        wsUpdateMLConfig(newSettings.mlParameters);
+        callbacks.wsUpdateMLConfig(newSettings.mlParameters);
       }
 
       // WebSocket updates are authoritative - no unsaved changes
@@ -205,14 +226,7 @@ export const useSettingsData = (autosaveEnabled = true) => {
       setHasUnsavedChanges(true);
       setValidationErrors({});
     }
-  }, [
-    useWebSocket,
-    wsUpdateStaffGroups,
-    wsUpdateDailyLimits,
-    wsUpdateMonthlyLimits,
-    wsUpdatePriorityRules,
-    wsUpdateMLConfig
-  ]);
+  }, [useWebSocket]); // FIXED: Only depend on useWebSocket, use refs for callbacks
 
   /**
    * Reset settings to defaults (multi-table aware)
