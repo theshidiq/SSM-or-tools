@@ -186,11 +186,21 @@ const SettingsModal = ({
       case "staff-groups":
         return <StaffGroupsTab {...commonProps} />;
       case "daily-limits":
-        return <DailyLimitsTab {...commonProps} />;
+        // Phase 4.3: DailyLimitsTab now uses useSettings() hook
+        return <DailyLimitsTab
+          staffMembers={staffMembers}
+          validationErrors={validationErrors[activeTab] || {}}
+          currentScheduleId={currentScheduleId}
+        />;
       case "priority-rules":
-        return <PriorityRulesTab {...commonProps} />;
+        // Phase 4.2: PriorityRulesTab needs staffMembers + validationErrors (no scheduleId)
+        return <PriorityRulesTab
+          staffMembers={staffMembers}
+          validationErrors={validationErrors[activeTab] || {}}
+        />;
       case "ml-parameters":
-        return <MLParametersTab {...commonProps} />;
+        // Phase 4.1: MLParametersTab only needs validationErrors (no staffMembers/scheduleId)
+        return <MLParametersTab validationErrors={validationErrors[activeTab] || {}} />;
       case "data-migration":
         return <DataMigrationTab />;
       default:

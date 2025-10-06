@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useCallback } from "react";
+import React, { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import {
   Plus,
   Trash2,
@@ -10,6 +10,7 @@ import {
   XCircle,
 } from "lucide-react";
 import { toast } from "sonner";
+import { useSettings } from "../../../contexts/SettingsContext";
 import FormField from "../shared/FormField";
 import NumberInput from "../shared/NumberInput";
 import ToggleSwitch from "../shared/ToggleSwitch";
@@ -42,12 +43,13 @@ const LIMIT_SCOPES = [
 ];
 
 const DailyLimitsTab = ({
-  settings,
-  onSettingsChange,
   staffMembers = [],
   validationErrors = {},
   currentScheduleId = null, // Phase 2: Schedule ID for validation
 }) => {
+  // Phase 4.3: Get settings from Context instead of props
+  const { settings, updateSettings } = useSettings();
+
   const [editingLimit, setEditingLimit] = useState(null);
   const [originalLimitData, setOriginalLimitData] = useState(null);
   const [editingMonthlyLimit, setEditingMonthlyLimit] = useState(null);
@@ -64,6 +66,16 @@ const DailyLimitsTab = ({
 
   // Schedule validation hook
   const { validateDailyLimits } = useScheduleValidation(currentScheduleId);
+
+  // Phase 4.3: Add refs for stable references (prevent infinite loops)
+  const settingsRef = useRef(settings);
+  const updateSettingsRef = useRef(updateSettings);
+
+  // Update refs when context values change
+  useEffect(() => {
+    settingsRef.current = settings;
+    updateSettingsRef.current = updateSettings;
+  }, [settings, updateSettings]);
 
   // Fix: Memoize derived arrays to prevent unnecessary re-renders
   // Transform WebSocket multi-table format to localStorage-compatible format
@@ -128,6 +140,7 @@ const DailyLimitsTab = ({
     return () => document.removeEventListener("keydown", handleKeyDown);
   }, [editingLimit, editingMonthlyLimit]);
 
+  // Phase 4.3: Wrap updateDailyLimits with refs (prevent infinite loops)
   const updateDailyLimits = useCallback(
     async (newLimits, skipValidation = false) => {
       try {
@@ -164,8 +177,9 @@ const DailyLimitsTab = ({
           }
         }
 
-        onSettingsChange({
-          ...settings,
+        // Use refs to avoid dependency on settings/updateSettings
+        updateSettingsRef.current({
+          ...settingsRef.current,
           dailyLimits: newLimits,
         });
       } catch (error) {
@@ -173,15 +187,16 @@ const DailyLimitsTab = ({
         throw error;
       }
     },
-    [settings, onSettingsChange, currentScheduleId, validateDailyLimits, staffMembers]
+    [currentScheduleId, validateDailyLimits, staffMembers] // Removed settings/onSettingsChange
   );
 
-  const updateMonthlyLimits = (newLimits) => {
-    onSettingsChange({
-      ...settings,
+  // Phase 4.3: Wrap updateMonthlyLimits with useCallback and refs
+  const updateMonthlyLimits = useCallback((newLimits) => {
+    updateSettingsRef.current({
+      ...settingsRef.current,
       monthlyLimits: newLimits,
     });
-  };
+  }, []); // Empty deps - uses refs
 
   // Daily Limits Edit Management
   const startEditingDailyLimit = (limitId) => {

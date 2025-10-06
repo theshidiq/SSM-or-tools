@@ -11,6 +11,7 @@ import {
   CalendarDays,
   AlertCircle,
 } from "lucide-react";
+import { useSettings } from "../../../contexts/SettingsContext";
 import FormField from "../shared/FormField";
 import Slider from "../shared/Slider";
 import NumberInput from "../shared/NumberInput";
@@ -111,10 +112,11 @@ const QUALITY_PRESETS = [
 ];
 
 const MLParametersTab = ({
-  settings,
-  onSettingsChange,
   validationErrors = {},
 }) => {
+  // Phase 4.1: Get settings from Context instead of props
+  const { settings, updateSettings } = useSettings();
+
   const [showAdvanced, setShowAdvanced] = useState(false);
 
   const mlConfig = settings?.mlParameters || QUALITY_PRESETS[1].config;
@@ -129,7 +131,7 @@ const MLParametersTab = ({
   }, [mlConfig]);
 
   const updateMLConfig = (updates) => {
-    onSettingsChange({
+    updateSettings({
       ...settings,
       mlParameters: { ...mlConfig, ...updates },
     });

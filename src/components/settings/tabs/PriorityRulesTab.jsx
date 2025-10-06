@@ -10,6 +10,7 @@ import {
   Check,
   XCircle,
 } from "lucide-react";
+import { useSettings } from "../../../contexts/SettingsContext";
 import FormField from "../shared/FormField";
 import ConfirmationModal from "../shared/ConfirmationModal";
 
@@ -59,11 +60,12 @@ const PRIORITY_LEVELS = [
 ];
 
 const PriorityRulesTab = ({
-  settings,
-  onSettingsChange,
   staffMembers = [],
   validationErrors = {},
 }) => {
+  // Phase 4.2: Get settings from Context instead of props
+  const { settings, updateSettings } = useSettings();
+
   const [editingRule, setEditingRule] = useState(null);
   const [originalRuleData, setOriginalRuleData] = useState(null);
   const [deleteConfirmation, setDeleteConfirmation] = useState(null); // { id, name }
@@ -102,30 +104,8 @@ const PriorityRulesTab = ({
     [settings?.priorityRules],
   );
 
-  // Add escape key listener to exit edit mode
-  useEffect(() => {
-    const handleKeyDown = (event) => {
-      if (event.key === "Escape" && editingRule) {
-        handleCancelEdit();
-      }
-    };
-
-    document.addEventListener("keydown", handleKeyDown);
-    return () => document.removeEventListener("keydown", handleKeyDown);
-  }, [editingRule]);
-
-  const updatePriorityRules = (newRules) => {
-    // Check for conflicts when updating rules
-    const conflicts = detectRuleConflicts(newRules);
-    setConflictingRules(conflicts);
-
-    onSettingsChange({
-      ...settings,
-      priorityRules: newRules,
-    });
-  };
-
-  const detectRuleConflicts = (rules) => {
+  // Memoize conflict detection to prevent recalculation (Phase 4.2)
+  const detectRuleConflicts = useCallback((rules) => {
     const conflicts = [];
 
     for (let i = 0; i < rules.length; i++) {
@@ -159,7 +139,43 @@ const PriorityRulesTab = ({
     }
 
     return conflicts;
-  };
+  }, [staffMembers]); // Only depends on staffMembers
+
+  // Wrap updatePriorityRules in useCallback for stable reference (Phase 4.2)
+  const updatePriorityRules = useCallback((newRules) => {
+    // Check for conflicts when updating rules
+    const conflicts = detectRuleConflicts(newRules);
+    setConflictingRules(conflicts);
+
+    updateSettings({
+      ...settings,
+      priorityRules: newRules,
+    });
+  }, [settings, updateSettings, detectRuleConflicts]);
+
+  // Cancel changes and restore original data (Phase 4.2: moved before useEffect for dependency)
+  const handleCancelEdit = useCallback(() => {
+    if (originalRuleData && editingRule) {
+      const updatedRules = priorityRules.map((rule) =>
+        rule.id === editingRule ? originalRuleData : rule,
+      );
+      updatePriorityRules(updatedRules);
+    }
+    setEditingRule(null);
+    setOriginalRuleData(null);
+  }, [originalRuleData, editingRule, priorityRules, updatePriorityRules]);
+
+  // Add escape key listener to exit edit mode (Phase 4.2: uses handleCancelEdit)
+  useEffect(() => {
+    const handleKeyDown = (event) => {
+      if (event.key === "Escape" && editingRule) {
+        handleCancelEdit();
+      }
+    };
+
+    document.addEventListener("keydown", handleKeyDown);
+    return () => document.removeEventListener("keydown", handleKeyDown);
+  }, [editingRule, handleCancelEdit]);
 
   const createNewRule = () => {
     const newRule = {
@@ -239,18 +255,6 @@ const PriorityRulesTab = ({
     setEditingRule(null);
     setOriginalRuleData(null);
   };
-
-  // Cancel changes and restore original data
-  const handleCancelEdit = useCallback(() => {
-    if (originalRuleData && editingRule) {
-      const updatedRules = priorityRules.map((rule) =>
-        rule.id === editingRule ? originalRuleData : rule,
-      );
-      updatePriorityRules(updatedRules);
-    }
-    setEditingRule(null);
-    setOriginalRuleData(null);
-  }, [originalRuleData, editingRule, priorityRules, updatePriorityRules]);
 
   const toggleDayOfWeek = (ruleId, dayId) => {
     const rule = priorityRules.find((r) => r.id === ruleId);
