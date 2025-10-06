@@ -96,6 +96,16 @@ const StaffGroupsTab = ({
     getAvailableBackupStaff: hookGetAvailableBackupStaff,
   } = useBackupStaffService();
 
+  // DEBUG: Track modal state changes
+  useEffect(() => {
+    console.log('🎯 [showStaffModal] State changed:', {
+      showStaffModal,
+      isOpen: !!showStaffModal,
+      groupId: showStaffModal,
+      timestamp: new Date().toISOString()
+    });
+  }, [showStaffModal]);
+
   // Use ref to persist modal state across parent re-renders
   const modalStateRef = useRef({
     deleteConfirmation: null,
@@ -251,12 +261,23 @@ const StaffGroupsTab = ({
 
   const updateStaffGroups = useCallback(
     async (newGroups, skipValidation = false) => {
+      console.log('💫 [updateStaffGroups] START:', {
+        newGroupsCount: newGroups.length,
+        skipValidation,
+        hasCurrentScheduleId: !!currentScheduleId,
+        timestamp: new Date().toISOString()
+      });
+
       try {
         // Phase 2: Validate against current schedule before saving (unless skipped)
         if (!skipValidation && currentScheduleId) {
+          console.log('💫 [updateStaffGroups] Starting validation...');
           setIsValidating(true);
           try {
             const conflicts = await validateStaffGroups(newGroups);
+            console.log('💫 [updateStaffGroups] Validation complete:', {
+              conflictsFound: conflicts.length
+            });
 
             if (conflicts.length > 0) {
               // Show warning toast with conflict count
@@ -288,16 +309,20 @@ const StaffGroupsTab = ({
         // Use ref to get current settings to avoid infinite loop
         const currentSettings = settingsRef.current;
 
+        console.log('💫 [updateStaffGroups] Creating updated settings object...');
         // Create a completely new settings object to ensure proper state update
         const updatedSettings = {
           ...currentSettings,
           staffGroups: [...newGroups], // Create a new array reference
         };
 
+        console.log('💫 [updateStaffGroups] Calling updateSettings via ref...');
         // Use ref to avoid dependency on onSettingsChange
         onSettingsChangeRef.current(updatedSettings);
+        console.log('💫 [updateStaffGroups] updateSettings called - this will trigger re-render');
+        console.log('💫 [updateStaffGroups] END');
       } catch (error) {
-        console.error("Error updating staff groups:", error);
+        console.error("❌ [updateStaffGroups] Error updating staff groups:", error);
         throw error;
       }
     },
@@ -470,6 +495,13 @@ const StaffGroupsTab = ({
   };
 
   const addStaffToGroup = (groupId, staffId) => {
+    console.log('⭐ [addStaffToGroup] START:', {
+      groupId,
+      staffId,
+      currentGroupsCount: staffGroups.length,
+      timestamp: new Date().toISOString()
+    });
+
     // Allow staff to be in multiple groups - just add to the specified group
     const updatedGroups = staffGroups.map((group) => ({
       ...group,
@@ -478,7 +510,10 @@ const StaffGroupsTab = ({
           ? [...new Set([...(group.members || []), staffId])] // Use Set to avoid duplicates, handle undefined members
           : (group.members || []),
     }));
+
+    console.log('⭐ [addStaffToGroup] Updated groups created, calling updateStaffGroups...');
     updateStaffGroups(updatedGroups);
+    console.log('⭐ [addStaffToGroup] END - updateStaffGroups called');
   };
 
   const removeStaffFromGroup = (groupId, staffId) => {
@@ -826,36 +861,76 @@ const StaffGroupsTab = ({
 
   // Staff Selection Modal Component (using Portal for proper z-index stacking)
   const StaffSelectionModal = ({ groupId, isOpen, onClose }) => {
-    if (!isOpen || !groupId) return null;
+    console.log('🔵 [StaffSelectionModal] Render:', {
+      groupId,
+      isOpen,
+      hasOnClose: !!onClose,
+      timestamp: new Date().toISOString()
+    });
+
+    if (!isOpen || !groupId) {
+      console.log('🔵 [StaffSelectionModal] Not rendering - isOpen:', isOpen, 'groupId:', groupId);
+      return null;
+    }
 
     const availableStaff = getAvailableStaffForGroup(groupId);
     const group = staffGroups.find((g) => g.id === groupId);
 
     const handleAddStaff = (staffId) => {
+      console.log('🟢 [handleAddStaff] START:', {
+        staffId,
+        groupId,
+        groupName: group?.name,
+        timestamp: new Date().toISOString()
+      });
+
       const staff = staffMembers.find(s => s.id === staffId);
+
+      console.log('🟢 [handleAddStaff] Calling addStaffToGroup...');
       addStaffToGroup(groupId, staffId);
+      console.log('🟢 [handleAddStaff] addStaffToGroup completed');
 
       // Show success feedback
       if (staff) {
+        console.log('🟢 [handleAddStaff] Showing success toast for:', staff.name);
         toast.success(`Added ${staff.name} to ${group?.name}`, {
           duration: 2000
         });
       }
 
+      console.log('🟢 [handleAddStaff] END - Modal should stay open');
       // Don't close modal - let user add multiple staff or close manually
       // This prevents race condition between settings update and modal close
     };
 
     const handleBackdropClick = (e) => {
+      console.log('🟡 [handleBackdropClick] Backdrop clicked:', {
+        target: e.target,
+        currentTarget: e.currentTarget,
+        timestamp: new Date().toISOString()
+      });
+
       // Only close if clicking the backdrop itself, not child elements
       if (e.target === e.currentTarget) {
+        console.log('🟡 [handleBackdropClick] Calling onClose() - valid backdrop click');
         onClose();
+        console.log('🟡 [handleBackdropClick] onClose() called');
+      } else {
+        console.log('🟡 [handleBackdropClick] Ignoring - clicked child element');
       }
     };
 
     const handleCloseClick = (e) => {
+      console.log('🔴 [handleCloseClick] Close button clicked:', {
+        timestamp: new Date().toISOString(),
+        hasOnClose: !!onClose
+      });
+
       e.stopPropagation();
+
+      console.log('🔴 [handleCloseClick] Calling onClose()...');
       onClose();
+      console.log('🔴 [handleCloseClick] onClose() called - modal should close now');
     };
 
     // Render modal using React Portal to escape parent stacking context
