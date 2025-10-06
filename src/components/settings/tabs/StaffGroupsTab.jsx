@@ -73,6 +73,7 @@ const StaffSelectionModal = React.memo(({
     isOpen,
     hasOnClose: !!onClose,
     staffCount: availableStaff?.length || 0,
+    availableStaffRef: availableStaff, // Log reference to detect changes
     timestamp: new Date().toISOString()
   });
 
@@ -172,6 +173,9 @@ const StaffSelectionModal = React.memo(({
     document.body
   );
 });
+
+// Add displayName for better debugging
+StaffSelectionModal.displayName = 'StaffSelectionModal';
 
 const StaffGroupsTab = ({
   staffMembers = [],
@@ -720,13 +724,14 @@ const StaffGroupsTab = ({
   };
 
   // Get available staff for a specific group (active staff not already in that group)
-  const getAvailableStaffForGroup = (groupId) => {
+  // FIXED: Wrapped in useCallback to maintain stable reference across renders
+  const getAvailableStaffForGroup = useCallback((groupId) => {
     const activeStaff = getActiveStaffMembers();
     const group = staffGroups.find((g) => g.id === groupId);
     const groupMemberIds = new Set(group?.members || []);
 
     return activeStaff.filter((staff) => !groupMemberIds.has(staff.id));
-  };
+  }, [staffMembers, staffGroups]); // Depend on staffMembers and staffGroups
 
   // Update drag start to only work on active staff
   const handleDragStart = (e, staffId) => {

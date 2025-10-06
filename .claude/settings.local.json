@@ -17,7 +17,9 @@
       "mcp__chrome-devtools__list_pages",
       "mcp__supabase__execute_sql",
       "mcp__chrome-devtools__new_page",
-      "mcp__chrome-devtools__evaluate_script"
+      "mcp__chrome-devtools__evaluate_script",
+      "Bash(lsof:*)",
+      "Bash(xargs kill:*)"
     ],
     "deny": []
   },
