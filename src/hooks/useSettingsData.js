@@ -191,7 +191,13 @@ export const useSettingsData = (autosaveEnabled = true) => {
         // ✅ FIX: Find and send only changed groups (reduces WebSocket traffic from 9 messages to 1)
         const changedGroups = newSettings.staffGroups?.filter(newGroup => {
           const oldGroup = oldSettings.staffGroups?.find(g => g.id === newGroup.id);
-          const hasChanged = JSON.stringify(oldGroup) !== JSON.stringify(newGroup);
+
+          // ✅ CRITICAL FIX: Only compare members array, not entire object
+          // JSON.stringify() is unreliable due to property ordering differences
+          const oldMembers = JSON.stringify(oldGroup?.members || []);
+          const newMembers = JSON.stringify(newGroup.members || []);
+          const hasChanged = oldMembers !== newMembers;
+
           if (hasChanged) {
             console.log(`    - Group "${newGroup.name}" changed:`, {
               oldMembers: oldGroup?.members?.length || 0,

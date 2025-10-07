@@ -23,7 +23,10 @@
       "Bash(npm run lint:*)",
       "Bash(curl:*)",
       "mcp__chrome-devtools__fill",
-      "mcp__chrome-devtools__take_screenshot"
+      "mcp__chrome-devtools__take_screenshot",
+      "Bash(go build:*)",
+      "Read(//private/tmp/**)",
+      "Bash(awk:*)"
     ],
     "deny": []
   },
