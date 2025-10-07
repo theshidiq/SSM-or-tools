@@ -210,10 +210,6 @@ export const useSettingsData = (autosaveEnabled = true) => {
         });
       }
 
-      // ✅ OPTIMISTIC UPDATE: Update local state immediately AFTER sending to server
-      settingsRef.current = newSettings;
-      setSettings(newSettings);
-
       // Detect and update daily limits
       if (JSON.stringify(oldSettings.dailyLimits) !== JSON.stringify(newSettings.dailyLimits)) {
         console.log('  - Updating daily_limits table');
@@ -243,6 +239,11 @@ export const useSettingsData = (autosaveEnabled = true) => {
         console.log('  - Updating ml_model_configs table');
         callbacks.wsUpdateMLConfig(newSettings.mlParameters);
       }
+
+      // ✅ OPTIMISTIC UPDATE: Update local state AFTER all change detection completes
+      // This prevents race conditions where ref updates before all comparisons finish
+      settingsRef.current = newSettings;
+      setSettings(newSettings);
 
       // WebSocket updates are authoritative - no unsaved changes
       setValidationErrors({});
