@@ -29,6 +29,28 @@ type SettingsAggregate struct {
 	Version        ConfigVersion   `json:"version"`
 }
 
+// MarshalJSON custom marshaler for SettingsAggregate
+// Converts StaffGroups to React format by extracting members from group_config JSONB
+func (sa *SettingsAggregate) MarshalJSON() ([]byte, error) {
+	// Convert staff groups to React format
+	reactGroups := make([]map[string]interface{}, len(sa.StaffGroups))
+	for i, group := range sa.StaffGroups {
+		reactGroups[i] = group.ToReactFormat()
+	}
+
+	// Create response structure with converted groups
+	response := map[string]interface{}{
+		"staffGroups":    reactGroups,
+		"dailyLimits":    sa.DailyLimits,
+		"monthlyLimits":  sa.MonthlyLimits,
+		"priorityRules":  sa.PriorityRules,
+		"mlModelConfigs": sa.MLModelConfigs,
+		"version":        sa.Version,
+	}
+
+	return json.Marshal(response)
+}
+
 // StaffGroup represents a staff grouping configuration
 type StaffGroup struct {
 	ID           string                 `json:"id"`
