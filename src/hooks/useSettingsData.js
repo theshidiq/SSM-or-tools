@@ -180,10 +180,24 @@ export const useSettingsData = (autosaveEnabled = true) => {
       const oldSettings = settingsRef.current || {};
       const callbacks = wsCallbacksRef.current;
 
+      // ✅ OPTIMISTIC UPDATE: Update local state immediately for instant UI feedback
+      settingsRef.current = newSettings;
+      setSettings(newSettings);
+
       // Detect and update staff groups
       if (JSON.stringify(oldSettings.staffGroups) !== JSON.stringify(newSettings.staffGroups)) {
         console.log('  - Updating staff_groups table');
-        newSettings.staffGroups?.forEach(group => {
+
+        // ✅ FIX: Find and send only changed groups (reduces WebSocket traffic from 9 messages to 1)
+        const changedGroups = newSettings.staffGroups?.filter(newGroup => {
+          const oldGroup = oldSettings.staffGroups?.find(g => g.id === newGroup.id);
+          return JSON.stringify(oldGroup) !== JSON.stringify(newGroup);
+        }) || [];
+
+        console.log(`  - Sending ${changedGroups.length} changed group(s) to server (instead of ${newSettings.staffGroups?.length} total)`);
+
+        // Send only changed groups to prevent sync loop
+        changedGroups.forEach(group => {
           callbacks.wsUpdateStaffGroups(group);
         });
       }
