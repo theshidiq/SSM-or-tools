@@ -45,7 +45,7 @@ type StaffGroup struct {
 
 // ToReactFormat converts snake_case to camelCase for React
 func (sg *StaffGroup) ToReactFormat() map[string]interface{} {
-	return map[string]interface{}{
+	reactData := map[string]interface{}{
 		"id":           sg.ID,
 		"restaurantId": sg.RestaurantID,
 		"versionId":    sg.VersionID,
@@ -57,6 +57,22 @@ func (sg *StaffGroup) ToReactFormat() map[string]interface{} {
 		"updatedAt":    sg.UpdatedAt,
 		"isActive":     sg.IsActive,
 	}
+
+	// ✅ FIX: Extract members from group_config JSONB to top level for React
+	// React expects: { id, name, members: [...] }
+	// Database stores: { id, name, group_config: { members: [...] } }
+	if sg.GroupConfig != nil {
+		if members, ok := sg.GroupConfig["members"]; ok {
+			reactData["members"] = members
+		}
+	}
+
+	// Ensure members field always exists (even if empty)
+	if _, exists := reactData["members"]; !exists {
+		reactData["members"] = []interface{}{}
+	}
+
+	return reactData
 }
 
 // DailyLimit represents daily shift constraints
@@ -533,8 +549,26 @@ func (s *StaffSyncServer) updateStaffGroup(versionID string, groupData map[strin
 	if color, ok := groupData["color"]; ok {
 		updateData["color"] = color
 	}
-	if groupConfig, ok := groupData["groupConfig"]; ok {
+
+	// ✅ FIX: Handle members field from React - store in group_config JSONB
+	// React sends members at top level: { id, name, members: [...] }
+	// We need to merge it into groupConfig before storing
+	if groupConfig, ok := groupData["groupConfig"].(map[string]interface{}); ok {
+		// groupConfig exists - merge members into it
+		if members, membersOk := groupData["members"]; membersOk {
+			groupConfig["members"] = members
+		}
 		updateData["group_config"] = groupConfig
+	} else {
+		// groupConfig doesn't exist - create it with members
+		if members, membersOk := groupData["members"]; membersOk {
+			updateData["group_config"] = map[string]interface{}{
+				"members": members,
+			}
+		} else if groupData["groupConfig"] != nil {
+			// groupConfig is not a map but exists - preserve it
+			updateData["group_config"] = groupData["groupConfig"]
+		}
 	}
 
 	// Always update timestamp
@@ -844,8 +878,24 @@ func (s *StaffSyncServer) insertStaffGroup(versionID string, groupData map[strin
 	if color, ok := groupData["color"]; ok {
 		insertData["color"] = color
 	}
-	if groupConfig, ok := groupData["groupConfig"]; ok {
+
+	// ✅ FIX: Handle members field from React - store in group_config JSONB
+	if groupConfig, ok := groupData["groupConfig"].(map[string]interface{}); ok {
+		// groupConfig exists - merge members into it
+		if members, membersOk := groupData["members"]; membersOk {
+			groupConfig["members"] = members
+		}
 		insertData["group_config"] = groupConfig
+	} else {
+		// groupConfig doesn't exist - create it with members
+		if members, membersOk := groupData["members"]; membersOk {
+			insertData["group_config"] = map[string]interface{}{
+				"members": members,
+			}
+		} else if groupData["groupConfig"] != nil {
+			// groupConfig is not a map but exists - preserve it
+			insertData["group_config"] = groupData["groupConfig"]
+		}
 	}
 
 	jsonData, _ := json.Marshal(insertData)
