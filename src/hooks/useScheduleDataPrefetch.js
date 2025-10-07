@@ -197,35 +197,44 @@ export const useScheduleDataPrefetch = (
       const startTime = performance.now();
 
       try {
-        // Load schedule for current period
+        // Load schedule for current period with proper filtering
         const { data: schedules, error: scheduleError } = await supabase
           .from("schedules")
           .select(`
-            *,
-            schedule_staff_assignments (
+            id,
+            schedule_data,
+            created_at,
+            updated_at,
+            schedule_staff_assignments!inner (
+              id,
               staff_id,
               period_index
             )
           `)
-          .eq('schedule_staff_assignments.period_index', currentMonthIndex);
+          .eq('schedule_staff_assignments.period_index', currentMonthIndex)
+          .order('created_at', { ascending: false }); // Get newest first
 
         if (scheduleError) throw scheduleError;
 
         const loadTime = performance.now() - startTime;
 
-        // Find the schedule for this period
-        const periodSchedule = schedules?.find(schedule =>
-          schedule.schedule_staff_assignments.some(
+        // Find the FIRST (newest) schedule with non-null schedule_data for this period
+        const periodSchedule = schedules?.find(schedule => {
+          const hasAssignmentForPeriod = schedule.schedule_staff_assignments?.some(
             assignment => assignment.period_index === currentMonthIndex
-          )
-        );
+          );
+          // Prefer schedules with actual data, skip null schedules
+          const hasData = schedule.schedule_data && Object.keys(schedule.schedule_data).length > 0;
+          return hasAssignmentForPeriod && (hasData || schedules.length === 1);
+        }) || schedules?.[0]; // Fallback to first schedule if none have data
 
         console.log(
           `⚡ [WEBSOCKET-PREFETCH] Loaded schedule data in ${loadTime.toFixed(1)}ms:`,
           {
             schedulesFound: schedules?.length || 0,
-            periodSchedule: !!periodSchedule,
+            selectedScheduleId: periodSchedule?.id || null,
             period: currentMonthIndex,
+            hasData: !!(periodSchedule?.schedule_data && Object.keys(periodSchedule.schedule_data).length > 0),
           },
         );
 
@@ -256,28 +265,58 @@ export const useScheduleDataPrefetch = (
   }, [currentScheduleData]);
 
   // Auto-create schedule if it doesn't exist for the current period
+  const creationAttemptedRef = useRef({});
   useEffect(() => {
     const createScheduleForPeriod = async () => {
       // Check if schedule is still loading
       if (scheduleLoading) {
-        console.log('⏳ [WEBSOCKET-PREFETCH] Schedule still loading, waiting...');
         return;
       }
 
       // Wait for query to actually run (data will be undefined until query executes)
       if (!currentScheduleData) {
-        console.log('⏳ [WEBSOCKET-PREFETCH] Schedule data not yet available, waiting for query...');
         return;
       }
 
-      // Only create if query completed and found no schedule
+      // Check if we already have a valid schedule ID for this period
       if (currentScheduleData.scheduleId) {
-        console.log(`✅ [WEBSOCKET-PREFETCH] Schedule already exists: ${currentScheduleData.scheduleId}`);
+        console.log(`✅ [WEBSOCKET-PREFETCH] Using existing schedule: ${currentScheduleData.scheduleId} for period ${currentMonthIndex}`);
+        creationAttemptedRef.current[currentMonthIndex] = false; // Reset creation flag
+        return;
+      }
+
+      // Prevent duplicate creation attempts for the same period
+      if (creationAttemptedRef.current[currentMonthIndex]) {
+        console.log(`⏭️ [WEBSOCKET-PREFETCH] Already attempted creation for period ${currentMonthIndex}, skipping...`);
         return;
       }
 
       try {
-        console.log(`🆕 [WEBSOCKET-PREFETCH] Creating new schedule for period ${currentMonthIndex}`);
+        // Mark that we're attempting to create for this period
+        creationAttemptedRef.current[currentMonthIndex] = true;
+
+        console.log(`🆕 [WEBSOCKET-PREFETCH] No schedule found for period ${currentMonthIndex}, creating new one...`);
+
+        // Double-check: Query again to ensure no schedule exists (race condition protection)
+        const { data: existingSchedules, error: checkError } = await supabase
+          .from("schedules")
+          .select(`
+            id,
+            schedule_staff_assignments!inner (
+              period_index
+            )
+          `)
+          .eq('schedule_staff_assignments.period_index', currentMonthIndex)
+          .limit(1);
+
+        if (checkError) throw checkError;
+
+        if (existingSchedules && existingSchedules.length > 0) {
+          console.log(`✅ [WEBSOCKET-PREFETCH] Found existing schedule during double-check: ${existingSchedules[0].id}`);
+          setCurrentScheduleId(existingSchedules[0].id);
+          queryClient.invalidateQueries(PREFETCH_QUERY_KEYS.scheduleData(currentMonthIndex));
+          return;
+        }
 
         // Create new schedule in Supabase
         const { data: newSchedule, error: createError } = await supabase
@@ -304,7 +343,11 @@ export const useScheduleDataPrefetch = (
             }
           ]);
 
-        if (assignmentError) throw assignmentError;
+        if (assignmentError) {
+          // If assignment creation fails, delete the orphaned schedule
+          await supabase.from('schedules').delete().eq('id', newSchedule.id);
+          throw assignmentError;
+        }
 
         console.log(`✅ [WEBSOCKET-PREFETCH] Created schedule ${newSchedule.id} for period ${currentMonthIndex}`);
 
@@ -317,6 +360,8 @@ export const useScheduleDataPrefetch = (
       } catch (error) {
         console.error(`❌ [WEBSOCKET-PREFETCH] Failed to create schedule for period ${currentMonthIndex}:`, error);
         setError(`スケジュールの作成に失敗しました: ${error.message}`);
+        // Reset creation flag on error so it can be retried
+        creationAttemptedRef.current[currentMonthIndex] = false;
       }
     };
 
@@ -596,47 +641,69 @@ export const useScheduleDataPrefetch = (
     updateShift: async (staffId, dateKey, shiftValue) => {
       // Create schedule on-demand if it doesn't exist
       if (!currentScheduleId) {
-        console.warn('⏳ [WEBSOCKET-PREFETCH] No schedule ID, creating schedule on-demand...');
+        console.warn('⏳ [WEBSOCKET-PREFETCH] No schedule ID, checking for existing schedule...');
 
         try {
-          // Create new schedule in Supabase
-          const { data: newSchedule, error: createError } = await supabase
-            .from('schedules')
-            .insert([
-              {
-                schedule_data: {},
-                created_at: new Date().toISOString(),
-                updated_at: new Date().toISOString(),
-              }
-            ])
-            .select()
-            .single();
+          // First, check if a schedule already exists for this period (race condition protection)
+          const { data: existingSchedules, error: checkError } = await supabase
+            .from("schedules")
+            .select(`
+              id,
+              schedule_staff_assignments!inner (
+                period_index
+              )
+            `)
+            .eq('schedule_staff_assignments.period_index', currentMonthIndex)
+            .limit(1);
 
-          if (createError) throw createError;
+          if (checkError) throw checkError;
 
-          // Create schedule_staff_assignment for this period
-          const { error: assignmentError } = await supabase
-            .from('schedule_staff_assignments')
-            .insert([
-              {
-                schedule_id: newSchedule.id,
-                period_index: currentMonthIndex,
-              }
-            ]);
+          if (existingSchedules && existingSchedules.length > 0) {
+            console.log(`✅ [WEBSOCKET-PREFETCH] Found existing schedule: ${existingSchedules[0].id}, using it`);
+            setCurrentScheduleId(existingSchedules[0].id);
+            queryClient.invalidateQueries(PREFETCH_QUERY_KEYS.scheduleData(currentMonthIndex));
+            // Continue with the update using the existing schedule ID (fall through)
+          } else {
+            // Create new schedule in Supabase
+            const { data: newSchedule, error: createError } = await supabase
+              .from('schedules')
+              .insert([
+                {
+                  schedule_data: {},
+                  created_at: new Date().toISOString(),
+                  updated_at: new Date().toISOString(),
+                }
+              ])
+              .select()
+              .single();
 
-          if (assignmentError) throw assignmentError;
+            if (createError) throw createError;
 
-          console.log(`✅ [WEBSOCKET-PREFETCH] Created schedule ${newSchedule.id} on-demand for period ${currentMonthIndex}`);
+            // Create schedule_staff_assignment for this period
+            const { error: assignmentError } = await supabase
+              .from('schedule_staff_assignments')
+              .insert([
+                {
+                  schedule_id: newSchedule.id,
+                  period_index: currentMonthIndex,
+                }
+              ]);
 
-          // Update local state
-          setCurrentScheduleId(newSchedule.id);
-          setSchedule({});
+            if (assignmentError) {
+              // If assignment creation fails, delete the orphaned schedule
+              await supabase.from('schedules').delete().eq('id', newSchedule.id);
+              throw assignmentError;
+            }
 
-          // Invalidate cache to refetch with new schedule
-          queryClient.invalidateQueries(PREFETCH_QUERY_KEYS.scheduleData(currentMonthIndex));
+            console.log(`✅ [WEBSOCKET-PREFETCH] Created schedule ${newSchedule.id} on-demand for period ${currentMonthIndex}`);
 
-          // Continue with the update using the newly created schedule ID
-          // (fall through to normal update logic below)
+            // Update local state
+            setCurrentScheduleId(newSchedule.id);
+            setSchedule({});
+
+            // Invalidate cache to refetch with new schedule
+            queryClient.invalidateQueries(PREFETCH_QUERY_KEYS.scheduleData(currentMonthIndex));
+          }
         } catch (error) {
           console.error('❌ [WEBSOCKET-PREFETCH] Failed to create schedule on-demand:', error);
           return Promise.reject(new Error(`Failed to create schedule: ${error.message}`));
