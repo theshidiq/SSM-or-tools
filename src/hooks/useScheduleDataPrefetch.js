@@ -266,6 +266,7 @@ export const useScheduleDataPrefetch = (
 
   // Auto-create schedule if it doesn't exist for the current period
   const creationAttemptedRef = useRef({});
+  const shiftCreationAttemptedRef = useRef({}); // For updateShift code path
   useEffect(() => {
     const createScheduleForPeriod = async () => {
       // Check if schedule is still loading
@@ -641,9 +642,24 @@ export const useScheduleDataPrefetch = (
     updateShift: async (staffId, dateKey, shiftValue) => {
       // Create schedule on-demand if it doesn't exist
       if (!currentScheduleId) {
+        // Check if we're already attempting creation (prevent race conditions)
+        if (shiftCreationAttemptedRef.current[currentMonthIndex]) {
+          console.log(`⏭️ [WEBSOCKET-PREFETCH] Already attempting schedule creation via updateShift for period ${currentMonthIndex}, waiting...`);
+          // Wait briefly for ongoing creation
+          await new Promise(resolve => setTimeout(resolve, 100));
+          // Check again after waiting
+          if (!currentScheduleId) {
+            return Promise.reject(new Error('Schedule creation in progress, please retry'));
+          }
+          // Schedule now exists, fall through to update
+        }
+
         console.warn('⏳ [WEBSOCKET-PREFETCH] No schedule ID, checking for existing schedule...');
 
         try {
+          // Mark that we're attempting creation
+          shiftCreationAttemptedRef.current[currentMonthIndex] = true;
+
           // First, check if a schedule already exists for this period (race condition protection)
           const { data: existingSchedules, error: checkError } = await supabase
             .from("schedules")
@@ -662,6 +678,7 @@ export const useScheduleDataPrefetch = (
             console.log(`✅ [WEBSOCKET-PREFETCH] Found existing schedule: ${existingSchedules[0].id}, using it`);
             setCurrentScheduleId(existingSchedules[0].id);
             queryClient.invalidateQueries(PREFETCH_QUERY_KEYS.scheduleData(currentMonthIndex));
+            shiftCreationAttemptedRef.current[currentMonthIndex] = false; // Reset flag
             // Continue with the update using the existing schedule ID (fall through)
           } else {
             // Create new schedule in Supabase
@@ -701,11 +718,15 @@ export const useScheduleDataPrefetch = (
             setCurrentScheduleId(newSchedule.id);
             setSchedule({});
 
+            // Reset flag after successful creation
+            shiftCreationAttemptedRef.current[currentMonthIndex] = false;
+
             // Invalidate cache to refetch with new schedule
             queryClient.invalidateQueries(PREFETCH_QUERY_KEYS.scheduleData(currentMonthIndex));
           }
         } catch (error) {
           console.error('❌ [WEBSOCKET-PREFETCH] Failed to create schedule on-demand:', error);
+          shiftCreationAttemptedRef.current[currentMonthIndex] = false; // Reset on error
           return Promise.reject(new Error(`Failed to create schedule: ${error.message}`));
         }
       }

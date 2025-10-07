@@ -26,7 +26,12 @@
       "mcp__chrome-devtools__take_screenshot",
       "Bash(go build:*)",
       "Read(//private/tmp/**)",
-      "Bash(awk:*)"
+      "Bash(awk:*)",
+      "mcp__supabase__list_tables",
+      "Bash(ps:*)",
+      "Bash(TZ:*)",
+      "Bash(git log:*)",
+      "Bash(git show:*)"
     ],
     "deny": []
   },

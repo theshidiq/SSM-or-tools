@@ -534,6 +534,14 @@ func (s *StaffSyncServer) updateStaffGroup(versionID string, groupData map[strin
 		return fmt.Errorf("missing or invalid group id")
 	}
 
+	// 🔍 DEBUG: Log what we received from React
+	log.Printf("🔍 [updateStaffGroup] Received groupData: %+v", groupData)
+	if members, ok := groupData["members"]; ok {
+		log.Printf("🔍 [updateStaffGroup] Members field present: %+v", members)
+	} else {
+		log.Printf("⚠️ [updateStaffGroup] Members field MISSING from groupData")
+	}
+
 	url := fmt.Sprintf("%s/rest/v1/staff_groups?id=eq.%s&version_id=eq.%s",
 		s.supabaseURL, groupID, versionID)
 
@@ -573,6 +581,9 @@ func (s *StaffSyncServer) updateStaffGroup(versionID string, groupData map[strin
 
 	// Always update timestamp
 	updateData["updated_at"] = time.Now().UTC().Format(time.RFC3339)
+
+	// 🔍 DEBUG: Log what we're sending to Supabase
+	log.Printf("🔍 [updateStaffGroup] Sending to Supabase: %+v", updateData)
 
 	jsonData, _ := json.Marshal(updateData)
 	req, err := http.NewRequest("PATCH", url, bytes.NewBuffer(jsonData))
