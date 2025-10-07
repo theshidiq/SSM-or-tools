@@ -24,6 +24,8 @@ const MESSAGE_TYPES = {
 
   // Table-specific updates
   SETTINGS_UPDATE_STAFF_GROUPS: 'SETTINGS_UPDATE_STAFF_GROUPS',
+  SETTINGS_CREATE_STAFF_GROUP: 'SETTINGS_CREATE_STAFF_GROUP',
+  SETTINGS_DELETE_STAFF_GROUP: 'SETTINGS_DELETE_STAFF_GROUP',
   SETTINGS_UPDATE_DAILY_LIMITS: 'SETTINGS_UPDATE_DAILY_LIMITS',
   SETTINGS_UPDATE_MONTHLY_LIMITS: 'SETTINGS_UPDATE_MONTHLY_LIMITS',
   SETTINGS_UPDATE_PRIORITY_RULES: 'SETTINGS_UPDATE_PRIORITY_RULES',
@@ -369,6 +371,64 @@ export const useWebSocketSettings = (options = {}) => {
   }, [enabled]);
 
   /**
+   * Create a new staff group (table-specific operation)
+   */
+  const createStaffGroup = useCallback((groupData) => {
+    if (!enabled) {
+      const error = new Error('WebSocket disabled');
+      console.log('🚫 Phase 3 Settings: Staff group creation blocked - WebSocket disabled');
+      return Promise.reject(error);
+    }
+
+    if (wsRef.current?.readyState === WebSocket.OPEN) {
+      const message = {
+        type: MESSAGE_TYPES.SETTINGS_CREATE_STAFF_GROUP,
+        payload: { group: groupData },
+        timestamp: new Date().toISOString(),
+        clientId: clientIdRef.current
+      };
+
+      wsRef.current.send(JSON.stringify(message));
+      console.log('📤 Phase 3 Settings: Sent staff group creation:', groupData);
+
+      return Promise.resolve();
+    } else {
+      const error = new Error('WebSocket not connected');
+      console.error('❌ Phase 3 Settings: Failed to create staff group - not connected');
+      return Promise.reject(error);
+    }
+  }, [enabled]);
+
+  /**
+   * Delete a staff group (table-specific operation)
+   */
+  const deleteStaffGroup = useCallback((groupId) => {
+    if (!enabled) {
+      const error = new Error('WebSocket disabled');
+      console.log('🚫 Phase 3 Settings: Staff group deletion blocked - WebSocket disabled');
+      return Promise.reject(error);
+    }
+
+    if (wsRef.current?.readyState === WebSocket.OPEN) {
+      const message = {
+        type: MESSAGE_TYPES.SETTINGS_DELETE_STAFF_GROUP,
+        payload: { groupId },
+        timestamp: new Date().toISOString(),
+        clientId: clientIdRef.current
+      };
+
+      wsRef.current.send(JSON.stringify(message));
+      console.log('📤 Phase 3 Settings: Sent staff group deletion:', groupId);
+
+      return Promise.resolve();
+    } else {
+      const error = new Error('WebSocket not connected');
+      console.error('❌ Phase 3 Settings: Failed to delete staff group - not connected');
+      return Promise.reject(error);
+    }
+  }, [enabled]);
+
+  /**
    * Update daily limits (table-specific operation)
    */
   const updateDailyLimits = useCallback((limitData) => {
@@ -625,6 +685,8 @@ export const useWebSocketSettings = (options = {}) => {
 
     // Table-specific operations
     updateStaffGroups,
+    createStaffGroup,
+    deleteStaffGroup,
     updateDailyLimits,
     updateMonthlyLimits,
     updatePriorityRules,

@@ -31,7 +31,9 @@
       "Bash(ps:*)",
       "Bash(TZ:*)",
       "Bash(git log:*)",
-      "Bash(git show:*)"
+      "Bash(git show:*)",
+      "Bash(cat:*)",
+      "Bash(docker ps:*)"
     ],
     "deny": []
   },

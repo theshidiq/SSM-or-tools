@@ -973,6 +973,43 @@ func (s *StaffSyncServer) insertStaffGroup(versionID string, groupData map[strin
 	return nil
 }
 
+// deleteStaffGroup soft-deletes a staff group from the database by setting is_active to false
+func (s *StaffSyncServer) deleteStaffGroup(versionID string, groupID string) error {
+	url := fmt.Sprintf("%s/rest/v1/staff_groups?id=eq.%s&version_id=eq.%s",
+		s.supabaseURL, groupID, versionID)
+
+	// Soft delete by setting is_active to false
+	updateData := map[string]interface{}{
+		"is_active":  false,
+		"updated_at": time.Now().UTC().Format(time.RFC3339),
+	}
+
+	jsonData, _ := json.Marshal(updateData)
+	req, err := http.NewRequest("PATCH", url, bytes.NewBuffer(jsonData))
+	if err != nil {
+		return fmt.Errorf("failed to create request: %w", err)
+	}
+
+	req.Header.Set("Authorization", "Bearer "+s.supabaseKey)
+	req.Header.Set("apikey", s.supabaseKey)
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Prefer", "return=minimal")
+
+	client := &http.Client{Timeout: 10 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		return fmt.Errorf("failed to delete staff group: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusNoContent {
+		body, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("delete failed with status %d: %s", resp.StatusCode, string(body))
+	}
+
+	return nil
+}
+
 // insertDailyLimit inserts a new daily limit into the database
 func (s *StaffSyncServer) insertDailyLimit(versionID string, limitData map[string]interface{}) error {
 	url := fmt.Sprintf("%s/rest/v1/daily_limits", s.supabaseURL)
@@ -1511,6 +1548,139 @@ func (s *StaffSyncServer) handleStaffGroupsUpdate(client *Client, msg *Message) 
 
 	s.broadcastToAll(&freshMsg)
 	log.Printf("📡 Broadcasted updated staff groups to all clients")
+}
+
+// handleStaffGroupCreate creates a new staff group and broadcasts changes
+func (s *StaffSyncServer) handleStaffGroupCreate(client *Client, msg *Message) {
+	log.Printf("📊 Processing SETTINGS_CREATE_STAFF_GROUP from client %s", client.clientId)
+	log.Printf("🔍 DEBUG: Payload type: %T, value: %+v", msg.Payload, msg.Payload)
+
+	payload, ok := msg.Payload.(map[string]interface{})
+	if !ok {
+		log.Printf("❌ Invalid payload format - got type %T", msg.Payload)
+		return
+	}
+	log.Printf("🔍 DEBUG: Payload keys: %v", payload)
+
+	groupData, ok := payload["group"].(map[string]interface{})
+	if !ok {
+		log.Printf("❌ Missing group data - payload[\"group\"] type: %T", payload["group"])
+		return
+	}
+	log.Printf("🔍 DEBUG: Group data: %+v", groupData)
+
+	// Get active version
+	version, err := s.fetchActiveConfigVersion()
+	if err != nil {
+		s.sendErrorResponse(client, "Failed to fetch active version", err)
+		return
+	}
+
+	// Check if version is locked
+	if version.IsLocked {
+		s.sendErrorResponse(client, "Cannot modify locked version", nil)
+		return
+	}
+
+	// Insert new staff group into database
+	if err := s.insertStaffGroup(version.ID, groupData); err != nil {
+		s.sendErrorResponse(client, "Failed to create staff group", err)
+		return
+	}
+
+	// Log change to audit trail
+	if err := s.logConfigChange(version.ID, "staff_groups", "INSERT", groupData); err != nil {
+		log.Printf("⚠️ Failed to log config change: %v", err)
+	}
+
+	log.Printf("✅ Successfully created staff group: %s", groupData["id"])
+
+	// Fetch fresh aggregated settings
+	settings, err := s.fetchAggregatedSettings(version.ID)
+	if err != nil {
+		log.Printf("⚠️ Failed to fetch updated settings: %v", err)
+		return
+	}
+
+	// Broadcast updated settings to all clients
+	freshMsg := Message{
+		Type: "SETTINGS_SYNC_RESPONSE",
+		Payload: map[string]interface{}{
+			"settings": settings,
+			"updated":  "staff_groups",
+			"action":   "created",
+		},
+		Timestamp: time.Now(),
+		ClientID:  msg.ClientID,
+	}
+
+	s.broadcastToAll(&freshMsg)
+	log.Printf("📡 Broadcasted new staff group to all clients")
+}
+
+// handleStaffGroupDelete deletes a staff group and broadcasts changes
+func (s *StaffSyncServer) handleStaffGroupDelete(client *Client, msg *Message) {
+	log.Printf("📊 Processing SETTINGS_DELETE_STAFF_GROUP from client %s", client.clientId)
+
+	payload, ok := msg.Payload.(map[string]interface{})
+	if !ok {
+		log.Printf("❌ Invalid payload format")
+		return
+	}
+
+	groupID, ok := payload["groupId"].(string)
+	if !ok {
+		log.Printf("❌ Missing group ID")
+		return
+	}
+
+	// Get active version
+	version, err := s.fetchActiveConfigVersion()
+	if err != nil {
+		s.sendErrorResponse(client, "Failed to fetch active version", err)
+		return
+	}
+
+	// Check if version is locked
+	if version.IsLocked {
+		s.sendErrorResponse(client, "Cannot modify locked version", nil)
+		return
+	}
+
+	// Delete staff group from database
+	if err := s.deleteStaffGroup(version.ID, groupID); err != nil {
+		s.sendErrorResponse(client, "Failed to delete staff group", err)
+		return
+	}
+
+	// Log change to audit trail
+	if err := s.logConfigChange(version.ID, "staff_groups", "DELETE", map[string]interface{}{"id": groupID}); err != nil {
+		log.Printf("⚠️ Failed to log config change: %v", err)
+	}
+
+	log.Printf("✅ Successfully deleted staff group: %s", groupID)
+
+	// Fetch fresh aggregated settings
+	settings, err := s.fetchAggregatedSettings(version.ID)
+	if err != nil {
+		log.Printf("⚠️ Failed to fetch updated settings: %v", err)
+		return
+	}
+
+	// Broadcast updated settings to all clients
+	freshMsg := Message{
+		Type: "SETTINGS_SYNC_RESPONSE",
+		Payload: map[string]interface{}{
+			"settings": settings,
+			"updated":  "staff_groups",
+			"action":   "deleted",
+		},
+		Timestamp: time.Now(),
+		ClientID:  msg.ClientID,
+	}
+
+	s.broadcastToAll(&freshMsg)
+	log.Printf("📡 Broadcasted group deletion to all clients")
 }
 
 // handleDailyLimitsUpdate updates a daily limit and broadcasts changes

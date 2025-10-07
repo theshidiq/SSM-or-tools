@@ -22,6 +22,8 @@ export const useSettingsData = (autosaveEnabled = true) => {
     settings: wsSettings,
     version: wsVersion,
     updateStaffGroups: wsUpdateStaffGroups,
+    createStaffGroup: wsCreateStaffGroup,
+    deleteStaffGroup: wsDeleteStaffGroup,
     updateDailyLimits: wsUpdateDailyLimits,
     updateMonthlyLimits: wsUpdateMonthlyLimits,
     updatePriorityRules: wsUpdatePriorityRules,
@@ -39,6 +41,8 @@ export const useSettingsData = (autosaveEnabled = true) => {
   // Store WebSocket callbacks in refs to keep updateSettings stable
   const wsCallbacksRef = useRef({
     wsUpdateStaffGroups,
+    wsCreateStaffGroup,
+    wsDeleteStaffGroup,
     wsUpdateDailyLimits,
     wsUpdateMonthlyLimits,
     wsUpdatePriorityRules,
@@ -49,12 +53,14 @@ export const useSettingsData = (autosaveEnabled = true) => {
   useEffect(() => {
     wsCallbacksRef.current = {
       wsUpdateStaffGroups,
+      wsCreateStaffGroup,
+      wsDeleteStaffGroup,
       wsUpdateDailyLimits,
       wsUpdateMonthlyLimits,
       wsUpdatePriorityRules,
       wsUpdateMLConfig
     };
-  }, [wsUpdateStaffGroups, wsUpdateDailyLimits, wsUpdateMonthlyLimits, wsUpdatePriorityRules, wsUpdateMLConfig]);
+  }, [wsUpdateStaffGroups, wsCreateStaffGroup, wsDeleteStaffGroup, wsUpdateDailyLimits, wsUpdateMonthlyLimits, wsUpdatePriorityRules, wsUpdateMLConfig]);
 
   // Determine active backend mode
   const useWebSocket = WEBSOCKET_SETTINGS_ENABLED && wsConnected;
@@ -183,37 +189,63 @@ export const useSettingsData = (autosaveEnabled = true) => {
 
       // Detect and send changes to server FIRST (while we still have old settings for comparison)
       let changedGroupsCount = 0;
+      let createdGroupsCount = 0;
+      let deletedGroupsCount = 0;
 
-      // Detect and update staff groups
+      // Detect and update staff groups (CREATE, UPDATE, DELETE operations)
       if (JSON.stringify(oldSettings.staffGroups) !== JSON.stringify(newSettings.staffGroups)) {
-        console.log('  - Updating staff_groups table');
+        console.log('  - Detecting staff_groups table changes...');
 
-        // ✅ FIX: Find and send only changed groups (reduces WebSocket traffic from 9 messages to 1)
-        const changedGroups = newSettings.staffGroups?.filter(newGroup => {
-          const oldGroup = oldSettings.staffGroups?.find(g => g.id === newGroup.id);
+        const oldGroups = oldSettings.staffGroups || [];
+        const newGroups = newSettings.staffGroups || [];
+        const oldGroupIds = new Set(oldGroups.map(g => g.id));
+        const newGroupIds = new Set(newGroups.map(g => g.id));
 
-          // ✅ CRITICAL FIX: Only compare members array, not entire object
-          // JSON.stringify() is unreliable due to property ordering differences
+        // Detect CREATED groups (exist in new but not in old)
+        const createdGroups = newGroups.filter(g => !oldGroupIds.has(g.id));
+        createdGroupsCount = createdGroups.length;
+        if (createdGroups.length > 0) {
+          console.log(`    - ${createdGroups.length} new group(s) created`);
+          createdGroups.forEach(group => {
+            console.log(`      - Creating group "${group.name}" (${group.id})`);
+            callbacks.wsCreateStaffGroup(group);
+          });
+        }
+
+        // Detect DELETED groups (exist in old but not in new)
+        const deletedGroupIds = [...oldGroupIds].filter(id => !newGroupIds.has(id));
+        deletedGroupsCount = deletedGroupIds.length;
+        if (deletedGroupIds.length > 0) {
+          console.log(`    - ${deletedGroupIds.length} group(s) deleted`);
+          deletedGroupIds.forEach(groupId => {
+            const deletedGroup = oldGroups.find(g => g.id === groupId);
+            console.log(`      - Deleting group "${deletedGroup?.name}" (${groupId})`);
+            callbacks.wsDeleteStaffGroup(groupId);
+          });
+        }
+
+        // Detect UPDATED groups (exist in both, but members changed)
+        const updatedGroups = newGroups.filter(newGroup => {
+          if (!oldGroupIds.has(newGroup.id)) return false; // Skip newly created
+
+          const oldGroup = oldGroups.find(g => g.id === newGroup.id);
+          // Only compare members array, not entire object
           const oldMembers = JSON.stringify(oldGroup?.members || []);
           const newMembers = JSON.stringify(newGroup.members || []);
-          const hasChanged = oldMembers !== newMembers;
-
-          if (hasChanged) {
-            console.log(`    - Group "${newGroup.name}" changed:`, {
-              oldMembers: oldGroup?.members?.length || 0,
-              newMembers: newGroup.members?.length || 0
-            });
-          }
-          return hasChanged;
-        }) || [];
-
-        changedGroupsCount = changedGroups.length;
-        console.log(`  - Sending ${changedGroupsCount} changed group(s) to server (out of ${newSettings.staffGroups?.length} total)`);
-
-        // Send only changed groups to prevent sync loop
-        changedGroups.forEach(group => {
-          callbacks.wsUpdateStaffGroups(group);
+          return oldMembers !== newMembers;
         });
+
+        changedGroupsCount = updatedGroups.length;
+        if (updatedGroups.length > 0) {
+          console.log(`    - ${updatedGroups.length} group(s) updated`);
+          updatedGroups.forEach(group => {
+            const oldGroup = oldGroups.find(g => g.id === group.id);
+            console.log(`      - Updating group "${group.name}": ${oldGroup?.members?.length || 0} → ${group.members?.length || 0} members`);
+            callbacks.wsUpdateStaffGroups(group);
+          });
+        }
+
+        console.log(`  - Summary: ${createdGroupsCount} created, ${changedGroupsCount} updated, ${deletedGroupsCount} deleted`);
       }
 
       // Detect and update daily limits
