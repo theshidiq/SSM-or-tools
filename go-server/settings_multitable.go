@@ -36,6 +36,11 @@ func (sa *SettingsAggregate) MarshalJSON() ([]byte, error) {
 	reactGroups := make([]map[string]interface{}, len(sa.StaffGroups))
 	for i, group := range sa.StaffGroups {
 		reactGroups[i] = group.ToReactFormat()
+
+		// 🔍 DEBUG: Log Group 4 to verify members extraction
+		if group.Name == "Group 4" {
+			log.Printf("🔍 [MarshalJSON] Group 4 after ToReactFormat: %+v", reactGroups[i])
+		}
 	}
 
 	// Create response structure with converted groups
@@ -54,15 +59,15 @@ func (sa *SettingsAggregate) MarshalJSON() ([]byte, error) {
 // StaffGroup represents a staff grouping configuration
 type StaffGroup struct {
 	ID           string                 `json:"id"`
-	RestaurantID string                 `json:"restaurantId"`
-	VersionID    string                 `json:"versionId"`
+	RestaurantID string                 `json:"restaurant_id"` // Changed: Supabase uses snake_case
+	VersionID    string                 `json:"version_id"`    // Changed: Supabase uses snake_case
 	Name         string                 `json:"name"`
 	Description  string                 `json:"description"`
 	Color        string                 `json:"color"`
-	GroupConfig  map[string]interface{} `json:"groupConfig"`
-	CreatedAt    time.Time              `json:"createdAt"`
-	UpdatedAt    time.Time              `json:"updatedAt"`
-	IsActive     bool                   `json:"isActive"`
+	GroupConfig  map[string]interface{} `json:"group_config"`  // ✅ FIX: Changed from groupConfig to group_config
+	CreatedAt    time.Time              `json:"created_at"`    // Changed: Supabase uses snake_case
+	UpdatedAt    time.Time              `json:"updated_at"`    // Changed: Supabase uses snake_case
+	IsActive     bool                   `json:"is_active"`     // Changed: Supabase uses snake_case
 }
 
 // ToReactFormat converts snake_case to camelCase for React
@@ -348,9 +353,20 @@ func (s *StaffSyncServer) fetchStaffGroups(versionID string) ([]StaffGroup, erro
 		return nil, fmt.Errorf("Supabase request failed with status %d: %s", resp.StatusCode, string(body))
 	}
 
+	// 🔍 DEBUG: Log raw response from Supabase
+	log.Printf("🔍 [fetchStaffGroups] Raw response from Supabase: %s", string(body))
+
 	var groups []StaffGroup
 	if err := json.Unmarshal(body, &groups); err != nil {
 		return nil, fmt.Errorf("failed to parse response: %w", err)
+	}
+
+	// 🔍 DEBUG: Log parsed groups to see if GroupConfig is populated
+	for _, group := range groups {
+		if group.Name == "Group 4" {
+			log.Printf("🔍 [fetchStaffGroups] Group 4 after unmarshal: %+v", group)
+			log.Printf("🔍 [fetchStaffGroups] Group 4 GroupConfig: %+v", group.GroupConfig)
+		}
 	}
 
 	return groups, nil
