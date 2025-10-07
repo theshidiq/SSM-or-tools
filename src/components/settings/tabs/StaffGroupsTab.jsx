@@ -960,16 +960,42 @@ const StaffGroupsTab = ({
             <select
               defaultValue=""
               onChange={(e) => {
+                console.log('🔵 [Dropdown onChange] Event fired:', {
+                  value: e.target.value,
+                  groupId: group.id,
+                  groupName: group.name,
+                  timestamp: new Date().toISOString()
+                });
+
                 const selectedStaffId = e.target.value;
+                console.log('🔵 [Dropdown onChange] Selected staff ID:', selectedStaffId);
+
                 if (selectedStaffId) {
-                  addStaffToGroup(group.id, selectedStaffId);
-                  // Success toast
-                  const staff = staffMembers.find(s => s.id === selectedStaffId);
-                  if (staff) {
-                    toast.success(`Added ${staff.name} to ${group.name}`);
+                  console.log('🔵 [Dropdown onChange] Calling addStaffToGroup...');
+                  try {
+                    addStaffToGroup(group.id, selectedStaffId);
+                    console.log('🔵 [Dropdown onChange] addStaffToGroup called successfully');
+
+                    // Success toast
+                    const staff = staffMembers.find(s => s.id === selectedStaffId);
+                    console.log('🔵 [Dropdown onChange] Found staff:', staff);
+
+                    if (staff) {
+                      toast.success(`Added ${staff.name} to ${group.name}`);
+                      console.log('🔵 [Dropdown onChange] Toast displayed');
+                    } else {
+                      console.warn('⚠️ [Dropdown onChange] Staff not found in staffMembers');
+                    }
+
+                    // Reset dropdown to placeholder
+                    e.target.value = "";
+                    console.log('🔵 [Dropdown onChange] Dropdown reset to placeholder');
+                  } catch (error) {
+                    console.error('❌ [Dropdown onChange] Error:', error);
+                    toast.error(`Failed to add staff: ${error.message}`);
                   }
-                  // Reset dropdown to placeholder
-                  e.target.value = "";
+                } else {
+                  console.warn('⚠️ [Dropdown onChange] selectedStaffId is empty');
                 }
               }}
               className="text-xs px-2 py-1.5 border border-gray-300 rounded-lg text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer transition-colors"

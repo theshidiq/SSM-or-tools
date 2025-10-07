@@ -21,7 +21,9 @@
       "Bash(lsof:*)",
       "Bash(xargs kill:*)",
       "Bash(npm run lint:*)",
-      "Bash(curl:*)"
+      "Bash(curl:*)",
+      "mcp__chrome-devtools__fill",
+      "mcp__chrome-devtools__take_screenshot"
     ],
     "deny": []
   },
