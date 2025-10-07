@@ -96,6 +96,18 @@ export const useWebSocketSettings = (options = {}) => {
       // Separate version from settings
       const { version: _, ...actualSettings } = settingsData;
 
+      // ✅ FIX #1: DEDUPLICATION - Skip sync if data hasn't actually changed
+      // This prevents the infinite sync loop from server broadcasts
+      const currentSettingsStr = JSON.stringify(settings);
+      const newSettingsStr = JSON.stringify(actualSettings);
+
+      if (currentSettingsStr === newSettingsStr) {
+        console.log('⏭️ Settings already up-to-date, skipping sync to prevent loop');
+        return; // Don't update state - prevents re-render and sync loop
+      }
+
+      console.log('🔄 Settings changed, syncing from server');
+
       setSettings(actualSettings);
       setVersion(versionData);
       setIsLoading(false);
