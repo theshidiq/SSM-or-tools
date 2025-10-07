@@ -177,12 +177,12 @@ export const useSettingsData = (autosaveEnabled = true) => {
     if (useWebSocket) {
       console.log('🔄 Updating settings via WebSocket multi-table backend');
 
+      // ✅ CRITICAL: Capture old settings BEFORE updating ref
       const oldSettings = settingsRef.current || {};
       const callbacks = wsCallbacksRef.current;
 
-      // ✅ OPTIMISTIC UPDATE: Update local state immediately for instant UI feedback
-      settingsRef.current = newSettings;
-      setSettings(newSettings);
+      // Detect and send changes to server FIRST (while we still have old settings for comparison)
+      let changedGroupsCount = 0;
 
       // Detect and update staff groups
       if (JSON.stringify(oldSettings.staffGroups) !== JSON.stringify(newSettings.staffGroups)) {
@@ -191,16 +191,28 @@ export const useSettingsData = (autosaveEnabled = true) => {
         // ✅ FIX: Find and send only changed groups (reduces WebSocket traffic from 9 messages to 1)
         const changedGroups = newSettings.staffGroups?.filter(newGroup => {
           const oldGroup = oldSettings.staffGroups?.find(g => g.id === newGroup.id);
-          return JSON.stringify(oldGroup) !== JSON.stringify(newGroup);
+          const hasChanged = JSON.stringify(oldGroup) !== JSON.stringify(newGroup);
+          if (hasChanged) {
+            console.log(`    - Group "${newGroup.name}" changed:`, {
+              oldMembers: oldGroup?.members?.length || 0,
+              newMembers: newGroup.members?.length || 0
+            });
+          }
+          return hasChanged;
         }) || [];
 
-        console.log(`  - Sending ${changedGroups.length} changed group(s) to server (instead of ${newSettings.staffGroups?.length} total)`);
+        changedGroupsCount = changedGroups.length;
+        console.log(`  - Sending ${changedGroupsCount} changed group(s) to server (out of ${newSettings.staffGroups?.length} total)`);
 
         // Send only changed groups to prevent sync loop
         changedGroups.forEach(group => {
           callbacks.wsUpdateStaffGroups(group);
         });
       }
+
+      // ✅ OPTIMISTIC UPDATE: Update local state immediately AFTER sending to server
+      settingsRef.current = newSettings;
+      setSettings(newSettings);
 
       // Detect and update daily limits
       if (JSON.stringify(oldSettings.dailyLimits) !== JSON.stringify(newSettings.dailyLimits)) {
