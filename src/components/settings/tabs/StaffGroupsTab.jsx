@@ -374,7 +374,7 @@ const StaffGroupsTab = ({
 
   const createNewGroup = () => {
     const newGroup = {
-      id: `group-${Date.now()}`,
+      id: crypto.randomUUID(), // Generate proper UUID for Supabase
       name: "New Group",
       description: "",
       color: getNextAvailableColor(),
