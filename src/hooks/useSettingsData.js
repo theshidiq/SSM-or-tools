@@ -183,8 +183,9 @@ export const useSettingsData = (autosaveEnabled = true) => {
     if (useWebSocket) {
       console.log('🔄 Updating settings via WebSocket multi-table backend');
 
-      // ✅ CRITICAL: Capture old settings BEFORE updating ref
-      const oldSettings = settingsRef.current || {};
+      // ✅ CRITICAL: Use settings state (NOT ref) as old value for comparison
+      // The ref gets updated by the useEffect above, so it may already contain new values
+      const oldSettings = settings || {};
       const callbacks = wsCallbacksRef.current;
 
       // Detect and send changes to server FIRST (while we still have old settings for comparison)
@@ -224,15 +225,25 @@ export const useSettingsData = (autosaveEnabled = true) => {
           });
         }
 
-        // Detect UPDATED groups (exist in both, but members changed)
+        // Detect UPDATED groups (exist in both, but content changed)
         const updatedGroups = newGroups.filter(newGroup => {
           if (!oldGroupIds.has(newGroup.id)) return false; // Skip newly created
 
           const oldGroup = oldGroups.find(g => g.id === newGroup.id);
-          // Only compare members array, not entire object
-          const oldMembers = JSON.stringify(oldGroup?.members || []);
-          const newMembers = JSON.stringify(newGroup.members || []);
-          return oldMembers !== newMembers;
+          // Compare specific fields that should trigger updates
+          const oldData = {
+            name: oldGroup?.name,
+            description: oldGroup?.description,
+            color: oldGroup?.color,
+            members: oldGroup?.members || []
+          };
+          const newData = {
+            name: newGroup.name,
+            description: newGroup.description,
+            color: newGroup.color,
+            members: newGroup.members || []
+          };
+          return JSON.stringify(oldData) !== JSON.stringify(newData);
         });
 
         changedGroupsCount = updatedGroups.length;
@@ -291,7 +302,7 @@ export const useSettingsData = (autosaveEnabled = true) => {
       setHasUnsavedChanges(true);
       setValidationErrors({});
     }
-  }, [useWebSocket]); // FIXED: Only depend on useWebSocket, use refs for callbacks
+  }, [useWebSocket, settings]); // FIX: Added settings dependency for change detection
 
   /**
    * Reset settings to defaults (multi-table aware)
