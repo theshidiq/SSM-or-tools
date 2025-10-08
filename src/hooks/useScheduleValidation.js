@@ -246,7 +246,8 @@ export const useScheduleValidation = (currentScheduleId = null) => {
    */
   const getScheduleData = useCallback(async (scheduleId) => {
     if (!scheduleId) {
-      console.warn('⚠️ useScheduleValidation: No schedule ID provided');
+      // No schedule ID provided - this is expected when no schedule is loaded
+      // Return empty object to skip validation (no conflicts will be found)
       return {};
     }
 
@@ -262,7 +263,7 @@ export const useScheduleValidation = (currentScheduleId = null) => {
 
     // If not in cache, return empty object
     // The validation will return no conflicts/violations
-    console.warn('⚠️ useScheduleValidation: Schedule data not in cache, returning empty');
+    // This is expected when settings are changed before any schedule is loaded
     return {};
   }, [queryClient]);
 
