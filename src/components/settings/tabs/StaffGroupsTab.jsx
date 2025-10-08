@@ -373,9 +373,19 @@ const StaffGroupsTab = ({
   };
 
   const createNewGroup = () => {
+    // Generate a unique group name based on existing groups
+    let groupNumber = 1;
+    let newGroupName = `New Group ${groupNumber}`;
+
+    // Keep incrementing until we find a unique name
+    while (staffGroups.some(group => group.name === newGroupName)) {
+      groupNumber++;
+      newGroupName = `New Group ${groupNumber}`;
+    }
+
     const newGroup = {
       id: crypto.randomUUID(), // Generate proper UUID for Supabase
-      name: "New Group",
+      name: newGroupName,
       description: "",
       color: getNextAvailableColor(),
       members: [], // Always initialize members array (WebSocket multi-table backend compatibility)
