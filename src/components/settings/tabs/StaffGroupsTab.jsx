@@ -455,15 +455,16 @@ const StaffGroupsTab = ({
         conflictRules: [...updatedRules],
       };
 
-      // Show success state first (before updating settings to prevent parent modal from closing)
+      // ✅ FIX: Update settings FIRST (before showing success state)
+      // This ensures change detection happens with correct old/new values
+      updateSettings(updatedSettings);
+
+      // Show success state after update (modal will stay open briefly)
       setDeleteSuccess(true);
       setIsDeleting(false);
 
       // Auto-close the confirmation modal after showing success message
       setTimeout(() => {
-        // Update settings AFTER the success message is shown and modal is closing
-        updateSettings(updatedSettings);
-
         // Clean up modal state
         setDeleteConfirmation(null);
         setDeleteSuccess(false);

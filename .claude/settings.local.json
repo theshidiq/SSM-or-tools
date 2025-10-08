@@ -33,7 +33,11 @@
       "Bash(git log:*)",
       "Bash(git show:*)",
       "Bash(cat:*)",
-      "Bash(docker ps:*)"
+      "Bash(docker ps:*)",
+      "Bash(/bashes)",
+      "Read(//tmp/**)",
+      "Bash(npm run dev:*)",
+      "Bash(node:*)"
     ],
     "deny": []
   },
