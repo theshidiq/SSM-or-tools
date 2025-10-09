@@ -17,6 +17,8 @@ import {
   XCircle,
   Shield,
   ChevronDown,
+  Search,
+  CheckCircle2,
 } from "lucide-react";
 import { toast } from "sonner";
 import ConflictsModal from "../shared/ConflictsModal";
@@ -56,6 +58,181 @@ const PRESET_COLORS = [
   "#9F1239",
   "#064E3B",
 ];
+
+// Custom Staff Dropdown Component with Search
+const StaffDropdown = ({
+  availableStaff,
+  assignedStaffIds,
+  onSelectStaff,
+  groupName,
+}) => {
+  const [isOpen, setIsOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+  const dropdownRef = useRef(null);
+  const searchInputRef = useRef(null);
+
+  // Filter staff based on search query
+  const filteredStaff = useMemo(() => {
+    if (!searchQuery.trim()) return availableStaff;
+    const query = searchQuery.toLowerCase();
+    return availableStaff.filter((staff) =>
+      staff.name.toLowerCase().includes(query)
+    );
+  }, [availableStaff, searchQuery]);
+
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
+        setIsOpen(false);
+        setSearchQuery("");
+      }
+    };
+
+    if (isOpen) {
+      document.addEventListener("mousedown", handleClickOutside);
+      return () => document.removeEventListener("mousedown", handleClickOutside);
+    }
+  }, [isOpen]);
+
+  // Focus search input when dropdown opens
+  useEffect(() => {
+    if (isOpen && searchInputRef.current) {
+      searchInputRef.current.focus();
+    }
+  }, [isOpen]);
+
+  // Handle keyboard navigation
+  const handleKeyDown = (e) => {
+    if (e.key === "Escape") {
+      setIsOpen(false);
+      setSearchQuery("");
+    }
+  };
+
+  const handleSelectStaff = (staffId) => {
+    onSelectStaff(staffId);
+    setIsOpen(false);
+    setSearchQuery("");
+  };
+
+  return (
+    <div className="relative" ref={dropdownRef}>
+      {/* Dropdown Button */}
+      <button
+        onClick={() => setIsOpen(!isOpen)}
+        className="text-xs px-3 py-1.5 border border-gray-300 rounded-lg text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer transition-all duration-200 hover:border-gray-400 flex items-center gap-1.5 font-medium"
+        title="Add staff to group"
+        type="button"
+      >
+        <UserPlus size={14} />
+        <span>Add staff...</span>
+      </button>
+
+      {/* Dropdown Menu */}
+      {isOpen && (
+        <div
+          className="absolute right-0 mt-2 w-64 bg-white rounded-lg shadow-xl border border-gray-200 z-50 overflow-hidden animate-in fade-in slide-in-from-top-2 duration-200"
+          onKeyDown={handleKeyDown}
+        >
+          {/* Search Input */}
+          <div className="p-3 border-b border-gray-200 bg-gray-50">
+            <div className="relative">
+              <Search
+                size={16}
+                className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400"
+              />
+              <input
+                ref={searchInputRef}
+                type="text"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="Search staff..."
+                className="w-full pl-9 pr-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              />
+            </div>
+          </div>
+
+          {/* Staff List */}
+          <div className="max-h-64 overflow-y-auto">
+            {filteredStaff.length > 0 ? (
+              <div className="py-1">
+                {filteredStaff.map((staff) => {
+                  const isAssigned = assignedStaffIds.includes(staff.id);
+                  return (
+                    <button
+                      key={staff.id}
+                      onClick={() => handleSelectStaff(staff.id)}
+                      className={`w-full px-4 py-2.5 text-left hover:bg-blue-50 transition-colors flex items-center gap-3 group ${
+                        isAssigned ? "bg-gray-50 cursor-default" : ""
+                      }`}
+                      disabled={isAssigned}
+                      type="button"
+                    >
+                      {/* Avatar */}
+                      <div
+                        className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-medium flex-shrink-0 ${
+                          isAssigned
+                            ? "bg-gray-300 text-gray-600"
+                            : "bg-blue-100 text-blue-700 group-hover:bg-blue-200"
+                        }`}
+                      >
+                        {staff.name?.charAt(0)}
+                      </div>
+
+                      {/* Staff Info */}
+                      <div className="flex-1 min-w-0">
+                        <p
+                          className={`text-sm font-medium truncate ${
+                            isAssigned ? "text-gray-500" : "text-gray-900"
+                          }`}
+                        >
+                          {staff.name}
+                        </p>
+                        {staff.position && (
+                          <p className="text-xs text-gray-500 truncate">
+                            {staff.position}
+                          </p>
+                        )}
+                      </div>
+
+                      {/* Already Assigned Indicator */}
+                      {isAssigned && (
+                        <CheckCircle2
+                          size={16}
+                          className="text-green-600 flex-shrink-0"
+                        />
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+            ) : (
+              <div className="px-4 py-8 text-center">
+                <Users size={32} className="mx-auto text-gray-400 mb-2" />
+                <p className="text-sm text-gray-600 mb-1">No staff found</p>
+                {searchQuery && (
+                  <p className="text-xs text-gray-500">
+                    Try a different search term
+                  </p>
+                )}
+              </div>
+            )}
+          </div>
+
+          {/* Footer Info */}
+          {availableStaff.length > 0 && (
+            <div className="px-4 py-2 bg-gray-50 border-t border-gray-200">
+              <p className="text-xs text-gray-600">
+                {filteredStaff.length} staff available
+              </p>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+};
 
 const StaffGroupsTab = ({
   staffMembers = [],
@@ -1082,78 +1259,50 @@ const StaffGroupsTab = ({
               <Users size={16} />
               Members ({groupMembers.length})
             </div>
-            <select
-              defaultValue=""
-              onChange={(e) => {
-                console.log("🔵 [Dropdown onChange] Event fired:", {
-                  value: e.target.value,
+            <StaffDropdown
+              availableStaff={[
+                ...getAvailableStaffForGroup(group.id),
+                ...groupMembers,
+              ]}
+              assignedStaffIds={group.members || []}
+              onSelectStaff={(staffId) => {
+                console.log("🔵 [StaffDropdown onSelectStaff] Event fired:", {
+                  staffId,
                   groupId: group.id,
                   groupName: group.name,
                   timestamp: new Date().toISOString(),
                 });
 
-                const selectedStaffId = e.target.value;
-                console.log(
-                  "🔵 [Dropdown onChange] Selected staff ID:",
-                  selectedStaffId,
-                );
-
-                if (selectedStaffId) {
+                try {
+                  addStaffToGroup(group.id, staffId);
                   console.log(
-                    "🔵 [Dropdown onChange] Calling addStaffToGroup...",
+                    "🔵 [StaffDropdown onSelectStaff] addStaffToGroup called successfully",
                   );
-                  try {
-                    addStaffToGroup(group.id, selectedStaffId);
+
+                  // Success toast
+                  const staff = staffMembers.find((s) => s.id === staffId);
+                  console.log(
+                    "🔵 [StaffDropdown onSelectStaff] Found staff:",
+                    staff,
+                  );
+
+                  if (staff) {
+                    toast.success(`Added ${staff.name} to ${group.name}`);
                     console.log(
-                      "🔵 [Dropdown onChange] addStaffToGroup called successfully",
+                      "🔵 [StaffDropdown onSelectStaff] Toast displayed",
                     );
-
-                    // Success toast
-                    const staff = staffMembers.find(
-                      (s) => s.id === selectedStaffId,
+                  } else {
+                    console.warn(
+                      "⚠️ [StaffDropdown onSelectStaff] Staff not found in staffMembers",
                     );
-                    console.log("🔵 [Dropdown onChange] Found staff:", staff);
-
-                    if (staff) {
-                      toast.success(`Added ${staff.name} to ${group.name}`);
-                      console.log("🔵 [Dropdown onChange] Toast displayed");
-                    } else {
-                      console.warn(
-                        "⚠️ [Dropdown onChange] Staff not found in staffMembers",
-                      );
-                    }
-
-                    // Reset dropdown to placeholder
-                    e.target.value = "";
-                    console.log(
-                      "🔵 [Dropdown onChange] Dropdown reset to placeholder",
-                    );
-                  } catch (error) {
-                    console.error("❌ [Dropdown onChange] Error:", error);
-                    toast.error(`Failed to add staff: ${error.message}`);
                   }
-                } else {
-                  console.warn(
-                    "⚠️ [Dropdown onChange] selectedStaffId is empty",
-                  );
+                } catch (error) {
+                  console.error("❌ [StaffDropdown onSelectStaff] Error:", error);
+                  toast.error(`Failed to add staff: ${error.message}`);
                 }
               }}
-              className="text-xs px-2 py-1.5 border border-gray-300 rounded-lg text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer transition-colors"
-              title="Add staff to group"
-            >
-              <option value="" disabled className="text-gray-500">
-                ➕ Add staff...
-              </option>
-              {getAvailableStaffForGroup(group.id).map((staff) => (
-                <option
-                  key={staff.id}
-                  value={staff.id}
-                  className="text-gray-900"
-                >
-                  {staff.name}
-                </option>
-              ))}
-            </select>
+              groupName={group.name}
+            />
           </div>
 
           <div className="space-y-1.5 max-h-32 overflow-y-auto">
