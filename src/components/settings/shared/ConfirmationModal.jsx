@@ -17,9 +17,9 @@ const ConfirmationModal = ({
 
   // Focus management and escape key handling
   useEffect(() => {
-    console.log('🗑️ [MODAL] ConfirmationModal isOpen changed:', isOpen);
+    console.log("🗑️ [MODAL] ConfirmationModal isOpen changed:", isOpen);
     if (isOpen && modalRef.current) {
-      console.log('🗑️ [MODAL] Focusing modal element');
+      console.log("🗑️ [MODAL] Focusing modal element");
       modalRef.current.focus();
     }
   }, [isOpen]);
@@ -28,35 +28,37 @@ const ConfirmationModal = ({
   useEffect(() => {
     if (isOpen) {
       // Add class to body to hide all select elements
-      document.body.classList.add('confirmation-modal-open');
+      document.body.classList.add("confirmation-modal-open");
 
       // Also hide select elements directly as a fallback
-      const selects = document.querySelectorAll('select');
-      selects.forEach(select => {
-        select.setAttribute('data-hidden-by-modal', 'true');
-        select.style.display = 'none';
+      const selects = document.querySelectorAll("select");
+      selects.forEach((select) => {
+        select.setAttribute("data-hidden-by-modal", "true");
+        select.style.display = "none";
       });
     }
 
     // Cleanup function runs when component unmounts OR when isOpen changes
     return () => {
       // Remove class and restore select elements
-      document.body.classList.remove('confirmation-modal-open');
+      document.body.classList.remove("confirmation-modal-open");
 
-      const selects = document.querySelectorAll('select[data-hidden-by-modal="true"]');
-      selects.forEach(select => {
-        select.removeAttribute('data-hidden-by-modal');
-        select.style.display = '';
+      const selects = document.querySelectorAll(
+        'select[data-hidden-by-modal="true"]',
+      );
+      selects.forEach((select) => {
+        select.removeAttribute("data-hidden-by-modal");
+        select.style.display = "";
       });
     };
   }, [isOpen]);
 
-  console.log('🗑️ [MODAL] ConfirmationModal rendering, isOpen:', isOpen);
+  console.log("🗑️ [MODAL] ConfirmationModal rendering, isOpen:", isOpen);
   if (!isOpen) {
-    console.log('🗑️ [MODAL] Modal not open, returning null');
+    console.log("🗑️ [MODAL] Modal not open, returning null");
     return null;
   }
-  console.log('🗑️ [MODAL] Modal is open, creating portal');
+  console.log("🗑️ [MODAL] Modal is open, creating portal");
 
   const variantStyles = {
     danger: {
@@ -120,16 +122,16 @@ const ConfirmationModal = ({
       aria-modal="true"
       style={{
         zIndex: 99999,
-        position: 'fixed',
+        position: "fixed",
         top: 0,
         left: 0,
         right: 0,
         bottom: 0,
-        backgroundColor: 'rgba(0, 0, 0, 0.5)',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        pointerEvents: 'auto' // Override Radix Dialog's pointer-events: none
+        backgroundColor: "rgba(0, 0, 0, 0.5)",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        pointerEvents: "auto", // Override Radix Dialog's pointer-events: none
       }}
     >
       <div

@@ -59,10 +59,7 @@ const PRIORITY_LEVELS = [
   { value: 5, label: "Absolute Priority", color: "text-purple-600" },
 ];
 
-const PriorityRulesTab = ({
-  staffMembers = [],
-  validationErrors = {},
-}) => {
+const PriorityRulesTab = ({ staffMembers = [], validationErrors = {} }) => {
   // Phase 4.2: Get settings from Context instead of props
   const { settings, updateSettings } = useSettings();
 
@@ -75,83 +72,95 @@ const PriorityRulesTab = ({
 
   // Fix: Memoize derived arrays to prevent unnecessary re-renders
   // Transform WebSocket multi-table format to localStorage-compatible format
-  const priorityRules = useMemo(
-    () => {
-      const rules = settings?.priorityRules || [];
-      // Ensure all rules have required properties (WebSocket multi-table backend compatibility)
-      // Handle legacy object format - convert to array if needed
-      const rulesArray = Array.isArray(rules) ? rules : [];
+  const priorityRules = useMemo(() => {
+    const rules = settings?.priorityRules || [];
+    // Ensure all rules have required properties (WebSocket multi-table backend compatibility)
+    // Handle legacy object format - convert to array if needed
+    const rulesArray = Array.isArray(rules) ? rules : [];
 
-      return rulesArray.map(rule => ({
-        ...rule,
-        // Extract properties from ruleConfig if stored there (multi-table backend)
-        // Otherwise use properties directly, or default to safe values
-        daysOfWeek: rule.daysOfWeek || rule.ruleConfig?.daysOfWeek || [],
-        targetIds: rule.targetIds || rule.ruleConfig?.targetIds || [],
-        shiftType: rule.shiftType || rule.ruleConfig?.shiftType || 'early',
-        ruleType: rule.ruleType || rule.ruleConfig?.ruleType || 'preferred_shift',
-        staffId: rule.staffId || rule.ruleConfig?.staffId || '',
-        priorityLevel: rule.priorityLevel ?? rule.ruleConfig?.priorityLevel ?? 4,
-        preferenceStrength: rule.preferenceStrength ?? rule.ruleConfig?.preferenceStrength ?? 1.0,
-        isHardConstraint: rule.isHardConstraint ?? rule.ruleConfig?.isHardConstraint ?? true,
-        penaltyWeight: rule.penaltyWeight ?? rule.ruleConfig?.penaltyWeight ?? 100,
-        effectiveFrom: rule.effectiveFrom ?? rule.ruleConfig?.effectiveFrom ?? null,
-        effectiveUntil: rule.effectiveUntil ?? rule.ruleConfig?.effectiveUntil ?? null,
-        isActive: rule.isActive ?? rule.ruleConfig?.isActive ?? true,
-        description: rule.description || rule.ruleConfig?.description || '',
-      }));
-    },
-    [settings?.priorityRules],
-  );
+    return rulesArray.map((rule) => ({
+      ...rule,
+      // Extract properties from ruleConfig if stored there (multi-table backend)
+      // Otherwise use properties directly, or default to safe values
+      daysOfWeek: rule.daysOfWeek || rule.ruleConfig?.daysOfWeek || [],
+      targetIds: rule.targetIds || rule.ruleConfig?.targetIds || [],
+      shiftType: rule.shiftType || rule.ruleConfig?.shiftType || "early",
+      ruleType: rule.ruleType || rule.ruleConfig?.ruleType || "preferred_shift",
+      staffId: rule.staffId || rule.ruleConfig?.staffId || "",
+      priorityLevel: rule.priorityLevel ?? rule.ruleConfig?.priorityLevel ?? 4,
+      preferenceStrength:
+        rule.preferenceStrength ?? rule.ruleConfig?.preferenceStrength ?? 1.0,
+      isHardConstraint:
+        rule.isHardConstraint ?? rule.ruleConfig?.isHardConstraint ?? true,
+      penaltyWeight:
+        rule.penaltyWeight ?? rule.ruleConfig?.penaltyWeight ?? 100,
+      effectiveFrom:
+        rule.effectiveFrom ?? rule.ruleConfig?.effectiveFrom ?? null,
+      effectiveUntil:
+        rule.effectiveUntil ?? rule.ruleConfig?.effectiveUntil ?? null,
+      isActive: rule.isActive ?? rule.ruleConfig?.isActive ?? true,
+      description: rule.description || rule.ruleConfig?.description || "",
+    }));
+  }, [settings?.priorityRules]);
 
   // Memoize conflict detection to prevent recalculation (Phase 4.2)
-  const detectRuleConflicts = useCallback((rules) => {
-    const conflicts = [];
+  const detectRuleConflicts = useCallback(
+    (rules) => {
+      const conflicts = [];
 
-    for (let i = 0; i < rules.length; i++) {
-      for (let j = i + 1; j < rules.length; j++) {
-        const rule1 = rules[i];
-        const rule2 = rules[j];
+      for (let i = 0; i < rules.length; i++) {
+        for (let j = i + 1; j < rules.length; j++) {
+          const rule1 = rules[i];
+          const rule2 = rules[j];
 
-        // Check if rules apply to same staff and have conflicting requirements
-        if (rule1.staffId === rule2.staffId) {
-          // Defensive: Ensure daysOfWeek is an array
-          const days1 = Array.isArray(rule1.daysOfWeek) ? rule1.daysOfWeek : [];
-          const days2 = Array.isArray(rule2.daysOfWeek) ? rule2.daysOfWeek : [];
+          // Check if rules apply to same staff and have conflicting requirements
+          if (rule1.staffId === rule2.staffId) {
+            // Defensive: Ensure daysOfWeek is an array
+            const days1 = Array.isArray(rule1.daysOfWeek)
+              ? rule1.daysOfWeek
+              : [];
+            const days2 = Array.isArray(rule2.daysOfWeek)
+              ? rule2.daysOfWeek
+              : [];
 
-          const daysOverlap = days1.some((day) => days2.includes(day));
-          const shiftsConflict =
-            (rule1.ruleType === "preferred_shift" &&
-              rule2.ruleType === "avoid_shift" &&
-              rule1.shiftType === rule2.shiftType) ||
-            (rule1.ruleType === "required_off" &&
-              rule2.ruleType === "preferred_shift" &&
-              rule2.shiftType !== "off");
+            const daysOverlap = days1.some((day) => days2.includes(day));
+            const shiftsConflict =
+              (rule1.ruleType === "preferred_shift" &&
+                rule2.ruleType === "avoid_shift" &&
+                rule1.shiftType === rule2.shiftType) ||
+              (rule1.ruleType === "required_off" &&
+                rule2.ruleType === "preferred_shift" &&
+                rule2.shiftType !== "off");
 
-          if (daysOverlap && shiftsConflict) {
-            conflicts.push({
-              rules: [rule1.id, rule2.id],
-              description: `Conflicting rules for ${getStaffById(rule1.staffId)?.name}`,
-            });
+            if (daysOverlap && shiftsConflict) {
+              conflicts.push({
+                rules: [rule1.id, rule2.id],
+                description: `Conflicting rules for ${getStaffById(rule1.staffId)?.name}`,
+              });
+            }
           }
         }
       }
-    }
 
-    return conflicts;
-  }, [staffMembers]); // Only depends on staffMembers
+      return conflicts;
+    },
+    [staffMembers],
+  ); // Only depends on staffMembers
 
   // Wrap updatePriorityRules in useCallback for stable reference (Phase 4.2)
-  const updatePriorityRules = useCallback((newRules) => {
-    // Check for conflicts when updating rules
-    const conflicts = detectRuleConflicts(newRules);
-    setConflictingRules(conflicts);
+  const updatePriorityRules = useCallback(
+    (newRules) => {
+      // Check for conflicts when updating rules
+      const conflicts = detectRuleConflicts(newRules);
+      setConflictingRules(conflicts);
 
-    updateSettings({
-      ...settings,
-      priorityRules: newRules,
-    });
-  }, [settings, updateSettings, detectRuleConflicts]);
+      updateSettings({
+        ...settings,
+        priorityRules: newRules,
+      });
+    },
+    [settings, updateSettings, detectRuleConflicts],
+  );
 
   // Cancel changes and restore original data (Phase 4.2: moved before useEffect for dependency)
   const handleCancelEdit = useCallback(() => {
@@ -384,7 +393,8 @@ const PriorityRulesTab = ({
               <p className="text-sm text-gray-600">
                 {staff?.name} • {ruleType?.label}
                 {/* Defensive: Ensure daysOfWeek is an array */}
-                {Array.isArray(rule.daysOfWeek) && rule.daysOfWeek.length > 0 &&
+                {Array.isArray(rule.daysOfWeek) &&
+                  rule.daysOfWeek.length > 0 &&
                   ` • ${rule.daysOfWeek.length} days`}
               </p>
             </div>

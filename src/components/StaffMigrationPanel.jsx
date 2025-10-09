@@ -4,7 +4,18 @@
  */
 
 import React, { useState, useEffect } from "react";
-import { AlertTriangle, Info, CheckCircle, XCircle, RefreshCw } from "lucide-react";
+import {
+  AlertTriangle,
+  Info,
+  CheckCircle,
+  XCircle,
+  RefreshCw,
+} from "lucide-react";
+import {
+  hasLocalStorageStaffData,
+  performStaffMigration,
+  extractLocalStorageStaffData,
+} from "../utils/staffMigrationUtils";
 import { Button } from "./ui/button";
 import { Badge } from "./ui/badge";
 import { Alert, AlertDescription } from "./ui/alert";
@@ -12,11 +23,6 @@ import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
 import { Progress } from "./ui/progress";
 
 // Import migration utilities
-import {
-  hasLocalStorageStaffData,
-  performStaffMigration,
-  extractLocalStorageStaffData,
-} from "../utils/staffMigrationUtils";
 
 const StaffMigrationPanel = () => {
   const [migrationState, setMigrationState] = useState("idle"); // idle, checking, migrating, completed, error
@@ -127,8 +133,9 @@ const StaffMigrationPanel = () => {
       <Alert>
         <Info className="h-4 w-4" />
         <AlertDescription>
-          Found staff data in localStorage: {localDataStatus.foundKeys.join(", ")} (
-          {localDataStatus.count} source{localDataStatus.count !== 1 ? "s" : ""})
+          Found staff data in localStorage:{" "}
+          {localDataStatus.foundKeys.join(", ")} ({localDataStatus.count} source
+          {localDataStatus.count !== 1 ? "s" : ""})
         </AlertDescription>
       </Alert>
     );
@@ -179,7 +186,9 @@ const StaffMigrationPanel = () => {
     const isDryRun = migrationResult.dryRun;
 
     return (
-      <Card className={`border-l-4 ${isSuccess ? "border-l-green-500" : "border-l-red-500"}`}>
+      <Card
+        className={`border-l-4 ${isSuccess ? "border-l-green-500" : "border-l-red-500"}`}
+      >
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             {isSuccess ? (
@@ -198,11 +207,15 @@ const StaffMigrationPanel = () => {
               <div className="grid grid-cols-2 gap-4 text-sm">
                 <div>
                   <span className="font-medium">Migrated:</span>{" "}
-                  <Badge variant="outline">{migrationResult.migrated || 0}</Badge>
+                  <Badge variant="outline">
+                    {migrationResult.migrated || 0}
+                  </Badge>
                 </div>
                 <div>
                   <span className="font-medium">Duplicates:</span>{" "}
-                  <Badge variant="secondary">{migrationResult.duplicates || 0}</Badge>
+                  <Badge variant="secondary">
+                    {migrationResult.duplicates || 0}
+                  </Badge>
                 </div>
                 {migrationResult.extractedFrom && (
                   <div className="col-span-2">
@@ -228,7 +241,9 @@ const StaffMigrationPanel = () => {
 
             {isDryRun && migrationResult.preview && (
               <div className="mt-3">
-                <h4 className="font-medium mb-2">Preview ({migrationResult.preview.length} staff members):</h4>
+                <h4 className="font-medium mb-2">
+                  Preview ({migrationResult.preview.length} staff members):
+                </h4>
                 <div className="max-h-40 overflow-y-auto text-sm bg-gray-50 p-2 rounded">
                   {migrationResult.preview.slice(0, 5).map((staff, index) => (
                     <div key={index} className="py-1">

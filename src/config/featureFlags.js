@@ -3,36 +3,39 @@
  * Enables safe rollback and gradual feature migration
  */
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect } from "react";
 
 // Environment-based feature flags
 export const FEATURE_FLAGS = {
-  WEBSOCKET_ENABLED: process.env.REACT_APP_WEBSOCKET_ENABLED === 'true' || true, // Re-enabled for hybrid architecture
-  OPTIMISTIC_UPDATES: process.env.REACT_APP_OPTIMISTIC_UPDATES === 'true',
-  CONFLICT_RESOLUTION: process.env.REACT_APP_CONFLICT_RESOLUTION === 'true',
-  GO_BACKEND_INTEGRATION: process.env.REACT_APP_GO_BACKEND === 'true' || true, // Re-enabled for Go server
-  WEBSOCKET_STAFF_MANAGEMENT: process.env.REACT_APP_WEBSOCKET_STAFF_MANAGEMENT === 'true' || true, // Re-enabled per CLAUDE.md
-  ENHANCED_LOGGING: process.env.NODE_ENV === 'development' || process.env.REACT_APP_DEBUG_MODE === 'true',
+  WEBSOCKET_ENABLED: process.env.REACT_APP_WEBSOCKET_ENABLED === "true" || true, // Re-enabled for hybrid architecture
+  OPTIMISTIC_UPDATES: process.env.REACT_APP_OPTIMISTIC_UPDATES === "true",
+  CONFLICT_RESOLUTION: process.env.REACT_APP_CONFLICT_RESOLUTION === "true",
+  GO_BACKEND_INTEGRATION: process.env.REACT_APP_GO_BACKEND === "true" || true, // Re-enabled for Go server
+  WEBSOCKET_STAFF_MANAGEMENT:
+    process.env.REACT_APP_WEBSOCKET_STAFF_MANAGEMENT === "true" || true, // Re-enabled per CLAUDE.md
+  ENHANCED_LOGGING:
+    process.env.NODE_ENV === "development" ||
+    process.env.REACT_APP_DEBUG_MODE === "true",
 };
 
 // Emergency rollback function
-export const emergencyRollback = (reason = 'manual_rollback') => {
+export const emergencyRollback = (reason = "manual_rollback") => {
   console.warn(`🚨 Emergency rollback initiated: ${reason}`);
 
   // Force Supabase-only mode
-  localStorage.setItem('FORCE_SUPABASE_ONLY', 'true');
-  localStorage.setItem('ROLLBACK_REASON', reason);
-  localStorage.setItem('ROLLBACK_TIMESTAMP', new Date().toISOString());
+  localStorage.setItem("FORCE_SUPABASE_ONLY", "true");
+  localStorage.setItem("ROLLBACK_REASON", reason);
+  localStorage.setItem("ROLLBACK_TIMESTAMP", new Date().toISOString());
 
   // Disable all advanced features
-  localStorage.setItem('WEBSOCKET_ENABLED', 'false');
-  localStorage.setItem('OPTIMISTIC_UPDATES', 'false');
-  localStorage.setItem('CONFLICT_RESOLUTION', 'false');
-  localStorage.setItem('GO_BACKEND_INTEGRATION', 'false');
+  localStorage.setItem("WEBSOCKET_ENABLED", "false");
+  localStorage.setItem("OPTIMISTIC_UPDATES", "false");
+  localStorage.setItem("CONFLICT_RESOLUTION", "false");
+  localStorage.setItem("GO_BACKEND_INTEGRATION", "false");
 
   // Clear any cached data that might be inconsistent
-  localStorage.removeItem('pending_operations');
-  localStorage.removeItem('websocket_cache');
+  localStorage.removeItem("pending_operations");
+  localStorage.removeItem("websocket_cache");
 
   // Reload to apply changes
   window.location.reload();
@@ -42,14 +45,14 @@ export const emergencyRollback = (reason = 'manual_rollback') => {
 export const useFeatureFlag = (flagName) => {
   const [enabled, setEnabled] = useState(() => {
     // Check for emergency rollback
-    if (localStorage.getItem('FORCE_SUPABASE_ONLY') === 'true') {
+    if (localStorage.getItem("FORCE_SUPABASE_ONLY") === "true") {
       return false;
     }
 
     // Check for runtime override
     const runtimeValue = localStorage.getItem(flagName);
     if (runtimeValue !== null) {
-      return runtimeValue === 'true';
+      return runtimeValue === "true";
     }
 
     // Use default from environment
@@ -70,12 +73,12 @@ export const useFeatureFlag = (flagName) => {
       setEnabled(false);
     };
 
-    window.addEventListener('feature-flag-change', handleFlagChange);
-    window.addEventListener('emergency-rollback', handleEmergencyRollback);
+    window.addEventListener("feature-flag-change", handleFlagChange);
+    window.addEventListener("emergency-rollback", handleEmergencyRollback);
 
     return () => {
-      window.removeEventListener('feature-flag-change', handleFlagChange);
-      window.removeEventListener('emergency-rollback', handleEmergencyRollback);
+      window.removeEventListener("feature-flag-change", handleFlagChange);
+      window.removeEventListener("emergency-rollback", handleEmergencyRollback);
     };
   }, [flagName]);
 
@@ -84,8 +87,8 @@ export const useFeatureFlag = (flagName) => {
 
 // Runtime feature flag control
 export const setFeatureFlag = (flagName, enabled) => {
-  const event = new CustomEvent('feature-flag-change', {
-    detail: { flag: flagName, enabled }
+  const event = new CustomEvent("feature-flag-change", {
+    detail: { flag: flagName, enabled },
   });
   window.dispatchEvent(event);
 
@@ -97,19 +100,19 @@ export const setFeatureFlag = (flagName, enabled) => {
 // System health checker
 export const checkSystemHealth = () => {
   const health = {
-    status: 'healthy',
+    status: "healthy",
     checks: {},
     warnings: [],
-    errors: []
+    errors: [],
   };
 
   // Check if in rollback mode
-  if (localStorage.getItem('FORCE_SUPABASE_ONLY') === 'true') {
-    health.status = 'rollback_mode';
+  if (localStorage.getItem("FORCE_SUPABASE_ONLY") === "true") {
+    health.status = "rollback_mode";
     health.warnings.push({
-      component: 'system',
-      message: `Emergency rollback active: ${localStorage.getItem('ROLLBACK_REASON')}`,
-      timestamp: localStorage.getItem('ROLLBACK_TIMESTAMP')
+      component: "system",
+      message: `Emergency rollback active: ${localStorage.getItem("ROLLBACK_REASON")}`,
+      timestamp: localStorage.getItem("ROLLBACK_TIMESTAMP"),
     });
   }
 
@@ -124,16 +127,16 @@ export const checkSystemHealth = () => {
 
   // Check localStorage for issues
   try {
-    const testKey = 'health_check_test';
-    localStorage.setItem(testKey, 'test');
+    const testKey = "health_check_test";
+    localStorage.setItem(testKey, "test");
     localStorage.removeItem(testKey);
-    health.checks.localStorage = 'operational';
+    health.checks.localStorage = "operational";
   } catch (error) {
-    health.status = 'degraded';
+    health.status = "degraded";
     health.errors.push({
-      component: 'localStorage',
-      message: 'LocalStorage access failed',
-      error: error.message
+      component: "localStorage",
+      message: "LocalStorage access failed",
+      error: error.message,
     });
   }
 
@@ -149,14 +152,14 @@ if (FEATURE_FLAGS.ENHANCED_LOGGING) {
     emergencyRollback,
     checkSystemHealth,
     clearRollback: () => {
-      localStorage.removeItem('FORCE_SUPABASE_ONLY');
-      localStorage.removeItem('ROLLBACK_REASON');
-      localStorage.removeItem('ROLLBACK_TIMESTAMP');
+      localStorage.removeItem("FORCE_SUPABASE_ONLY");
+      localStorage.removeItem("ROLLBACK_REASON");
+      localStorage.removeItem("ROLLBACK_TIMESTAMP");
       window.location.reload();
-    }
+    },
   };
 
-  console.log('🔧 Debug utilities available at window.debugUtils');
+  console.log("🔧 Debug utilities available at window.debugUtils");
 }
 
 export default FEATURE_FLAGS;

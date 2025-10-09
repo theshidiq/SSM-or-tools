@@ -4,7 +4,8 @@ import { useAutosave } from "./useAutosave";
 import { useWebSocketSettings } from "./useWebSocketSettings";
 
 // Feature flag for WebSocket settings (multi-table backend)
-const WEBSOCKET_SETTINGS_ENABLED = process.env.REACT_APP_WEBSOCKET_SETTINGS === 'true';
+const WEBSOCKET_SETTINGS_ENABLED =
+  process.env.REACT_APP_WEBSOCKET_SETTINGS === "true";
 
 export const useSettingsData = (autosaveEnabled = true) => {
   const [settings, setSettings] = useState(null);
@@ -16,6 +17,9 @@ export const useSettingsData = (autosaveEnabled = true) => {
 
   // Ref to hold current settings to prevent infinite loops
   const settingsRef = useRef(settings);
+
+  // 🔧 FIX: Prevent localStorage save from triggering infinite sync loop
+  const isSyncingFromWebSocketRef = useRef(false);
 
   // WebSocket multi-table integration
   const {
@@ -33,9 +37,9 @@ export const useSettingsData = (autosaveEnabled = true) => {
     isConnected: wsConnected,
     connectionStatus,
     isLoading: wsLoading,
-    lastError: wsError
+    lastError: wsError,
   } = useWebSocketSettings({
-    enabled: WEBSOCKET_SETTINGS_ENABLED
+    enabled: WEBSOCKET_SETTINGS_ENABLED,
   });
 
   // Store WebSocket callbacks in refs to keep updateSettings stable
@@ -46,7 +50,7 @@ export const useSettingsData = (autosaveEnabled = true) => {
     wsUpdateDailyLimits,
     wsUpdateMonthlyLimits,
     wsUpdatePriorityRules,
-    wsUpdateMLConfig
+    wsUpdateMLConfig,
   });
 
   // Update refs when callbacks change
@@ -58,9 +62,17 @@ export const useSettingsData = (autosaveEnabled = true) => {
       wsUpdateDailyLimits,
       wsUpdateMonthlyLimits,
       wsUpdatePriorityRules,
-      wsUpdateMLConfig
+      wsUpdateMLConfig,
     };
-  }, [wsUpdateStaffGroups, wsCreateStaffGroup, wsDeleteStaffGroup, wsUpdateDailyLimits, wsUpdateMonthlyLimits, wsUpdatePriorityRules, wsUpdateMLConfig]);
+  }, [
+    wsUpdateStaffGroups,
+    wsCreateStaffGroup,
+    wsDeleteStaffGroup,
+    wsUpdateDailyLimits,
+    wsUpdateMonthlyLimits,
+    wsUpdatePriorityRules,
+    wsUpdateMLConfig,
+  ]);
 
   // Determine active backend mode
   const useWebSocket = WEBSOCKET_SETTINGS_ENABLED && wsConnected;
@@ -69,25 +81,39 @@ export const useSettingsData = (autosaveEnabled = true) => {
   useEffect(() => {
     if (WEBSOCKET_SETTINGS_ENABLED) {
       if (wsConnected) {
-        console.log('📡 useSettingsData: WebSocket multi-table backend ACTIVE');
-        console.log(`  - Version: ${wsVersion?.versionNumber} (${wsVersion?.name})`);
-        console.log(`  - Tables: staff_groups, daily_limits, monthly_limits, priority_rules, ml_model_configs`);
+        console.log("📡 useSettingsData: WebSocket multi-table backend ACTIVE");
+        console.log(
+          `  - Version: ${wsVersion?.versionNumber} (${wsVersion?.name})`,
+        );
+        console.log(
+          `  - Tables: staff_groups, daily_limits, monthly_limits, priority_rules, ml_model_configs`,
+        );
       } else {
-        console.log('📦 useSettingsData: localStorage fallback (WebSocket disconnected)');
+        console.log(
+          "📦 useSettingsData: localStorage fallback (WebSocket disconnected)",
+        );
       }
     } else {
-      console.log('📦 useSettingsData: localStorage mode (WebSocket disabled)');
+      console.log("📦 useSettingsData: localStorage mode (WebSocket disabled)");
     }
   }, [wsConnected, wsVersion]);
 
   // Sync WebSocket settings to local state (aggregate multi-table data)
   useEffect(() => {
     if (useWebSocket && wsSettings) {
-      console.log('🔄 Syncing WebSocket multi-table settings to local state');
+      // 🔧 FIX: Set flag BEFORE any state updates to prevent circular sync
+      isSyncingFromWebSocketRef.current = true;
+
+      console.log("🔄 Syncing WebSocket multi-table settings to local state");
+
+      // ✅ FIX: Filter out soft-deleted groups before syncing to local state
+      const filteredStaffGroups = (wsSettings.staffGroups || []).filter(
+        (group) => group.is_active !== false && group.isActive !== false,
+      );
 
       // Transform multi-table response to localStorage-compatible format
       const aggregatedSettings = {
-        staffGroups: wsSettings.staffGroups || [],
+        staffGroups: filteredStaffGroups,
         dailyLimits: wsSettings.dailyLimits || [],
         monthlyLimits: wsSettings.monthlyLimits || [],
         priorityRules: wsSettings.priorityRules || [],
@@ -99,6 +125,11 @@ export const useSettingsData = (autosaveEnabled = true) => {
       setIsLoading(false);
       setHasUnsavedChanges(false);
       setError(null);
+
+      // 🔧 FIX: Clear flag AFTER all state updates complete (use timeout to ensure render cycle finishes)
+      setTimeout(() => {
+        isSyncingFromWebSocketRef.current = false;
+      }, 100);
     }
   }, [useWebSocket, wsSettings, wsVersion]);
 
@@ -110,7 +141,9 @@ export const useSettingsData = (autosaveEnabled = true) => {
   // Load settings from localStorage via configService (localStorage mode only)
   const loadSettings = useCallback(() => {
     if (useWebSocket) {
-      console.log('⏭️ Skipping loadSettings - using WebSocket multi-table backend');
+      console.log(
+        "⏭️ Skipping loadSettings - using WebSocket multi-table backend",
+      );
       return;
     }
 
@@ -134,7 +167,9 @@ export const useSettingsData = (autosaveEnabled = true) => {
   const saveSettings = useCallback(
     async (settingsToSave = settings, skipLoadingState = false) => {
       if (useWebSocket) {
-        console.log('⏭️ Skipping saveSettings - using WebSocket multi-table backend (auto-sync)');
+        console.log(
+          "⏭️ Skipping saveSettings - using WebSocket multi-table backend (auto-sync)",
+        );
         return { success: true };
       }
 
@@ -179,130 +214,184 @@ export const useSettingsData = (autosaveEnabled = true) => {
    * Update settings with multi-table awareness
    * Detects which table was modified and sends specific WebSocket updates
    */
-  const updateSettings = useCallback((newSettings) => {
-    if (useWebSocket) {
-      console.log('🔄 Updating settings via WebSocket multi-table backend');
+  const updateSettings = useCallback(
+    (newSettings) => {
+      if (useWebSocket) {
+        // 🔧 FIX: CRITICAL - Prevent circular updates when syncing FROM WebSocket
+        // If we're currently syncing from WebSocket, DON'T send updates back to WebSocket
+        if (isSyncingFromWebSocketRef.current) {
+          console.log(
+            "⏭️ Skipping WebSocket update - currently syncing FROM server (prevents infinite loop)",
+          );
+          // Still update local state for UI consistency
+          setSettings(newSettings);
+          setValidationErrors({});
+          return;
+        }
 
-      // ✅ CRITICAL: Use settings state (NOT ref) as old value for comparison
-      // The ref gets updated by the useEffect above, so it may already contain new values
-      const oldSettings = settings || {};
-      const callbacks = wsCallbacksRef.current;
+        console.log("🔄 Updating settings via WebSocket multi-table backend");
 
-      // Detect and send changes to server FIRST (while we still have old settings for comparison)
-      let changedGroupsCount = 0;
-      let createdGroupsCount = 0;
-      let deletedGroupsCount = 0;
+        // ✅ CRITICAL: Use settings state (NOT ref) as old value for comparison
+        // The ref gets updated by the useEffect above, so it may already contain new values
+        const oldSettings = settings || {};
+        const callbacks = wsCallbacksRef.current;
 
-      // Detect and update staff groups (CREATE, UPDATE, DELETE operations)
-      if (JSON.stringify(oldSettings.staffGroups) !== JSON.stringify(newSettings.staffGroups)) {
-        console.log('  - Detecting staff_groups table changes...');
+        // Detect and send changes to server FIRST (while we still have old settings for comparison)
+        let changedGroupsCount = 0;
+        let createdGroupsCount = 0;
+        let deletedGroupsCount = 0;
+
+        // Detect and update staff groups (CREATE, UPDATE, DELETE operations)
+        // ✅ FIX: Normalize groups before comparison to exclude auto-generated fields
+        // This prevents infinite loops from server-side timestamp updates
+        const normalizeGroup = (group) => ({
+          id: group.id,
+          name: group.name,
+          description: group.description,
+          color: group.color,
+          members: group.members || [],
+        });
 
         const oldGroups = oldSettings.staffGroups || [];
         const newGroups = newSettings.staffGroups || [];
-        const oldGroupIds = new Set(oldGroups.map(g => g.id));
-        const newGroupIds = new Set(newGroups.map(g => g.id));
+        const oldGroupsNormalized = oldGroups.map(normalizeGroup);
+        const newGroupsNormalized = newGroups.map(normalizeGroup);
 
-        // Detect CREATED groups (exist in new but not in old)
-        const createdGroups = newGroups.filter(g => !oldGroupIds.has(g.id));
-        createdGroupsCount = createdGroups.length;
-        if (createdGroups.length > 0) {
-          console.log(`    - ${createdGroups.length} new group(s) created`);
-          createdGroups.forEach(group => {
-            console.log(`      - Creating group "${group.name}" (${group.id})`);
-            callbacks.wsCreateStaffGroup(group);
+        if (
+          JSON.stringify(oldGroupsNormalized) !==
+          JSON.stringify(newGroupsNormalized)
+        ) {
+          console.log("  - Detecting staff_groups table changes...");
+          const oldGroupIds = new Set(oldGroups.map((g) => g.id));
+          const newGroupIds = new Set(newGroups.map((g) => g.id));
+
+          // Detect CREATED groups (exist in new but not in old)
+          const createdGroups = newGroups.filter((g) => !oldGroupIds.has(g.id));
+          createdGroupsCount = createdGroups.length;
+          if (createdGroups.length > 0) {
+            console.log(`    - ${createdGroups.length} new group(s) created`);
+            createdGroups.forEach((group) => {
+              console.log(
+                `      - Creating group "${group.name}" (${group.id})`,
+              );
+              callbacks.wsCreateStaffGroup(group);
+            });
+          }
+
+          // Detect DELETED groups (exist in old but not in new)
+          const deletedGroupIds = [...oldGroupIds].filter(
+            (id) => !newGroupIds.has(id),
+          );
+          deletedGroupsCount = deletedGroupIds.length;
+          if (deletedGroupIds.length > 0) {
+            console.log(`    - ${deletedGroupIds.length} group(s) deleted`);
+            deletedGroupIds.forEach((groupId) => {
+              const deletedGroup = oldGroups.find((g) => g.id === groupId);
+              console.log(
+                `      - Deleting group "${deletedGroup?.name}" (${groupId})`,
+              );
+              callbacks.wsDeleteStaffGroup(groupId);
+            });
+          }
+
+          // Detect UPDATED groups (exist in both, but content changed)
+          const updatedGroups = newGroups.filter((newGroup) => {
+            if (!oldGroupIds.has(newGroup.id)) return false; // Skip newly created
+
+            const oldGroup = oldGroups.find((g) => g.id === newGroup.id);
+            // ✅ FIX: ONLY compare user-editable fields
+            // EXCLUDE auto-generated fields: updatedAt, createdAt, isActive, versionId, restaurantId
+            // This prevents infinite loops from server-side timestamp updates
+            const oldData = {
+              name: oldGroup?.name,
+              description: oldGroup?.description,
+              color: oldGroup?.color,
+              members: oldGroup?.members || [],
+            };
+            const newData = {
+              name: newGroup.name,
+              description: newGroup.description,
+              color: newGroup.color,
+              members: newGroup.members || [],
+            };
+            return JSON.stringify(oldData) !== JSON.stringify(newData);
+          });
+
+          changedGroupsCount = updatedGroups.length;
+          if (updatedGroups.length > 0) {
+            console.log(`    - ${updatedGroups.length} group(s) updated`);
+            updatedGroups.forEach((group) => {
+              const oldGroup = oldGroups.find((g) => g.id === group.id);
+              console.log(
+                `      - Updating group "${group.name}": ${oldGroup?.members?.length || 0} → ${group.members?.length || 0} members`,
+              );
+              callbacks.wsUpdateStaffGroups(group);
+            });
+          }
+
+          console.log(
+            `  - Summary: ${createdGroupsCount} created, ${changedGroupsCount} updated, ${deletedGroupsCount} deleted`,
+          );
+        }
+
+        // Detect and update daily limits
+        if (
+          JSON.stringify(oldSettings.dailyLimits) !==
+          JSON.stringify(newSettings.dailyLimits)
+        ) {
+          console.log("  - Updating daily_limits table");
+          newSettings.dailyLimits?.forEach((limit) => {
+            callbacks.wsUpdateDailyLimits(limit);
           });
         }
 
-        // Detect DELETED groups (exist in old but not in new)
-        const deletedGroupIds = [...oldGroupIds].filter(id => !newGroupIds.has(id));
-        deletedGroupsCount = deletedGroupIds.length;
-        if (deletedGroupIds.length > 0) {
-          console.log(`    - ${deletedGroupIds.length} group(s) deleted`);
-          deletedGroupIds.forEach(groupId => {
-            const deletedGroup = oldGroups.find(g => g.id === groupId);
-            console.log(`      - Deleting group "${deletedGroup?.name}" (${groupId})`);
-            callbacks.wsDeleteStaffGroup(groupId);
+        // Detect and update monthly limits
+        if (
+          JSON.stringify(oldSettings.monthlyLimits) !==
+          JSON.stringify(newSettings.monthlyLimits)
+        ) {
+          console.log("  - Updating monthly_limits table");
+          newSettings.monthlyLimits?.forEach((limit) => {
+            callbacks.wsUpdateMonthlyLimits(limit);
           });
         }
 
-        // Detect UPDATED groups (exist in both, but content changed)
-        const updatedGroups = newGroups.filter(newGroup => {
-          if (!oldGroupIds.has(newGroup.id)) return false; // Skip newly created
-
-          const oldGroup = oldGroups.find(g => g.id === newGroup.id);
-          // Compare specific fields that should trigger updates
-          const oldData = {
-            name: oldGroup?.name,
-            description: oldGroup?.description,
-            color: oldGroup?.color,
-            members: oldGroup?.members || []
-          };
-          const newData = {
-            name: newGroup.name,
-            description: newGroup.description,
-            color: newGroup.color,
-            members: newGroup.members || []
-          };
-          return JSON.stringify(oldData) !== JSON.stringify(newData);
-        });
-
-        changedGroupsCount = updatedGroups.length;
-        if (updatedGroups.length > 0) {
-          console.log(`    - ${updatedGroups.length} group(s) updated`);
-          updatedGroups.forEach(group => {
-            const oldGroup = oldGroups.find(g => g.id === group.id);
-            console.log(`      - Updating group "${group.name}": ${oldGroup?.members?.length || 0} → ${group.members?.length || 0} members`);
-            callbacks.wsUpdateStaffGroups(group);
+        // Detect and update priority rules
+        if (
+          JSON.stringify(oldSettings.priorityRules) !==
+          JSON.stringify(newSettings.priorityRules)
+        ) {
+          console.log("  - Updating priority_rules table");
+          newSettings.priorityRules?.forEach((rule) => {
+            callbacks.wsUpdatePriorityRules(rule);
           });
         }
 
-        console.log(`  - Summary: ${createdGroupsCount} created, ${changedGroupsCount} updated, ${deletedGroupsCount} deleted`);
+        // Detect and update ML parameters
+        if (
+          JSON.stringify(oldSettings.mlParameters) !==
+          JSON.stringify(newSettings.mlParameters)
+        ) {
+          console.log("  - Updating ml_model_configs table");
+          callbacks.wsUpdateMLConfig(newSettings.mlParameters);
+        }
+
+        // ✅ OPTIMISTIC UPDATE: Update local state AFTER all change detection completes
+        // This prevents race conditions where ref updates before all comparisons finish
+        settingsRef.current = newSettings;
+        setSettings(newSettings);
+
+        // WebSocket updates are authoritative - no unsaved changes
+        setValidationErrors({});
+      } else {
+        // localStorage mode - traditional behavior
+        setSettings(newSettings);
+        setHasUnsavedChanges(true);
+        setValidationErrors({});
       }
-
-      // Detect and update daily limits
-      if (JSON.stringify(oldSettings.dailyLimits) !== JSON.stringify(newSettings.dailyLimits)) {
-        console.log('  - Updating daily_limits table');
-        newSettings.dailyLimits?.forEach(limit => {
-          callbacks.wsUpdateDailyLimits(limit);
-        });
-      }
-
-      // Detect and update monthly limits
-      if (JSON.stringify(oldSettings.monthlyLimits) !== JSON.stringify(newSettings.monthlyLimits)) {
-        console.log('  - Updating monthly_limits table');
-        newSettings.monthlyLimits?.forEach(limit => {
-          callbacks.wsUpdateMonthlyLimits(limit);
-        });
-      }
-
-      // Detect and update priority rules
-      if (JSON.stringify(oldSettings.priorityRules) !== JSON.stringify(newSettings.priorityRules)) {
-        console.log('  - Updating priority_rules table');
-        newSettings.priorityRules?.forEach(rule => {
-          callbacks.wsUpdatePriorityRules(rule);
-        });
-      }
-
-      // Detect and update ML parameters
-      if (JSON.stringify(oldSettings.mlParameters) !== JSON.stringify(newSettings.mlParameters)) {
-        console.log('  - Updating ml_model_configs table');
-        callbacks.wsUpdateMLConfig(newSettings.mlParameters);
-      }
-
-      // ✅ OPTIMISTIC UPDATE: Update local state AFTER all change detection completes
-      // This prevents race conditions where ref updates before all comparisons finish
-      settingsRef.current = newSettings;
-      setSettings(newSettings);
-
-      // WebSocket updates are authoritative - no unsaved changes
-      setValidationErrors({});
-    } else {
-      // localStorage mode - traditional behavior
-      setSettings(newSettings);
-      setHasUnsavedChanges(true);
-      setValidationErrors({});
-    }
-  }, [useWebSocket, settings]); // FIX: Added settings dependency for change detection
+    },
+    [useWebSocket, settings],
+  ); // FIX: Added settings dependency for change detection
 
   /**
    * Reset settings to defaults (multi-table aware)
@@ -312,10 +401,10 @@ export const useSettingsData = (autosaveEnabled = true) => {
       setIsLoading(true);
 
       if (useWebSocket) {
-        console.log('🔄 Resetting settings via WebSocket multi-table backend');
+        console.log("🔄 Resetting settings via WebSocket multi-table backend");
         // WebSocket mode: send multi-table reset to Go server
         await wsResetSettings();
-        console.log('✅ Multi-table reset complete');
+        console.log("✅ Multi-table reset complete");
       } else {
         // localStorage mode: use configService
         await configService.resetToDefaults();
@@ -353,10 +442,12 @@ export const useSettingsData = (autosaveEnabled = true) => {
         }
 
         if (useWebSocket) {
-          console.log('📥 Imported configuration - migrating to WebSocket multi-table backend');
+          console.log(
+            "📥 Imported configuration - migrating to WebSocket multi-table backend",
+          );
           // In WebSocket mode, trigger migration after import
-          wsMigrateSettings(JSON.parse(configJson)).catch(err => {
-            console.error('Migration failed after import:', err);
+          wsMigrateSettings(JSON.parse(configJson)).catch((err) => {
+            console.error("Migration failed after import:", err);
           });
         } else {
           // Reload settings after import (localStorage mode)
@@ -378,17 +469,19 @@ export const useSettingsData = (autosaveEnabled = true) => {
    */
   const migrateToBackend = useCallback(async () => {
     if (!useWebSocket) {
-      throw new Error('WebSocket not connected - cannot migrate to multi-table backend');
+      throw new Error(
+        "WebSocket not connected - cannot migrate to multi-table backend",
+      );
     }
 
     try {
       setIsLoading(true);
-      console.log('🚀 Starting localStorage → multi-table backend migration');
+      console.log("🚀 Starting localStorage → multi-table backend migration");
 
       // Get localStorage settings
-      const localSettings = localStorage.getItem('shift-schedule-settings');
+      const localSettings = localStorage.getItem("shift-schedule-settings");
       if (!localSettings) {
-        throw new Error('No localStorage settings to migrate');
+        throw new Error("No localStorage settings to migrate");
       }
 
       const parsedSettings = JSON.parse(localSettings);
@@ -396,12 +489,22 @@ export const useSettingsData = (autosaveEnabled = true) => {
       // Send migration request (will map to multi-table structure on server)
       await wsMigrateSettings(parsedSettings);
 
-      console.log('✅ Migration complete (localStorage → multi-table backend)');
-      console.log(`  - Staff Groups: ${parsedSettings.staffGroups?.length || 0} items`);
-      console.log(`  - Daily Limits: ${parsedSettings.dailyLimits?.length || 0} items`);
-      console.log(`  - Monthly Limits: ${parsedSettings.monthlyLimits?.length || 0} items`);
-      console.log(`  - Priority Rules: ${parsedSettings.priorityRules?.length || 0} items`);
-      console.log(`  - ML Parameters: ${parsedSettings.mlParameters ? '1 config' : '0 configs'}`);
+      console.log("✅ Migration complete (localStorage → multi-table backend)");
+      console.log(
+        `  - Staff Groups: ${parsedSettings.staffGroups?.length || 0} items`,
+      );
+      console.log(
+        `  - Daily Limits: ${parsedSettings.dailyLimits?.length || 0} items`,
+      );
+      console.log(
+        `  - Monthly Limits: ${parsedSettings.monthlyLimits?.length || 0} items`,
+      );
+      console.log(
+        `  - Priority Rules: ${parsedSettings.priorityRules?.length || 0} items`,
+      );
+      console.log(
+        `  - ML Parameters: ${parsedSettings.mlParameters ? "1 config" : "0 configs"}`,
+      );
     } catch (err) {
       console.error("Failed to migrate settings:", err);
       setError(err.message);
@@ -466,9 +569,9 @@ export const useSettingsData = (autosaveEnabled = true) => {
     importConfiguration,
 
     // Backend mode indicators (NEW)
-    backendMode: useWebSocket ? 'websocket-multitable' : 'localStorage',
+    backendMode: useWebSocket ? "websocket-multitable" : "localStorage",
     isConnectedToBackend: useWebSocket,
-    connectionStatus: useWebSocket ? connectionStatus : 'localStorage',
+    connectionStatus: useWebSocket ? connectionStatus : "localStorage",
 
     // Version info (NEW - multi-table backend only)
     currentVersion: wsVersion?.versionNumber,

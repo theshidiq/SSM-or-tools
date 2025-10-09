@@ -17,12 +17,12 @@
  * - React Query: Client-side caching layer
  */
 
-import { useState, useEffect, useRef, useCallback } from 'react';
-import { useQueryClient } from '@tanstack/react-query';
+import { useState, useEffect, useRef, useCallback } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 
 // WebSocket connection configuration
-const WS_URL = process.env.REACT_APP_WEBSOCKET_URL || 'ws://localhost:8080';
-const WS_ENDPOINT = '/staff-sync';
+const WS_URL = process.env.REACT_APP_WEBSOCKET_URL || "ws://localhost:8080";
+const WS_ENDPOINT = "/staff-sync";
 const RECONNECT_DELAY_BASE = 1000; // 1 second
 const RECONNECT_DELAY_MAX = 30000; // 30 seconds
 const HEARTBEAT_INTERVAL = 30000; // 30 seconds
@@ -30,15 +30,15 @@ const HEARTBEAT_INTERVAL = 30000; // 30 seconds
 // Message types
 const MESSAGE_TYPES = {
   // Shift operations
-  SHIFT_UPDATE: 'SHIFT_UPDATE',
-  SHIFT_SYNC_REQUEST: 'SHIFT_SYNC_REQUEST',
-  SHIFT_SYNC_RESPONSE: 'SHIFT_SYNC_RESPONSE',
-  SHIFT_BROADCAST: 'SHIFT_BROADCAST',
-  SHIFT_BULK_UPDATE: 'SHIFT_BULK_UPDATE',
+  SHIFT_UPDATE: "SHIFT_UPDATE",
+  SHIFT_SYNC_REQUEST: "SHIFT_SYNC_REQUEST",
+  SHIFT_SYNC_RESPONSE: "SHIFT_SYNC_RESPONSE",
+  SHIFT_BROADCAST: "SHIFT_BROADCAST",
+  SHIFT_BULK_UPDATE: "SHIFT_BULK_UPDATE",
 
   // Connection
-  CONNECTION_ACK: 'CONNECTION_ACK',
-  ERROR: 'ERROR',
+  CONNECTION_ACK: "CONNECTION_ACK",
+  ERROR: "ERROR",
 };
 
 /**
@@ -49,7 +49,11 @@ const MESSAGE_TYPES = {
  * @param {object} options - Configuration options
  * @returns {object} WebSocket shift operations and state
  */
-export const useWebSocketShifts = (currentPeriod = 0, scheduleId = null, options = {}) => {
+export const useWebSocketShifts = (
+  currentPeriod = 0,
+  scheduleId = null,
+  options = {},
+) => {
   const {
     enabled = true,
     autoReconnect = true,
@@ -59,7 +63,7 @@ export const useWebSocketShifts = (currentPeriod = 0, scheduleId = null, options
   const queryClient = useQueryClient();
 
   // Connection state
-  const [connectionStatus, setConnectionStatus] = useState('disconnected');
+  const [connectionStatus, setConnectionStatus] = useState("disconnected");
   const [isConnected, setIsConnected] = useState(false);
   const [lastError, setLastError] = useState(null);
   const [reconnectAttempts, setReconnectAttempts] = useState(0);
@@ -82,7 +86,7 @@ export const useWebSocketShifts = (currentPeriod = 0, scheduleId = null, options
   const getReconnectDelay = useCallback(() => {
     const delay = Math.min(
       RECONNECT_DELAY_BASE * Math.pow(2, reconnectAttempts),
-      RECONNECT_DELAY_MAX
+      RECONNECT_DELAY_MAX,
     );
     return delay;
   }, [reconnectAttempts]);
@@ -90,30 +94,41 @@ export const useWebSocketShifts = (currentPeriod = 0, scheduleId = null, options
   /**
    * Send message to WebSocket server
    */
-  const sendMessage = useCallback((type, payload) => {
-    if (wsRef.current?.readyState === WebSocket.OPEN) {
-      const message = {
-        type,
-        payload,
-        timestamp: new Date().toISOString(),
-        clientId: clientIdRef.current,
-      };
+  const sendMessage = useCallback(
+    (type, payload) => {
+      if (wsRef.current?.readyState === WebSocket.OPEN) {
+        const message = {
+          type,
+          payload,
+          timestamp: new Date().toISOString(),
+          clientId: clientIdRef.current,
+        };
 
-      wsRef.current.send(JSON.stringify(message));
-      console.log(`📤 [WEBSOCKET-SHIFTS] Sent ${type}:`, payload);
-      return true;
-    } else {
-      console.warn(`⚠️ [WEBSOCKET-SHIFTS] Cannot send ${type}: Not connected`);
+        wsRef.current.send(JSON.stringify(message));
+        console.log(`📤 [WEBSOCKET-SHIFTS] Sent ${type}:`, payload);
+        return true;
+      } else {
+        console.warn(
+          `⚠️ [WEBSOCKET-SHIFTS] Cannot send ${type}: Not connected`,
+        );
 
-      // Queue message for later if offline queue enabled
-      if (enableOfflineQueue && type !== MESSAGE_TYPES.SHIFT_SYNC_REQUEST) {
-        offlineQueueRef.current.push({ type, payload, timestamp: Date.now() });
-        console.log(`📥 [WEBSOCKET-SHIFTS] Queued ${type} for offline processing`);
+        // Queue message for later if offline queue enabled
+        if (enableOfflineQueue && type !== MESSAGE_TYPES.SHIFT_SYNC_REQUEST) {
+          offlineQueueRef.current.push({
+            type,
+            payload,
+            timestamp: Date.now(),
+          });
+          console.log(
+            `📥 [WEBSOCKET-SHIFTS] Queued ${type} for offline processing`,
+          );
+        }
+
+        return false;
       }
-
-      return false;
-    }
-  }, [enableOfflineQueue]);
+    },
+    [enableOfflineQueue],
+  );
 
   /**
    * Process offline queue after reconnection
@@ -121,7 +136,9 @@ export const useWebSocketShifts = (currentPeriod = 0, scheduleId = null, options
   const processOfflineQueue = useCallback(() => {
     if (offlineQueueRef.current.length === 0) return;
 
-    console.log(`📤 [WEBSOCKET-SHIFTS] Processing ${offlineQueueRef.current.length} queued messages`);
+    console.log(
+      `📤 [WEBSOCKET-SHIFTS] Processing ${offlineQueueRef.current.length} queued messages`,
+    );
 
     const queue = [...offlineQueueRef.current];
     offlineQueueRef.current = [];
@@ -134,79 +151,97 @@ export const useWebSocketShifts = (currentPeriod = 0, scheduleId = null, options
   /**
    * Handle incoming WebSocket messages
    */
-  const handleMessage = useCallback((event) => {
-    try {
-      const message = JSON.parse(event.data);
-      console.log(`📨 [WEBSOCKET-SHIFTS] Received ${message.type}:`, message.payload);
+  const handleMessage = useCallback(
+    (event) => {
+      try {
+        const message = JSON.parse(event.data);
+        console.log(
+          `📨 [WEBSOCKET-SHIFTS] Received ${message.type}:`,
+          message.payload,
+        );
 
-      switch (message.type) {
-        case MESSAGE_TYPES.CONNECTION_ACK:
-          setConnectionStatus('connected');
-          setIsConnected(true);
-          setReconnectAttempts(0);
-          clientIdRef.current = message.payload?.clientId || clientIdRef.current;
-          console.log(`✅ [WEBSOCKET-SHIFTS] Connected (Client ID: ${clientIdRef.current})`);
+        switch (message.type) {
+          case MESSAGE_TYPES.CONNECTION_ACK:
+            setConnectionStatus("connected");
+            setIsConnected(true);
+            setReconnectAttempts(0);
+            clientIdRef.current =
+              message.payload?.clientId || clientIdRef.current;
+            console.log(
+              `✅ [WEBSOCKET-SHIFTS] Connected (Client ID: ${clientIdRef.current})`,
+            );
 
-          // Request initial sync if scheduleId available
-          if (scheduleId) {
-            sendMessage(MESSAGE_TYPES.SHIFT_SYNC_REQUEST, {
-              scheduleId,
-              periodIndex: currentPeriod,
+            // Request initial sync if scheduleId available
+            if (scheduleId) {
+              sendMessage(MESSAGE_TYPES.SHIFT_SYNC_REQUEST, {
+                scheduleId,
+                periodIndex: currentPeriod,
+              });
+            }
+
+            // Process offline queue
+            processOfflineQueue();
+            break;
+
+          case MESSAGE_TYPES.SHIFT_SYNC_RESPONSE:
+            setScheduleData(message.payload.scheduleData || {});
+            setIsSyncing(false);
+            console.log(
+              `✅ [WEBSOCKET-SHIFTS] Schedule synced: ${Object.keys(message.payload.scheduleData || {}).length} staff members`,
+            );
+
+            // Update React Query cache
+            queryClient.setQueryData(
+              ["schedule", "data", currentPeriod],
+              (old) => ({
+                ...old,
+                schedule: message.payload.scheduleData,
+                loadedAt: Date.now(),
+              }),
+            );
+            break;
+
+          case MESSAGE_TYPES.SHIFT_BROADCAST:
+            // Real-time update from another client
+            const { staffId, dateKey, shiftValue } = message.payload;
+
+            setScheduleData((prev) => {
+              const updated = { ...prev };
+              if (!updated[staffId]) updated[staffId] = {};
+              updated[staffId][dateKey] = shiftValue;
+              return updated;
             });
-          }
 
-          // Process offline queue
-          processOfflineQueue();
-          break;
+            console.log(
+              `📡 [WEBSOCKET-SHIFTS] Received broadcast update: ${staffId} → ${dateKey} = "${shiftValue}"`,
+            );
 
-        case MESSAGE_TYPES.SHIFT_SYNC_RESPONSE:
-          setScheduleData(message.payload.scheduleData || {});
-          setIsSyncing(false);
-          console.log(`✅ [WEBSOCKET-SHIFTS] Schedule synced: ${Object.keys(message.payload.scheduleData || {}).length} staff members`);
+            // Invalidate React Query cache to trigger refetch
+            queryClient.invalidateQueries({
+              queryKey: ["schedule", "data", currentPeriod],
+            });
+            break;
 
-          // Update React Query cache
-          queryClient.setQueryData(
-            ['schedule', 'data', currentPeriod],
-            (old) => ({
-              ...old,
-              schedule: message.payload.scheduleData,
-              loadedAt: Date.now(),
-            })
-          );
-          break;
+          case MESSAGE_TYPES.ERROR:
+            console.error(
+              `❌ [WEBSOCKET-SHIFTS] Server error:`,
+              message.payload,
+            );
+            setLastError(message.payload.error || "Unknown error");
+            setIsSyncing(false);
+            break;
 
-        case MESSAGE_TYPES.SHIFT_BROADCAST:
-          // Real-time update from another client
-          const { staffId, dateKey, shiftValue } = message.payload;
-
-          setScheduleData((prev) => {
-            const updated = { ...prev };
-            if (!updated[staffId]) updated[staffId] = {};
-            updated[staffId][dateKey] = shiftValue;
-            return updated;
-          });
-
-          console.log(`📡 [WEBSOCKET-SHIFTS] Received broadcast update: ${staffId} → ${dateKey} = "${shiftValue}"`);
-
-          // Invalidate React Query cache to trigger refetch
-          queryClient.invalidateQueries({
-            queryKey: ['schedule', 'data', currentPeriod],
-          });
-          break;
-
-        case MESSAGE_TYPES.ERROR:
-          console.error(`❌ [WEBSOCKET-SHIFTS] Server error:`, message.payload);
-          setLastError(message.payload.error || 'Unknown error');
-          setIsSyncing(false);
-          break;
-
-        default:
-          console.log(`📨 [WEBSOCKET-SHIFTS] Unhandled message type: ${message.type}`);
+          default:
+            console.log(
+              `📨 [WEBSOCKET-SHIFTS] Unhandled message type: ${message.type}`,
+            );
+        }
+      } catch (error) {
+        console.error(`❌ [WEBSOCKET-SHIFTS] Failed to parse message:`, error);
       }
-    } catch (error) {
-      console.error(`❌ [WEBSOCKET-SHIFTS] Failed to parse message:`, error);
-    }
-  }, [scheduleId, currentPeriod, sendMessage, processOfflineQueue, queryClient]);
+    },
+    [scheduleId, currentPeriod, sendMessage, processOfflineQueue, queryClient],
+  );
 
   /**
    * Start heartbeat to keep connection alive
@@ -235,7 +270,7 @@ export const useWebSocketShifts = (currentPeriod = 0, scheduleId = null, options
       return;
     }
 
-    setConnectionStatus('connecting');
+    setConnectionStatus("connecting");
     setIsLoading(true);
 
     try {
@@ -255,14 +290,18 @@ export const useWebSocketShifts = (currentPeriod = 0, scheduleId = null, options
 
       ws.onerror = (error) => {
         console.error(`❌ [WEBSOCKET-SHIFTS] WebSocket error:`, error);
-        setLastError('WebSocket connection error');
-        setConnectionStatus('error');
+        setLastError("WebSocket connection error");
+        setConnectionStatus("error");
       };
 
       ws.onclose = (event) => {
-        console.log(`🔌 [WEBSOCKET-SHIFTS] WebSocket closed:`, event.code, event.reason);
+        console.log(
+          `🔌 [WEBSOCKET-SHIFTS] WebSocket closed:`,
+          event.code,
+          event.reason,
+        );
         setIsConnected(false);
-        setConnectionStatus('disconnected');
+        setConnectionStatus("disconnected");
         setIsLoading(false);
 
         if (heartbeatTimerRef.current) {
@@ -284,10 +323,17 @@ export const useWebSocketShifts = (currentPeriod = 0, scheduleId = null, options
     } catch (error) {
       console.error(`❌ [WEBSOCKET-SHIFTS] Failed to create WebSocket:`, error);
       setLastError(error.message);
-      setConnectionStatus('error');
+      setConnectionStatus("error");
       setIsLoading(false);
     }
-  }, [enabled, currentPeriod, autoReconnect, getReconnectDelay, handleMessage, startHeartbeat]);
+  }, [
+    enabled,
+    currentPeriod,
+    autoReconnect,
+    getReconnectDelay,
+    handleMessage,
+    startHeartbeat,
+  ]);
 
   /**
    * Disconnect from WebSocket server
@@ -309,79 +355,97 @@ export const useWebSocketShifts = (currentPeriod = 0, scheduleId = null, options
     }
 
     setIsConnected(false);
-    setConnectionStatus('disconnected');
+    setConnectionStatus("disconnected");
   }, []);
 
   /**
    * Update a single shift cell
    */
-  const updateShift = useCallback((staffId, dateKey, shiftValue) => {
-    if (!scheduleId) {
-      console.error(`❌ [WEBSOCKET-SHIFTS] Cannot update shift: No scheduleId`);
-      return Promise.reject(new Error('No scheduleId'));
-    }
+  const updateShift = useCallback(
+    (staffId, dateKey, shiftValue) => {
+      if (!scheduleId) {
+        console.error(
+          `❌ [WEBSOCKET-SHIFTS] Cannot update shift: No scheduleId`,
+        );
+        return Promise.reject(new Error("No scheduleId"));
+      }
 
-    console.log(`📝 [WEBSOCKET-SHIFTS] Updating shift: ${staffId} → ${dateKey} = "${shiftValue}"`);
+      console.log(
+        `📝 [WEBSOCKET-SHIFTS] Updating shift: ${staffId} → ${dateKey} = "${shiftValue}"`,
+      );
 
-    // Optimistic update
-    setScheduleData((prev) => {
-      const updated = { ...prev };
-      if (!updated[staffId]) updated[staffId] = {};
-      updated[staffId][dateKey] = shiftValue;
-      return updated;
-    });
-
-    // Send to server
-    const success = sendMessage(MESSAGE_TYPES.SHIFT_UPDATE, {
-      staffId,
-      dateKey,
-      shiftValue,
-      scheduleId,
-      periodIndex: currentPeriod,
-    });
-
-    if (!success && !enableOfflineQueue) {
-      // Rollback optimistic update if not queued
+      // Optimistic update
       setScheduleData((prev) => {
         const updated = { ...prev };
-        if (updated[staffId]) {
-          delete updated[staffId][dateKey];
-        }
+        if (!updated[staffId]) updated[staffId] = {};
+        updated[staffId][dateKey] = shiftValue;
         return updated;
       });
-      return Promise.reject(new Error('Not connected and offline queue disabled'));
-    }
 
-    return Promise.resolve();
-  }, [scheduleId, currentPeriod, sendMessage, enableOfflineQueue]);
+      // Send to server
+      const success = sendMessage(MESSAGE_TYPES.SHIFT_UPDATE, {
+        staffId,
+        dateKey,
+        shiftValue,
+        scheduleId,
+        periodIndex: currentPeriod,
+      });
+
+      if (!success && !enableOfflineQueue) {
+        // Rollback optimistic update if not queued
+        setScheduleData((prev) => {
+          const updated = { ...prev };
+          if (updated[staffId]) {
+            delete updated[staffId][dateKey];
+          }
+          return updated;
+        });
+        return Promise.reject(
+          new Error("Not connected and offline queue disabled"),
+        );
+      }
+
+      return Promise.resolve();
+    },
+    [scheduleId, currentPeriod, sendMessage, enableOfflineQueue],
+  );
 
   /**
    * Bulk update entire schedule
    */
-  const bulkUpdateSchedule = useCallback((newScheduleData) => {
-    if (!scheduleId) {
-      console.error(`❌ [WEBSOCKET-SHIFTS] Cannot bulk update: No scheduleId`);
-      return Promise.reject(new Error('No scheduleId'));
-    }
+  const bulkUpdateSchedule = useCallback(
+    (newScheduleData) => {
+      if (!scheduleId) {
+        console.error(
+          `❌ [WEBSOCKET-SHIFTS] Cannot bulk update: No scheduleId`,
+        );
+        return Promise.reject(new Error("No scheduleId"));
+      }
 
-    console.log(`📦 [WEBSOCKET-SHIFTS] Bulk updating schedule: ${Object.keys(newScheduleData).length} staff members`);
+      console.log(
+        `📦 [WEBSOCKET-SHIFTS] Bulk updating schedule: ${Object.keys(newScheduleData).length} staff members`,
+      );
 
-    // Optimistic update
-    setScheduleData(newScheduleData);
+      // Optimistic update
+      setScheduleData(newScheduleData);
 
-    // Send to server
-    const success = sendMessage(MESSAGE_TYPES.SHIFT_BULK_UPDATE, {
-      scheduleId,
-      scheduleData: newScheduleData,
-      periodIndex: currentPeriod,
-    });
+      // Send to server
+      const success = sendMessage(MESSAGE_TYPES.SHIFT_BULK_UPDATE, {
+        scheduleId,
+        scheduleData: newScheduleData,
+        periodIndex: currentPeriod,
+      });
 
-    if (!success && !enableOfflineQueue) {
-      return Promise.reject(new Error('Not connected and offline queue disabled'));
-    }
+      if (!success && !enableOfflineQueue) {
+        return Promise.reject(
+          new Error("Not connected and offline queue disabled"),
+        );
+      }
 
-    return Promise.resolve();
-  }, [scheduleId, currentPeriod, sendMessage, enableOfflineQueue]);
+      return Promise.resolve();
+    },
+    [scheduleId, currentPeriod, sendMessage, enableOfflineQueue],
+  );
 
   /**
    * Request schedule sync from server

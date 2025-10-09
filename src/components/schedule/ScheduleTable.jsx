@@ -717,10 +717,19 @@ const ScheduleTable = ({
       >
         <table
           className="shift-table w-full text-sm relative border-collapse"
-          style={{ minWidth: `${40 + (orderedStaffMembers?.length || 0) * 40}px` }}
+          style={{
+            minWidth: `${40 + (orderedStaffMembers?.length || 0) * 40}px`,
+          }}
         >
           {/* Sticky Header Row: Staff Names as Column Headers */}
-          <TableHeader style={{ position: "sticky", top: 0, zIndex: 500, backgroundColor: "hsl(var(--background))" }}>
+          <TableHeader
+            style={{
+              position: "sticky",
+              top: 0,
+              zIndex: 500,
+              backgroundColor: "hsl(var(--background))",
+            }}
+          >
             <TableRow>
               <TableHead
                 className="bg-gray-700 text-white min-w-[40px] border-r-2 border-border font-bold hover:bg-gray-600 sticky-header-cell"
@@ -991,37 +1000,62 @@ const ScheduleTable = ({
                           {showDropdown === cellKey && isActiveForDate && (
                             <div
                               className="shift-dropdown absolute bg-white border border-gray-300 rounded-lg shadow-lg z-50 min-w-[120px]"
-                              style={getDropdownPosition(staffIndex, dateIndex, orderedStaffMembers?.length || 0, dateRange?.length || 0)}
+                              style={getDropdownPosition(
+                                staffIndex,
+                                dateIndex,
+                                orderedStaffMembers?.length || 0,
+                                dateRange?.length || 0,
+                              )}
                               onClick={(e) => e.stopPropagation()}
                             >
                               <div className="py-1">
                                 {/* Normal/Blank Shift Option */}
                                 <button
-                                  onClick={() => handleShiftSelect(staff.id, dateKey, 'normal')}
+                                  onClick={() =>
+                                    handleShiftSelect(
+                                      staff.id,
+                                      dateKey,
+                                      "normal",
+                                    )
+                                  }
                                   className="w-full text-left px-3 py-2 text-base hover:bg-gray-50 border-b border-gray-100 flex items-center gap-2"
                                 >
-                                  <span className="text-gray-600 font-medium">（空白）</span>
-                                  <span className="text-gray-500">Normal Shift</span>
+                                  <span className="text-gray-600 font-medium">
+                                    （空白）
+                                  </span>
+                                  <span className="text-gray-500">
+                                    Normal Shift
+                                  </span>
                                 </button>
 
                                 {/* Other Shift Options */}
-                                {getAvailableShifts(staff.status).filter(key => key !== 'normal').map(shiftKey => {
-                                  const shift = shiftSymbols[shiftKey];
-                                  return (
-                                    <button
-                                      key={shiftKey}
-                                      onClick={() => handleShiftSelect(staff.id, dateKey, shiftKey)}
-                                      className="w-full text-left px-3 py-2 text-base hover:bg-gray-50 flex items-center gap-2"
-                                    >
-                                      <span className={`font-bold ${shift.color}`}>
-                                        {shift.symbol}
-                                      </span>
-                                      <span className="text-gray-700">
-                                        {shift.label}
-                                      </span>
-                                    </button>
-                                  );
-                                })}
+                                {getAvailableShifts(staff.status)
+                                  .filter((key) => key !== "normal")
+                                  .map((shiftKey) => {
+                                    const shift = shiftSymbols[shiftKey];
+                                    return (
+                                      <button
+                                        key={shiftKey}
+                                        onClick={() =>
+                                          handleShiftSelect(
+                                            staff.id,
+                                            dateKey,
+                                            shiftKey,
+                                          )
+                                        }
+                                        className="w-full text-left px-3 py-2 text-base hover:bg-gray-50 flex items-center gap-2"
+                                      >
+                                        <span
+                                          className={`font-bold ${shift.color}`}
+                                        >
+                                          {shift.symbol}
+                                        </span>
+                                        <span className="text-gray-700">
+                                          {shift.label}
+                                        </span>
+                                      </button>
+                                    );
+                                  })}
 
                                 {/* Custom Text Input */}
                                 <div className="border-t border-gray-100 p-2">
@@ -1029,11 +1063,16 @@ const ScheduleTable = ({
                                     <Input
                                       type="text"
                                       value={customInputText}
-                                      onChange={(e) => setCustomInputText(e.target.value)}
+                                      onChange={(e) =>
+                                        setCustomInputText(e.target.value)
+                                      }
                                       onKeyDown={(e) => {
-                                        if (e.key === 'Enter') {
-                                          handleCustomTextSave(staff.id, dateKey);
-                                        } else if (e.key === 'Escape') {
+                                        if (e.key === "Enter") {
+                                          handleCustomTextSave(
+                                            staff.id,
+                                            dateKey,
+                                          );
+                                        } else if (e.key === "Escape") {
                                           handleCustomTextCancel();
                                         }
                                       }}
@@ -1049,7 +1088,12 @@ const ScheduleTable = ({
                                         <X size={16} />
                                       </Button>
                                       <Button
-                                        onClick={() => handleCustomTextSave(staff.id, dateKey)}
+                                        onClick={() =>
+                                          handleCustomTextSave(
+                                            staff.id,
+                                            dateKey,
+                                          )
+                                        }
                                         className="flex-1 px-4 py-2 text-sm text-white bg-green-600 hover:bg-green-700 flex items-center justify-center transition-colors duration-200"
                                         title="保存"
                                       >

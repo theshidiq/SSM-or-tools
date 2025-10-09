@@ -111,9 +111,7 @@ const QUALITY_PRESETS = [
   },
 ];
 
-const MLParametersTab = ({
-  validationErrors = {},
-}) => {
+const MLParametersTab = ({ validationErrors = {} }) => {
   // Phase 4.1: Get settings from Context instead of props
   const { settings, updateSettings } = useSettings();
 

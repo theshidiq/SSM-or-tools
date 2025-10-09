@@ -57,7 +57,6 @@ const PRESET_COLORS = [
   "#064E3B",
 ];
 
-
 const StaffGroupsTab = ({
   staffMembers = [],
   validationErrors = {},
@@ -72,6 +71,9 @@ const StaffGroupsTab = ({
   const [originalGroupData, setOriginalGroupData] = useState(null);
   const [draggedStaff, setDraggedStaff] = useState(null);
   const [dragOverGroup, setDragOverGroup] = useState(null);
+
+  // Local state for group name/description while editing (for instant UI feedback)
+  const [localGroupEdits, setLocalGroupEdits] = useState({});
 
   // Phase 2: Validation state
   const [validationConflicts, setValidationConflicts] = useState([]);
@@ -95,19 +97,18 @@ const StaffGroupsTab = ({
 
   // Fix: Memoize derived arrays to prevent unnecessary re-renders
   // Transform WebSocket multi-table format to localStorage-compatible format
-  const staffGroups = useMemo(
-    () => {
-      const groups = settings?.staffGroups || [];
-      // Ensure all groups have a members array (WebSocket multi-table backend compatibility)
-      return groups.map(group => ({
+  const staffGroups = useMemo(() => {
+    const groups = settings?.staffGroups || [];
+    // ✅ FIX: Filter out soft-deleted groups and ensure members array exists
+    return groups
+      .filter((group) => group.is_active !== false && group.isActive !== false)
+      .map((group) => ({
         ...group,
         // Extract members from groupConfig if stored there (multi-table backend)
         // Otherwise use members directly, or default to empty array
-        members: group.members || group.groupConfig?.members || []
+        members: group.members || group.groupConfig?.members || [],
       }));
-    },
-    [settings?.staffGroups],
-  );
+  }, [settings?.staffGroups]);
   const conflictRules = useMemo(
     () => settings?.conflictRules || [],
     [settings?.conflictRules],
@@ -190,7 +191,9 @@ const StaffGroupsTab = ({
     const missingRules = [];
     staffGroups.forEach((group) => {
       const ruleId = `intra-${group.id}`;
-      const existingRule = currentConflictRules.find((rule) => rule.id === ruleId);
+      const existingRule = currentConflictRules.find(
+        (rule) => rule.id === ruleId,
+      );
 
       if (!existingRule) {
         missingRules.push({
@@ -212,8 +215,12 @@ const StaffGroupsTab = ({
       const updatedRules = [...currentConflictRules, ...missingRules];
 
       // Double-check that the rules are actually different before updating
-      const currentRulesString = JSON.stringify(currentConflictRules.map(r => r.id).sort());
-      const updatedRulesString = JSON.stringify(updatedRules.map(r => r.id).sort());
+      const currentRulesString = JSON.stringify(
+        currentConflictRules.map((r) => r.id).sort(),
+      );
+      const updatedRulesString = JSON.stringify(
+        updatedRules.map((r) => r.id).sort(),
+      );
 
       if (currentRulesString !== updatedRulesString) {
         // Use ref to avoid dependency on onSettingsChange
@@ -230,45 +237,52 @@ const StaffGroupsTab = ({
 
   const updateStaffGroups = useCallback(
     async (newGroups, skipValidation = false) => {
-      console.log('💫 [updateStaffGroups] START:', {
+      console.log("💫 [updateStaffGroups] START:", {
         newGroupsCount: newGroups.length,
         skipValidation,
         hasCurrentScheduleId: !!currentScheduleId,
-        timestamp: new Date().toISOString()
+        timestamp: new Date().toISOString(),
       });
 
       try {
         // Phase 2: Validate against current schedule before saving (unless skipped)
         if (!skipValidation && currentScheduleId) {
-          console.log('💫 [updateStaffGroups] Starting validation...');
+          console.log("💫 [updateStaffGroups] Starting validation...");
           setIsValidating(true);
           try {
             const conflicts = await validateStaffGroups(newGroups);
-            console.log('💫 [updateStaffGroups] Validation complete:', {
-              conflictsFound: conflicts.length
+            console.log("💫 [updateStaffGroups] Validation complete:", {
+              conflictsFound: conflicts.length,
             });
 
             if (conflicts.length > 0) {
               // Show warning toast with conflict count
               toast.warning(
-                `Warning: ${conflicts.length} schedule conflict${conflicts.length !== 1 ? 's' : ''} detected`,
+                `Warning: ${conflicts.length} schedule conflict${conflicts.length !== 1 ? "s" : ""} detected`,
                 {
-                  description: 'Some group members are working on the same dates',
+                  description:
+                    "Some group members are working on the same dates",
                   action: {
-                    label: 'View Conflicts',
+                    label: "View Conflicts",
                     onClick: () => {
                       setValidationConflicts(conflicts);
                       setShowConflictsModal(true);
-                    }
+                    },
                   },
-                  duration: 6000
-                }
+                  duration: 6000,
+                },
               );
 
-              console.log('⚠️ Staff groups validation detected conflicts:', conflicts);
+              console.log(
+                "⚠️ Staff groups validation detected conflicts:",
+                conflicts,
+              );
             }
           } catch (validationError) {
-            console.error('❌ Staff groups validation failed:', validationError);
+            console.error(
+              "❌ Staff groups validation failed:",
+              validationError,
+            );
             // Continue with save even if validation fails
           } finally {
             setIsValidating(false);
@@ -278,20 +292,27 @@ const StaffGroupsTab = ({
         // Use ref to get current settings to avoid infinite loop
         const currentSettings = settingsRef.current;
 
-        console.log('💫 [updateStaffGroups] Creating updated settings object...');
+        console.log(
+          "💫 [updateStaffGroups] Creating updated settings object...",
+        );
         // Create a completely new settings object to ensure proper state update
         const updatedSettings = {
           ...currentSettings,
           staffGroups: [...newGroups], // Create a new array reference
         };
 
-        console.log('💫 [updateStaffGroups] Calling updateSettings via ref...');
+        console.log("💫 [updateStaffGroups] Calling updateSettings via ref...");
         // Use ref to avoid dependency on onSettingsChange
         onSettingsChangeRef.current(updatedSettings);
-        console.log('💫 [updateStaffGroups] updateSettings called - this will trigger re-render');
-        console.log('💫 [updateStaffGroups] END');
+        console.log(
+          "💫 [updateStaffGroups] updateSettings called - this will trigger re-render",
+        );
+        console.log("💫 [updateStaffGroups] END");
       } catch (error) {
-        console.error("❌ [updateStaffGroups] Error updating staff groups:", error);
+        console.error(
+          "❌ [updateStaffGroups] Error updating staff groups:",
+          error,
+        );
         throw error;
       }
     },
@@ -305,6 +326,13 @@ const StaffGroupsTab = ({
         group.id === editingGroup ? originalGroupData : group,
       );
       updateStaffGroups(updatedGroups);
+
+      // Clear local edits for this group
+      setLocalGroupEdits((prev) => {
+        const newEdits = { ...prev };
+        delete newEdits[editingGroup];
+        return newEdits;
+      });
     }
     setEditingGroup(null);
     setOriginalGroupData(null);
@@ -333,6 +361,28 @@ const StaffGroupsTab = ({
 
   // Save changes and exit edit mode
   const handleSaveEdit = () => {
+    // Clear any pending debounce timers and send update immediately
+    if (editingGroup && updateGroupDebounceRef.current[editingGroup]) {
+      clearTimeout(updateGroupDebounceRef.current[editingGroup]);
+      delete updateGroupDebounceRef.current[editingGroup];
+
+      // Get the final local edits and send to server
+      const localEdits = localGroupEdits[editingGroup];
+      if (localEdits) {
+        const updatedGroups = staffGroups.map((group) =>
+          group.id === editingGroup ? { ...group, ...localEdits } : group,
+        );
+        updateStaffGroups(updatedGroups);
+      }
+    }
+
+    // Clear local edits for this group
+    setLocalGroupEdits((prev) => {
+      const newEdits = { ...prev };
+      delete newEdits[editingGroup];
+      return newEdits;
+    });
+
     setEditingGroup(null);
     setOriginalGroupData(null);
   };
@@ -358,7 +408,7 @@ const StaffGroupsTab = ({
     let newGroupName = `New Group ${groupNumber}`;
 
     // Keep incrementing until we find a unique name
-    while (staffGroups.some(group => group.name === newGroupName)) {
+    while (staffGroups.some((group) => group.name === newGroupName)) {
       groupNumber++;
       newGroupName = `New Group ${groupNumber}`;
     }
@@ -377,84 +427,171 @@ const StaffGroupsTab = ({
     // Note: The useEffect will handle adding the rule once the group is in state
   };
 
-  const updateGroup = (groupId, updates) => {
-    const updatedGroups = staffGroups.map((group) =>
-      group.id === groupId ? { ...group, ...updates } : group,
-    );
-    updateStaffGroups(updatedGroups);
-  };
+  // Debounce ref for group updates to prevent rapid-fire WebSocket messages
+  const updateGroupDebounceRef = useRef({});
+
+  const updateGroup = useCallback(
+    (groupId, updates) => {
+      console.log("✏️ [updateGroup] Called:", {
+        groupId,
+        updates,
+        timestamp: new Date().toISOString(),
+      });
+
+      // Update local state immediately for responsive UI
+      setLocalGroupEdits((prev) => ({
+        ...prev,
+        [groupId]: { ...(prev[groupId] || {}), ...updates },
+      }));
+
+      // Clear existing debounce timer for this group
+      if (updateGroupDebounceRef.current[groupId]) {
+        console.log(
+          "✏️ [updateGroup] Clearing existing debounce timer for group:",
+          groupId,
+        );
+        clearTimeout(updateGroupDebounceRef.current[groupId]);
+      }
+
+      console.log("✏️ [updateGroup] Starting 500ms debounce timer...");
+
+      // Debounce the server update (500ms delay)
+      updateGroupDebounceRef.current[groupId] = setTimeout(() => {
+        console.log(
+          "⏱️ [updateGroup] Debounce timer fired - sending update to server:",
+          {
+            groupId,
+            updates,
+            timestamp: new Date().toISOString(),
+          },
+        );
+
+        // Create updated groups array using staffGroups (not localGroupEdits)
+        const updatedGroups = staffGroups.map((group) =>
+          group.id === groupId ? { ...group, ...updates } : group,
+        );
+
+        // Send the update to server after user stops typing
+        // This will trigger updateSettings() and the WebSocket send
+        updateStaffGroups(updatedGroups);
+
+        // Clear local edits for this group after sending to server
+        setLocalGroupEdits((prev) => {
+          const newEdits = { ...prev };
+          delete newEdits[groupId];
+          return newEdits;
+        });
+
+        // Clean up timer reference
+        delete updateGroupDebounceRef.current[groupId];
+      }, 500); // 500ms debounce delay
+    },
+    [staffGroups, updateStaffGroups],
+  );
+
+  // Cleanup debounce timers on unmount
+  useEffect(() => {
+    return () => {
+      Object.values(updateGroupDebounceRef.current).forEach((timer) => {
+        clearTimeout(timer);
+      });
+    };
+  }, []);
 
   // Delete group logic - called when user confirms deletion
-  const performDeleteGroup = useCallback(async (groupId) => {
-    console.log('🗑️ [StaffGroupsTab] performDeleteGroup called with groupId:', groupId);
-
-    try {
-      // Filter out the group to delete
-      const updatedGroups = staffGroups.filter((group) => group.id !== groupId);
-
-      // Remove related intra-group conflict rules
-      const updatedRules = conflictRules.filter(
-        (rule) =>
-          !(rule.type === "intra_group_conflict" && rule.groupId === groupId),
+  const performDeleteGroup = useCallback(
+    async (groupId) => {
+      console.log(
+        "🗑️ [StaffGroupsTab] performDeleteGroup called with groupId:",
+        groupId,
       );
 
-      // Remove related backup assignments using hook
-      const relatedBackupAssignments = backupAssignments.filter(
-        (assignment) => assignment.groupId === groupId,
-      );
+      try {
+        // Filter out the group to delete
+        const updatedGroups = staffGroups.filter(
+          (group) => group.id !== groupId,
+        );
 
-      // Remove each backup assignment through the hook for proper database sync
-      for (const assignment of relatedBackupAssignments) {
-        await hookRemoveBackupAssignment(assignment.id);
+        // Remove related intra-group conflict rules
+        const updatedRules = conflictRules.filter(
+          (rule) =>
+            !(rule.type === "intra_group_conflict" && rule.groupId === groupId),
+        );
+
+        // Remove related backup assignments using hook
+        const relatedBackupAssignments = backupAssignments.filter(
+          (assignment) => assignment.groupId === groupId,
+        );
+
+        // Remove each backup assignment through the hook for proper database sync
+        for (const assignment of relatedBackupAssignments) {
+          await hookRemoveBackupAssignment(assignment.id);
+        }
+
+        // Update settings in a single atomic operation (backup assignments handled by hook)
+        const updatedSettings = {
+          ...settings,
+          staffGroups: [...updatedGroups],
+          conflictRules: [...updatedRules],
+        };
+
+        // Update settings (this will trigger change detection)
+        console.log("🗑️ [StaffGroupsTab] Calling updateSettings with:", {
+          oldGroupsCount: settings.staffGroups?.length,
+          newGroupsCount: updatedSettings.staffGroups?.length,
+          deletedGroupId: groupId,
+        });
+        updateSettings(updatedSettings);
+        console.log("🗑️ [StaffGroupsTab] updateSettings called successfully");
+      } catch (error) {
+        console.error("🗑️ [StaffGroupsTab] Error deleting group:", error);
+        throw error;
       }
-
-      // Update settings in a single atomic operation (backup assignments handled by hook)
-      const updatedSettings = {
-        ...settings,
-        staffGroups: [...updatedGroups],
-        conflictRules: [...updatedRules],
-      };
-
-      // Update settings (this will trigger change detection)
-      console.log('🗑️ [StaffGroupsTab] Calling updateSettings with:', {
-        oldGroupsCount: settings.staffGroups?.length,
-        newGroupsCount: updatedSettings.staffGroups?.length,
-        deletedGroupId: groupId
-      });
-      updateSettings(updatedSettings);
-      console.log('🗑️ [StaffGroupsTab] updateSettings called successfully');
-    } catch (error) {
-      console.error("🗑️ [StaffGroupsTab] Error deleting group:", error);
-      throw error;
-    }
-  }, [staffGroups, conflictRules, backupAssignments, settings, updateSettings, hookRemoveBackupAssignment]);
+    },
+    [
+      staffGroups,
+      conflictRules,
+      backupAssignments,
+      settings,
+      updateSettings,
+      hookRemoveBackupAssignment,
+    ],
+  );
 
   // Delete group - trigger confirmation modal via parent
-  const deleteGroup = useCallback((groupId) => {
-    console.log('🗑️ [StaffGroupsTab] deleteGroup called with groupId:', groupId);
-    const group = staffGroups.find((g) => g.id === groupId);
-    console.log('🗑️ [StaffGroupsTab] Found group:', group);
+  const deleteGroup = useCallback(
+    (groupId) => {
+      console.log(
+        "🗑️ [StaffGroupsTab] deleteGroup called with groupId:",
+        groupId,
+      );
+      const group = staffGroups.find((g) => g.id === groupId);
+      console.log("🗑️ [StaffGroupsTab] Found group:", group);
 
-    if (group && onDeleteGroup) {
-      console.log('🗑️ [StaffGroupsTab] Calling onDeleteGroup callback');
-      // Pass the group info and delete handler to parent
-      onDeleteGroup(groupId, group.name, () => performDeleteGroup(groupId));
-    } else {
-      if (!group) {
-        console.error('🗑️ [StaffGroupsTab] Group not found for ID:', groupId);
+      if (group && onDeleteGroup) {
+        console.log("🗑️ [StaffGroupsTab] Calling onDeleteGroup callback");
+        // Pass the group info and delete handler to parent
+        onDeleteGroup(groupId, group.name, () => performDeleteGroup(groupId));
+      } else {
+        if (!group) {
+          console.error("🗑️ [StaffGroupsTab] Group not found for ID:", groupId);
+        }
+        if (!onDeleteGroup) {
+          console.error(
+            "🗑️ [StaffGroupsTab] onDeleteGroup callback not provided",
+          );
+        }
       }
-      if (!onDeleteGroup) {
-        console.error('🗑️ [StaffGroupsTab] onDeleteGroup callback not provided');
-      }
-    }
-  }, [staffGroups, onDeleteGroup, performDeleteGroup]);
+    },
+    [staffGroups, onDeleteGroup, performDeleteGroup],
+  );
 
   const addStaffToGroup = (groupId, staffId) => {
-    console.log('⭐ [addStaffToGroup] START:', {
+    console.log("⭐ [addStaffToGroup] START:", {
       groupId,
       staffId,
       currentGroupsCount: staffGroups.length,
-      timestamp: new Date().toISOString()
+      timestamp: new Date().toISOString(),
     });
 
     // Allow staff to be in multiple groups - just add to the specified group
@@ -463,18 +600,23 @@ const StaffGroupsTab = ({
       members:
         group.id === groupId
           ? [...new Set([...(group.members || []), staffId])] // Use Set to avoid duplicates, handle undefined members
-          : (group.members || []),
+          : group.members || [],
     }));
 
-    console.log('⭐ [addStaffToGroup] Updated groups created, calling updateStaffGroups...');
+    console.log(
+      "⭐ [addStaffToGroup] Updated groups created, calling updateStaffGroups...",
+    );
     updateStaffGroups(updatedGroups);
-    console.log('⭐ [addStaffToGroup] END - updateStaffGroups called');
+    console.log("⭐ [addStaffToGroup] END - updateStaffGroups called");
   };
 
   const removeStaffFromGroup = (groupId, staffId) => {
     const updatedGroups = staffGroups.map((group) =>
       group.id === groupId
-        ? { ...group, members: (group.members || []).filter((id) => id !== staffId) }
+        ? {
+            ...group,
+            members: (group.members || []).filter((id) => id !== staffId),
+          }
         : group,
     );
     updateStaffGroups(updatedGroups);
@@ -562,13 +704,16 @@ const StaffGroupsTab = ({
 
   // Get available staff for a specific group (active staff not already in that group)
   // FIXED: Wrapped in useCallback to maintain stable reference across renders
-  const getAvailableStaffForGroup = useCallback((groupId) => {
-    const activeStaff = getActiveStaffMembers();
-    const group = staffGroups.find((g) => g.id === groupId);
-    const groupMemberIds = new Set(group?.members || []);
+  const getAvailableStaffForGroup = useCallback(
+    (groupId) => {
+      const activeStaff = getActiveStaffMembers();
+      const group = staffGroups.find((g) => g.id === groupId);
+      const groupMemberIds = new Set(group?.members || []);
 
-    return activeStaff.filter((staff) => !groupMemberIds.has(staff.id));
-  }, [staffMembers, staffGroups]); // Depend on staffMembers and staffGroups
+      return activeStaff.filter((staff) => !groupMemberIds.has(staff.id));
+    },
+    [staffMembers, staffGroups],
+  ); // Depend on staffMembers and staffGroups
 
   // Update drag start to only work on active staff
   const handleDragStart = (e, staffId) => {
@@ -818,11 +963,25 @@ const StaffGroupsTab = ({
   const renderGroupCard = (group) => {
     const isEditing = editingGroup === group.id;
     // Defensive check: handle undefined/null members array (WebSocket multi-table backend compatibility)
-    const groupMembers = (group.members || []).map(getStaffById).filter(Boolean);
+    const groupMembers = (group.members || [])
+      .map(getStaffById)
+      .filter(Boolean);
 
+    // Use local edits if available, otherwise use server state
+    const localEdits = localGroupEdits[group.id] || {};
+    const displayName =
+      localEdits.name !== undefined ? localEdits.name : group.name;
+    const displayDescription =
+      localEdits.description !== undefined
+        ? localEdits.description
+        : group.description;
+
+    // ✅ FIX: Use stable key that doesn't change during edits
+    // This prevents React from reordering DOM elements when group names change
     return (
       <div
-        key={group.id}
+        key={`group-${group.id}`}
+        data-group-id={group.id}
         className={`bg-white rounded-xl border-2 p-4 transition-all duration-200 ${
           dragOverGroup === group.id
             ? "border-blue-400 shadow-lg scale-105"
@@ -839,23 +998,23 @@ const StaffGroupsTab = ({
               className="w-4 h-4 rounded-full border-2 border-white shadow-sm flex-shrink-0"
               style={{ backgroundColor: group.color }}
             />
-            {isEditing ? (
-              <div className="flex-1 min-w-0">
+            <div className="flex-1 min-w-0">
+              {isEditing ? (
                 <input
                   type="text"
-                  value={group.name}
+                  value={displayName}
                   onChange={(e) =>
                     updateGroup(group.id, { name: e.target.value })
                   }
-                  className="font-semibold text-lg bg-transparent border-b-2 border-blue-500 focus:outline-none w-full mr-2"
+                  className="font-semibold text-lg bg-transparent border-b-2 border-blue-500 focus:outline-none w-full"
                   autoFocus
                 />
-              </div>
-            ) : (
-              <h3 className="font-semibold text-lg text-gray-800 truncate">
-                {group.name}
-              </h3>
-            )}
+              ) : (
+                <h3 className="font-semibold text-lg text-gray-800 truncate">
+                  {displayName}
+                </h3>
+              )}
+            </div>
           </div>
 
           <div className="flex items-center gap-2 flex-shrink-0">
@@ -902,7 +1061,7 @@ const StaffGroupsTab = ({
           <div className="mb-3">
             <input
               type="text"
-              value={group.description}
+              value={displayDescription}
               onChange={(e) =>
                 updateGroup(group.id, { description: e.target.value })
               }
@@ -912,8 +1071,8 @@ const StaffGroupsTab = ({
           </div>
         )}
 
-        {!isEditing && group.description && (
-          <p className="text-sm text-gray-600 mb-4">{group.description}</p>
+        {!isEditing && displayDescription && (
+          <p className="text-sm text-gray-600 mb-4">{displayDescription}</p>
         )}
 
         {/* Staff Members */}
@@ -926,42 +1085,57 @@ const StaffGroupsTab = ({
             <select
               defaultValue=""
               onChange={(e) => {
-                console.log('🔵 [Dropdown onChange] Event fired:', {
+                console.log("🔵 [Dropdown onChange] Event fired:", {
                   value: e.target.value,
                   groupId: group.id,
                   groupName: group.name,
-                  timestamp: new Date().toISOString()
+                  timestamp: new Date().toISOString(),
                 });
 
                 const selectedStaffId = e.target.value;
-                console.log('🔵 [Dropdown onChange] Selected staff ID:', selectedStaffId);
+                console.log(
+                  "🔵 [Dropdown onChange] Selected staff ID:",
+                  selectedStaffId,
+                );
 
                 if (selectedStaffId) {
-                  console.log('🔵 [Dropdown onChange] Calling addStaffToGroup...');
+                  console.log(
+                    "🔵 [Dropdown onChange] Calling addStaffToGroup...",
+                  );
                   try {
                     addStaffToGroup(group.id, selectedStaffId);
-                    console.log('🔵 [Dropdown onChange] addStaffToGroup called successfully');
+                    console.log(
+                      "🔵 [Dropdown onChange] addStaffToGroup called successfully",
+                    );
 
                     // Success toast
-                    const staff = staffMembers.find(s => s.id === selectedStaffId);
-                    console.log('🔵 [Dropdown onChange] Found staff:', staff);
+                    const staff = staffMembers.find(
+                      (s) => s.id === selectedStaffId,
+                    );
+                    console.log("🔵 [Dropdown onChange] Found staff:", staff);
 
                     if (staff) {
                       toast.success(`Added ${staff.name} to ${group.name}`);
-                      console.log('🔵 [Dropdown onChange] Toast displayed');
+                      console.log("🔵 [Dropdown onChange] Toast displayed");
                     } else {
-                      console.warn('⚠️ [Dropdown onChange] Staff not found in staffMembers');
+                      console.warn(
+                        "⚠️ [Dropdown onChange] Staff not found in staffMembers",
+                      );
                     }
 
                     // Reset dropdown to placeholder
                     e.target.value = "";
-                    console.log('🔵 [Dropdown onChange] Dropdown reset to placeholder');
+                    console.log(
+                      "🔵 [Dropdown onChange] Dropdown reset to placeholder",
+                    );
                   } catch (error) {
-                    console.error('❌ [Dropdown onChange] Error:', error);
+                    console.error("❌ [Dropdown onChange] Error:", error);
                     toast.error(`Failed to add staff: ${error.message}`);
                   }
                 } else {
-                  console.warn('⚠️ [Dropdown onChange] selectedStaffId is empty');
+                  console.warn(
+                    "⚠️ [Dropdown onChange] selectedStaffId is empty",
+                  );
                 }
               }}
               className="text-xs px-2 py-1.5 border border-gray-300 rounded-lg text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer transition-colors"
@@ -971,7 +1145,11 @@ const StaffGroupsTab = ({
                 ➕ Add staff...
               </option>
               {getAvailableStaffForGroup(group.id).map((staff) => (
-                <option key={staff.id} value={staff.id} className="text-gray-900">
+                <option
+                  key={staff.id}
+                  value={staff.id}
+                  className="text-gray-900"
+                >
                   {staff.name}
                 </option>
               ))}
@@ -1055,7 +1233,7 @@ const StaffGroupsTab = ({
       {/* Staff Groups */}
       {staffGroups.length > 0 ? (
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6">
-          {staffGroups.map(renderGroupCard)}
+          {staffGroups.map((group) => renderGroupCard(group))}
         </div>
       ) : (
         <div className="text-center py-12">

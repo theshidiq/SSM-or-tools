@@ -1,8 +1,8 @@
-import React, { useMemo, useCallback } from 'react';
-import ReactDOM from 'react-dom';
-import { X, AlertTriangle, Calendar, Users, TrendingUp } from 'lucide-react';
-import { format, parseISO } from 'date-fns';
-import { ja } from 'date-fns/locale';
+import React, { useMemo, useCallback } from "react";
+import ReactDOM from "react-dom";
+import { X, AlertTriangle, Calendar, Users, TrendingUp } from "lucide-react";
+import { format, parseISO } from "date-fns";
+import { ja } from "date-fns/locale";
 
 /**
  * ConflictsModal Component
@@ -24,21 +24,24 @@ const ConflictsModal = ({
   isOpen,
   onClose,
   conflicts = [],
-  type = 'staff_groups',
+  type = "staff_groups",
   staffMembers = [],
-  title = 'Schedule Conflicts'
+  title = "Schedule Conflicts",
 }) => {
   // Helper: Get staff name by ID
-  const getStaffName = useCallback((staffId) => {
-    const staff = staffMembers.find(s => s.id === staffId);
-    return staff?.name || 'Unknown Staff';
-  }, [staffMembers]);
+  const getStaffName = useCallback(
+    (staffId) => {
+      const staff = staffMembers.find((s) => s.id === staffId);
+      return staff?.name || "Unknown Staff";
+    },
+    [staffMembers],
+  );
 
   // Helper: Format date for display
   const formatDate = useCallback((dateKey) => {
     try {
       const date = parseISO(dateKey);
-      return format(date, 'M月d日 (E)', { locale: ja });
+      return format(date, "M月d日 (E)", { locale: ja });
     } catch (error) {
       return dateKey;
     }
@@ -48,7 +51,7 @@ const ConflictsModal = ({
   const groupedConflicts = useMemo(() => {
     const grouped = {};
 
-    conflicts.forEach(conflict => {
+    conflicts.forEach((conflict) => {
       const dateKey = conflict.date;
       if (!grouped[dateKey]) {
         grouped[dateKey] = [];
@@ -83,10 +86,13 @@ const ConflictsModal = ({
               Group: {groupName}
             </h4>
             <p className="text-sm text-red-800 mb-3">
-              Multiple group members are scheduled to work on the same day, violating intra-group conflict rules.
+              Multiple group members are scheduled to work on the same day,
+              violating intra-group conflict rules.
             </p>
             <div className="space-y-2">
-              <p className="text-sm font-medium text-red-900">Working Members:</p>
+              <p className="text-sm font-medium text-red-900">
+                Working Members:
+              </p>
               <div className="grid grid-cols-1 gap-2">
                 {shifts?.map((shiftInfo, idx) => (
                   <div
@@ -98,7 +104,11 @@ const ConflictsModal = ({
                     </span>
                     <span className="text-gray-500">→</span>
                     <span className="px-2 py-1 bg-blue-100 text-blue-800 rounded text-sm font-medium">
-                      {shiftInfo.shift === '△' ? '早番' : shiftInfo.shift === '○' ? '通常勤務' : shiftInfo.shift}
+                      {shiftInfo.shift === "△"
+                        ? "早番"
+                        : shiftInfo.shift === "○"
+                          ? "通常勤務"
+                          : shiftInfo.shift}
                     </span>
                   </div>
                 ))}
@@ -118,14 +128,19 @@ const ConflictsModal = ({
       maxCount,
       actualCount,
       violatingStaff,
-      dayOfWeek
+      dayOfWeek,
     } = violation;
 
-    const shiftTypeLabel = shiftType === '△' ? '早番' :
-                          shiftType === '○' ? '通常勤務' :
-                          shiftType === 'early' ? '早番' :
-                          shiftType === 'late' ? '通常勤務' :
-                          'Any';
+    const shiftTypeLabel =
+      shiftType === "△"
+        ? "早番"
+        : shiftType === "○"
+          ? "通常勤務"
+          : shiftType === "early"
+            ? "早番"
+            : shiftType === "late"
+              ? "通常勤務"
+              : "Any";
 
     return (
       <div className="bg-orange-50 border border-orange-200 rounded-lg p-4">
@@ -134,25 +149,31 @@ const ConflictsModal = ({
             <TrendingUp size={20} className="text-orange-600" />
           </div>
           <div className="flex-1">
-            <h4 className="font-medium text-orange-900 mb-2">
-              {limitName}
-            </h4>
+            <h4 className="font-medium text-orange-900 mb-2">{limitName}</h4>
             <div className="space-y-2 mb-3">
               <div className="flex items-center gap-4 text-sm">
                 <div className="flex items-center gap-2">
                   <span className="text-orange-800">Shift Type:</span>
-                  <span className="font-medium text-orange-900">{shiftTypeLabel}</span>
+                  <span className="font-medium text-orange-900">
+                    {shiftTypeLabel}
+                  </span>
                 </div>
                 <div className="flex items-center gap-2">
                   <span className="text-orange-800">Day:</span>
-                  <span className="font-medium text-orange-900">{dayOfWeek}</span>
+                  <span className="font-medium text-orange-900">
+                    {dayOfWeek}
+                  </span>
                 </div>
               </div>
               <div className="flex items-center gap-2 text-sm">
                 <span className="text-orange-800">Limit:</span>
-                <span className="font-medium text-orange-900">{maxCount} shifts</span>
+                <span className="font-medium text-orange-900">
+                  {maxCount} shifts
+                </span>
                 <span className="text-orange-500">→</span>
-                <span className="font-medium text-red-600">Actual: {actualCount} shifts</span>
+                <span className="font-medium text-red-600">
+                  Actual: {actualCount} shifts
+                </span>
                 <span className="px-2 py-0.5 bg-red-100 text-red-700 rounded text-xs font-medium">
                   +{actualCount - maxCount} over limit
                 </span>
@@ -212,7 +233,8 @@ const ConflictsModal = ({
             <div>
               <h3 className="text-xl font-semibold text-gray-900">{title}</h3>
               <p className="text-sm text-gray-600">
-                {conflicts.length} conflict{conflicts.length !== 1 ? 's' : ''} detected in current schedule
+                {conflicts.length} conflict{conflicts.length !== 1 ? "s" : ""}{" "}
+                detected in current schedule
               </p>
             </div>
           </div>
@@ -233,7 +255,7 @@ const ConflictsModal = ({
             </div>
           ) : (
             <div className="space-y-6">
-              {sortedDates.map(dateKey => (
+              {sortedDates.map((dateKey) => (
                 <div key={dateKey} className="space-y-3">
                   {/* Date Header */}
                   <div className="flex items-center gap-2 pb-2 border-b border-gray-200">
@@ -242,7 +264,8 @@ const ConflictsModal = ({
                       {formatDate(dateKey)}
                     </h4>
                     <span className="text-sm text-gray-500">
-                      ({groupedConflicts[dateKey].length} conflict{groupedConflicts[dateKey].length !== 1 ? 's' : ''})
+                      ({groupedConflicts[dateKey].length} conflict
+                      {groupedConflicts[dateKey].length !== 1 ? "s" : ""})
                     </span>
                   </div>
 
@@ -250,8 +273,10 @@ const ConflictsModal = ({
                   <div className="space-y-3">
                     {groupedConflicts[dateKey].map((conflict, idx) => (
                       <div key={idx}>
-                        {type === 'staff_groups' && renderStaffGroupConflict(conflict)}
-                        {type === 'daily_limits' && renderDailyLimitViolation(conflict)}
+                        {type === "staff_groups" &&
+                          renderStaffGroupConflict(conflict)}
+                        {type === "daily_limits" &&
+                          renderDailyLimitViolation(conflict)}
                       </div>
                     ))}
                   </div>
@@ -264,14 +289,16 @@ const ConflictsModal = ({
         {/* Footer */}
         <div className="flex items-center justify-between p-6 border-t border-gray-200 bg-gray-50">
           <div className="text-sm text-gray-600">
-            {type === 'staff_groups' && (
+            {type === "staff_groups" && (
               <p>
-                💡 Tip: Review group memberships or adjust the schedule to resolve conflicts.
+                💡 Tip: Review group memberships or adjust the schedule to
+                resolve conflicts.
               </p>
             )}
-            {type === 'daily_limits' && (
+            {type === "daily_limits" && (
               <p>
-                💡 Tip: Increase the limits or adjust the schedule to comply with new settings.
+                💡 Tip: Increase the limits or adjust the schedule to comply
+                with new settings.
               </p>
             )}
           </div>
@@ -284,7 +311,7 @@ const ConflictsModal = ({
         </div>
       </div>
     </div>,
-    document.body
+    document.body,
   );
 };
 

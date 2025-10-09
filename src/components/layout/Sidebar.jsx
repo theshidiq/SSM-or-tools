@@ -13,7 +13,11 @@ import { Badge } from "../ui/badge";
 import { Button } from "../ui/button";
 import { Separator } from "../ui/separator";
 
-const Sidebar = ({ currentView = "schedule", onViewChange, onShowSettings }) => {
+const Sidebar = ({
+  currentView = "schedule",
+  onViewChange,
+  onShowSettings,
+}) => {
   const menuItems = [
     { id: "schedule", label: "Schedule", icon: Calendar, type: "nav" },
     { id: "monitor", label: "Monitor", icon: Monitor, type: "nav" },

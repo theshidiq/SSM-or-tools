@@ -80,7 +80,8 @@ const ShiftScheduleEditorPhase3 = ({
   });
 
   // Use external showSettingsModal state if provided, otherwise use internal state
-  const showSettingsModal = externalShowSettingsModal !== undefined ? externalShowSettingsModal : false;
+  const showSettingsModal =
+    externalShowSettingsModal !== undefined ? externalShowSettingsModal : false;
   const setShowSettingsModal = externalSetShowSettingsModal || (() => {});
 
   // WebSocket-first prefetch hook (replaces separate usePeriodsRealtime and data management)
@@ -191,7 +192,7 @@ const ShiftScheduleEditorPhase3 = ({
   const effectiveStaffOps = {
     updateStaff: prefetchUpdateStaff,
     addStaff: prefetchAddStaff,
-    deleteStaff: prefetchDeleteStaff
+    deleteStaff: prefetchDeleteStaff,
   };
 
   // Connection state from prefetch hook
@@ -217,7 +218,13 @@ const ShiftScheduleEditorPhase3 = ({
     }, 100);
 
     return () => clearTimeout(throttleTimeout);
-  }, [currentMonthIndex, prefetchPhase, isPrefetchWebSocketEnabled, fallbackMode, effectiveStaffMembers?.length]);
+  }, [
+    currentMonthIndex,
+    prefetchPhase,
+    isPrefetchWebSocketEnabled,
+    fallbackMode,
+    effectiveStaffMembers?.length,
+  ]);
 
   // Settings hook (unchanged)
   const {
@@ -274,7 +281,8 @@ const ShiftScheduleEditorPhase3 = ({
 
   // Alias for compatibility with existing code
   const localStaffData = effectiveStaffMembers;
-  const hasLoadedFromDb = !!effectiveStaffMembers && effectiveStaffMembers.length > 0;
+  const hasLoadedFromDb =
+    !!effectiveStaffMembers && effectiveStaffMembers.length > 0;
 
   // Error state - combine all possible errors
   const error =
@@ -290,7 +298,12 @@ const ShiftScheduleEditorPhase3 = ({
     // Only show offline when truly disconnected AND no cached data available
     if (!isConnected && !hasAllPeriodsData)
       return { type: "error", message: "Offline Mode", instantNav: false };
-    if (isSaving) return { type: "saving", message: "Saving...", instantNav: isInstantNavEnabled };
+    if (isSaving)
+      return {
+        type: "saving",
+        message: "Saving...",
+        instantNav: isInstantNavEnabled,
+      };
     if (isSupabaseLoading && !hasAllPeriodsData)
       return { type: "loading", message: "Loading...", instantNav: false };
 
@@ -516,9 +529,14 @@ const ShiftScheduleEditorPhase3 = ({
         <Card>
           <CardHeader>
             <div className="flex items-center justify-between">
-              <CardTitle className="text-2xl font-bold">調理場シフト表</CardTitle>
+              <CardTitle className="text-2xl font-bold">
+                調理場シフト表
+              </CardTitle>
               <div className="flex items-center space-x-2">
-                <Badge variant="secondary" className="bg-green-100 text-green-800">
+                <Badge
+                  variant="secondary"
+                  className="bg-green-100 text-green-800"
+                >
                   Phase 3: Normalized
                 </Badge>
                 <Badge variant="default" className="bg-blue-500 text-white">
@@ -561,204 +579,209 @@ const ShiftScheduleEditorPhase3 = ({
   return (
     <SettingsProvider>
       <div className="shift-schedule-container space-y-6 p-6">
-      {/* Header with Phase 4 instant navigation indicator */}
-      <Card>
-        <CardHeader>
-          <div className="flex items-center justify-between">
-            <CardTitle className="text-2xl font-bold">調理場シフト表</CardTitle>
-            <div className="flex items-center space-x-2">
-              <Badge
-                variant="secondary"
-                className="bg-green-100 text-green-800"
-              >
-                Phase 4: Instant Navigation
-              </Badge>
-              {/* Phase 4: Connection status with instant nav indicator */}
-              <Badge
-                variant={isConnected ? "default" : "destructive"}
-                className={
-                  isConnected
-                    ? realtimeStatus.instantNav
-                      ? "bg-gradient-to-r from-green-500 to-blue-500 text-white animate-pulse"
-                      : "bg-green-500 text-white"
-                    : "bg-red-500 text-white"
-                }
-                title={realtimeStatus.instantNav
-                  ? `All ${realtimeStatus.periodsCached} periods cached - Navigation is instant!`
-                  : realtimeStatus.message
-                }
-              >
-                {realtimeStatus.message}
-              </Badge>
-              {/* Phase 4: Cache status indicator */}
-              {realtimeStatus.instantNav && prefetchStats?.memoryUsage && (
+        {/* Header with Phase 4 instant navigation indicator */}
+        <Card>
+          <CardHeader>
+            <div className="flex items-center justify-between">
+              <CardTitle className="text-2xl font-bold">
+                調理場シフト表
+              </CardTitle>
+              <div className="flex items-center space-x-2">
                 <Badge
-                  variant="outline"
-                  className="bg-blue-50 text-blue-700 border-blue-300"
-                  title={`Memory: ${prefetchStats.memoryUsage.estimatedMemoryKB} KB | Cache Hit Rate: ${prefetchStats.cacheStats?.hitRate || 'N/A'}`}
+                  variant="secondary"
+                  className="bg-green-100 text-green-800"
                 >
-                  📦 {prefetchStats.memoryUsage.periodCount} periods cached
+                  Phase 4: Instant Navigation
                 </Badge>
-              )}
+                {/* Phase 4: Connection status with instant nav indicator */}
+                <Badge
+                  variant={isConnected ? "default" : "destructive"}
+                  className={
+                    isConnected
+                      ? realtimeStatus.instantNav
+                        ? "bg-gradient-to-r from-green-500 to-blue-500 text-white animate-pulse"
+                        : "bg-green-500 text-white"
+                      : "bg-red-500 text-white"
+                  }
+                  title={
+                    realtimeStatus.instantNav
+                      ? `All ${realtimeStatus.periodsCached} periods cached - Navigation is instant!`
+                      : realtimeStatus.message
+                  }
+                >
+                  {realtimeStatus.message}
+                </Badge>
+                {/* Phase 4: Cache status indicator */}
+                {realtimeStatus.instantNav && prefetchStats?.memoryUsage && (
+                  <Badge
+                    variant="outline"
+                    className="bg-blue-50 text-blue-700 border-blue-300"
+                    title={`Memory: ${prefetchStats.memoryUsage.estimatedMemoryKB} KB | Cache Hit Rate: ${prefetchStats.cacheStats?.hitRate || "N/A"}`}
+                  >
+                    📦 {prefetchStats.memoryUsage.periodCount} periods cached
+                  </Badge>
+                )}
+              </div>
             </div>
-          </div>
-        </CardHeader>
-      </Card>
+          </CardHeader>
+        </Card>
 
-      {/* Error Display - Temporarily disabled for Phase 3 testing */}
-      {error && (
-        <Alert className="mb-4">
-          <AlertDescription>Error: {error}</AlertDescription>
-        </Alert>
-      )}
+        {/* Error Display - Temporarily disabled for Phase 3 testing */}
+        {error && (
+          <Alert className="mb-4">
+            <AlertDescription>Error: {error}</AlertDescription>
+          </Alert>
+        )}
 
-      {/* Navigation Toolbar */}
-      <NavigationToolbar
-        currentMonthIndex={currentMonthIndex}
-        periods={realtimePeriods}
-        onMonthChange={navigateToMonth}
-        onPrevious={previousMonth}
-        onNext={nextMonth}
-        showMonthPicker={showMonthPicker}
-        setShowMonthPicker={setShowMonthPicker}
-        editingColumn={editingColumn}
-        setEditingColumn={setEditingColumn}
-        setJustEnteredEditMode={setJustEnteredEditMode}
-        addNewColumn={() => {}} // Placeholder function
-        setShowStaffEditModal={setShowStaffEditModal}
-        handleExport={handleExportCSV}
-        handlePrint={handlePrint}
-        handleAddTable={handleAddNextPeriod}
-        handleDeletePeriod={() => handleDeletePeriod(currentMonthIndex)}
-        viewMode={viewMode}
-        onViewModeChange={handleViewModeChange}
-        scheduleData={schedule}
-        staffMembers={currentStaff}
-        updateSchedule={handleScheduleUpdate}
-        onShowSettings={() => setShowSettingsModal(true)}
-        aiEnabled={aiEnabled}
-        onEnableAI={setAiEnabled}
-        isConnected={isConnected}
-        isSaving={isSaving}
-      />
+        {/* Navigation Toolbar */}
+        <NavigationToolbar
+          currentMonthIndex={currentMonthIndex}
+          periods={realtimePeriods}
+          onMonthChange={navigateToMonth}
+          onPrevious={previousMonth}
+          onNext={nextMonth}
+          showMonthPicker={showMonthPicker}
+          setShowMonthPicker={setShowMonthPicker}
+          editingColumn={editingColumn}
+          setEditingColumn={setEditingColumn}
+          setJustEnteredEditMode={setJustEnteredEditMode}
+          addNewColumn={() => {}} // Placeholder function
+          setShowStaffEditModal={setShowStaffEditModal}
+          handleExport={handleExportCSV}
+          handlePrint={handlePrint}
+          handleAddTable={handleAddNextPeriod}
+          handleDeletePeriod={() => handleDeletePeriod(currentMonthIndex)}
+          viewMode={viewMode}
+          onViewModeChange={handleViewModeChange}
+          scheduleData={schedule}
+          staffMembers={currentStaff}
+          updateSchedule={handleScheduleUpdate}
+          onShowSettings={() => setShowSettingsModal(true)}
+          aiEnabled={aiEnabled}
+          onEnableAI={setAiEnabled}
+          isConnected={isConnected}
+          isSaving={isSaving}
+        />
 
-      {/* Main Interface - Switch between views with Phase 4 smooth transitions */}
-      <div
-        className={`space-y-4 transition-opacity duration-200 ${
-          isNavigating ? 'opacity-50' : 'opacity-100'
-        }`}
-        style={{
-          // Phase 4: Respect user's motion preferences
-          transition: window.matchMedia('(prefers-reduced-motion: reduce)').matches
-            ? 'none'
-            : 'opacity 200ms ease-in-out'
-        }}
-      >
-        {viewMode === "table" ? (
-          // Phase 4: Only show skeleton during initial load, not during navigation
-          isSupabaseLoading && !prefetchStats?.memoryUsage?.periodCount ? (
-            <ScheduleTableSkeleton
-              staffCount={currentStaff?.length || 5}
-              dateCount={dateRange?.length || 31}
-              showConnectionStatus={false}
-            />
-          ) : (
-            <ScheduleTable
+        {/* Main Interface - Switch between views with Phase 4 smooth transitions */}
+        <div
+          className={`space-y-4 transition-opacity duration-200 ${
+            isNavigating ? "opacity-50" : "opacity-100"
+          }`}
+          style={{
+            // Phase 4: Respect user's motion preferences
+            transition: window.matchMedia("(prefers-reduced-motion: reduce)")
+              .matches
+              ? "none"
+              : "opacity 200ms ease-in-out",
+          }}
+        >
+          {viewMode === "table" ? (
+            // Phase 4: Only show skeleton during initial load, not during navigation
+            isSupabaseLoading && !prefetchStats?.memoryUsage?.periodCount ? (
+              <ScheduleTableSkeleton
+                staffCount={currentStaff?.length || 5}
+                dateCount={dateRange?.length || 31}
+                showConnectionStatus={false}
+              />
+            ) : (
+              <ScheduleTable
+                orderedStaffMembers={currentStaff}
+                dateRange={dateRange}
+                schedule={schedule}
+                editingColumn={editingColumn}
+                editingSpecificColumn={editingSpecificColumn}
+                editingNames={editingNames}
+                setEditingNames={setEditingNames}
+                setEditingSpecificColumn={setEditingSpecificColumn}
+                showDropdown={showDropdown}
+                setShowDropdown={setShowDropdown}
+                updateShift={handleShiftUpdate}
+                customText={customText}
+                setCustomText={setCustomText}
+                editingCell={editingCell}
+                setEditingCell={setEditingCell}
+                deleteStaff={effectiveStaffOps.deleteStaff}
+                staffMembers={localStaffData}
+                updateSchedule={handleScheduleUpdate}
+                currentMonthIndex={currentMonthIndex}
+                editStaffName={editStaffName}
+                isConnected={isConnected}
+                hasAllPeriodsData={prefetchStats?.memoryUsage?.periodCount > 0}
+              />
+            )
+          ) : viewMode === "card" ? (
+            <StaffCardView
               orderedStaffMembers={currentStaff}
-              dateRange={dateRange}
               schedule={schedule}
-              editingColumn={editingColumn}
-              editingSpecificColumn={editingSpecificColumn}
-              editingNames={editingNames}
-              setEditingNames={setEditingNames}
-              setEditingSpecificColumn={setEditingSpecificColumn}
-              showDropdown={showDropdown}
-              setShowDropdown={setShowDropdown}
-              updateShift={handleShiftUpdate}
-              customText={customText}
-              setCustomText={setCustomText}
-              editingCell={editingCell}
-              setEditingCell={setEditingCell}
-              deleteStaff={effectiveStaffOps.deleteStaff}
-              staffMembers={localStaffData}
-              updateSchedule={handleScheduleUpdate}
-              currentMonthIndex={currentMonthIndex}
-              editStaffName={editStaffName}
-              isConnected={isConnected}
-              hasAllPeriodsData={prefetchStats?.memoryUsage?.periodCount > 0}
+              dateRange={dateRange}
+              currentPeriod={currentPeriod}
+              onShiftUpdate={handleShiftUpdate}
+              settings={settings}
             />
-          )
-        ) : viewMode === "card" ? (
-          <StaffCardView
-            orderedStaffMembers={currentStaff}
-            schedule={schedule}
-            dateRange={dateRange}
+          ) : null}
+        </div>
+
+        {/* Statistics Dashboard - Always visible below editor/view tabs */}
+        {viewMode !== "stats" && (
+          <StatisticsDashboard
+            data={statsData}
             currentPeriod={currentPeriod}
-            onShiftUpdate={handleShiftUpdate}
+            isLoading={
+              isSupabaseLoading && !prefetchStats?.memoryUsage?.periodCount
+            }
             settings={settings}
           />
-        ) : null}
-      </div>
+        )}
 
-      {/* Statistics Dashboard - Always visible below editor/view tabs */}
-      {viewMode !== "stats" && (
-        <StatisticsDashboard
-          data={statsData}
-          currentPeriod={currentPeriod}
-          isLoading={isSupabaseLoading && !prefetchStats?.memoryUsage?.periodCount}
-          settings={settings}
-        />
-      )}
+        {/* Staff Edit Modal - Enhanced Real-time Integration */}
+        {showStaffEditModal && (
+          <StaffEditModal
+            showStaffEditModal={showStaffEditModal}
+            setShowStaffEditModal={setShowStaffEditModal}
+            staffMembers={effectiveStaffMembers}
+            schedule={schedule}
+            dateRange={dateRange}
+            selectedStaffForEdit={selectedStaffForEdit}
+            setSelectedStaffForEdit={setSelectedStaffForEdit}
+            editingStaffData={editingStaffData}
+            setEditingStaffData={setEditingStaffData}
+            isAddingNewStaff={isAddingNewStaff}
+            setIsAddingNewStaff={setIsAddingNewStaff}
+            addStaff={effectiveStaffOps.addStaff}
+            updateStaff={effectiveStaffOps.updateStaff}
+            deleteStaff={effectiveStaffOps.deleteStaff}
+            currentMonthIndex={currentMonthIndex}
+            updateSchedule={updateSchedule}
+            isSaving={isSaving}
+            error={supabaseError}
+            invalidateAllPeriodsCache={invalidateAllPeriodsCache} // Phase 3: Cache refresh for database sync
+            currentScheduleId={currentScheduleId} // Phase 3: WebSocket shift integration
+          />
+        )}
 
-      {/* Staff Edit Modal - Enhanced Real-time Integration */}
-      {showStaffEditModal && (
-        <StaffEditModal
-          showStaffEditModal={showStaffEditModal}
-          setShowStaffEditModal={setShowStaffEditModal}
-          staffMembers={effectiveStaffMembers}
-          schedule={schedule}
-          dateRange={dateRange}
-          selectedStaffForEdit={selectedStaffForEdit}
-          setSelectedStaffForEdit={setSelectedStaffForEdit}
-          editingStaffData={editingStaffData}
-          setEditingStaffData={setEditingStaffData}
-          isAddingNewStaff={isAddingNewStaff}
-          setIsAddingNewStaff={setIsAddingNewStaff}
-          addStaff={effectiveStaffOps.addStaff}
-          updateStaff={effectiveStaffOps.updateStaff}
-          deleteStaff={effectiveStaffOps.deleteStaff}
-          currentMonthIndex={currentMonthIndex}
-          updateSchedule={updateSchedule}
-          isSaving={isSaving}
-          error={supabaseError}
-          invalidateAllPeriodsCache={invalidateAllPeriodsCache} // Phase 3: Cache refresh for database sync
-          currentScheduleId={currentScheduleId} // Phase 3: WebSocket shift integration
-        />
-      )}
+        {/* Settings Modal - Phase 2: Using Context API (11 props removed, 73% reduction) */}
+        {showSettingsModal && (
+          <SettingsModal
+            isOpen={showSettingsModal}
+            onClose={() => setShowSettingsModal(false)}
+            currentScheduleId={currentScheduleId} // Phase 2: Schedule validation
+            staffMembers={effectiveStaffMembers} // Phase 2: Staff data for validation
+          />
+        )}
 
-      {/* Settings Modal - Phase 2: Using Context API (11 props removed, 73% reduction) */}
-      {showSettingsModal && (
-        <SettingsModal
-          isOpen={showSettingsModal}
-          onClose={() => setShowSettingsModal(false)}
-          currentScheduleId={currentScheduleId} // Phase 2: Schedule validation
-          staffMembers={effectiveStaffMembers} // Phase 2: Staff data for validation
-        />
-      )}
-
-      {/* Delete Confirmation Modal */}
-      {deleteModal.isOpen && (
-        <StatusModal
-          isOpen={deleteModal.isOpen}
-          onClose={() => setDeleteModal({ isOpen: false })}
-          type={deleteModal.type}
-          title={deleteModal.title}
-          message={deleteModal.message}
-          onConfirm={deleteModal.onConfirm}
-          onCancel={deleteModal.onCancel}
-        />
-      )}
-
+        {/* Delete Confirmation Modal */}
+        {deleteModal.isOpen && (
+          <StatusModal
+            isOpen={deleteModal.isOpen}
+            onClose={() => setDeleteModal({ isOpen: false })}
+            type={deleteModal.type}
+            title={deleteModal.title}
+            message={deleteModal.message}
+            onConfirm={deleteModal.onConfirm}
+            onCancel={deleteModal.onCancel}
+          />
+        )}
       </div>
     </SettingsProvider>
   );

@@ -10,8 +10,8 @@
  * 3. No prop drilling needed!
  */
 
-import React, { createContext, useContext } from 'react';
-import { useSettingsData } from '../hooks/useSettingsData';
+import React, { createContext, useContext } from "react";
+import { useSettingsData } from "../hooks/useSettingsData";
 
 // Create context with undefined default (will error if used outside provider)
 const SettingsContext = createContext(undefined);
@@ -55,8 +55,8 @@ export const useSettings = () => {
 
   if (context === undefined) {
     throw new Error(
-      'useSettings must be used within a SettingsProvider. ' +
-      'Make sure your component is wrapped with <SettingsProvider>.'
+      "useSettings must be used within a SettingsProvider. " +
+        "Make sure your component is wrapped with <SettingsProvider>.",
     );
   }
 

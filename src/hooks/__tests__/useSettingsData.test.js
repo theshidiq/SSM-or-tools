@@ -3,14 +3,14 @@
  * Tests backend mode detection, data aggregation, and CRUD operations routing
  */
 
-import { renderHook, waitFor } from '@testing-library/react';
-import { act } from 'react';
-import { useSettingsData } from '../useSettingsData';
-import * as useWebSocketSettingsModule from '../useWebSocketSettings';
-import { configService } from '../../services/ConfigurationService';
+import { renderHook, waitFor } from "@testing-library/react";
+import { act } from "react";
+import { useSettingsData } from "../useSettingsData";
+import * as useWebSocketSettingsModule from "../useWebSocketSettings";
+import { configService } from "../../services/ConfigurationService";
 
 // Mock configService
-jest.mock('../../services/ConfigurationService', () => ({
+jest.mock("../../services/ConfigurationService", () => ({
   configService: {
     getSettings: jest.fn(),
     saveSettings: jest.fn(),
@@ -18,7 +18,7 @@ jest.mock('../../services/ConfigurationService', () => ({
     resetToDefaults: jest.fn(),
     exportSettings: jest.fn(),
     importSettings: jest.fn(),
-  }
+  },
 }));
 
 // Mock localStorage
@@ -34,13 +34,13 @@ const localStorageMock = (() => {
     }),
     clear: jest.fn(() => {
       store = {};
-    })
+    }),
   };
 })();
 
 global.localStorage = localStorageMock;
 
-describe('useSettingsData Hook', () => {
+describe("useSettingsData Hook", () => {
   let mockWebSocketSettings;
   const originalEnv = process.env.REACT_APP_WEBSOCKET_SETTINGS;
 
@@ -49,7 +49,7 @@ describe('useSettingsData Hook', () => {
     localStorageMock.clear();
 
     // Default: WebSocket enabled but disconnected
-    process.env.REACT_APP_WEBSOCKET_SETTINGS = 'true';
+    process.env.REACT_APP_WEBSOCKET_SETTINGS = "true";
 
     // Default WebSocket mock (disconnected state)
     mockWebSocketSettings = {
@@ -63,13 +63,15 @@ describe('useSettingsData Hook', () => {
       resetSettings: jest.fn(),
       migrateSettings: jest.fn(),
       isConnected: false,
-      connectionStatus: 'disconnected',
+      connectionStatus: "disconnected",
       isLoading: false,
-      lastError: null
+      lastError: null,
     };
 
     // Mock useWebSocketSettings
-    jest.spyOn(useWebSocketSettingsModule, 'useWebSocketSettings').mockReturnValue(mockWebSocketSettings);
+    jest
+      .spyOn(useWebSocketSettingsModule, "useWebSocketSettings")
+      .mockReturnValue(mockWebSocketSettings);
 
     // Default configService mocks
     configService.getSettings.mockReturnValue({
@@ -77,9 +79,12 @@ describe('useSettingsData Hook', () => {
       dailyLimits: [],
       monthlyLimits: [],
       priorityRules: [],
-      mlParameters: {}
+      mlParameters: {},
     });
-    configService.validateSettings.mockReturnValue({ isValid: true, errors: {} });
+    configService.validateSettings.mockReturnValue({
+      isValid: true,
+      errors: {},
+    });
     configService.saveSettings.mockResolvedValue(true);
   });
 
@@ -88,84 +93,91 @@ describe('useSettingsData Hook', () => {
     process.env.REACT_APP_WEBSOCKET_SETTINGS = originalEnv;
   });
 
-  describe('Backend Mode Detection', () => {
-    test('uses localStorage mode when WebSocket disabled', async () => {
+  describe("Backend Mode Detection", () => {
+    test("uses localStorage mode when WebSocket disabled", async () => {
       // Disable WebSocket via environment variable
-      process.env.REACT_APP_WEBSOCKET_SETTINGS = 'false';
+      process.env.REACT_APP_WEBSOCKET_SETTINGS = "false";
 
       // Re-mock the hook with updated environment
       jest.resetModules();
-      const { useSettingsData: useSettingsDataWithDisabledWs } = require('../useSettingsData');
+      const {
+        useSettingsData: useSettingsDataWithDisabledWs,
+      } = require("../useSettingsData");
 
       const { result } = renderHook(() => useSettingsDataWithDisabledWs());
 
       await waitFor(() => {
-        expect(result.current.backendMode).toBe('localStorage');
+        expect(result.current.backendMode).toBe("localStorage");
         expect(result.current.isConnectedToBackend).toBe(false);
-        expect(result.current.connectionStatus).toBe('localStorage');
+        expect(result.current.connectionStatus).toBe("localStorage");
       });
     });
 
-    test('uses localStorage fallback when WebSocket disconnected', async () => {
+    test("uses localStorage fallback when WebSocket disconnected", async () => {
       // WebSocket is disabled via connection status
       const { result } = renderHook(() => useSettingsData());
 
       await waitFor(() => {
-        expect(result.current.backendMode).toBe('localStorage');
+        expect(result.current.backendMode).toBe("localStorage");
         expect(configService.getSettings).toHaveBeenCalled();
       });
     });
 
-    test('uses WebSocket mode when connected', async () => {
+    test("uses WebSocket mode when connected", async () => {
       // Mock connected WebSocket
       mockWebSocketSettings.isConnected = true;
-      mockWebSocketSettings.connectionStatus = 'connected';
+      mockWebSocketSettings.connectionStatus = "connected";
       mockWebSocketSettings.settings = {
         staffGroups: [],
         dailyLimits: [],
         monthlyLimits: [],
         priorityRules: [],
-        mlModelConfigs: []
+        mlModelConfigs: [],
       };
       mockWebSocketSettings.version = {
         versionNumber: 1,
-        name: 'Initial',
-        isActive: true
+        name: "Initial",
+        isActive: true,
       };
 
       const { result } = renderHook(() => useSettingsData());
 
       await waitFor(() => {
-        expect(result.current.backendMode).toBe('websocket-multitable');
+        expect(result.current.backendMode).toBe("websocket-multitable");
         expect(result.current.isConnectedToBackend).toBe(true);
       });
     });
   });
 
-  describe('Data Aggregation from Multi-Table', () => {
-    test('aggregates settings from 5 tables (WebSocket mode)', async () => {
+  describe("Data Aggregation from Multi-Table", () => {
+    test("aggregates settings from 5 tables (WebSocket mode)", async () => {
       mockWebSocketSettings.isConnected = true;
-      mockWebSocketSettings.connectionStatus = 'connected';
+      mockWebSocketSettings.connectionStatus = "connected";
       mockWebSocketSettings.settings = {
         staffGroups: [
-          { id: 'group-1', name: 'Kitchen', groupConfig: { members: ['staff-1'] } }
+          {
+            id: "group-1",
+            name: "Kitchen",
+            groupConfig: { members: ["staff-1"] },
+          },
         ],
         dailyLimits: [
-          { id: 'limit-1', limitConfig: { maxShifts: 2, daysOfWeek: [1, 2, 3] } }
+          {
+            id: "limit-1",
+            limitConfig: { maxShifts: 2, daysOfWeek: [1, 2, 3] },
+          },
         ],
         monthlyLimits: [
-          { id: 'monthly-1', limitConfig: { maxMonthlyShifts: 20 } }
+          { id: "monthly-1", limitConfig: { maxMonthlyShifts: 20 } },
         ],
-        priorityRules: [
-          { id: 'rule-1', ruleConfig: { priority: 'high' } }
-        ],
+        priorityRules: [{ id: "rule-1", ruleConfig: { priority: "high" } }],
         mlModelConfigs: [
-          { id: 'ml-1', modelConfig: { algorithm: 'random-forest' } }
-        ]
+          { id: "ml-1", modelConfig: { algorithm: "random-forest" } },
+        ],
       };
       mockWebSocketSettings.version = {
         versionNumber: 2,
-        name: 'Production Config'
+        name: "Production Config",
       };
 
       const { result } = renderHook(() => useSettingsData());
@@ -177,15 +189,15 @@ describe('useSettingsData Hook', () => {
         expect(result.current.settings.monthlyLimits).toHaveLength(1);
         expect(result.current.settings.priorityRules).toHaveLength(1);
         expect(result.current.settings.mlParameters).toEqual(
-          mockWebSocketSettings.settings.mlModelConfigs[0]
+          mockWebSocketSettings.settings.mlModelConfigs[0],
         );
         expect(result.current.version).toEqual(mockWebSocketSettings.version);
       });
     });
 
-    test('handles empty multi-table response', async () => {
+    test("handles empty multi-table response", async () => {
       mockWebSocketSettings.isConnected = true;
-      mockWebSocketSettings.connectionStatus = 'connected';
+      mockWebSocketSettings.connectionStatus = "connected";
       mockWebSocketSettings.settings = {};
       mockWebSocketSettings.version = null;
 
@@ -199,16 +211,16 @@ describe('useSettingsData Hook', () => {
     });
   });
 
-  describe('CRUD Operations Routing', () => {
-    test('routes staff group updates to WebSocket (WebSocket mode)', async () => {
+  describe("CRUD Operations Routing", () => {
+    test("routes staff group updates to WebSocket (WebSocket mode)", async () => {
       mockWebSocketSettings.isConnected = true;
-      mockWebSocketSettings.connectionStatus = 'connected';
+      mockWebSocketSettings.connectionStatus = "connected";
       mockWebSocketSettings.settings = {
-        staffGroups: [{ id: 'group-1', name: 'Kitchen' }],
+        staffGroups: [{ id: "group-1", name: "Kitchen" }],
         dailyLimits: [],
         monthlyLimits: [],
         priorityRules: [],
-        mlModelConfigs: []
+        mlModelConfigs: [],
       };
 
       const { result } = renderHook(() => useSettingsData());
@@ -217,29 +229,31 @@ describe('useSettingsData Hook', () => {
         expect(result.current.settings).toBeDefined();
       });
 
-      const newGroup = { id: 'group-2', name: 'Service' };
+      const newGroup = { id: "group-2", name: "Service" };
 
       act(() => {
         result.current.updateSettings({
           ...result.current.settings,
-          staffGroups: [{ id: 'group-1', name: 'Kitchen' }, newGroup]
+          staffGroups: [{ id: "group-1", name: "Kitchen" }, newGroup],
         });
       });
 
       await waitFor(() => {
-        expect(mockWebSocketSettings.updateStaffGroups).toHaveBeenCalledWith(newGroup);
+        expect(mockWebSocketSettings.updateStaffGroups).toHaveBeenCalledWith(
+          newGroup,
+        );
       });
     });
 
-    test('routes daily limits updates to WebSocket (WebSocket mode)', async () => {
+    test("routes daily limits updates to WebSocket (WebSocket mode)", async () => {
       mockWebSocketSettings.isConnected = true;
-      mockWebSocketSettings.connectionStatus = 'connected';
+      mockWebSocketSettings.connectionStatus = "connected";
       mockWebSocketSettings.settings = {
         staffGroups: [],
         dailyLimits: [],
         monthlyLimits: [],
         priorityRules: [],
-        mlModelConfigs: []
+        mlModelConfigs: [],
       };
 
       const { result } = renderHook(() => useSettingsData());
@@ -248,21 +262,23 @@ describe('useSettingsData Hook', () => {
         expect(result.current.settings).toBeDefined();
       });
 
-      const newLimit = { id: 'limit-1', limitConfig: { maxShifts: 3 } };
+      const newLimit = { id: "limit-1", limitConfig: { maxShifts: 3 } };
 
       act(() => {
         result.current.updateSettings({
           ...result.current.settings,
-          dailyLimits: [newLimit]
+          dailyLimits: [newLimit],
         });
       });
 
       await waitFor(() => {
-        expect(mockWebSocketSettings.updateDailyLimits).toHaveBeenCalledWith(newLimit);
+        expect(mockWebSocketSettings.updateDailyLimits).toHaveBeenCalledWith(
+          newLimit,
+        );
       });
     });
 
-    test('updates local state in localStorage mode', async () => {
+    test("updates local state in localStorage mode", async () => {
       const { result } = renderHook(() => useSettingsData());
 
       await waitFor(() => {
@@ -271,7 +287,7 @@ describe('useSettingsData Hook', () => {
 
       const updatedSettings = {
         ...result.current.settings,
-        staffGroups: [{ id: 'group-1', name: 'New Group' }]
+        staffGroups: [{ id: "group-1", name: "New Group" }],
       };
 
       act(() => {
@@ -284,15 +300,15 @@ describe('useSettingsData Hook', () => {
       });
     });
 
-    test('does not mark unsaved changes in WebSocket mode', async () => {
+    test("does not mark unsaved changes in WebSocket mode", async () => {
       mockWebSocketSettings.isConnected = true;
-      mockWebSocketSettings.connectionStatus = 'connected';
+      mockWebSocketSettings.connectionStatus = "connected";
       mockWebSocketSettings.settings = {
         staffGroups: [],
         dailyLimits: [],
         monthlyLimits: [],
         priorityRules: [],
-        mlModelConfigs: []
+        mlModelConfigs: [],
       };
 
       const { result } = renderHook(() => useSettingsData());
@@ -304,7 +320,7 @@ describe('useSettingsData Hook', () => {
       act(() => {
         result.current.updateSettings({
           ...result.current.settings,
-          staffGroups: [{ id: 'group-1', name: 'Test' }]
+          staffGroups: [{ id: "group-1", name: "Test" }],
         });
       });
 
@@ -312,18 +328,18 @@ describe('useSettingsData Hook', () => {
     });
   });
 
-  describe('Migration Function', () => {
-    test('migrateToBackend sends localStorage data to WebSocket', async () => {
+  describe("Migration Function", () => {
+    test("migrateToBackend sends localStorage data to WebSocket", async () => {
       mockWebSocketSettings.isConnected = true;
-      mockWebSocketSettings.connectionStatus = 'connected';
+      mockWebSocketSettings.connectionStatus = "connected";
       mockWebSocketSettings.settings = {};
 
       const localSettings = {
-        staffGroups: [{ id: 'group-1', name: 'Kitchen' }],
-        dailyLimits: [{ id: 'limit-1', maxShifts: 2 }],
+        staffGroups: [{ id: "group-1", name: "Kitchen" }],
+        dailyLimits: [{ id: "limit-1", maxShifts: 2 }],
         monthlyLimits: [],
         priorityRules: [],
-        mlParameters: { algorithm: 'test' }
+        mlParameters: { algorithm: "test" },
       };
 
       localStorageMock.getItem.mockReturnValue(JSON.stringify(localSettings));
@@ -338,10 +354,12 @@ describe('useSettingsData Hook', () => {
         await result.current.migrateToBackend();
       });
 
-      expect(mockWebSocketSettings.migrateSettings).toHaveBeenCalledWith(localSettings);
+      expect(mockWebSocketSettings.migrateSettings).toHaveBeenCalledWith(
+        localSettings,
+      );
     });
 
-    test('migrateToBackend throws error when not connected', async () => {
+    test("migrateToBackend throws error when not connected", async () => {
       mockWebSocketSettings.isConnected = false;
 
       const { result } = renderHook(() => useSettingsData());
@@ -350,14 +368,14 @@ describe('useSettingsData Hook', () => {
         expect(result.current.settings).toBeDefined();
       });
 
-      await expect(
-        result.current.migrateToBackend()
-      ).rejects.toThrow('WebSocket not connected');
+      await expect(result.current.migrateToBackend()).rejects.toThrow(
+        "WebSocket not connected",
+      );
     });
 
-    test('migrateToBackend throws error when no localStorage data', async () => {
+    test("migrateToBackend throws error when no localStorage data", async () => {
       mockWebSocketSettings.isConnected = true;
-      mockWebSocketSettings.connectionStatus = 'connected';
+      mockWebSocketSettings.connectionStatus = "connected";
       mockWebSocketSettings.settings = {};
 
       localStorageMock.getItem.mockReturnValue(null);
@@ -368,16 +386,16 @@ describe('useSettingsData Hook', () => {
         expect(result.current.settings).toBeDefined();
       });
 
-      await expect(
-        result.current.migrateToBackend()
-      ).rejects.toThrow('No localStorage settings to migrate');
+      await expect(result.current.migrateToBackend()).rejects.toThrow(
+        "No localStorage settings to migrate",
+      );
     });
   });
 
-  describe('Reset to Defaults', () => {
-    test('uses WebSocket reset in WebSocket mode', async () => {
+  describe("Reset to Defaults", () => {
+    test("uses WebSocket reset in WebSocket mode", async () => {
       mockWebSocketSettings.isConnected = true;
-      mockWebSocketSettings.connectionStatus = 'connected';
+      mockWebSocketSettings.connectionStatus = "connected";
       mockWebSocketSettings.settings = {};
       mockWebSocketSettings.resetSettings.mockResolvedValue();
 
@@ -395,13 +413,13 @@ describe('useSettingsData Hook', () => {
       expect(configService.resetToDefaults).not.toHaveBeenCalled();
     });
 
-    test('uses configService reset in localStorage mode', async () => {
+    test("uses configService reset in localStorage mode", async () => {
       const defaultSettings = {
         staffGroups: [],
         dailyLimits: [],
         monthlyLimits: [],
         priorityRules: [],
-        mlParameters: {}
+        mlParameters: {},
       };
 
       configService.resetToDefaults.mockResolvedValue();
@@ -422,15 +440,15 @@ describe('useSettingsData Hook', () => {
     });
   });
 
-  describe('Import/Export', () => {
-    test('triggers migration after import in WebSocket mode', async () => {
+  describe("Import/Export", () => {
+    test("triggers migration after import in WebSocket mode", async () => {
       mockWebSocketSettings.isConnected = true;
-      mockWebSocketSettings.connectionStatus = 'connected';
+      mockWebSocketSettings.connectionStatus = "connected";
       mockWebSocketSettings.settings = {};
 
       const configJson = JSON.stringify({
-        staffGroups: [{ id: 'group-1', name: 'Imported' }],
-        dailyLimits: []
+        staffGroups: [{ id: "group-1", name: "Imported" }],
+        dailyLimits: [],
       });
 
       configService.importSettings.mockReturnValue({ success: true });
@@ -448,15 +466,15 @@ describe('useSettingsData Hook', () => {
       await waitFor(() => {
         expect(configService.importSettings).toHaveBeenCalledWith(configJson);
         expect(mockWebSocketSettings.migrateSettings).toHaveBeenCalledWith(
-          JSON.parse(configJson)
+          JSON.parse(configJson),
         );
       });
     });
 
-    test('reloads settings after import in localStorage mode', async () => {
+    test("reloads settings after import in localStorage mode", async () => {
       const configJson = JSON.stringify({
-        staffGroups: [{ id: 'group-1', name: 'Imported' }],
-        dailyLimits: []
+        staffGroups: [{ id: "group-1", name: "Imported" }],
+        dailyLimits: [],
       });
 
       configService.importSettings.mockReturnValue({ success: true });
@@ -478,9 +496,11 @@ describe('useSettingsData Hook', () => {
       });
     });
 
-    test('exportConfiguration uses configService', async () => {
+    test("exportConfiguration uses configService", async () => {
       const exportedData = { staffGroups: [], dailyLimits: [] };
-      configService.exportSettings.mockReturnValue(JSON.stringify(exportedData));
+      configService.exportSettings.mockReturnValue(
+        JSON.stringify(exportedData),
+      );
 
       const { result } = renderHook(() => useSettingsData());
 
@@ -495,10 +515,10 @@ describe('useSettingsData Hook', () => {
     });
   });
 
-  describe('Autosave Behavior', () => {
-    test('disables autosave in WebSocket mode', async () => {
+  describe("Autosave Behavior", () => {
+    test("disables autosave in WebSocket mode", async () => {
       mockWebSocketSettings.isConnected = true;
-      mockWebSocketSettings.connectionStatus = 'connected';
+      mockWebSocketSettings.connectionStatus = "connected";
       mockWebSocketSettings.settings = {};
 
       const { result } = renderHook(() => useSettingsData(true));
@@ -511,7 +531,7 @@ describe('useSettingsData Hook', () => {
       expect(result.current.isAutosaving).toBe(false);
     });
 
-    test('enables autosave in localStorage mode', async () => {
+    test("enables autosave in localStorage mode", async () => {
       const { result } = renderHook(() => useSettingsData(true));
 
       await waitFor(() => {
@@ -520,27 +540,27 @@ describe('useSettingsData Hook', () => {
     });
   });
 
-  describe('Version Info', () => {
-    test('exposes version info in WebSocket mode', async () => {
+  describe("Version Info", () => {
+    test("exposes version info in WebSocket mode", async () => {
       mockWebSocketSettings.isConnected = true;
-      mockWebSocketSettings.connectionStatus = 'connected';
+      mockWebSocketSettings.connectionStatus = "connected";
       mockWebSocketSettings.settings = {};
       mockWebSocketSettings.version = {
         versionNumber: 5,
-        name: 'Production v5',
-        isLocked: true
+        name: "Production v5",
+        isLocked: true,
       };
 
       const { result } = renderHook(() => useSettingsData());
 
       await waitFor(() => {
         expect(result.current.currentVersion).toBe(5);
-        expect(result.current.versionName).toBe('Production v5');
+        expect(result.current.versionName).toBe("Production v5");
         expect(result.current.isVersionLocked).toBe(true);
       });
     });
 
-    test('version info is null in localStorage mode', async () => {
+    test("version info is null in localStorage mode", async () => {
       const { result } = renderHook(() => useSettingsData());
 
       await waitFor(() => {
@@ -551,10 +571,10 @@ describe('useSettingsData Hook', () => {
     });
   });
 
-  describe('Loading and Error States', () => {
-    test('uses WebSocket loading state in WebSocket mode', async () => {
+  describe("Loading and Error States", () => {
+    test("uses WebSocket loading state in WebSocket mode", async () => {
       mockWebSocketSettings.isConnected = true;
-      mockWebSocketSettings.connectionStatus = 'connected';
+      mockWebSocketSettings.connectionStatus = "connected";
       mockWebSocketSettings.isLoading = true;
       mockWebSocketSettings.settings = {};
 
@@ -563,7 +583,9 @@ describe('useSettingsData Hook', () => {
       expect(result.current.isLoading).toBe(true);
 
       mockWebSocketSettings.isLoading = false;
-      jest.spyOn(useWebSocketSettingsModule, 'useWebSocketSettings').mockReturnValue(mockWebSocketSettings);
+      jest
+        .spyOn(useWebSocketSettingsModule, "useWebSocketSettings")
+        .mockReturnValue(mockWebSocketSettings);
 
       const { result: result2 } = renderHook(() => useSettingsData());
 
@@ -572,28 +594,31 @@ describe('useSettingsData Hook', () => {
       });
     });
 
-    test('uses WebSocket error in WebSocket mode', async () => {
+    test("uses WebSocket error in WebSocket mode", async () => {
       mockWebSocketSettings.isConnected = true;
-      mockWebSocketSettings.connectionStatus = 'connected';
-      mockWebSocketSettings.lastError = 'Database connection failed';
+      mockWebSocketSettings.connectionStatus = "connected";
+      mockWebSocketSettings.lastError = "Database connection failed";
       mockWebSocketSettings.settings = {};
 
       const { result } = renderHook(() => useSettingsData());
 
       await waitFor(() => {
-        expect(result.current.error).toBe('Database connection failed');
+        expect(result.current.error).toBe("Database connection failed");
       });
     });
   });
 
-  describe('Validation', () => {
-    test('validateSettings delegates to configService', async () => {
+  describe("Validation", () => {
+    test("validateSettings delegates to configService", async () => {
       const settingsToValidate = {
-        staffGroups: [{ id: 'group-1', name: 'Test' }],
-        dailyLimits: []
+        staffGroups: [{ id: "group-1", name: "Test" }],
+        dailyLimits: [],
       };
 
-      const validationResult = { isValid: false, errors: { staffGroups: 'Invalid format' } };
+      const validationResult = {
+        isValid: false,
+        errors: { staffGroups: "Invalid format" },
+      };
       configService.validateSettings.mockReturnValue(validationResult);
 
       const { result } = renderHook(() => useSettingsData());
@@ -604,7 +629,9 @@ describe('useSettingsData Hook', () => {
 
       const validation = result.current.validateSettings(settingsToValidate);
 
-      expect(configService.validateSettings).toHaveBeenCalledWith(settingsToValidate);
+      expect(configService.validateSettings).toHaveBeenCalledWith(
+        settingsToValidate,
+      );
       expect(validation).toEqual(validationResult);
     });
   });

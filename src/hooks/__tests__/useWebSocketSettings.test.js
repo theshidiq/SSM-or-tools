@@ -3,9 +3,9 @@
  * Tests WebSocket connection lifecycle, message handling, and data synchronization
  */
 
-import { renderHook, waitFor } from '@testing-library/react';
-import { act } from 'react';
-import { useWebSocketSettings } from '../useWebSocketSettings';
+import { renderHook, waitFor } from "@testing-library/react";
+import { act } from "react";
+import { useWebSocketSettings } from "../useWebSocketSettings";
 
 // Track all WebSocket instances for test access
 let lastWebSocketInstance = null;
@@ -29,7 +29,7 @@ class MockWebSocket {
       if (this.readyState === WebSocket.CONNECTING) {
         this.readyState = WebSocket.OPEN;
         if (this.onopen) {
-          this.onopen({ type: 'open' });
+          this.onopen({ type: "open" });
         }
       }
     }, 0);
@@ -42,7 +42,7 @@ class MockWebSocket {
   close() {
     this.readyState = WebSocket.CLOSED;
     if (this.onclose) {
-      this.onclose({ code: 1000, reason: 'Normal closure' });
+      this.onclose({ code: 1000, reason: "Normal closure" });
     }
   }
 
@@ -68,11 +68,11 @@ global.WebSocket.OPEN = 1;
 global.WebSocket.CLOSING = 2;
 global.WebSocket.CLOSED = 3;
 
-describe('useWebSocketSettings Hook', () => {
+describe("useWebSocketSettings Hook", () => {
   // Helper to wait for WebSocket connection with real timers
   const waitForConnection = async () => {
     // Wait for connection delay (100ms) + setTimeout(0)
-    await new Promise(resolve => setTimeout(resolve, 200));
+    await new Promise((resolve) => setTimeout(resolve, 200));
   };
 
   beforeEach(() => {
@@ -95,29 +95,37 @@ describe('useWebSocketSettings Hook', () => {
     jest.useRealTimers();
   });
 
-  describe('Connection Lifecycle', () => {
-    test('connects to ws://localhost:8080/staff-sync on mount', async () => {
-      const { result } = renderHook(() => useWebSocketSettings({ enabled: true }));
+  describe("Connection Lifecycle", () => {
+    test("connects to ws://localhost:8080/staff-sync on mount", async () => {
+      const { result } = renderHook(() =>
+        useWebSocketSettings({ enabled: true }),
+      );
 
       await waitForConnection();
 
-      expect(result.current.connectionStatus).toBe('connected');
+      expect(result.current.connectionStatus).toBe("connected");
       expect(result.current.isConnected).toBe(true);
     });
 
-    test('sets connectionStatus to disabled when enabled=false', async () => {
-      const { result } = renderHook(() => useWebSocketSettings({ enabled: false }));
+    test("sets connectionStatus to disabled when enabled=false", async () => {
+      const { result } = renderHook(() =>
+        useWebSocketSettings({ enabled: false }),
+      );
 
       await waitFor(() => {
-        expect(result.current.connectionStatus).toBe('disabled');
+        expect(result.current.connectionStatus).toBe("disabled");
       });
 
       expect(result.current.isLoading).toBe(false);
-      expect(result.current.lastError).toBe('WebSocket disabled via feature flag');
+      expect(result.current.lastError).toBe(
+        "WebSocket disabled via feature flag",
+      );
     });
 
-    test('sends SETTINGS_SYNC_REQUEST after connection', async () => {
-      const { result } = renderHook(() => useWebSocketSettings({ enabled: true }));
+    test("sends SETTINGS_SYNC_REQUEST after connection", async () => {
+      const { result } = renderHook(() =>
+        useWebSocketSettings({ enabled: true }),
+      );
 
       await waitForConnection();
 
@@ -126,12 +134,14 @@ describe('useWebSocketSettings Hook', () => {
       // Check if sync request was sent
       expect(lastWebSocketInstance).toBeDefined();
       expect(lastWebSocketInstance.sentMessages).toBeDefined();
-      const syncRequest = lastWebSocketInstance.sentMessages.find(msg => msg.type === 'SETTINGS_SYNC_REQUEST');
+      const syncRequest = lastWebSocketInstance.sentMessages.find(
+        (msg) => msg.type === "SETTINGS_SYNC_REQUEST",
+      );
       expect(syncRequest).toBeDefined();
       expect(syncRequest.payload.clientId).toBeDefined();
     });
 
-    test('handles connection timeout and marks as failed_permanently', async () => {
+    test("handles connection timeout and marks as failed_permanently", async () => {
       jest.useFakeTimers();
 
       // Override WebSocket to never connect
@@ -144,20 +154,22 @@ describe('useWebSocketSettings Hook', () => {
       }
       global.WebSocket = NeverConnectingWebSocket;
 
-      const { result } = renderHook(() => useWebSocketSettings({ enabled: true }));
+      const { result } = renderHook(() =>
+        useWebSocketSettings({ enabled: true }),
+      );
 
       // Fast-forward to trigger timeout (10 second timeout)
       act(() => {
         jest.advanceTimersByTime(11000);
       });
 
-      expect(result.current.connectionStatus).toBe('failed_permanently');
-      expect(result.current.lastError).toContain('Connection timeout');
+      expect(result.current.connectionStatus).toBe("failed_permanently");
+      expect(result.current.lastError).toContain("Connection timeout");
 
       jest.useRealTimers();
     });
 
-    test('implements exponential backoff reconnection', async () => {
+    test("implements exponential backoff reconnection", async () => {
       jest.useFakeTimers();
 
       let connectionAttempts = 0;
@@ -171,7 +183,7 @@ describe('useWebSocketSettings Hook', () => {
             setTimeout(() => {
               this.readyState = WebSocket.CLOSED;
               if (this.onclose) {
-                this.onclose({ code: 1006, reason: 'Abnormal closure' });
+                this.onclose({ code: 1006, reason: "Abnormal closure" });
               }
             }, 20);
           }
@@ -179,7 +191,9 @@ describe('useWebSocketSettings Hook', () => {
       }
       global.WebSocket = ReconnectingWebSocket;
 
-      const { result } = renderHook(() => useWebSocketSettings({ enabled: true }));
+      const { result } = renderHook(() =>
+        useWebSocketSettings({ enabled: true }),
+      );
 
       // Advance through multiple reconnection attempts
       // Initial connect: 100ms + fail delay 20ms = 120ms
@@ -194,7 +208,7 @@ describe('useWebSocketSettings Hook', () => {
       jest.useRealTimers();
     });
 
-    test('marks as failed_permanently after max reconnection attempts', async () => {
+    test("marks as failed_permanently after max reconnection attempts", async () => {
       jest.useFakeTimers();
 
       let attempts = 0;
@@ -205,14 +219,16 @@ describe('useWebSocketSettings Hook', () => {
           setTimeout(() => {
             this.readyState = WebSocket.CLOSED;
             if (this.onclose) {
-              this.onclose({ code: 1006, reason: 'Connection failed' });
+              this.onclose({ code: 1006, reason: "Connection failed" });
             }
           }, 20);
         }
       }
       global.WebSocket = AlwaysFailingWebSocket;
 
-      const { result } = renderHook(() => useWebSocketSettings({ enabled: true }));
+      const { result } = renderHook(() =>
+        useWebSocketSettings({ enabled: true }),
+      );
 
       // Advance through all reconnection attempts until permanent failure
       // Initial: 100ms + 20ms
@@ -223,17 +239,21 @@ describe('useWebSocketSettings Hook', () => {
         jest.advanceTimersByTime(8000);
       });
 
-      expect(result.current.connectionStatus).toBe('failed_permanently');
-      expect(result.current.lastError).toContain('Connection failed after multiple attempts');
+      expect(result.current.connectionStatus).toBe("failed_permanently");
+      expect(result.current.lastError).toContain(
+        "Connection failed after multiple attempts",
+      );
       expect(attempts).toBeGreaterThanOrEqual(3);
 
       jest.useRealTimers();
     });
   });
 
-  describe('Message Handling', () => {
-    test('handles SETTINGS_SYNC_RESPONSE with multi-table data', async () => {
-      const { result } = renderHook(() => useWebSocketSettings({ enabled: true }));
+  describe("Message Handling", () => {
+    test("handles SETTINGS_SYNC_RESPONSE with multi-table data", async () => {
+      const { result } = renderHook(() =>
+        useWebSocketSettings({ enabled: true }),
+      );
 
       await waitForConnection();
 
@@ -241,25 +261,32 @@ describe('useWebSocketSettings Hook', () => {
 
       // Simulate sync response
       const mockResponse = {
-        type: 'SETTINGS_SYNC_RESPONSE',
+        type: "SETTINGS_SYNC_RESPONSE",
         payload: {
           settings: {
             staffGroups: [
-              { id: 'group-1', name: 'Kitchen Staff', members: ['staff-1', 'staff-2'] }
+              {
+                id: "group-1",
+                name: "Kitchen Staff",
+                members: ["staff-1", "staff-2"],
+              },
             ],
             dailyLimits: [
-              { id: 'limit-1', limitConfig: { maxShifts: 2, daysOfWeek: [1, 2, 3] } }
+              {
+                id: "limit-1",
+                limitConfig: { maxShifts: 2, daysOfWeek: [1, 2, 3] },
+              },
             ],
             monthlyLimits: [],
             priorityRules: [],
             mlModelConfigs: [],
             version: {
               versionNumber: 1,
-              name: 'Initial Config',
-              isActive: true
-            }
-          }
-        }
+              name: "Initial Config",
+              isActive: true,
+            },
+          },
+        },
       };
 
       act(() => {
@@ -272,20 +299,24 @@ describe('useWebSocketSettings Hook', () => {
       await waitFor(() => {
         expect(result.current.settings).toBeDefined();
         expect(result.current.settings.staffGroups).toHaveLength(1);
-        expect(result.current.version).toEqual(mockResponse.payload.settings.version);
+        expect(result.current.version).toEqual(
+          mockResponse.payload.settings.version,
+        );
       });
     });
 
-    test('handles CONNECTION_ACK message', async () => {
-      const { result } = renderHook(() => useWebSocketSettings({ enabled: true }));
+    test("handles CONNECTION_ACK message", async () => {
+      const { result } = renderHook(() =>
+        useWebSocketSettings({ enabled: true }),
+      );
 
       await waitForConnection();
 
       expect(result.current.isConnected).toBe(true);
 
       const ackMessage = {
-        type: 'CONNECTION_ACK',
-        payload: { message: 'Connected successfully' }
+        type: "CONNECTION_ACK",
+        payload: { message: "Connected successfully" },
       };
 
       act(() => {
@@ -298,16 +329,18 @@ describe('useWebSocketSettings Hook', () => {
       expect(result.current.lastError).toBeNull();
     });
 
-    test('handles ERROR message', async () => {
-      const { result } = renderHook(() => useWebSocketSettings({ enabled: true }));
+    test("handles ERROR message", async () => {
+      const { result } = renderHook(() =>
+        useWebSocketSettings({ enabled: true }),
+      );
 
       await waitForConnection();
 
       expect(result.current.isConnected).toBe(true);
 
       const errorMessage = {
-        type: 'ERROR',
-        payload: { message: 'Database connection failed' }
+        type: "ERROR",
+        payload: { message: "Database connection failed" },
       };
 
       act(() => {
@@ -317,20 +350,22 @@ describe('useWebSocketSettings Hook', () => {
       });
 
       await waitFor(() => {
-        expect(result.current.lastError).toBe('Database connection failed');
+        expect(result.current.lastError).toBe("Database connection failed");
       });
     });
 
-    test('handles unknown message types gracefully', async () => {
-      const { result } = renderHook(() => useWebSocketSettings({ enabled: true }));
+    test("handles unknown message types gracefully", async () => {
+      const { result } = renderHook(() =>
+        useWebSocketSettings({ enabled: true }),
+      );
 
       await waitForConnection();
 
       expect(result.current.isConnected).toBe(true);
 
       const unknownMessage = {
-        type: 'UNKNOWN_TYPE',
-        payload: { data: 'something' }
+        type: "UNKNOWN_TYPE",
+        payload: { data: "something" },
       };
 
       act(() => {
@@ -344,33 +379,35 @@ describe('useWebSocketSettings Hook', () => {
     });
   });
 
-  describe('Data Transformation', () => {
-    test('extracts members from groupConfig.members (JSONB)', async () => {
-      const { result } = renderHook(() => useWebSocketSettings({ enabled: true }));
+  describe("Data Transformation", () => {
+    test("extracts members from groupConfig.members (JSONB)", async () => {
+      const { result } = renderHook(() =>
+        useWebSocketSettings({ enabled: true }),
+      );
 
       await waitForConnection();
 
       expect(result.current.isConnected).toBe(true);
 
       const responseWithGroupConfig = {
-        type: 'SETTINGS_SYNC_RESPONSE',
+        type: "SETTINGS_SYNC_RESPONSE",
         payload: {
           settings: {
             staffGroups: [
               {
-                id: 'group-1',
-                name: 'Kitchen',
+                id: "group-1",
+                name: "Kitchen",
                 groupConfig: {
-                  members: ['staff-1', 'staff-2', 'staff-3']
-                }
-              }
+                  members: ["staff-1", "staff-2", "staff-3"],
+                },
+              },
             ],
             dailyLimits: [],
             monthlyLimits: [],
             priorityRules: [],
-            mlModelConfigs: []
-          }
-        }
+            mlModelConfigs: [],
+          },
+        },
       };
 
       act(() => {
@@ -386,22 +423,24 @@ describe('useWebSocketSettings Hook', () => {
       // Note: The extraction happens in useSettingsData, not this hook
       // This hook just passes the raw data
       expect(result.current.settings.staffGroups[0]).toEqual(
-        responseWithGroupConfig.payload.settings.staffGroups[0]
+        responseWithGroupConfig.payload.settings.staffGroups[0],
       );
     });
 
-    test('provides safe defaults for undefined nested properties', async () => {
-      const { result } = renderHook(() => useWebSocketSettings({ enabled: true }));
+    test("provides safe defaults for undefined nested properties", async () => {
+      const { result } = renderHook(() =>
+        useWebSocketSettings({ enabled: true }),
+      );
 
       await waitForConnection();
 
       expect(result.current.isConnected).toBe(true);
 
       const responseWithMissingData = {
-        type: 'SETTINGS_SYNC_RESPONSE',
+        type: "SETTINGS_SYNC_RESPONSE",
         payload: {
-          settings: {}
-        }
+          settings: {},
+        },
       };
 
       act(() => {
@@ -415,26 +454,28 @@ describe('useWebSocketSettings Hook', () => {
       });
     });
 
-    test('separates version from settings data', async () => {
-      const { result } = renderHook(() => useWebSocketSettings({ enabled: true }));
+    test("separates version from settings data", async () => {
+      const { result } = renderHook(() =>
+        useWebSocketSettings({ enabled: true }),
+      );
 
       await waitForConnection();
 
       expect(result.current.isConnected).toBe(true);
 
       const responseWithVersion = {
-        type: 'SETTINGS_SYNC_RESPONSE',
+        type: "SETTINGS_SYNC_RESPONSE",
         payload: {
           settings: {
             staffGroups: [],
             dailyLimits: [],
             version: {
               versionNumber: 5,
-              name: 'Production Config v5',
-              isLocked: true
-            }
-          }
-        }
+              name: "Production Config v5",
+              isLocked: true,
+            },
+          },
+        },
       };
 
       act(() => {
@@ -446,26 +487,28 @@ describe('useWebSocketSettings Hook', () => {
       await waitFor(() => {
         expect(result.current.version).toEqual({
           versionNumber: 5,
-          name: 'Production Config v5',
-          isLocked: true
+          name: "Production Config v5",
+          isLocked: true,
         });
         expect(result.current.settings.version).toBeUndefined();
       });
     });
   });
 
-  describe('CRUD Operations', () => {
-    test('sends SETTINGS_UPDATE_STAFF_GROUPS message', async () => {
-      const { result } = renderHook(() => useWebSocketSettings({ enabled: true }));
+  describe("CRUD Operations", () => {
+    test("sends SETTINGS_UPDATE_STAFF_GROUPS message", async () => {
+      const { result } = renderHook(() =>
+        useWebSocketSettings({ enabled: true }),
+      );
 
       await waitForConnection();
 
       expect(result.current.isConnected).toBe(true);
 
       const groupData = {
-        id: 'group-1',
-        name: 'Kitchen Staff',
-        members: ['staff-1', 'staff-2']
+        id: "group-1",
+        name: "Kitchen Staff",
+        members: ["staff-1", "staff-2"],
       };
 
       act(() => {
@@ -474,22 +517,24 @@ describe('useWebSocketSettings Hook', () => {
 
       expect(lastWebSocketInstance).toBeDefined();
       const updateMessage = lastWebSocketInstance.sentMessages.find(
-        msg => msg.type === 'SETTINGS_UPDATE_STAFF_GROUPS'
+        (msg) => msg.type === "SETTINGS_UPDATE_STAFF_GROUPS",
       );
       expect(updateMessage).toBeDefined();
       expect(updateMessage.payload.group).toEqual(groupData);
     });
 
-    test('sends SETTINGS_UPDATE_DAILY_LIMITS message', async () => {
-      const { result } = renderHook(() => useWebSocketSettings({ enabled: true }));
+    test("sends SETTINGS_UPDATE_DAILY_LIMITS message", async () => {
+      const { result } = renderHook(() =>
+        useWebSocketSettings({ enabled: true }),
+      );
 
       await waitForConnection();
 
       expect(result.current.isConnected).toBe(true);
 
       const limitData = {
-        id: 'limit-1',
-        limitConfig: { maxShifts: 2, daysOfWeek: [1, 2, 3] }
+        id: "limit-1",
+        limitConfig: { maxShifts: 2, daysOfWeek: [1, 2, 3] },
       };
 
       act(() => {
@@ -498,80 +543,90 @@ describe('useWebSocketSettings Hook', () => {
 
       expect(lastWebSocketInstance).toBeDefined();
       const updateMessage = lastWebSocketInstance.sentMessages.find(
-        msg => msg.type === 'SETTINGS_UPDATE_DAILY_LIMITS'
+        (msg) => msg.type === "SETTINGS_UPDATE_DAILY_LIMITS",
       );
       expect(updateMessage).toBeDefined();
       expect(updateMessage.payload.limit).toEqual(limitData);
     });
 
-    test('rejects operations when WebSocket disabled', async () => {
-      const { result } = renderHook(() => useWebSocketSettings({ enabled: false }));
+    test("rejects operations when WebSocket disabled", async () => {
+      const { result } = renderHook(() =>
+        useWebSocketSettings({ enabled: false }),
+      );
 
       await waitFor(() => {
-        expect(result.current.connectionStatus).toBe('disabled');
+        expect(result.current.connectionStatus).toBe("disabled");
       });
 
       await expect(
-        result.current.updateStaffGroups({ id: 'test' })
-      ).rejects.toThrow('WebSocket disabled');
+        result.current.updateStaffGroups({ id: "test" }),
+      ).rejects.toThrow("WebSocket disabled");
     });
 
-    test('rejects operations when not connected', async () => {
-      const { result } = renderHook(() => useWebSocketSettings({ enabled: true }));
+    test("rejects operations when not connected", async () => {
+      const { result } = renderHook(() =>
+        useWebSocketSettings({ enabled: true }),
+      );
 
       // Try to update before connection is established
       await expect(
-        result.current.updateStaffGroups({ id: 'test' })
-      ).rejects.toThrow('WebSocket not connected');
+        result.current.updateStaffGroups({ id: "test" }),
+      ).rejects.toThrow("WebSocket not connected");
     });
   });
 
-  describe('Version Management', () => {
-    test('sends SETTINGS_CREATE_VERSION message', async () => {
-      const { result } = renderHook(() => useWebSocketSettings({ enabled: true }));
+  describe("Version Management", () => {
+    test("sends SETTINGS_CREATE_VERSION message", async () => {
+      const { result } = renderHook(() =>
+        useWebSocketSettings({ enabled: true }),
+      );
 
       await waitForConnection();
 
       expect(result.current.isConnected).toBe(true);
 
       act(() => {
-        result.current.createVersion('Backup Config', 'Pre-migration backup');
+        result.current.createVersion("Backup Config", "Pre-migration backup");
       });
 
       expect(lastWebSocketInstance).toBeDefined();
       const versionMessage = lastWebSocketInstance.sentMessages.find(
-        msg => msg.type === 'SETTINGS_CREATE_VERSION'
+        (msg) => msg.type === "SETTINGS_CREATE_VERSION",
       );
       expect(versionMessage).toBeDefined();
       expect(versionMessage.payload).toEqual({
-        name: 'Backup Config',
-        description: 'Pre-migration backup'
+        name: "Backup Config",
+        description: "Pre-migration backup",
       });
     });
 
-    test('sends SETTINGS_ACTIVATE_VERSION message', async () => {
-      const { result } = renderHook(() => useWebSocketSettings({ enabled: true }));
+    test("sends SETTINGS_ACTIVATE_VERSION message", async () => {
+      const { result } = renderHook(() =>
+        useWebSocketSettings({ enabled: true }),
+      );
 
       await waitForConnection();
 
       expect(result.current.isConnected).toBe(true);
 
       act(() => {
-        result.current.activateVersion('version-123');
+        result.current.activateVersion("version-123");
       });
 
       expect(lastWebSocketInstance).toBeDefined();
       const activateMessage = lastWebSocketInstance.sentMessages.find(
-        msg => msg.type === 'SETTINGS_ACTIVATE_VERSION'
+        (msg) => msg.type === "SETTINGS_ACTIVATE_VERSION",
       );
       expect(activateMessage).toBeDefined();
-      expect(activateMessage.payload.versionId).toBe('version-123');
+      expect(activateMessage.payload.versionId).toBe("version-123");
     });
   });
 
-  describe('Bulk Operations', () => {
-    test('sends SETTINGS_RESET message', async () => {
-      const { result } = renderHook(() => useWebSocketSettings({ enabled: true }));
+  describe("Bulk Operations", () => {
+    test("sends SETTINGS_RESET message", async () => {
+      const { result } = renderHook(() =>
+        useWebSocketSettings({ enabled: true }),
+      );
 
       await waitForConnection();
 
@@ -583,22 +638,24 @@ describe('useWebSocketSettings Hook', () => {
 
       expect(lastWebSocketInstance).toBeDefined();
       const resetMessage = lastWebSocketInstance.sentMessages.find(
-        msg => msg.type === 'SETTINGS_RESET'
+        (msg) => msg.type === "SETTINGS_RESET",
       );
       expect(resetMessage).toBeDefined();
     });
 
-    test('sends SETTINGS_MIGRATE message with localStorage data', async () => {
-      const { result } = renderHook(() => useWebSocketSettings({ enabled: true }));
+    test("sends SETTINGS_MIGRATE message with localStorage data", async () => {
+      const { result } = renderHook(() =>
+        useWebSocketSettings({ enabled: true }),
+      );
 
       await waitForConnection();
 
       expect(result.current.isConnected).toBe(true);
 
       const localStorageData = {
-        staffGroups: [{ id: 'group-1', name: 'Kitchen' }],
+        staffGroups: [{ id: "group-1", name: "Kitchen" }],
         dailyLimits: [],
-        monthlyLimits: []
+        monthlyLimits: [],
       };
 
       act(() => {
@@ -607,16 +664,18 @@ describe('useWebSocketSettings Hook', () => {
 
       expect(lastWebSocketInstance).toBeDefined();
       const migrateMessage = lastWebSocketInstance.sentMessages.find(
-        msg => msg.type === 'SETTINGS_MIGRATE'
+        (msg) => msg.type === "SETTINGS_MIGRATE",
       );
       expect(migrateMessage).toBeDefined();
       expect(migrateMessage.payload.settings).toEqual(localStorageData);
     });
   });
 
-  describe('Manual Controls', () => {
-    test('reconnect() resets connection and attempts to reconnect', async () => {
-      const { result } = renderHook(() => useWebSocketSettings({ enabled: true }));
+  describe("Manual Controls", () => {
+    test("reconnect() resets connection and attempts to reconnect", async () => {
+      const { result } = renderHook(() =>
+        useWebSocketSettings({ enabled: true }),
+      );
 
       await waitForConnection();
 
@@ -627,12 +686,14 @@ describe('useWebSocketSettings Hook', () => {
       });
 
       await waitFor(() => {
-        expect(result.current.connectionStatus).toBe('connecting');
+        expect(result.current.connectionStatus).toBe("connecting");
       });
     });
 
-    test('provides debug info (clientId, reconnectAttempts)', async () => {
-      const { result } = renderHook(() => useWebSocketSettings({ enabled: true }));
+    test("provides debug info (clientId, reconnectAttempts)", async () => {
+      const { result } = renderHook(() =>
+        useWebSocketSettings({ enabled: true }),
+      );
 
       await waitFor(() => {
         expect(result.current.clientId).toBeDefined();
@@ -641,16 +702,18 @@ describe('useWebSocketSettings Hook', () => {
     });
   });
 
-  describe('Cleanup', () => {
-    test('closes WebSocket connection on unmount', async () => {
-      const { result, unmount } = renderHook(() => useWebSocketSettings({ enabled: true }));
+  describe("Cleanup", () => {
+    test("closes WebSocket connection on unmount", async () => {
+      const { result, unmount } = renderHook(() =>
+        useWebSocketSettings({ enabled: true }),
+      );
 
       await waitForConnection();
 
       expect(result.current.isConnected).toBe(true);
 
       expect(lastWebSocketInstance).toBeDefined();
-      const closeSpy = jest.spyOn(lastWebSocketInstance, 'close');
+      const closeSpy = jest.spyOn(lastWebSocketInstance, "close");
 
       unmount();
 
@@ -658,8 +721,10 @@ describe('useWebSocketSettings Hook', () => {
       expect(closeSpy).toHaveBeenCalled();
     });
 
-    test('clears all timers on unmount', async () => {
-      const { unmount } = renderHook(() => useWebSocketSettings({ enabled: true }));
+    test("clears all timers on unmount", async () => {
+      const { unmount } = renderHook(() =>
+        useWebSocketSettings({ enabled: true }),
+      );
 
       unmount();
 

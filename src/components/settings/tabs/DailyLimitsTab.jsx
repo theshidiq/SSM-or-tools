@@ -1,4 +1,10 @@
-import React, { useState, useEffect, useMemo, useCallback, useRef } from "react";
+import React, {
+  useState,
+  useEffect,
+  useMemo,
+  useCallback,
+  useRef,
+} from "react";
 import {
   Plus,
   Trash2,
@@ -79,50 +85,50 @@ const DailyLimitsTab = ({
 
   // Fix: Memoize derived arrays to prevent unnecessary re-renders
   // Transform WebSocket multi-table format to localStorage-compatible format
-  const dailyLimits = useMemo(
-    () => {
-      const limits = settings?.dailyLimits || [];
-      // Ensure all limits have required properties (WebSocket multi-table backend compatibility)
-      return limits.map(limit => ({
-        ...limit,
-        // Extract properties from limitConfig if stored there (multi-table backend)
-        // Otherwise use properties directly, or default to safe values
-        daysOfWeek: limit.daysOfWeek || limit.limitConfig?.daysOfWeek || [],
-        targetIds: limit.targetIds || limit.limitConfig?.targetIds || [],
-        shiftType: limit.shiftType || limit.limitConfig?.shiftType || 'any',
-        maxCount: limit.maxCount ?? limit.limitConfig?.maxCount ?? 0,
-        scope: limit.scope || limit.limitConfig?.scope || 'all',
-        isHardConstraint: limit.isHardConstraint ?? limit.limitConfig?.isHardConstraint ?? true,
-        penaltyWeight: limit.penaltyWeight ?? limit.limitConfig?.penaltyWeight ?? 10,
-        description: limit.description || limit.limitConfig?.description || '',
-      }));
-    },
-    [settings?.dailyLimits],
-  );
+  const dailyLimits = useMemo(() => {
+    const limits = settings?.dailyLimits || [];
+    // Ensure all limits have required properties (WebSocket multi-table backend compatibility)
+    return limits.map((limit) => ({
+      ...limit,
+      // Extract properties from limitConfig if stored there (multi-table backend)
+      // Otherwise use properties directly, or default to safe values
+      daysOfWeek: limit.daysOfWeek || limit.limitConfig?.daysOfWeek || [],
+      targetIds: limit.targetIds || limit.limitConfig?.targetIds || [],
+      shiftType: limit.shiftType || limit.limitConfig?.shiftType || "any",
+      maxCount: limit.maxCount ?? limit.limitConfig?.maxCount ?? 0,
+      scope: limit.scope || limit.limitConfig?.scope || "all",
+      isHardConstraint:
+        limit.isHardConstraint ?? limit.limitConfig?.isHardConstraint ?? true,
+      penaltyWeight:
+        limit.penaltyWeight ?? limit.limitConfig?.penaltyWeight ?? 10,
+      description: limit.description || limit.limitConfig?.description || "",
+    }));
+  }, [settings?.dailyLimits]);
 
-  const monthlyLimits = useMemo(
-    () => {
-      const limits = settings?.monthlyLimits || [];
-      // Ensure all limits have required properties (WebSocket multi-table backend compatibility)
-      return limits.map(limit => ({
-        ...limit,
-        // Extract properties from limitConfig if stored there (multi-table backend)
-        // Otherwise use properties directly, or default to safe values
-        limitType: limit.limitType || limit.limitConfig?.limitType || 'max_off_days',
-        maxCount: limit.maxCount ?? limit.limitConfig?.maxCount ?? 0,
-        scope: limit.scope || limit.limitConfig?.scope || 'all',
-        targetIds: limit.targetIds || limit.limitConfig?.targetIds || [],
-        distributionRules: limit.distributionRules || limit.limitConfig?.distributionRules || {
+  const monthlyLimits = useMemo(() => {
+    const limits = settings?.monthlyLimits || [];
+    // Ensure all limits have required properties (WebSocket multi-table backend compatibility)
+    return limits.map((limit) => ({
+      ...limit,
+      // Extract properties from limitConfig if stored there (multi-table backend)
+      // Otherwise use properties directly, or default to safe values
+      limitType:
+        limit.limitType || limit.limitConfig?.limitType || "max_off_days",
+      maxCount: limit.maxCount ?? limit.limitConfig?.maxCount ?? 0,
+      scope: limit.scope || limit.limitConfig?.scope || "all",
+      targetIds: limit.targetIds || limit.limitConfig?.targetIds || [],
+      distributionRules: limit.distributionRules ||
+        limit.limitConfig?.distributionRules || {
           maxConsecutive: 2,
           preferWeekends: false,
         },
-        isHardConstraint: limit.isHardConstraint ?? limit.limitConfig?.isHardConstraint ?? false,
-        penaltyWeight: limit.penaltyWeight ?? limit.limitConfig?.penaltyWeight ?? 5,
-        description: limit.description || limit.limitConfig?.description || '',
-      }));
-    },
-    [settings?.monthlyLimits],
-  );
+      isHardConstraint:
+        limit.isHardConstraint ?? limit.limitConfig?.isHardConstraint ?? false,
+      penaltyWeight:
+        limit.penaltyWeight ?? limit.limitConfig?.penaltyWeight ?? 5,
+      description: limit.description || limit.limitConfig?.description || "",
+    }));
+  }, [settings?.monthlyLimits]);
 
   // Add escape key listener to exit edit mode
   useEffect(() => {
@@ -148,29 +154,38 @@ const DailyLimitsTab = ({
         if (!skipValidation && currentScheduleId) {
           setIsValidating(true);
           try {
-            const violations = await validateDailyLimits(newLimits, staffMembers);
+            const violations = await validateDailyLimits(
+              newLimits,
+              staffMembers,
+            );
 
             if (violations.length > 0) {
               // Show warning toast with violation count
               toast.warning(
-                `Warning: ${violations.length} daily limit violation${violations.length !== 1 ? 's' : ''} detected`,
+                `Warning: ${violations.length} daily limit violation${violations.length !== 1 ? "s" : ""} detected`,
                 {
-                  description: 'Current schedule exceeds new daily limits',
+                  description: "Current schedule exceeds new daily limits",
                   action: {
-                    label: 'View Violations',
+                    label: "View Violations",
                     onClick: () => {
                       setValidationViolations(violations);
                       setShowViolationsModal(true);
-                    }
+                    },
                   },
-                  duration: 6000
-                }
+                  duration: 6000,
+                },
               );
 
-              console.log('⚠️ Daily limits validation detected violations:', violations);
+              console.log(
+                "⚠️ Daily limits validation detected violations:",
+                violations,
+              );
             }
           } catch (validationError) {
-            console.error('❌ Daily limits validation failed:', validationError);
+            console.error(
+              "❌ Daily limits validation failed:",
+              validationError,
+            );
             // Continue with save even if validation fails
           } finally {
             setIsValidating(false);
@@ -187,7 +202,7 @@ const DailyLimitsTab = ({
         throw error;
       }
     },
-    [currentScheduleId, validateDailyLimits, staffMembers] // Removed settings/onSettingsChange
+    [currentScheduleId, validateDailyLimits, staffMembers], // Removed settings/onSettingsChange
   );
 
   // Phase 4.3: Wrap updateMonthlyLimits with useCallback and refs
@@ -423,9 +438,7 @@ const DailyLimitsTab = ({
         </div>
         <p className="text-xs text-gray-500">
           Selected days:{" "}
-          {daysOfWeek.length === 7
-            ? "All days"
-            : `${daysOfWeek.length} days`}
+          {daysOfWeek.length === 7 ? "All days" : `${daysOfWeek.length} days`}
         </p>
       </div>
     );
@@ -491,9 +504,7 @@ const DailyLimitsTab = ({
         : "No staff selected";
     }
     if (limit.scope === "staff_status") {
-      return targetIds.length > 0
-        ? targetIds.join(", ")
-        : "No status selected";
+      return targetIds.length > 0 ? targetIds.join(", ") : "No status selected";
     }
     return limit.scope;
   };

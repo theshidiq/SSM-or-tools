@@ -359,7 +359,11 @@ export const useStaffManagementEnhanced = (currentMonthIndex, options = {}) => {
     if (enableConflictResolution && conflictHook.activeConflicts.length > 0)
       return "conflicts";
     // Only consider offline if both Supabase is disconnected AND browser is offline
-    if (!realtimeHook.isConnected && enableOfflineSupport && !offlineHook.isOnline)
+    if (
+      !realtimeHook.isConnected &&
+      enableOfflineSupport &&
+      !offlineHook.isOnline
+    )
       return "offline_mode";
     // If Supabase is connected, we're considered online regardless of navigator.onLine
     if (realtimeHook.isConnected) return "connected";

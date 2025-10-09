@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState, useCallback } from "react";
-import { isDateWithinWorkPeriod } from "../../utils/dateUtils";
 import { toast } from "sonner";
+import { AlertCircle, CheckCircle2, Loader2 } from "lucide-react";
+import { isDateWithinWorkPeriod } from "../../utils/dateUtils";
 import { useFeatureFlag, checkSystemHealth } from "../../config/featureFlags";
 import { useWebSocketShifts } from "../../hooks/useWebSocketShifts";
 
@@ -25,7 +26,6 @@ import {
 import { Card, CardContent } from "../ui/card";
 import { Badge } from "../ui/badge";
 import { RadioGroup, RadioGroupItem } from "../ui/radio-group";
-import { AlertCircle, CheckCircle2, Loader2 } from "lucide-react";
 
 const StaffEditModal = ({
   showStaffEditModal,
@@ -51,15 +51,24 @@ const StaffEditModal = ({
 }) => {
   // Debug staffMembers prop changes
   React.useEffect(() => {
-    console.log(`🔍 [StaffModal] Received staffMembers: ${staffMembers?.length || 0} staff`);
+    console.log(
+      `🔍 [StaffModal] Received staffMembers: ${staffMembers?.length || 0} staff`,
+    );
     if (staffMembers?.length > 0) {
-      console.log(`🔍 [StaffModal] Staff list:`, staffMembers.map(s => ({id: s.id, name: s.name, lastModified: s.lastModified})));
+      console.log(
+        `🔍 [StaffModal] Staff list:`,
+        staffMembers.map((s) => ({
+          id: s.id,
+          name: s.name,
+          lastModified: s.lastModified,
+        })),
+      );
     }
   }, [staffMembers]);
 
   // Track if user is actively editing to prevent overwriting their changes
   const [isUserEditing, setIsUserEditing] = React.useState(false);
-  
+
   // Track operation states for better UX
   const [operationState, setOperationState] = useState({
     isProcessing: false,
@@ -68,8 +77,8 @@ const StaffEditModal = ({
   });
 
   // Feature flags for enhanced behavior
-  const optimisticUpdatesEnabled = useFeatureFlag('OPTIMISTIC_UPDATES');
-  const enhancedLoggingEnabled = useFeatureFlag('ENHANCED_LOGGING');
+  const optimisticUpdatesEnabled = useFeatureFlag("OPTIMISTIC_UPDATES");
+  const enhancedLoggingEnabled = useFeatureFlag("ENHANCED_LOGGING");
 
   // Optimistic update state management
   const [optimisticStaffData, setOptimisticStaffData] = useState(null);
@@ -80,11 +89,15 @@ const StaffEditModal = ({
   const [staffToDelete, setStaffToDelete] = useState(null);
 
   // WebSocket integration for real-time shift synchronization
-  const webSocketShifts = useWebSocketShifts(currentMonthIndex, currentScheduleId, {
-    enabled: !!currentScheduleId,
-    autoReconnect: true,
-    enableOfflineQueue: true,
-  });
+  const webSocketShifts = useWebSocketShifts(
+    currentMonthIndex,
+    currentScheduleId,
+    {
+      enabled: !!currentScheduleId,
+      autoReconnect: true,
+      enableOfflineQueue: true,
+    },
+  );
 
   // Ref for the name input field to enable auto-focus
   const nameInputRef = useRef(null);
@@ -128,7 +141,9 @@ const StaffEditModal = ({
     // Skip sync during optimistic updates to prevent conflicts
     if (optimisticUpdatesEnabled && pendingOperation) {
       if (enhancedLoggingEnabled) {
-        console.log(`⏸️ [Enhanced Sync] Skipping sync during optimistic update for ${pendingOperation.type} operation`);
+        console.log(
+          `⏸️ [Enhanced Sync] Skipping sync during optimistic update for ${pendingOperation.type} operation`,
+        );
       }
       return;
     }
@@ -136,7 +151,9 @@ const StaffEditModal = ({
     // Skip sync if user is actively editing the form AND it's not right after an operation
     if (isUserEditing && !operationState.lastOperationSuccess) {
       if (enhancedLoggingEnabled) {
-        console.log(`⏸️ [Enhanced Sync] Skipping sync - user is actively editing`);
+        console.log(
+          `⏸️ [Enhanced Sync] Skipping sync - user is actively editing`,
+        );
       }
       return;
     }
@@ -158,7 +175,7 @@ const StaffEditModal = ({
           currentStatus: selectedStaffForEdit.status,
           newStatus: updatedStaffData.status,
           hasLastModified: !!updatedStaffData.lastModified,
-          lastModified: updatedStaffData.lastModified
+          lastModified: updatedStaffData.lastModified,
         });
 
         // Check if the data has actually changed to avoid unnecessary updates
@@ -172,7 +189,9 @@ const StaffEditModal = ({
             JSON.stringify(selectedStaffForEdit.endPeriod);
 
         if (hasChanges) {
-          console.log(`🔄 [Enhanced Sync] Changes detected! Syncing form with updated data for: ${updatedStaffData.name}`);
+          console.log(
+            `🔄 [Enhanced Sync] Changes detected! Syncing form with updated data for: ${updatedStaffData.name}`,
+          );
 
           // Update selectedStaffForEdit with latest data
           setSelectedStaffForEdit(updatedStaffData);
@@ -191,12 +210,17 @@ const StaffEditModal = ({
           // Clear the editing flag since we've successfully synced
           setIsUserEditing(false);
 
-          console.log(`✅ [Enhanced Sync] Form synced successfully with:`, newEditingData);
+          console.log(
+            `✅ [Enhanced Sync] Form synced successfully with:`,
+            newEditingData,
+          );
         } else {
           console.log(`⏭️ [Enhanced Sync] No changes detected, skipping sync`);
         }
       } else {
-        console.warn(`⚠️ [Enhanced Sync] Staff ${selectedStaffForEdit.id} not found in staffMembers array`);
+        console.warn(
+          `⚠️ [Enhanced Sync] Staff ${selectedStaffForEdit.id} not found in staffMembers array`,
+        );
       }
     }
   }, [
@@ -252,30 +276,36 @@ const StaffEditModal = ({
 
     // Enhanced logging with feature flag
     if (enhancedLoggingEnabled) {
-      console.log(`🚀 [Enhanced StaffModal] Starting ${isAddingNewStaff ? 'add' : 'update'} operation for: ${safeEditingStaffData.name}`);
-      console.log(`🚀 [Enhanced StaffModal] Optimistic updates enabled: ${optimisticUpdatesEnabled}`);
+      console.log(
+        `🚀 [Enhanced StaffModal] Starting ${isAddingNewStaff ? "add" : "update"} operation for: ${safeEditingStaffData.name}`,
+      );
+      console.log(
+        `🚀 [Enhanced StaffModal] Optimistic updates enabled: ${optimisticUpdatesEnabled}`,
+      );
     }
 
     // Clear editing flag and set processing state
     setIsUserEditing(false);
     setOperationState({
       isProcessing: true,
-      lastOperation: isAddingNewStaff ? 'add' : 'update',
+      lastOperation: isAddingNewStaff ? "add" : "update",
       lastOperationSuccess: false,
     });
 
     // Optimistic update mechanism
     if (optimisticUpdatesEnabled) {
       if (enhancedLoggingEnabled) {
-        console.log(`⚡ [Optimistic Update] Applying immediate UI update for ${safeEditingStaffData.name}`);
+        console.log(
+          `⚡ [Optimistic Update] Applying immediate UI update for ${safeEditingStaffData.name}`,
+        );
       }
 
       // Store pending operation for rollback if needed
       setPendingOperation({
-        type: isAddingNewStaff ? 'add' : 'update',
+        type: isAddingNewStaff ? "add" : "update",
         data: safeEditingStaffData,
         staffId: selectedStaffForEdit?.id,
-        timestamp: Date.now()
+        timestamp: Date.now(),
       });
 
       // Apply optimistic update immediately
@@ -283,7 +313,7 @@ const StaffEditModal = ({
         const optimisticStaff = {
           ...safeEditingStaffData,
           id: `temp_${Date.now()}`, // Temporary ID for optimistic update
-          isOptimistic: true // Flag to identify optimistic updates
+          isOptimistic: true, // Flag to identify optimistic updates
         };
         setOptimisticStaffData(optimisticStaff);
       } else {
@@ -291,21 +321,27 @@ const StaffEditModal = ({
         setOptimisticStaffData({
           ...selectedStaffForEdit,
           ...safeEditingStaffData,
-          isOptimistic: true
+          isOptimistic: true,
         });
       }
     }
 
     try {
       if (isAddingNewStaff) {
-        console.log(`➕ [Real-time UI] Adding new staff member: ${safeEditingStaffData.name}`);
-        
+        console.log(
+          `➕ [Real-time UI] Adding new staff member: ${safeEditingStaffData.name}`,
+        );
+
         // Show immediate optimistic feedback
-        toast.success(`${safeEditingStaffData.name}を追加しています...`, { duration: 1000 });
-        
+        toast.success(`${safeEditingStaffData.name}を追加しています...`, {
+          duration: 1000,
+        });
+
         const newStaff = addStaff(safeEditingStaffData, (updatedStaffArray) => {
           if (enhancedLoggingEnabled) {
-            console.log("✅ [Enhanced StaffModal] Staff added successfully - confirming optimistic update");
+            console.log(
+              "✅ [Enhanced StaffModal] Staff added successfully - confirming optimistic update",
+            );
           }
 
           // Clear optimistic state - real data is now available
@@ -314,13 +350,15 @@ const StaffEditModal = ({
 
           setOperationState({
             isProcessing: false,
-            lastOperation: 'add',
+            lastOperation: "add",
             lastOperationSuccess: true,
           });
 
           // Phase 3: Invalidate React Query cache to trigger database refresh
           if (invalidateAllPeriodsCache) {
-            console.log('🔄 [StaffModal-Refresh] Invalidating cache after staff add to refresh from database');
+            console.log(
+              "🔄 [StaffModal-Refresh] Invalidating cache after staff add to refresh from database",
+            );
             invalidateAllPeriodsCache();
           }
 
@@ -345,29 +383,37 @@ const StaffEditModal = ({
             }
           }, 100);
         });
-        
       } else if (selectedStaffForEdit) {
-        console.log(`✏️ [StaffModal-Update] Updating staff member: ${safeEditingStaffData.name}`);
+        console.log(
+          `✏️ [StaffModal-Update] Updating staff member: ${safeEditingStaffData.name}`,
+        );
 
         // Show immediate optimistic feedback
-        toast.success(`${safeEditingStaffData.name}を更新しています...`, { duration: 1000 });
+        toast.success(`${safeEditingStaffData.name}を更新しています...`, {
+          duration: 1000,
+        });
 
         // Check if staff type changed (requires schedule validation)
-        const staffTypeChanged = safeEditingStaffData.status !== selectedStaffForEdit.status;
+        const staffTypeChanged =
+          safeEditingStaffData.status !== selectedStaffForEdit.status;
         if (staffTypeChanged) {
-          console.log(`🔄 [StaffModal-Update] Staff type changed: ${selectedStaffForEdit.status} → ${safeEditingStaffData.status}`);
+          console.log(
+            `🔄 [StaffModal-Update] Staff type changed: ${selectedStaffForEdit.status} → ${safeEditingStaffData.status}`,
+          );
 
           // Validate schedule constraints for new staff type
           const hasScheduleData = schedule && schedule[selectedStaffForEdit.id];
           if (hasScheduleData) {
-            const shiftCount = Object.values(schedule[selectedStaffForEdit.id]).filter(
-              shift => shift && shift !== '×'
-            ).length;
+            const shiftCount = Object.values(
+              schedule[selectedStaffForEdit.id],
+            ).filter((shift) => shift && shift !== "×").length;
 
             if (shiftCount > 0) {
-              console.log(`📊 [StaffModal-Update] Staff has ${shiftCount} existing shifts - may require validation`);
+              console.log(
+                `📊 [StaffModal-Update] Staff has ${shiftCount} existing shifts - may require validation`,
+              );
               toast.info(`雇用形態変更: ${shiftCount}件のシフトがあります`, {
-                description: 'スケジュールを確認してください'
+                description: "スケジュールを確認してください",
               });
             }
           }
@@ -387,23 +433,34 @@ const StaffEditModal = ({
 
             setOperationState({
               isProcessing: false,
-              lastOperation: 'update',
+              lastOperation: "update",
               lastOperationSuccess: true,
             });
 
             // If staff type changed and WebSocket connected, trigger schedule re-validation
-            if (staffTypeChanged && webSocketShifts.isConnected && currentScheduleId) {
-              console.log(`🔄 [StaffModal-Update] Triggering schedule sync after staff type change`);
+            if (
+              staffTypeChanged &&
+              webSocketShifts.isConnected &&
+              currentScheduleId
+            ) {
+              console.log(
+                `🔄 [StaffModal-Update] Triggering schedule sync after staff type change`,
+              );
 
               // Request full schedule sync to ensure consistency
-              webSocketShifts.syncSchedule().catch(error => {
-                console.warn(`⚠️ [StaffModal-Update] Schedule sync failed:`, error);
+              webSocketShifts.syncSchedule().catch((error) => {
+                console.warn(
+                  `⚠️ [StaffModal-Update] Schedule sync failed:`,
+                  error,
+                );
               });
             }
 
             // Phase 3: Invalidate React Query cache to trigger re-render with fresh data
             if (invalidateAllPeriodsCache) {
-              console.log('🔄 [StaffModal-Update] Invalidating cache to refresh from database');
+              console.log(
+                "🔄 [StaffModal-Update] Invalidating cache to refresh from database",
+              );
               invalidateAllPeriodsCache();
             }
 
@@ -413,19 +470,26 @@ const StaffEditModal = ({
             // Clear editing flag to allow useEffect sync to run
             setIsUserEditing(false);
 
-            console.log(`🔄 [StaffModal-Update] Form will sync automatically via useEffect when staffMembers updates`);
+            console.log(
+              `🔄 [StaffModal-Update] Form will sync automatically via useEffect when staffMembers updates`,
+            );
           },
         );
       }
     } catch (error) {
       if (enhancedLoggingEnabled) {
-        console.error("❌ [Enhanced StaffModal] Staff operation failed - rolling back optimistic update:", error);
+        console.error(
+          "❌ [Enhanced StaffModal] Staff operation failed - rolling back optimistic update:",
+          error,
+        );
       }
 
       // Rollback optimistic update on error
       if (optimisticUpdatesEnabled && pendingOperation) {
         if (enhancedLoggingEnabled) {
-          console.log(`⏪ [Optimistic Rollback] Rolling back ${pendingOperation.type} operation for safety`);
+          console.log(
+            `⏪ [Optimistic Rollback] Rolling back ${pendingOperation.type} operation for safety`,
+          );
         }
 
         // Clear optimistic state
@@ -446,25 +510,28 @@ const StaffEditModal = ({
 
       setOperationState({
         isProcessing: false,
-        lastOperation: isAddingNewStaff ? 'add' : 'update',
+        lastOperation: isAddingNewStaff ? "add" : "update",
         lastOperationSuccess: false,
       });
 
       // Show enhanced error feedback
-      const operationText = isAddingNewStaff ? '追加' : '更新';
+      const operationText = isAddingNewStaff ? "追加" : "更新";
       toast.error(`スタッフの${operationText}に失敗しました: ${error.message}`);
 
       // System health check on error
       const healthCheck = checkSystemHealth();
-      if (healthCheck.status !== 'healthy' && enhancedLoggingEnabled) {
-        console.warn('⚠️ [System Health] System health check indicates issues:', healthCheck);
+      if (healthCheck.status !== "healthy" && enhancedLoggingEnabled) {
+        console.warn(
+          "⚠️ [System Health] System health check indicates issues:",
+          healthCheck,
+        );
       }
     }
   };
 
   // Open delete confirmation modal
   const openDeleteConfirmation = (staffId) => {
-    const staff = staffMembers.find(s => s.id === staffId);
+    const staff = staffMembers.find((s) => s.id === staffId);
     setStaffToDelete(staff);
     setShowDeleteConfirmModal(true);
   };
@@ -480,7 +547,7 @@ const StaffEditModal = ({
     if (!staffToDelete) return;
 
     const staffId = staffToDelete.id;
-    const staffName = staffToDelete.name || 'スタッフ';
+    const staffName = staffToDelete.name || "スタッフ";
 
     // Close confirmation modal
     closeDeleteConfirmation();
@@ -489,7 +556,7 @@ const StaffEditModal = ({
 
     setOperationState({
       isProcessing: true,
-      lastOperation: 'delete',
+      lastOperation: "delete",
       lastOperationSuccess: false,
     });
 
@@ -507,7 +574,9 @@ const StaffEditModal = ({
 
           // Step 2: Clean up schedule data for this staff across current period
           if (currentScheduleId && schedule && schedule[staffId]) {
-            console.log(`🧹 [StaffModal-Delete] Cleaning up schedule data for ${staffName}`);
+            console.log(
+              `🧹 [StaffModal-Delete] Cleaning up schedule data for ${staffName}`,
+            );
 
             // Create updated schedule without deleted staff
             const updatedScheduleData = { ...schedule };
@@ -516,33 +585,44 @@ const StaffEditModal = ({
             // Step 3: Broadcast schedule update via WebSocket
             if (webSocketShifts.isConnected) {
               try {
-                await webSocketShifts.bulkUpdate([{
-                  staffId,
-                  updates: {}, // Empty updates = delete all shifts for this staff
-                  reason: 'STAFF_DELETED'
-                }]);
-                console.log(`📡 [StaffModal-Delete] Schedule cleanup broadcasted via WebSocket`);
+                await webSocketShifts.bulkUpdate([
+                  {
+                    staffId,
+                    updates: {}, // Empty updates = delete all shifts for this staff
+                    reason: "STAFF_DELETED",
+                  },
+                ]);
+                console.log(
+                  `📡 [StaffModal-Delete] Schedule cleanup broadcasted via WebSocket`,
+                );
               } catch (wsError) {
-                console.warn(`⚠️ [StaffModal-Delete] WebSocket broadcast failed, using local update:`, wsError);
+                console.warn(
+                  `⚠️ [StaffModal-Delete] WebSocket broadcast failed, using local update:`,
+                  wsError,
+                );
                 // Fallback to local update if WebSocket fails
                 updateSchedule(updatedScheduleData);
               }
             } else {
               // WebSocket not connected, use direct update
-              console.log(`📝 [StaffModal-Delete] WebSocket not connected, using direct schedule update`);
+              console.log(
+                `📝 [StaffModal-Delete] WebSocket not connected, using direct schedule update`,
+              );
               updateSchedule(updatedScheduleData);
             }
           }
 
           setOperationState({
             isProcessing: false,
-            lastOperation: 'delete',
+            lastOperation: "delete",
             lastOperationSuccess: true,
           });
 
           // Step 4: Invalidate React Query cache to trigger database refresh
           if (invalidateAllPeriodsCache) {
-            console.log('🔄 [StaffModal-Delete] Invalidating cache to refresh from database');
+            console.log(
+              "🔄 [StaffModal-Delete] Invalidating cache to refresh from database",
+            );
             invalidateAllPeriodsCache();
           }
 
@@ -560,7 +640,7 @@ const StaffEditModal = ({
 
       setOperationState({
         isProcessing: false,
-        lastOperation: 'delete',
+        lastOperation: "delete",
         lastOperationSuccess: false,
       });
 
@@ -623,481 +703,509 @@ const StaffEditModal = ({
 
   return (
     <>
-    <Dialog
-      open={showStaffEditModal}
-      onOpenChange={(open) => {
-        if (!open) {
-          setIsUserEditing(false);
-          setShowStaffEditModal(false);
-          setSelectedStaffForEdit(null);
-          setIsAddingNewStaff(false);
-        }
-      }}
-    >
-      <DialogContent className="w-[95vw] max-w-6xl h-[90vh] max-h-[90vh] overflow-y-auto bg-background border-border shadow-2xl">
-        <DialogHeader>
-          <DialogTitle className="text-xl font-bold">スタッフ管理</DialogTitle>
-          <DialogDescription>
-            スタッフの追加、編集、削除を行います。
-          </DialogDescription>
-        </DialogHeader>
+      <Dialog
+        open={showStaffEditModal}
+        onOpenChange={(open) => {
+          if (!open) {
+            setIsUserEditing(false);
+            setShowStaffEditModal(false);
+            setSelectedStaffForEdit(null);
+            setIsAddingNewStaff(false);
+          }
+        }}
+      >
+        <DialogContent className="w-[95vw] max-w-6xl h-[90vh] max-h-[90vh] overflow-y-auto bg-background border-border shadow-2xl">
+          <DialogHeader>
+            <DialogTitle className="text-xl font-bold">
+              スタッフ管理
+            </DialogTitle>
+            <DialogDescription>
+              スタッフの追加、編集、削除を行います。
+            </DialogDescription>
+          </DialogHeader>
 
-        <div className="flex flex-col lg:flex-row gap-6 h-full p-1">
-          {/* Left Panel - Staff List */}
-          <div className="flex-1 lg:max-w-md space-y-4 min-h-0 flex flex-col">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <h3 className="text-lg font-semibold text-card-foreground">
-                  スタッフ一覧
-                </h3>
-                {isSaving && (
-                  <div className="flex items-center gap-1 text-sm text-muted-foreground">
-                    <Loader2 className="h-3 w-3 animate-spin" />
-                    <span>同期中...</span>
-                  </div>
-                )}
-                {operationState.lastOperationSuccess && (
-                  <div className="flex items-center gap-1 text-sm text-green-600">
-                    <CheckCircle2 className="h-3 w-3" />
-                  </div>
-                )}
-              </div>
-              <Button
-                onClick={startAddingNew}
-                disabled={operationState.isProcessing}
-                className="bg-green-500 hover:bg-green-600 disabled:opacity-50"
-              >
-                {operationState.isProcessing && operationState.lastOperation === 'add' ? (
-                  <>
-                    <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                    追加中...
-                  </>
-                ) : (
-                  "新規追加"
-                )}
-              </Button>
-            </div>
-
-            <div className="space-y-2 flex-1 overflow-y-auto">
-              {staffMembers.map((staff) => {
-                const isActive =
-                  isDateWithinWorkPeriod(dateRange[0], staff) ||
-                  isDateWithinWorkPeriod(
-                    dateRange[dateRange.length - 1],
-                    staff,
-                  );
-
-                return (
-                  <Card
-                    key={staff.id}
-                    onClick={() => handleStaffSelect(staff)}
-                    className={`cursor-pointer transition-all ${
-                      selectedStaffForEdit?.id === staff.id
-                        ? "border-primary bg-primary/10"
-                        : "hover:bg-accent"
-                    } ${!isActive ? "opacity-60" : ""}`}
-                  >
-                    <CardContent className="p-3">
-                      <div className="flex items-center justify-between">
-                        <div>
-                          <div className="font-medium">{staff.name}</div>
-                          <div className="text-sm text-muted-foreground flex items-center gap-2">
-                            <span>{staff.position}</span> •{" "}
-                            <Badge variant="outline">{staff.status}</Badge>
-                            {!isActive && (
-                              <Badge variant="destructive">期間外</Badge>
-                            )}
-                          </div>
-                        </div>
-                        {selectedStaffForEdit?.id === staff.id && (
-                          <div className="w-3 h-3 bg-primary rounded-full"></div>
-                        )}
-                      </div>
-                    </CardContent>
-                  </Card>
-                );
-              })}
-            </div>
-          </div>
-
-          {/* Right Panel - Staff Form */}
-          <div className="flex-1 space-y-4">
-            <div className="flex items-center justify-between">
-              <h3 className="text-lg font-semibold text-card-foreground">
-                {isAddingNewStaff
-                  ? "スタッフ追加"
-                  : selectedStaffForEdit
-                    ? "スタッフ編集"
-                    : "スタッフを選択してください"}
-              </h3>
-              
-              {/* Real-time status indicators */}
-              <div className="flex items-center gap-2">
-                {error && (
-                  <div className="flex items-center gap-1 text-sm text-red-600">
-                    <AlertCircle className="h-4 w-4" />
-                    <span>エラー</span>
-                  </div>
-                )}
-                {operationState.isProcessing && (
-                  <div className="flex items-center gap-1 text-sm text-blue-600">
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                    <span>
-                      {operationState.lastOperation === 'add' && '追加中...'}
-                      {operationState.lastOperation === 'update' && '更新中...'}
-                      {operationState.lastOperation === 'delete' && '削除中...'}
-                    </span>
-                  </div>
-                )}
-                {operationState.lastOperationSuccess && !operationState.isProcessing && (
-                  <div className="flex items-center gap-1 text-sm text-green-600">
-                    <CheckCircle2 className="h-4 w-4" />
-                    <span>完了</span>
-                  </div>
-                )}
-              </div>
-            </div>
-
-            {(isAddingNewStaff || selectedStaffForEdit) && (
-              <div className="relative isolate">
-                <form
-                  key={formKey}
-                  onSubmit={handleSubmit}
-                  className="space-y-4"
+          <div className="flex flex-col lg:flex-row gap-6 h-full p-1">
+            {/* Left Panel - Staff List */}
+            <div className="flex-1 lg:max-w-md space-y-4 min-h-0 flex flex-col">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <h3 className="text-lg font-semibold text-card-foreground">
+                    スタッフ一覧
+                  </h3>
+                  {isSaving && (
+                    <div className="flex items-center gap-1 text-sm text-muted-foreground">
+                      <Loader2 className="h-3 w-3 animate-spin" />
+                      <span>同期中...</span>
+                    </div>
+                  )}
+                  {operationState.lastOperationSuccess && (
+                    <div className="flex items-center gap-1 text-sm text-green-600">
+                      <CheckCircle2 className="h-3 w-3" />
+                    </div>
+                  )}
+                </div>
+                <Button
+                  onClick={startAddingNew}
+                  disabled={operationState.isProcessing}
+                  className="bg-green-500 hover:bg-green-600 disabled:opacity-50"
                 >
-                  {/* Name Field */}
-                  <div className="space-y-2">
-                    <Label htmlFor="staff-name">
-                      名前 <span className="text-destructive">*</span>
-                    </Label>
-                    <Input
-                      id="staff-name"
-                      name="staff-name"
-                      ref={nameInputRef}
-                      type="text"
-                      value={safeEditingStaffData.name}
-                      onChange={(e) =>
-                        updateEditingStaffData((prev) => ({
-                          ...prev,
-                          name: e.target.value,
-                        }))
-                      }
-                      required
-                      placeholder="スタッフ名を入力"
-                      autoComplete="off"
-                      list=""
-                    />
-                  </div>
+                  {operationState.isProcessing &&
+                  operationState.lastOperation === "add" ? (
+                    <>
+                      <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                      追加中...
+                    </>
+                  ) : (
+                    "新規追加"
+                  )}
+                </Button>
+              </div>
 
-                  {/* Position Field */}
-                  <div className="space-y-2">
-                    <Label htmlFor="staff-position">職位</Label>
-                    <Input
-                      id="staff-position"
-                      name="position"
-                      type="text"
-                      value={safeEditingStaffData.position}
-                      onChange={(e) =>
-                        updateEditingStaffData((prev) => ({
-                          ...prev,
-                          position: e.target.value,
-                        }))
-                      }
-                      placeholder="例: Server, Kitchen, Manager"
-                      autoComplete="new-password"
-                      autoCapitalize="none"
-                      autoCorrect="off"
-                      spellCheck={false}
-                      list=""
-                      data-1p-ignore
-                      data-lpignore="true"
-                    />
-                  </div>
+              <div className="space-y-2 flex-1 overflow-y-auto">
+                {staffMembers.map((staff) => {
+                  const isActive =
+                    isDateWithinWorkPeriod(dateRange[0], staff) ||
+                    isDateWithinWorkPeriod(
+                      dateRange[dateRange.length - 1],
+                      staff,
+                    );
 
-                  {/* Status Field */}
-                  <div className="space-y-2">
-                    <Label>
-                      雇用形態 <span className="text-destructive">*</span>
-                    </Label>
-                    <RadioGroup
-                      value={safeEditingStaffData.status}
-                      onValueChange={(value) => {
-                        const currentYear = new Date().getFullYear();
-                        updateEditingStaffData((prev) => ({
-                          ...prev,
-                          status: value,
-                          // If 派遣 or パート is selected, set both periods to current year
-                          ...(value === "派遣" || value === "パート"
-                            ? {
-                                startPeriod: {
-                                  ...prev.startPeriod,
-                                  year: currentYear,
-                                },
-                                endPeriod: {
-                                  ...prev.endPeriod,
-                                  year: currentYear,
-                                },
-                              }
-                            : {}),
-                        }));
-                      }}
-                      className="flex flex-row space-x-6"
+                  return (
+                    <Card
+                      key={staff.id}
+                      onClick={() => handleStaffSelect(staff)}
+                      className={`cursor-pointer transition-all ${
+                        selectedStaffForEdit?.id === staff.id
+                          ? "border-primary bg-primary/10"
+                          : "hover:bg-accent"
+                      } ${!isActive ? "opacity-60" : ""}`}
                     >
-                      <div className="flex items-center space-x-2">
-                        <RadioGroupItem value="社員" id="status-employee" />
-                        <Label htmlFor="status-employee">社員</Label>
-                      </div>
-                      <div className="flex items-center space-x-2">
-                        <RadioGroupItem value="派遣" id="status-dispatch" />
-                        <Label htmlFor="status-dispatch">派遣</Label>
-                      </div>
-                      <div className="flex items-center space-x-2">
-                        <RadioGroupItem value="パート" id="status-part" />
-                        <Label htmlFor="status-part">パート</Label>
-                      </div>
-                    </RadioGroup>
-                  </div>
+                      <CardContent className="p-3">
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <div className="font-medium">{staff.name}</div>
+                            <div className="text-sm text-muted-foreground flex items-center gap-2">
+                              <span>{staff.position}</span> •{" "}
+                              <Badge variant="outline">{staff.status}</Badge>
+                              {!isActive && (
+                                <Badge variant="destructive">期間外</Badge>
+                              )}
+                            </div>
+                          </div>
+                          {selectedStaffForEdit?.id === staff.id && (
+                            <div className="w-3 h-3 bg-primary rounded-full"></div>
+                          )}
+                        </div>
+                      </CardContent>
+                    </Card>
+                  );
+                })}
+              </div>
+            </div>
 
-                  {/* Start Period */}
-                  <div className="space-y-2">
-                    <Label>開始期間</Label>
-                    <div className="grid grid-cols-3 gap-2 relative">
-                      <Select
-                        value={
-                          safeEditingStaffData.startPeriod?.year?.toString() ||
-                          ""
-                        }
-                        onValueChange={(value) =>
-                          updateEditingStaffData((prev) => ({
-                            ...prev,
-                            startPeriod: {
-                              ...prev.startPeriod,
-                              year: value ? parseInt(value) : null,
-                            },
-                          }))
-                        }
-                      >
-                        <SelectTrigger>
-                          <SelectValue placeholder="年" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {Array.from({ length: 5 }, (_, i) => {
-                            const currentYear = new Date().getFullYear();
-                            const year = currentYear - 4 + i;
-                            return (
-                              <SelectItem key={year} value={year.toString()}>
-                                {year}
-                              </SelectItem>
-                            );
-                          })}
-                        </SelectContent>
-                      </Select>
-                      <Select
-                        value={
-                          safeEditingStaffData.startPeriod?.month?.toString() ||
-                          ""
-                        }
-                        onValueChange={(value) =>
-                          updateEditingStaffData((prev) => ({
-                            ...prev,
-                            startPeriod: {
-                              ...prev.startPeriod,
-                              month: value ? parseInt(value) : null,
-                            },
-                          }))
-                        }
-                      >
-                        <SelectTrigger>
-                          <SelectValue placeholder="月" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {Array.from({ length: 12 }, (_, i) => (
-                            <SelectItem key={i + 1} value={(i + 1).toString()}>
-                              {i + 1}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                      <Select
-                        value={
-                          safeEditingStaffData.startPeriod?.day?.toString() ||
-                          ""
-                        }
-                        onValueChange={(value) =>
-                          updateEditingStaffData((prev) => ({
-                            ...prev,
-                            startPeriod: {
-                              ...prev.startPeriod,
-                              day: value ? parseInt(value) : null,
-                            },
-                          }))
-                        }
-                      >
-                        <SelectTrigger>
-                          <SelectValue placeholder="日" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {Array.from({ length: 31 }, (_, i) => (
-                            <SelectItem key={i + 1} value={(i + 1).toString()}>
-                              {i + 1}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
+            {/* Right Panel - Staff Form */}
+            <div className="flex-1 space-y-4">
+              <div className="flex items-center justify-between">
+                <h3 className="text-lg font-semibold text-card-foreground">
+                  {isAddingNewStaff
+                    ? "スタッフ追加"
+                    : selectedStaffForEdit
+                      ? "スタッフ編集"
+                      : "スタッフを選択してください"}
+                </h3>
+
+                {/* Real-time status indicators */}
+                <div className="flex items-center gap-2">
+                  {error && (
+                    <div className="flex items-center gap-1 text-sm text-red-600">
+                      <AlertCircle className="h-4 w-4" />
+                      <span>エラー</span>
                     </div>
-                  </div>
+                  )}
+                  {operationState.isProcessing && (
+                    <div className="flex items-center gap-1 text-sm text-blue-600">
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      <span>
+                        {operationState.lastOperation === "add" && "追加中..."}
+                        {operationState.lastOperation === "update" &&
+                          "更新中..."}
+                        {operationState.lastOperation === "delete" &&
+                          "削除中..."}
+                      </span>
+                    </div>
+                  )}
+                  {operationState.lastOperationSuccess &&
+                    !operationState.isProcessing && (
+                      <div className="flex items-center gap-1 text-sm text-green-600">
+                        <CheckCircle2 className="h-4 w-4" />
+                        <span>完了</span>
+                      </div>
+                    )}
+                </div>
+              </div>
 
-                  {/* End Period */}
-                  <div className="space-y-2">
-                    <Label>終了期間</Label>
-                    <div className="grid grid-cols-3 gap-2 relative">
-                      <Select
-                        value={
-                          safeEditingStaffData.endPeriod?.year?.toString() || ""
-                        }
-                        onValueChange={(value) =>
+              {(isAddingNewStaff || selectedStaffForEdit) && (
+                <div className="relative isolate">
+                  <form
+                    key={formKey}
+                    onSubmit={handleSubmit}
+                    className="space-y-4"
+                  >
+                    {/* Name Field */}
+                    <div className="space-y-2">
+                      <Label htmlFor="staff-name">
+                        名前 <span className="text-destructive">*</span>
+                      </Label>
+                      <Input
+                        id="staff-name"
+                        name="staff-name"
+                        ref={nameInputRef}
+                        type="text"
+                        value={safeEditingStaffData.name}
+                        onChange={(e) =>
                           updateEditingStaffData((prev) => ({
                             ...prev,
-                            endPeriod: value
+                            name: e.target.value,
+                          }))
+                        }
+                        required
+                        placeholder="スタッフ名を入力"
+                        autoComplete="off"
+                        list=""
+                      />
+                    </div>
+
+                    {/* Position Field */}
+                    <div className="space-y-2">
+                      <Label htmlFor="staff-position">職位</Label>
+                      <Input
+                        id="staff-position"
+                        name="position"
+                        type="text"
+                        value={safeEditingStaffData.position}
+                        onChange={(e) =>
+                          updateEditingStaffData((prev) => ({
+                            ...prev,
+                            position: e.target.value,
+                          }))
+                        }
+                        placeholder="例: Server, Kitchen, Manager"
+                        autoComplete="new-password"
+                        autoCapitalize="none"
+                        autoCorrect="off"
+                        spellCheck={false}
+                        list=""
+                        data-1p-ignore
+                        data-lpignore="true"
+                      />
+                    </div>
+
+                    {/* Status Field */}
+                    <div className="space-y-2">
+                      <Label>
+                        雇用形態 <span className="text-destructive">*</span>
+                      </Label>
+                      <RadioGroup
+                        value={safeEditingStaffData.status}
+                        onValueChange={(value) => {
+                          const currentYear = new Date().getFullYear();
+                          updateEditingStaffData((prev) => ({
+                            ...prev,
+                            status: value,
+                            // If 派遣 or パート is selected, set both periods to current year
+                            ...(value === "派遣" || value === "パート"
                               ? {
-                                  ...prev.endPeriod,
-                                  year: parseInt(value),
+                                  startPeriod: {
+                                    ...prev.startPeriod,
+                                    year: currentYear,
+                                  },
+                                  endPeriod: {
+                                    ...prev.endPeriod,
+                                    year: currentYear,
+                                  },
                                 }
-                              : null,
-                          }))
-                        }
+                              : {}),
+                          }));
+                        }}
+                        className="flex flex-row space-x-6"
                       >
-                        <SelectTrigger>
-                          <SelectValue placeholder="年" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {Array.from({ length: 2 }, (_, i) => {
-                            const year = new Date().getFullYear() + i;
-                            return (
-                              <SelectItem key={year} value={year.toString()}>
-                                {year}
-                              </SelectItem>
-                            );
-                          })}
-                        </SelectContent>
-                      </Select>
-                      <Select
-                        value={
-                          safeEditingStaffData.endPeriod?.month?.toString() ||
-                          ""
-                        }
-                        onValueChange={(value) =>
-                          updateEditingStaffData((prev) => ({
-                            ...prev,
-                            endPeriod:
-                              prev.endPeriod || value
-                                ? {
-                                    ...prev.endPeriod,
-                                    month: value ? parseInt(value) : null,
-                                  }
-                                : null,
-                          }))
-                        }
-                      >
-                        <SelectTrigger>
-                          <SelectValue placeholder="月" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {Array.from({ length: 12 }, (_, i) => (
-                            <SelectItem key={i + 1} value={(i + 1).toString()}>
-                              {i + 1}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                      <Select
-                        value={
-                          safeEditingStaffData.endPeriod?.day?.toString() || ""
-                        }
-                        onValueChange={(value) =>
-                          updateEditingStaffData((prev) => ({
-                            ...prev,
-                            endPeriod:
-                              prev.endPeriod || value
-                                ? {
-                                    ...prev.endPeriod,
-                                    day: value ? parseInt(value) : null,
-                                  }
-                                : null,
-                          }))
-                        }
-                      >
-                        <SelectTrigger>
-                          <SelectValue placeholder="日" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {Array.from({ length: 31 }, (_, i) => (
-                            <SelectItem key={i + 1} value={(i + 1).toString()}>
-                              {i + 1}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
+                        <div className="flex items-center space-x-2">
+                          <RadioGroupItem value="社員" id="status-employee" />
+                          <Label htmlFor="status-employee">社員</Label>
+                        </div>
+                        <div className="flex items-center space-x-2">
+                          <RadioGroupItem value="派遣" id="status-dispatch" />
+                          <Label htmlFor="status-dispatch">派遣</Label>
+                        </div>
+                        <div className="flex items-center space-x-2">
+                          <RadioGroupItem value="パート" id="status-part" />
+                          <Label htmlFor="status-part">パート</Label>
+                        </div>
+                      </RadioGroup>
                     </div>
-                  </div>
 
-                  {/* Action Buttons */}
-                  <div className="flex gap-3 pt-4 border-t">
-                    <Button
-                      type="button"
-                      variant="secondary"
-                      onClick={() => {
-                        setIsUserEditing(false);
-                        setSelectedStaffForEdit(null);
-                        setIsAddingNewStaff(false);
-                      }}
-                    >
-                      キャンセル
-                    </Button>
+                    {/* Start Period */}
+                    <div className="space-y-2">
+                      <Label>開始期間</Label>
+                      <div className="grid grid-cols-3 gap-2 relative">
+                        <Select
+                          value={
+                            safeEditingStaffData.startPeriod?.year?.toString() ||
+                            ""
+                          }
+                          onValueChange={(value) =>
+                            updateEditingStaffData((prev) => ({
+                              ...prev,
+                              startPeriod: {
+                                ...prev.startPeriod,
+                                year: value ? parseInt(value) : null,
+                              },
+                            }))
+                          }
+                        >
+                          <SelectTrigger>
+                            <SelectValue placeholder="年" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {Array.from({ length: 5 }, (_, i) => {
+                              const currentYear = new Date().getFullYear();
+                              const year = currentYear - 4 + i;
+                              return (
+                                <SelectItem key={year} value={year.toString()}>
+                                  {year}
+                                </SelectItem>
+                              );
+                            })}
+                          </SelectContent>
+                        </Select>
+                        <Select
+                          value={
+                            safeEditingStaffData.startPeriod?.month?.toString() ||
+                            ""
+                          }
+                          onValueChange={(value) =>
+                            updateEditingStaffData((prev) => ({
+                              ...prev,
+                              startPeriod: {
+                                ...prev.startPeriod,
+                                month: value ? parseInt(value) : null,
+                              },
+                            }))
+                          }
+                        >
+                          <SelectTrigger>
+                            <SelectValue placeholder="月" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {Array.from({ length: 12 }, (_, i) => (
+                              <SelectItem
+                                key={i + 1}
+                                value={(i + 1).toString()}
+                              >
+                                {i + 1}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <Select
+                          value={
+                            safeEditingStaffData.startPeriod?.day?.toString() ||
+                            ""
+                          }
+                          onValueChange={(value) =>
+                            updateEditingStaffData((prev) => ({
+                              ...prev,
+                              startPeriod: {
+                                ...prev.startPeriod,
+                                day: value ? parseInt(value) : null,
+                              },
+                            }))
+                          }
+                        >
+                          <SelectTrigger>
+                            <SelectValue placeholder="日" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {Array.from({ length: 31 }, (_, i) => (
+                              <SelectItem
+                                key={i + 1}
+                                value={(i + 1).toString()}
+                              >
+                                {i + 1}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    </div>
 
-                    {selectedStaffForEdit && !isAddingNewStaff && (
+                    {/* End Period */}
+                    <div className="space-y-2">
+                      <Label>終了期間</Label>
+                      <div className="grid grid-cols-3 gap-2 relative">
+                        <Select
+                          value={
+                            safeEditingStaffData.endPeriod?.year?.toString() ||
+                            ""
+                          }
+                          onValueChange={(value) =>
+                            updateEditingStaffData((prev) => ({
+                              ...prev,
+                              endPeriod: value
+                                ? {
+                                    ...prev.endPeriod,
+                                    year: parseInt(value),
+                                  }
+                                : null,
+                            }))
+                          }
+                        >
+                          <SelectTrigger>
+                            <SelectValue placeholder="年" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {Array.from({ length: 2 }, (_, i) => {
+                              const year = new Date().getFullYear() + i;
+                              return (
+                                <SelectItem key={year} value={year.toString()}>
+                                  {year}
+                                </SelectItem>
+                              );
+                            })}
+                          </SelectContent>
+                        </Select>
+                        <Select
+                          value={
+                            safeEditingStaffData.endPeriod?.month?.toString() ||
+                            ""
+                          }
+                          onValueChange={(value) =>
+                            updateEditingStaffData((prev) => ({
+                              ...prev,
+                              endPeriod:
+                                prev.endPeriod || value
+                                  ? {
+                                      ...prev.endPeriod,
+                                      month: value ? parseInt(value) : null,
+                                    }
+                                  : null,
+                            }))
+                          }
+                        >
+                          <SelectTrigger>
+                            <SelectValue placeholder="月" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {Array.from({ length: 12 }, (_, i) => (
+                              <SelectItem
+                                key={i + 1}
+                                value={(i + 1).toString()}
+                              >
+                                {i + 1}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <Select
+                          value={
+                            safeEditingStaffData.endPeriod?.day?.toString() ||
+                            ""
+                          }
+                          onValueChange={(value) =>
+                            updateEditingStaffData((prev) => ({
+                              ...prev,
+                              endPeriod:
+                                prev.endPeriod || value
+                                  ? {
+                                      ...prev.endPeriod,
+                                      day: value ? parseInt(value) : null,
+                                    }
+                                  : null,
+                            }))
+                          }
+                        >
+                          <SelectTrigger>
+                            <SelectValue placeholder="日" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {Array.from({ length: 31 }, (_, i) => (
+                              <SelectItem
+                                key={i + 1}
+                                value={(i + 1).toString()}
+                              >
+                                {i + 1}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    </div>
+
+                    {/* Action Buttons */}
+                    <div className="flex gap-3 pt-4 border-t">
                       <Button
                         type="button"
-                        variant="destructive"
-                        disabled={operationState.isProcessing}
-                        onClick={() =>
-                          openDeleteConfirmation(selectedStaffForEdit.id)
-                        }
+                        variant="secondary"
+                        onClick={() => {
+                          setIsUserEditing(false);
+                          setSelectedStaffForEdit(null);
+                          setIsAddingNewStaff(false);
+                        }}
                       >
-                        削除
+                        キャンセル
                       </Button>
-                    )}
 
-                    <Button
-                      type="button"
-                      onClick={handleSubmit}
-                      disabled={operationState.isProcessing || !safeEditingStaffData.name?.trim()}
-                      className="flex-1"
-                    >
-                      {operationState.isProcessing ? (
-                        <>
-                          <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                          {isAddingNewStaff ? "追加中..." : "更新中..."}
-                        </>
-                      ) : (
-                        isAddingNewStaff ? "追加" : "更新"
+                      {selectedStaffForEdit && !isAddingNewStaff && (
+                        <Button
+                          type="button"
+                          variant="destructive"
+                          disabled={operationState.isProcessing}
+                          onClick={() =>
+                            openDeleteConfirmation(selectedStaffForEdit.id)
+                          }
+                        >
+                          削除
+                        </Button>
                       )}
-                    </Button>
-                  </div>
-                </form>
-              </div>
-            )}
+
+                      <Button
+                        type="button"
+                        onClick={handleSubmit}
+                        disabled={
+                          operationState.isProcessing ||
+                          !safeEditingStaffData.name?.trim()
+                        }
+                        className="flex-1"
+                      >
+                        {operationState.isProcessing ? (
+                          <>
+                            <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                            {isAddingNewStaff ? "追加中..." : "更新中..."}
+                          </>
+                        ) : isAddingNewStaff ? (
+                          "追加"
+                        ) : (
+                          "更新"
+                        )}
+                      </Button>
+                    </div>
+                  </form>
+                </div>
+              )}
+            </div>
           </div>
-        </div>
-      </DialogContent>
-    </Dialog>
+        </DialogContent>
+      </Dialog>
 
       {/* Delete Confirmation Modal */}
-      <Dialog open={showDeleteConfirmModal} onOpenChange={setShowDeleteConfirmModal}>
+      <Dialog
+        open={showDeleteConfirmModal}
+        onOpenChange={setShowDeleteConfirmModal}
+      >
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle className="text-lg font-semibold">
-              本当に{staffToDelete?.name || 'このスタッフ'}を削除しますか？
+              本当に{staffToDelete?.name || "このスタッフ"}を削除しますか？
             </DialogTitle>
             <DialogDescription className="sr-only">
               スタッフ削除の確認
@@ -1117,7 +1225,9 @@ const StaffEditModal = ({
               </li>
               <li className="flex items-start gap-2">
                 <span className="text-red-500 mt-0.5">•</span>
-                <span className="font-medium text-red-600">この操作は元に戻せません</span>
+                <span className="font-medium text-red-600">
+                  この操作は元に戻せません
+                </span>
               </li>
             </ul>
           </div>
@@ -1135,7 +1245,8 @@ const StaffEditModal = ({
               onClick={handleDeleteStaff}
               disabled={operationState.isProcessing}
             >
-              {operationState.isProcessing && operationState.lastOperation === 'delete' ? (
+              {operationState.isProcessing &&
+              operationState.lastOperation === "delete" ? (
                 <>
                   <Loader2 className="h-4 w-4 animate-spin mr-2" />
                   削除中...

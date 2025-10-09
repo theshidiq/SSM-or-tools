@@ -181,7 +181,10 @@ const SettingsModal = ({
 
   // Handlers for StaffGroupsTab delete confirmation
   const handleDeleteGroup = (groupId, groupName, onConfirm) => {
-    console.log('🗑️ [SettingsModal] handleDeleteGroup called:', { groupId, groupName });
+    console.log("🗑️ [SettingsModal] handleDeleteGroup called:", {
+      groupId,
+      groupName,
+    });
 
     // Close any open select dropdowns (native selects have higher z-index than modals)
     document.activeElement?.blur();
@@ -191,7 +194,7 @@ const SettingsModal = ({
   };
 
   const handleDeleteGroupConfirm = async () => {
-    console.log('🗑️ [SettingsModal] handleDeleteGroupConfirm called');
+    console.log("🗑️ [SettingsModal] handleDeleteGroupConfirm called");
     if (!deleteGroupConfirmation) return;
 
     setIsDeletingGroup(true);
@@ -209,13 +212,13 @@ const SettingsModal = ({
         setDeleteGroupSuccess(false);
       }, 1500);
     } catch (error) {
-      console.error('🗑️ [SettingsModal] Error during delete:', error);
+      console.error("🗑️ [SettingsModal] Error during delete:", error);
       setIsDeletingGroup(false);
     }
   };
 
   const handleDeleteGroupCancel = () => {
-    console.log('🗑️ [SettingsModal] handleDeleteGroupCancel called');
+    console.log("🗑️ [SettingsModal] handleDeleteGroupCancel called");
     setDeleteGroupConfirmation(null);
     setDeleteGroupSuccess(false);
   };
@@ -230,23 +233,37 @@ const SettingsModal = ({
 
     switch (activeTab) {
       case "staff-groups":
-        return <StaffGroupsTab {...commonProps} onDeleteGroup={handleDeleteGroup} isDeleteModalOpen={deleteGroupConfirmation !== null} />;
+        return (
+          <StaffGroupsTab
+            {...commonProps}
+            onDeleteGroup={handleDeleteGroup}
+            isDeleteModalOpen={deleteGroupConfirmation !== null}
+          />
+        );
       case "daily-limits":
         // Phase 4.3: DailyLimitsTab now uses useSettings() hook
-        return <DailyLimitsTab
-          staffMembers={staffMembers}
-          validationErrors={validationErrors[activeTab] || {}}
-          currentScheduleId={currentScheduleId}
-        />;
+        return (
+          <DailyLimitsTab
+            staffMembers={staffMembers}
+            validationErrors={validationErrors[activeTab] || {}}
+            currentScheduleId={currentScheduleId}
+          />
+        );
       case "priority-rules":
         // Phase 4.2: PriorityRulesTab needs staffMembers + validationErrors (no scheduleId)
-        return <PriorityRulesTab
-          staffMembers={staffMembers}
-          validationErrors={validationErrors[activeTab] || {}}
-        />;
+        return (
+          <PriorityRulesTab
+            staffMembers={staffMembers}
+            validationErrors={validationErrors[activeTab] || {}}
+          />
+        );
       case "ml-parameters":
         // Phase 4.1: MLParametersTab only needs validationErrors (no staffMembers/scheduleId)
-        return <MLParametersTab validationErrors={validationErrors[activeTab] || {}} />;
+        return (
+          <MLParametersTab
+            validationErrors={validationErrors[activeTab] || {}}
+          />
+        );
       case "data-migration":
         return <DataMigrationTab />;
       default:
@@ -263,172 +280,172 @@ const SettingsModal = ({
   return (
     <>
       <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="max-w-6xl max-h-[90vh] h-[90vh] flex flex-col overflow-hidden">
-        <DialogHeader className="flex-shrink-0">
-          <DialogTitle className="flex items-center gap-3">
-            <div className="w-8 h-8 bg-blue-500 rounded-lg flex items-center justify-center text-white font-bold">
-              ⚙️
-            </div>
-            <span className="japanese-text text-xl font-bold">
-              Settings & Configuration
-            </span>
-            <Badge variant="secondary" className="japanese-text">
-              設定
-            </Badge>
-          </DialogTitle>
-
-          {/* Backend Status Indicator */}
-          <div className="flex items-center justify-between mt-2">
-            {backendMode === "websocket-multitable" ? (
-              <Badge
-                variant="default"
-                className="bg-green-100 text-green-800 border-green-300"
-              >
-                <span className="mr-1">🟢</span>
-                Real-time Multi-Table Sync
-              </Badge>
-            ) : (
-              <Badge
-                variant="secondary"
-                className="bg-amber-100 text-amber-800 border-amber-300"
-              >
-                <span className="mr-1">📱</span>
-                Local Storage Mode
-              </Badge>
-            )}
-
-            {backendMode === "websocket-multitable" && currentVersion && (
-              <div className="flex items-center gap-2 text-xs text-gray-600">
-                <span>Version {currentVersion}</span>
-                {versionName && (
-                  <span className="text-gray-500">• {versionName}</span>
-                )}
-                {isVersionLocked && (
-                  <span className="text-red-600">🔒 Locked</span>
-                )}
+        <DialogContent className="max-w-6xl max-h-[90vh] h-[90vh] flex flex-col overflow-hidden">
+          <DialogHeader className="flex-shrink-0">
+            <DialogTitle className="flex items-center gap-3">
+              <div className="w-8 h-8 bg-blue-500 rounded-lg flex items-center justify-center text-white font-bold">
+                ⚙️
               </div>
-            )}
-          </div>
-
-          <DialogDescription>
-            Configure ML models, business rules, and system settings
-            {backendMode === "websocket-multitable" && (
-              <span className="ml-2 text-xs text-gray-500">
-                • Status:{" "}
-                {connectionStatus === "connected"
-                  ? "✅ Connected"
-                  : "⏳ Connecting..."}
+              <span className="japanese-text text-xl font-bold">
+                Settings & Configuration
               </span>
-            )}
-          </DialogDescription>
-        </DialogHeader>
+              <Badge variant="secondary" className="japanese-text">
+                設定
+              </Badge>
+            </DialogTitle>
 
-        {/* Error Display */}
-        {error && (
-          <Alert variant="destructive" className="mx-4">
-            <AlertTriangle size={20} />
-            <AlertDescription>
-              <strong>Configuration Error:</strong> {error}
-            </AlertDescription>
-          </Alert>
-        )}
+            {/* Backend Status Indicator */}
+            <div className="flex items-center justify-between mt-2">
+              {backendMode === "websocket-multitable" ? (
+                <Badge
+                  variant="default"
+                  className="bg-green-100 text-green-800 border-green-300"
+                >
+                  <span className="mr-1">🟢</span>
+                  Real-time Multi-Table Sync
+                </Badge>
+              ) : (
+                <Badge
+                  variant="secondary"
+                  className="bg-amber-100 text-amber-800 border-amber-300"
+                >
+                  <span className="mr-1">📱</span>
+                  Local Storage Mode
+                </Badge>
+              )}
 
-        <Tabs
-          value={activeTab}
-          onValueChange={setActiveTab}
-          className="flex-1 flex flex-col min-h-0"
-        >
-          <TabsList className="mx-4 mb-4 flex-shrink-0">
-            {TABS.map((tab, index) => (
-              <TabsTrigger
-                key={tab.id}
-                value={tab.id}
-                className="flex items-center gap-2"
-              >
-                <span>{tab.icon}</span>
-                {tab.label}
-                {validationErrors[tab.id] &&
-                  Object.keys(validationErrors[tab.id]).length > 0 && (
-                    <Badge variant="destructive" className="ml-2 text-xs">
-                      !
-                    </Badge>
+              {backendMode === "websocket-multitable" && currentVersion && (
+                <div className="flex items-center gap-2 text-xs text-gray-600">
+                  <span>Version {currentVersion}</span>
+                  {versionName && (
+                    <span className="text-gray-500">• {versionName}</span>
                   )}
-              </TabsTrigger>
-            ))}
-          </TabsList>
-
-          <div className="flex-1 min-h-0 overflow-hidden px-4">
-            {TABS.map((tab) => (
-              <TabsContent
-                key={tab.id}
-                value={tab.id}
-                className="h-full overflow-y-auto mt-0 data-[state=active]:flex data-[state=active]:flex-col"
-              >
-                {renderTabContent(tab.id)}
-              </TabsContent>
-            ))}
-          </div>
-        </Tabs>
-
-        {/* Footer */}
-        <div className="flex items-center justify-between px-6 py-4 border-t border-gray-200 bg-gray-50 flex-shrink-0">
-          <div className="flex items-center gap-4">
-            {/* Autosave Status */}
-            {isAutosaving && (
-              <div className="flex items-center gap-2 text-blue-600">
-                <div className="w-4 h-4 border-2 border-blue-200 border-t-blue-600 rounded-full animate-spin"></div>
-                <span className="text-sm font-medium">Auto-saving...</span>
-              </div>
-            )}
-
-            {autosaveError && (
-              <div className="flex items-center gap-2 text-red-600">
-                <AlertTriangle size={16} />
-                <span className="text-sm font-medium">
-                  Auto-save failed: {autosaveError}
-                </span>
-              </div>
-            )}
-
-            {!isAutosaving && !autosaveError && lastSaveTime && (
-              <div className="flex items-center gap-2 text-green-600">
-                <Check size={16} />
-                <span className="text-sm">
-                  Saved at {new Date(lastSaveTime).toLocaleTimeString()}
-                </span>
-              </div>
-            )}
-
-            {/* Autosave Toggle */}
-            <div className="flex items-center space-x-2">
-              <Switch
-                id="autosave"
-                checked={isAutosaveEnabled}
-                onCheckedChange={setIsAutosaveEnabled}
-              />
-              <Label htmlFor="autosave" className="text-sm">
-                Auto-save
-              </Label>
+                  {isVersionLocked && (
+                    <span className="text-red-600">🔒 Locked</span>
+                  )}
+                </div>
+              )}
             </div>
 
-            <Button
-              onClick={handleReset}
-              variant="outline"
-              size="sm"
-              className="flex items-center gap-2"
-              title="Reset to Defaults"
-            >
-              <RotateCcw size={16} />
-              Reset
-            </Button>
-          </div>
+            <DialogDescription>
+              Configure ML models, business rules, and system settings
+              {backendMode === "websocket-multitable" && (
+                <span className="ml-2 text-xs text-gray-500">
+                  • Status:{" "}
+                  {connectionStatus === "connected"
+                    ? "✅ Connected"
+                    : "⏳ Connecting..."}
+                </span>
+              )}
+            </DialogDescription>
+          </DialogHeader>
 
-          <div className="flex items-center gap-3">
-            <Button onClick={onClose}>Done</Button>
+          {/* Error Display */}
+          {error && (
+            <Alert variant="destructive" className="mx-4">
+              <AlertTriangle size={20} />
+              <AlertDescription>
+                <strong>Configuration Error:</strong> {error}
+              </AlertDescription>
+            </Alert>
+          )}
+
+          <Tabs
+            value={activeTab}
+            onValueChange={setActiveTab}
+            className="flex-1 flex flex-col min-h-0"
+          >
+            <TabsList className="mx-4 mb-4 flex-shrink-0">
+              {TABS.map((tab, index) => (
+                <TabsTrigger
+                  key={tab.id}
+                  value={tab.id}
+                  className="flex items-center gap-2"
+                >
+                  <span>{tab.icon}</span>
+                  {tab.label}
+                  {validationErrors[tab.id] &&
+                    Object.keys(validationErrors[tab.id]).length > 0 && (
+                      <Badge variant="destructive" className="ml-2 text-xs">
+                        !
+                      </Badge>
+                    )}
+                </TabsTrigger>
+              ))}
+            </TabsList>
+
+            <div className="flex-1 min-h-0 overflow-hidden px-4">
+              {TABS.map((tab) => (
+                <TabsContent
+                  key={tab.id}
+                  value={tab.id}
+                  className="h-full overflow-y-auto mt-0 data-[state=active]:flex data-[state=active]:flex-col"
+                >
+                  {renderTabContent(tab.id)}
+                </TabsContent>
+              ))}
+            </div>
+          </Tabs>
+
+          {/* Footer */}
+          <div className="flex items-center justify-between px-6 py-4 border-t border-gray-200 bg-gray-50 flex-shrink-0">
+            <div className="flex items-center gap-4">
+              {/* Autosave Status */}
+              {isAutosaving && (
+                <div className="flex items-center gap-2 text-blue-600">
+                  <div className="w-4 h-4 border-2 border-blue-200 border-t-blue-600 rounded-full animate-spin"></div>
+                  <span className="text-sm font-medium">Auto-saving...</span>
+                </div>
+              )}
+
+              {autosaveError && (
+                <div className="flex items-center gap-2 text-red-600">
+                  <AlertTriangle size={16} />
+                  <span className="text-sm font-medium">
+                    Auto-save failed: {autosaveError}
+                  </span>
+                </div>
+              )}
+
+              {!isAutosaving && !autosaveError && lastSaveTime && (
+                <div className="flex items-center gap-2 text-green-600">
+                  <Check size={16} />
+                  <span className="text-sm">
+                    Saved at {new Date(lastSaveTime).toLocaleTimeString()}
+                  </span>
+                </div>
+              )}
+
+              {/* Autosave Toggle */}
+              <div className="flex items-center space-x-2">
+                <Switch
+                  id="autosave"
+                  checked={isAutosaveEnabled}
+                  onCheckedChange={setIsAutosaveEnabled}
+                />
+                <Label htmlFor="autosave" className="text-sm">
+                  Auto-save
+                </Label>
+              </div>
+
+              <Button
+                onClick={handleReset}
+                variant="outline"
+                size="sm"
+                className="flex items-center gap-2"
+                title="Reset to Defaults"
+              >
+                <RotateCcw size={16} />
+                Reset
+              </Button>
+            </div>
+
+            <div className="flex items-center gap-3">
+              <Button onClick={onClose}>Done</Button>
+            </div>
           </div>
-        </div>
-      </DialogContent>
-    </Dialog>
+        </DialogContent>
+      </Dialog>
 
       {/* Reset Confirmation Modal - Rendered outside Dialog to prevent pointer-events issues */}
       {resetConfirmation && (
@@ -452,7 +469,9 @@ const SettingsModal = ({
           onClose={handleDeleteGroupCancel}
           onConfirm={deleteGroupSuccess ? null : handleDeleteGroupConfirm}
           title={
-            deleteGroupSuccess ? "Group Deleted Successfully" : "Delete Staff Group"
+            deleteGroupSuccess
+              ? "Group Deleted Successfully"
+              : "Delete Staff Group"
           }
           message={
             deleteGroupSuccess

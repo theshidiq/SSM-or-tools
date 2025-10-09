@@ -14,50 +14,50 @@
  * - Supports automatic migration from localStorage
  */
 
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback } from "react";
 
 // WebSocket message types matching Go server implementation (settings_multitable.go)
 const MESSAGE_TYPES = {
   // Settings synchronization
-  SETTINGS_SYNC_REQUEST: 'SETTINGS_SYNC_REQUEST',
-  SETTINGS_SYNC_RESPONSE: 'SETTINGS_SYNC_RESPONSE',
+  SETTINGS_SYNC_REQUEST: "SETTINGS_SYNC_REQUEST",
+  SETTINGS_SYNC_RESPONSE: "SETTINGS_SYNC_RESPONSE",
 
   // Table-specific updates
-  SETTINGS_UPDATE_STAFF_GROUPS: 'SETTINGS_UPDATE_STAFF_GROUPS',
-  SETTINGS_CREATE_STAFF_GROUP: 'SETTINGS_CREATE_STAFF_GROUP',
-  SETTINGS_DELETE_STAFF_GROUP: 'SETTINGS_DELETE_STAFF_GROUP',
-  SETTINGS_UPDATE_DAILY_LIMITS: 'SETTINGS_UPDATE_DAILY_LIMITS',
-  SETTINGS_UPDATE_MONTHLY_LIMITS: 'SETTINGS_UPDATE_MONTHLY_LIMITS',
-  SETTINGS_UPDATE_PRIORITY_RULES: 'SETTINGS_UPDATE_PRIORITY_RULES',
-  SETTINGS_UPDATE_ML_CONFIG: 'SETTINGS_UPDATE_ML_CONFIG',
+  SETTINGS_UPDATE_STAFF_GROUPS: "SETTINGS_UPDATE_STAFF_GROUPS",
+  SETTINGS_CREATE_STAFF_GROUP: "SETTINGS_CREATE_STAFF_GROUP",
+  SETTINGS_DELETE_STAFF_GROUP: "SETTINGS_DELETE_STAFF_GROUP",
+  SETTINGS_UPDATE_DAILY_LIMITS: "SETTINGS_UPDATE_DAILY_LIMITS",
+  SETTINGS_UPDATE_MONTHLY_LIMITS: "SETTINGS_UPDATE_MONTHLY_LIMITS",
+  SETTINGS_UPDATE_PRIORITY_RULES: "SETTINGS_UPDATE_PRIORITY_RULES",
+  SETTINGS_UPDATE_ML_CONFIG: "SETTINGS_UPDATE_ML_CONFIG",
 
   // Bulk operations
-  SETTINGS_RESET: 'SETTINGS_RESET',
-  SETTINGS_MIGRATE: 'SETTINGS_MIGRATE',
+  SETTINGS_RESET: "SETTINGS_RESET",
+  SETTINGS_MIGRATE: "SETTINGS_MIGRATE",
 
   // Version management
-  SETTINGS_CREATE_VERSION: 'SETTINGS_CREATE_VERSION',
-  SETTINGS_ACTIVATE_VERSION: 'SETTINGS_ACTIVATE_VERSION',
+  SETTINGS_CREATE_VERSION: "SETTINGS_CREATE_VERSION",
+  SETTINGS_ACTIVATE_VERSION: "SETTINGS_ACTIVATE_VERSION",
 
   // Connection management
-  CONNECTION_ACK: 'CONNECTION_ACK',
-  ERROR: 'ERROR'
+  CONNECTION_ACK: "CONNECTION_ACK",
+  ERROR: "ERROR",
 };
 
 // Message types to silently ignore (handled by other hooks on same WebSocket)
 const IGNORED_MESSAGE_TYPES = [
-  'SHIFT_SYNC_RESPONSE',
-  'SHIFT_UPDATE',
-  'SHIFT_SYNC_REQUEST',
-  'SHIFT_BROADCAST',
-  'SHIFT_BULK_UPDATE',
-  'SYNC_REQUEST',
-  'SYNC_RESPONSE',
-  'SYNC_ALL_PERIODS_REQUEST',
-  'SYNC_ALL_PERIODS_RESPONSE',
-  'STAFF_UPDATE',
-  'STAFF_CREATE',
-  'STAFF_DELETE'
+  "SHIFT_SYNC_RESPONSE",
+  "SHIFT_UPDATE",
+  "SHIFT_SYNC_REQUEST",
+  "SHIFT_BROADCAST",
+  "SHIFT_BULK_UPDATE",
+  "SYNC_REQUEST",
+  "SYNC_RESPONSE",
+  "SYNC_ALL_PERIODS_REQUEST",
+  "SYNC_ALL_PERIODS_RESPONSE",
+  "STAFF_UPDATE",
+  "STAFF_CREATE",
+  "STAFF_DELETE",
 ];
 
 /**
@@ -73,7 +73,7 @@ export const useWebSocketSettings = (options = {}) => {
   // State management - aggregated from multi-table backend
   const [settings, setSettings] = useState(null);
   const [version, setVersion] = useState(null);
-  const [connectionStatus, setConnectionStatus] = useState('connecting');
+  const [connectionStatus, setConnectionStatus] = useState("connecting");
   const [isLoading, setIsLoading] = useState(true);
   const [lastError, setLastError] = useState(null);
 
@@ -86,98 +86,143 @@ export const useWebSocketSettings = (options = {}) => {
   const connectionFailedPermanently = useRef(false);
   const initialConnectionTimer = useRef(null);
 
+  // 🔧 FIX: Use ref to track current settings to prevent useCallback recreation
+  const settingsRef = useRef(null);
+
   /**
    * Handle SETTINGS_SYNC_RESPONSE message
    * Parses aggregated multi-table response and separates version from settings
    */
-  const handleSettingsSyncResponse = useCallback((payload) => {
-    try {
-      const settingsData = payload.settings || {};
-      const versionData = settingsData.version || null;
-
-      // Separate version from settings
-      const { version: _, ...actualSettings } = settingsData;
-
-      // ✅ FIX #1: DEDUPLICATION - Skip sync if data hasn't actually changed
-      // This prevents the infinite sync loop from server broadcasts
-      if (settings !== null) { // Only compare if we have existing settings
-        const currentSettingsStr = JSON.stringify(settings);
-        const newSettingsStr = JSON.stringify(actualSettings);
-
-        if (currentSettingsStr === newSettingsStr) {
-          console.log('⏭️ Settings already up-to-date, skipping sync to prevent loop');
-          setIsLoading(false); // Ensure loading state is cleared
-          return; // Don't update state - prevents re-render and sync loop
+  const handleSettingsSyncResponse = useCallback(
+    (payload, messageClientId) => {
+      try {
+        // ✅ FIX #1: IGNORE SELF-BROADCASTS - Don't process messages from ourselves
+        if (messageClientId && messageClientId === clientIdRef.current) {
+          console.log("⏭️ [SYNC] Ignoring self-broadcast (clientId match)");
+          return;
         }
 
-        console.log('🔄 Settings changed, syncing from server');
-      } else {
-        console.log('📥 Initial settings load from server');
+        const settingsData = payload.settings || {};
+        const versionData = settingsData.version || null;
+
+        // Separate version from settings
+        const { version: _, ...actualSettings } = settingsData;
+
+        // ✅ FIX #2: Filter out soft-deleted groups (is_active = false)
+        if (actualSettings.staffGroups) {
+          const beforeCount = actualSettings.staffGroups.length;
+          actualSettings.staffGroups = actualSettings.staffGroups.filter(
+            (group) => group.is_active !== false && group.isActive !== false,
+          );
+          const afterCount = actualSettings.staffGroups.length;
+
+          if (beforeCount !== afterCount) {
+            console.log(
+              `🗑️ [SYNC] Filtered out ${beforeCount - afterCount} soft-deleted groups`,
+            );
+          }
+        }
+
+        // ✅ FIX #3: DEDUPLICATION - Skip sync if data hasn't actually changed
+        // This prevents the infinite sync loop from server broadcasts
+        if (settingsRef.current !== null) {
+          // Only compare if we have existing settings
+          const currentSettingsStr = JSON.stringify(settingsRef.current);
+          const newSettingsStr = JSON.stringify(actualSettings);
+
+          if (currentSettingsStr === newSettingsStr) {
+            console.log(
+              "⏭️ [SYNC] Settings already up-to-date, skipping sync to prevent loop",
+            );
+            setIsLoading(false); // Ensure loading state is cleared
+            return; // Don't update state - prevents re-render and sync loop
+          }
+
+          console.log("🔄 [SYNC] Settings changed, syncing from server");
+        } else {
+          console.log("📥 [SYNC] Initial settings load from server");
+        }
+
+        settingsRef.current = actualSettings;
+        setSettings(actualSettings);
+        setVersion(versionData);
+        setIsLoading(false);
+
+        console.log("📊 Settings synced from multi-table backend:", {
+          staffGroups: actualSettings.staffGroups?.length || 0,
+          dailyLimits: actualSettings.dailyLimits?.length || 0,
+          monthlyLimits: actualSettings.monthlyLimits?.length || 0,
+          priorityRules: actualSettings.priorityRules?.length || 0,
+          mlModelConfigs: actualSettings.mlModelConfigs?.length || 0,
+        });
+        console.log("📌 Active config version:", versionData?.versionNumber);
+
+        // If this was a migration response
+        if (payload.migrated) {
+          console.log(
+            "✅ Settings migration completed (localStorage → multi-table)",
+          );
+        }
+
+        // If this was a reset response
+        if (payload.reset) {
+          console.log("🔄 Settings reset to defaults (multi-table)");
+        }
+
+        // If a specific table was updated
+        if (payload.updated) {
+          console.log(`📝 Settings updated: ${payload.updated} table`);
+        }
+      } catch (error) {
+        console.error("❌ Failed to parse settings sync response:", error);
+        setLastError("Failed to parse settings data");
       }
-
-      setSettings(actualSettings);
-      setVersion(versionData);
-      setIsLoading(false);
-
-      console.log('📊 Settings synced from multi-table backend:', {
-        staffGroups: actualSettings.staffGroups?.length || 0,
-        dailyLimits: actualSettings.dailyLimits?.length || 0,
-        monthlyLimits: actualSettings.monthlyLimits?.length || 0,
-        priorityRules: actualSettings.priorityRules?.length || 0,
-        mlModelConfigs: actualSettings.mlModelConfigs?.length || 0
-      });
-      console.log('📌 Active config version:', versionData?.versionNumber);
-
-      // If this was a migration response
-      if (payload.migrated) {
-        console.log('✅ Settings migration completed (localStorage → multi-table)');
-      }
-
-      // If this was a reset response
-      if (payload.reset) {
-        console.log('🔄 Settings reset to defaults (multi-table)');
-      }
-
-      // If a specific table was updated
-      if (payload.updated) {
-        console.log(`📝 Settings updated: ${payload.updated} table`);
-      }
-    } catch (error) {
-      console.error('❌ Failed to parse settings sync response:', error);
-      setLastError('Failed to parse settings data');
-    }
-  }, []);
+    },
+    [], // 🔧 FIX: Empty dependency array - use settingsRef instead of settings state
+  );
 
   /**
    * Handle ERROR message
+   * 🔧 FIX: Already has stable dependency array (empty)
    */
   const handleError = useCallback((payload) => {
-    console.error('❌ Settings server error:', payload);
-    setLastError(payload.message || 'Unknown server error');
+    console.error("❌ Settings server error:", payload);
+    setLastError(payload.message || "Unknown server error");
   }, []);
 
   /**
    * WebSocket connection management
    */
   const connect = useCallback(() => {
+    // 🔧 FIX: Guard against reconnection when already connected or connecting
+    if (wsRef.current?.readyState === WebSocket.OPEN) {
+      console.log("⏭️ [CONNECT] Already connected, skipping reconnection");
+      return;
+    }
+
+    if (wsRef.current?.readyState === WebSocket.CONNECTING) {
+      console.log("⏭️ [CONNECT] Connection in progress, skipping duplicate attempt");
+      return;
+    }
+
     // Don't attempt connection if disabled via options
     if (!enabled) {
-      console.log('🚫 Phase 3 Settings: WebSocket disabled via options, skipping connection');
-      setConnectionStatus('disabled');
+      console.log(
+        "🚫 Phase 3 Settings: WebSocket disabled via options, skipping connection",
+      );
+      setConnectionStatus("disabled");
       setIsLoading(false);
-      setLastError('WebSocket disabled via feature flag');
+      setLastError("WebSocket disabled via feature flag");
       return;
     }
 
     // Don't attempt connection if permanently failed
     if (connectionFailedPermanently.current) {
-      console.log('🚫 Phase 3 Settings: WebSocket permanently disabled, skipping connection');
-      setConnectionStatus('failed_permanently');
+      console.log(
+        "🚫 Phase 3 Settings: WebSocket permanently disabled, skipping connection",
+      );
+      setConnectionStatus("failed_permanently");
       setIsLoading(false);
-      return;
-    }
-
-    if (wsRef.current?.readyState === WebSocket.OPEN) {
       return;
     }
 
@@ -190,10 +235,12 @@ export const useWebSocketSettings = (options = {}) => {
     // Set absolute timeout for initial connection (10 seconds)
     if (!initialConnectionTimer.current) {
       initialConnectionTimer.current = setTimeout(() => {
-        console.log('⏰ Phase 3 Settings: WebSocket connection timeout, permanently disabling');
+        console.log(
+          "⏰ Phase 3 Settings: WebSocket connection timeout, permanently disabling",
+        );
         connectionFailedPermanently.current = true;
-        setConnectionStatus('failed_permanently');
-        setLastError('Connection timeout - falling back to localStorage mode');
+        setConnectionStatus("failed_permanently");
+        setLastError("Connection timeout - falling back to localStorage mode");
         setIsLoading(false);
 
         if (wsRef.current) {
@@ -207,8 +254,11 @@ export const useWebSocketSettings = (options = {}) => {
 
     try {
       // Use same endpoint as staff management for connection reuse
-      const wsUrl = 'ws://localhost:8080/staff-sync';
-      console.log(`🔌 Phase 3 Settings: Creating WebSocket connection to ${wsUrl}`);
+      const wsUrl = "ws://localhost:8080/staff-sync";
+      console.log(
+        `🔌 [CONNECT] Phase 3 Settings: Creating WebSocket connection to ${wsUrl}`,
+      );
+      console.log(`🔌 [CONNECT] Reconnect attempt: ${reconnectAttempts.current}/${maxReconnectAttempts}`);
 
       const ws = new WebSocket(wsUrl);
       wsRef.current = ws;
@@ -216,15 +266,17 @@ export const useWebSocketSettings = (options = {}) => {
       // Connection timeout per attempt (3 seconds)
       const connectionTimer = setTimeout(() => {
         if (ws.readyState === WebSocket.CONNECTING) {
-          console.log('⏰ Phase 3 Settings: Connection attempt timeout, closing socket');
+          console.log(
+            "⏰ Phase 3 Settings: Connection attempt timeout, closing socket",
+          );
           ws.close();
         }
       }, 3000);
 
       ws.onopen = () => {
-        console.log('🔌 Phase 3 Settings: WebSocket connected to Go server');
+        console.log("🔌 Phase 3 Settings: WebSocket connected to Go server");
         clearTimeout(connectionTimer);
-        setConnectionStatus('connected');
+        setConnectionStatus("connected");
         setLastError(null);
         reconnectAttempts.current = 0;
 
@@ -238,13 +290,15 @@ export const useWebSocketSettings = (options = {}) => {
         }
 
         // Request initial settings sync
-        console.log('📤 Phase 3 Settings: Requesting settings sync');
-        ws.send(JSON.stringify({
-          type: MESSAGE_TYPES.SETTINGS_SYNC_REQUEST,
-          payload: { clientId: clientIdRef.current },
-          timestamp: new Date().toISOString(),
-          clientId: clientIdRef.current
-        }));
+        console.log("📤 Phase 3 Settings: Requesting settings sync");
+        ws.send(
+          JSON.stringify({
+            type: MESSAGE_TYPES.SETTINGS_SYNC_REQUEST,
+            payload: { clientId: clientIdRef.current },
+            timestamp: new Date().toISOString(),
+            clientId: clientIdRef.current,
+          }),
+        );
       };
 
       ws.onmessage = (event) => {
@@ -253,11 +307,14 @@ export const useWebSocketSettings = (options = {}) => {
 
           switch (message.type) {
             case MESSAGE_TYPES.SETTINGS_SYNC_RESPONSE:
-              handleSettingsSyncResponse(message.payload);
+              // Pass the clientId from the message to detect self-broadcasts
+              handleSettingsSyncResponse(message.payload, message.clientId);
               break;
 
             case MESSAGE_TYPES.CONNECTION_ACK:
-              console.log('✅ Phase 3 Settings: Connection acknowledged by Go server');
+              console.log(
+                "✅ Phase 3 Settings: Connection acknowledged by Go server",
+              );
               break;
 
             case MESSAGE_TYPES.ERROR:
@@ -267,24 +324,46 @@ export const useWebSocketSettings = (options = {}) => {
             default:
               // Silently ignore messages handled by other hooks (staff, shifts)
               if (!IGNORED_MESSAGE_TYPES.includes(message.type)) {
-                console.warn('⚠️ Phase 3 Settings: Unknown message type:', message.type);
+                console.warn(
+                  "⚠️ Phase 3 Settings: Unknown message type:",
+                  message.type,
+                );
               }
           }
         } catch (error) {
-          console.error('❌ Phase 3 Settings: Failed to parse WebSocket message:', error);
-          setLastError('Failed to parse server message');
+          console.error(
+            "❌ Phase 3 Settings: Failed to parse WebSocket message:",
+            error,
+          );
+          setLastError("Failed to parse server message");
         }
       };
 
       ws.onclose = (event) => {
-        console.log(`🔌 Phase 3 Settings: WebSocket disconnected: code=${event.code}, reason='${event.reason}'`);
+        console.log(
+          `🔌 [DISCONNECT] Phase 3 Settings: WebSocket disconnected`,
+        );
+        console.log(`   - Close code: ${event.code}`);
+        console.log(`   - Close reason: '${event.reason}'`);
+        console.log(`   - Was clean: ${event.wasClean}`);
+        console.log(`   - Current readyState: ${wsRef.current?.readyState}`);
+
+        // 🔧 FIX: Code 1005 means "no status received" - often caused by client closing connection
+        if (event.code === 1005) {
+          console.warn("⚠️ [DISCONNECT] Close code 1005 detected - connection closed abnormally");
+          console.warn("   - This usually means the client closed the connection without sending a close frame");
+          console.warn("   - Check for useEffect cleanup running prematurely");
+        }
+
         clearTimeout(connectionTimer);
-        setConnectionStatus('disconnected');
+        setConnectionStatus("disconnected");
 
         // Check if permanently disabled
         if (connectionFailedPermanently.current) {
-          console.log('🚫 Phase 3 Settings: WebSocket permanently disabled, no reconnection');
-          setConnectionStatus('failed_permanently');
+          console.log(
+            "🚫 Phase 3 Settings: WebSocket permanently disabled, no reconnection",
+          );
+          setConnectionStatus("failed_permanently");
           setIsLoading(false);
           return;
         }
@@ -294,40 +373,54 @@ export const useWebSocketSettings = (options = {}) => {
           const delay = Math.pow(2, reconnectAttempts.current) * 1000; // 1s, 2s, 4s
           reconnectAttempts.current++;
 
-          console.log(`🔄 Phase 3 Settings: Reconnecting in ${delay}ms (attempt ${reconnectAttempts.current}/${maxReconnectAttempts})`);
+          console.log(
+            `🔄 Phase 3 Settings: Reconnecting in ${delay}ms (attempt ${reconnectAttempts.current}/${maxReconnectAttempts})`,
+          );
 
           reconnectTimeoutRef.current = setTimeout(() => {
             connect();
           }, delay);
         } else {
-          console.error('❌ Phase 3 Settings: Max reconnection attempts reached, permanently disabling');
+          console.error(
+            "❌ Phase 3 Settings: Max reconnection attempts reached, permanently disabling",
+          );
           connectionFailedPermanently.current = true;
-          setConnectionStatus('failed_permanently');
-          setLastError('Connection failed after multiple attempts - switching to localStorage mode');
+          setConnectionStatus("failed_permanently");
+          setLastError(
+            "Connection failed after multiple attempts - switching to localStorage mode",
+          );
           setIsLoading(false);
         }
       };
 
       ws.onerror = (error) => {
-        console.error('❌ Phase 3 Settings: WebSocket error:', error);
+        console.error("❌ Phase 3 Settings: WebSocket error:", error);
         clearTimeout(connectionTimer);
-        setLastError('WebSocket connection error');
+        setLastError("WebSocket connection error");
       };
-
     } catch (error) {
-      console.error('❌ Phase 3 Settings: Failed to create WebSocket connection:', error);
-      setConnectionStatus('disconnected');
-      setLastError('Failed to establish WebSocket connection');
+      console.error(
+        "❌ Phase 3 Settings: Failed to create WebSocket connection:",
+        error,
+      );
+      setConnectionStatus("disconnected");
+      setLastError("Failed to establish WebSocket connection");
     }
   }, [enabled, handleSettingsSyncResponse, handleError]);
 
   // Initialize WebSocket connection
+  // 🔧 FIX: Empty dependency array to prevent reconnection loop
+  // The useEffect should ONLY run once on mount, not on every render
   useEffect(() => {
+    console.log("🚀 [MOUNT] useWebSocketSettings mounted - initializing connection");
+
     const timeoutId = setTimeout(() => {
       connect();
     }, 100); // Small delay to prevent rapid reconnections
 
+    // Cleanup function only runs on UNMOUNT, not on every render
     return () => {
+      console.log("🔌 [UNMOUNT] useWebSocketSettings unmounting - cleaning up connection");
       clearTimeout(timeoutId);
       if (reconnectTimeoutRef.current) {
         clearTimeout(reconnectTimeoutRef.current);
@@ -336,221 +429,287 @@ export const useWebSocketSettings = (options = {}) => {
         clearTimeout(initialConnectionTimer.current);
       }
       if (wsRef.current && wsRef.current.readyState !== WebSocket.CLOSED) {
+        console.log("🔌 [UNMOUNT] Closing WebSocket on unmount");
         wsRef.current.close();
       }
     };
-  }, [connect]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // 🔧 FIX: Empty deps - connect is called via ref, not dependency
 
   /**
    * Update staff groups (table-specific operation)
    */
-  const updateStaffGroups = useCallback((groupData) => {
-    if (!enabled) {
-      const error = new Error('WebSocket disabled');
-      console.log('🚫 Phase 3 Settings: Staff groups update blocked - WebSocket disabled');
-      return Promise.reject(error);
-    }
+  const updateStaffGroups = useCallback(
+    (groupData) => {
+      if (!enabled) {
+        const error = new Error("WebSocket disabled");
+        console.log(
+          "🚫 Phase 3 Settings: Staff groups update blocked - WebSocket disabled",
+        );
+        return Promise.reject(error);
+      }
 
-    if (wsRef.current?.readyState === WebSocket.OPEN) {
-      const message = {
-        type: MESSAGE_TYPES.SETTINGS_UPDATE_STAFF_GROUPS,
-        payload: { group: groupData },
-        timestamp: new Date().toISOString(),
-        clientId: clientIdRef.current
-      };
+      if (wsRef.current?.readyState === WebSocket.OPEN) {
+        const message = {
+          type: MESSAGE_TYPES.SETTINGS_UPDATE_STAFF_GROUPS,
+          payload: { group: groupData },
+          timestamp: new Date().toISOString(),
+          clientId: clientIdRef.current,
+        };
 
-      wsRef.current.send(JSON.stringify(message));
-      console.log('📤 Phase 3 Settings: Sent staff groups update:', groupData);
+        wsRef.current.send(JSON.stringify(message));
+        console.log(
+          "📤 Phase 3 Settings: Sent staff groups update:",
+          groupData,
+        );
 
-      return Promise.resolve();
-    } else {
-      const error = new Error('WebSocket not connected');
-      console.error('❌ Phase 3 Settings: Failed to update staff groups - not connected');
-      return Promise.reject(error);
-    }
-  }, [enabled]);
+        return Promise.resolve();
+      } else {
+        const error = new Error("WebSocket not connected");
+        console.error(
+          "❌ Phase 3 Settings: Failed to update staff groups - not connected",
+        );
+        return Promise.reject(error);
+      }
+    },
+    [enabled],
+  );
 
   /**
    * Create a new staff group (table-specific operation)
    */
-  const createStaffGroup = useCallback((groupData) => {
-    if (!enabled) {
-      const error = new Error('WebSocket disabled');
-      console.log('🚫 Phase 3 Settings: Staff group creation blocked - WebSocket disabled');
-      return Promise.reject(error);
-    }
+  const createStaffGroup = useCallback(
+    (groupData) => {
+      if (!enabled) {
+        const error = new Error("WebSocket disabled");
+        console.log(
+          "🚫 Phase 3 Settings: Staff group creation blocked - WebSocket disabled",
+        );
+        return Promise.reject(error);
+      }
 
-    if (wsRef.current?.readyState === WebSocket.OPEN) {
-      const message = {
-        type: MESSAGE_TYPES.SETTINGS_CREATE_STAFF_GROUP,
-        payload: { group: groupData },
-        timestamp: new Date().toISOString(),
-        clientId: clientIdRef.current
-      };
+      if (wsRef.current?.readyState === WebSocket.OPEN) {
+        const message = {
+          type: MESSAGE_TYPES.SETTINGS_CREATE_STAFF_GROUP,
+          payload: { group: groupData },
+          timestamp: new Date().toISOString(),
+          clientId: clientIdRef.current,
+        };
 
-      wsRef.current.send(JSON.stringify(message));
-      console.log('📤 Phase 3 Settings: Sent staff group creation:', groupData);
+        wsRef.current.send(JSON.stringify(message));
+        console.log(
+          "📤 Phase 3 Settings: Sent staff group creation:",
+          groupData,
+        );
 
-      return Promise.resolve();
-    } else {
-      const error = new Error('WebSocket not connected');
-      console.error('❌ Phase 3 Settings: Failed to create staff group - not connected');
-      return Promise.reject(error);
-    }
-  }, [enabled]);
+        return Promise.resolve();
+      } else {
+        const error = new Error("WebSocket not connected");
+        console.error(
+          "❌ Phase 3 Settings: Failed to create staff group - not connected",
+        );
+        return Promise.reject(error);
+      }
+    },
+    [enabled],
+  );
 
   /**
    * Delete a staff group (table-specific operation)
    */
-  const deleteStaffGroup = useCallback((groupId) => {
-    if (!enabled) {
-      const error = new Error('WebSocket disabled');
-      console.log('🚫 Phase 3 Settings: Staff group deletion blocked - WebSocket disabled');
-      return Promise.reject(error);
-    }
+  const deleteStaffGroup = useCallback(
+    (groupId) => {
+      if (!enabled) {
+        const error = new Error("WebSocket disabled");
+        console.log(
+          "🚫 Phase 3 Settings: Staff group deletion blocked - WebSocket disabled",
+        );
+        return Promise.reject(error);
+      }
 
-    if (wsRef.current?.readyState === WebSocket.OPEN) {
-      const message = {
-        type: MESSAGE_TYPES.SETTINGS_DELETE_STAFF_GROUP,
-        payload: { groupId },
-        timestamp: new Date().toISOString(),
-        clientId: clientIdRef.current
-      };
+      if (wsRef.current?.readyState === WebSocket.OPEN) {
+        const message = {
+          type: MESSAGE_TYPES.SETTINGS_DELETE_STAFF_GROUP,
+          payload: { groupId },
+          timestamp: new Date().toISOString(),
+          clientId: clientIdRef.current,
+        };
 
-      wsRef.current.send(JSON.stringify(message));
-      console.log('📤 Phase 3 Settings: Sent staff group deletion:', groupId);
+        wsRef.current.send(JSON.stringify(message));
+        console.log("📤 Phase 3 Settings: Sent staff group deletion:", groupId);
 
-      return Promise.resolve();
-    } else {
-      const error = new Error('WebSocket not connected');
-      console.error('❌ Phase 3 Settings: Failed to delete staff group - not connected');
-      return Promise.reject(error);
-    }
-  }, [enabled]);
+        return Promise.resolve();
+      } else {
+        const error = new Error("WebSocket not connected");
+        console.error(
+          "❌ Phase 3 Settings: Failed to delete staff group - not connected",
+        );
+        return Promise.reject(error);
+      }
+    },
+    [enabled],
+  );
 
   /**
    * Update daily limits (table-specific operation)
    */
-  const updateDailyLimits = useCallback((limitData) => {
-    if (!enabled) {
-      const error = new Error('WebSocket disabled');
-      console.log('🚫 Phase 3 Settings: Daily limits update blocked - WebSocket disabled');
-      return Promise.reject(error);
-    }
+  const updateDailyLimits = useCallback(
+    (limitData) => {
+      if (!enabled) {
+        const error = new Error("WebSocket disabled");
+        console.log(
+          "🚫 Phase 3 Settings: Daily limits update blocked - WebSocket disabled",
+        );
+        return Promise.reject(error);
+      }
 
-    if (wsRef.current?.readyState === WebSocket.OPEN) {
-      const message = {
-        type: MESSAGE_TYPES.SETTINGS_UPDATE_DAILY_LIMITS,
-        payload: { limit: limitData },
-        timestamp: new Date().toISOString(),
-        clientId: clientIdRef.current
-      };
+      if (wsRef.current?.readyState === WebSocket.OPEN) {
+        const message = {
+          type: MESSAGE_TYPES.SETTINGS_UPDATE_DAILY_LIMITS,
+          payload: { limit: limitData },
+          timestamp: new Date().toISOString(),
+          clientId: clientIdRef.current,
+        };
 
-      wsRef.current.send(JSON.stringify(message));
-      console.log('📤 Phase 3 Settings: Sent daily limits update:', limitData);
+        wsRef.current.send(JSON.stringify(message));
+        console.log(
+          "📤 Phase 3 Settings: Sent daily limits update:",
+          limitData,
+        );
 
-      return Promise.resolve();
-    } else {
-      const error = new Error('WebSocket not connected');
-      console.error('❌ Phase 3 Settings: Failed to update daily limits - not connected');
-      return Promise.reject(error);
-    }
-  }, [enabled]);
+        return Promise.resolve();
+      } else {
+        const error = new Error("WebSocket not connected");
+        console.error(
+          "❌ Phase 3 Settings: Failed to update daily limits - not connected",
+        );
+        return Promise.reject(error);
+      }
+    },
+    [enabled],
+  );
 
   /**
    * Update monthly limits (table-specific operation)
    */
-  const updateMonthlyLimits = useCallback((limitData) => {
-    if (!enabled) {
-      const error = new Error('WebSocket disabled');
-      console.log('🚫 Phase 3 Settings: Monthly limits update blocked - WebSocket disabled');
-      return Promise.reject(error);
-    }
+  const updateMonthlyLimits = useCallback(
+    (limitData) => {
+      if (!enabled) {
+        const error = new Error("WebSocket disabled");
+        console.log(
+          "🚫 Phase 3 Settings: Monthly limits update blocked - WebSocket disabled",
+        );
+        return Promise.reject(error);
+      }
 
-    if (wsRef.current?.readyState === WebSocket.OPEN) {
-      const message = {
-        type: MESSAGE_TYPES.SETTINGS_UPDATE_MONTHLY_LIMITS,
-        payload: { limit: limitData },
-        timestamp: new Date().toISOString(),
-        clientId: clientIdRef.current
-      };
+      if (wsRef.current?.readyState === WebSocket.OPEN) {
+        const message = {
+          type: MESSAGE_TYPES.SETTINGS_UPDATE_MONTHLY_LIMITS,
+          payload: { limit: limitData },
+          timestamp: new Date().toISOString(),
+          clientId: clientIdRef.current,
+        };
 
-      wsRef.current.send(JSON.stringify(message));
-      console.log('📤 Phase 3 Settings: Sent monthly limits update:', limitData);
+        wsRef.current.send(JSON.stringify(message));
+        console.log(
+          "📤 Phase 3 Settings: Sent monthly limits update:",
+          limitData,
+        );
 
-      return Promise.resolve();
-    } else {
-      const error = new Error('WebSocket not connected');
-      console.error('❌ Phase 3 Settings: Failed to update monthly limits - not connected');
-      return Promise.reject(error);
-    }
-  }, [enabled]);
+        return Promise.resolve();
+      } else {
+        const error = new Error("WebSocket not connected");
+        console.error(
+          "❌ Phase 3 Settings: Failed to update monthly limits - not connected",
+        );
+        return Promise.reject(error);
+      }
+    },
+    [enabled],
+  );
 
   /**
    * Update priority rules (table-specific operation)
    */
-  const updatePriorityRules = useCallback((ruleData) => {
-    if (!enabled) {
-      const error = new Error('WebSocket disabled');
-      console.log('🚫 Phase 3 Settings: Priority rules update blocked - WebSocket disabled');
-      return Promise.reject(error);
-    }
+  const updatePriorityRules = useCallback(
+    (ruleData) => {
+      if (!enabled) {
+        const error = new Error("WebSocket disabled");
+        console.log(
+          "🚫 Phase 3 Settings: Priority rules update blocked - WebSocket disabled",
+        );
+        return Promise.reject(error);
+      }
 
-    if (wsRef.current?.readyState === WebSocket.OPEN) {
-      const message = {
-        type: MESSAGE_TYPES.SETTINGS_UPDATE_PRIORITY_RULES,
-        payload: { rule: ruleData },
-        timestamp: new Date().toISOString(),
-        clientId: clientIdRef.current
-      };
+      if (wsRef.current?.readyState === WebSocket.OPEN) {
+        const message = {
+          type: MESSAGE_TYPES.SETTINGS_UPDATE_PRIORITY_RULES,
+          payload: { rule: ruleData },
+          timestamp: new Date().toISOString(),
+          clientId: clientIdRef.current,
+        };
 
-      wsRef.current.send(JSON.stringify(message));
-      console.log('📤 Phase 3 Settings: Sent priority rules update:', ruleData);
+        wsRef.current.send(JSON.stringify(message));
+        console.log(
+          "📤 Phase 3 Settings: Sent priority rules update:",
+          ruleData,
+        );
 
-      return Promise.resolve();
-    } else {
-      const error = new Error('WebSocket not connected');
-      console.error('❌ Phase 3 Settings: Failed to update priority rules - not connected');
-      return Promise.reject(error);
-    }
-  }, [enabled]);
+        return Promise.resolve();
+      } else {
+        const error = new Error("WebSocket not connected");
+        console.error(
+          "❌ Phase 3 Settings: Failed to update priority rules - not connected",
+        );
+        return Promise.reject(error);
+      }
+    },
+    [enabled],
+  );
 
   /**
    * Update ML model config (table-specific operation)
    */
-  const updateMLConfig = useCallback((configData) => {
-    if (!enabled) {
-      const error = new Error('WebSocket disabled');
-      console.log('🚫 Phase 3 Settings: ML config update blocked - WebSocket disabled');
-      return Promise.reject(error);
-    }
+  const updateMLConfig = useCallback(
+    (configData) => {
+      if (!enabled) {
+        const error = new Error("WebSocket disabled");
+        console.log(
+          "🚫 Phase 3 Settings: ML config update blocked - WebSocket disabled",
+        );
+        return Promise.reject(error);
+      }
 
-    if (wsRef.current?.readyState === WebSocket.OPEN) {
-      const message = {
-        type: MESSAGE_TYPES.SETTINGS_UPDATE_ML_CONFIG,
-        payload: { config: configData },
-        timestamp: new Date().toISOString(),
-        clientId: clientIdRef.current
-      };
+      if (wsRef.current?.readyState === WebSocket.OPEN) {
+        const message = {
+          type: MESSAGE_TYPES.SETTINGS_UPDATE_ML_CONFIG,
+          payload: { config: configData },
+          timestamp: new Date().toISOString(),
+          clientId: clientIdRef.current,
+        };
 
-      wsRef.current.send(JSON.stringify(message));
-      console.log('📤 Phase 3 Settings: Sent ML config update:', configData);
+        wsRef.current.send(JSON.stringify(message));
+        console.log("📤 Phase 3 Settings: Sent ML config update:", configData);
 
-      return Promise.resolve();
-    } else {
-      const error = new Error('WebSocket not connected');
-      console.error('❌ Phase 3 Settings: Failed to update ML config - not connected');
-      return Promise.reject(error);
-    }
-  }, [enabled]);
+        return Promise.resolve();
+      } else {
+        const error = new Error("WebSocket not connected");
+        console.error(
+          "❌ Phase 3 Settings: Failed to update ML config - not connected",
+        );
+        return Promise.reject(error);
+      }
+    },
+    [enabled],
+  );
 
   /**
    * Reset settings to defaults (multi-table reset)
    */
   const resetSettings = useCallback(() => {
     if (!enabled) {
-      const error = new Error('WebSocket disabled');
-      console.log('🚫 Phase 3 Settings: Reset blocked - WebSocket disabled');
+      const error = new Error("WebSocket disabled");
+      console.log("🚫 Phase 3 Settings: Reset blocked - WebSocket disabled");
       return Promise.reject(error);
     }
 
@@ -559,16 +718,18 @@ export const useWebSocketSettings = (options = {}) => {
         type: MESSAGE_TYPES.SETTINGS_RESET,
         payload: {},
         timestamp: new Date().toISOString(),
-        clientId: clientIdRef.current
+        clientId: clientIdRef.current,
       };
 
       wsRef.current.send(JSON.stringify(message));
-      console.log('📤 Phase 3 Settings: Sent settings reset (multi-table)');
+      console.log("📤 Phase 3 Settings: Sent settings reset (multi-table)");
 
       return Promise.resolve();
     } else {
-      const error = new Error('WebSocket not connected');
-      console.error('❌ Phase 3 Settings: Failed to reset settings - not connected');
+      const error = new Error("WebSocket not connected");
+      console.error(
+        "❌ Phase 3 Settings: Failed to reset settings - not connected",
+      );
       return Promise.reject(error);
     }
   }, [enabled]);
@@ -576,96 +737,127 @@ export const useWebSocketSettings = (options = {}) => {
   /**
    * Migrate settings from localStorage to multi-table backend
    */
-  const migrateSettings = useCallback((localStorageData) => {
-    if (!enabled) {
-      const error = new Error('WebSocket disabled');
-      console.log('🚫 Phase 3 Settings: Migration blocked - WebSocket disabled');
-      return Promise.reject(error);
-    }
+  const migrateSettings = useCallback(
+    (localStorageData) => {
+      if (!enabled) {
+        const error = new Error("WebSocket disabled");
+        console.log(
+          "🚫 Phase 3 Settings: Migration blocked - WebSocket disabled",
+        );
+        return Promise.reject(error);
+      }
 
-    if (wsRef.current?.readyState === WebSocket.OPEN) {
-      const message = {
-        type: MESSAGE_TYPES.SETTINGS_MIGRATE,
-        payload: { settings: localStorageData },
-        timestamp: new Date().toISOString(),
-        clientId: clientIdRef.current
-      };
+      if (wsRef.current?.readyState === WebSocket.OPEN) {
+        const message = {
+          type: MESSAGE_TYPES.SETTINGS_MIGRATE,
+          payload: { settings: localStorageData },
+          timestamp: new Date().toISOString(),
+          clientId: clientIdRef.current,
+        };
 
-      wsRef.current.send(JSON.stringify(message));
-      console.log('📤 Phase 3 Settings: Sent settings migration (localStorage → multi-table)');
+        wsRef.current.send(JSON.stringify(message));
+        console.log(
+          "📤 Phase 3 Settings: Sent settings migration (localStorage → multi-table)",
+        );
 
-      return Promise.resolve();
-    } else {
-      const error = new Error('WebSocket not connected');
-      console.error('❌ Phase 3 Settings: Failed to migrate settings - not connected');
-      return Promise.reject(error);
-    }
-  }, [enabled]);
+        return Promise.resolve();
+      } else {
+        const error = new Error("WebSocket not connected");
+        console.error(
+          "❌ Phase 3 Settings: Failed to migrate settings - not connected",
+        );
+        return Promise.reject(error);
+      }
+    },
+    [enabled],
+  );
 
   /**
    * Create new config version
    */
-  const createVersion = useCallback((name, description) => {
-    if (!enabled) {
-      const error = new Error('WebSocket disabled');
-      console.log('🚫 Phase 3 Settings: Create version blocked - WebSocket disabled');
-      return Promise.reject(error);
-    }
+  const createVersion = useCallback(
+    (name, description) => {
+      if (!enabled) {
+        const error = new Error("WebSocket disabled");
+        console.log(
+          "🚫 Phase 3 Settings: Create version blocked - WebSocket disabled",
+        );
+        return Promise.reject(error);
+      }
 
-    if (wsRef.current?.readyState === WebSocket.OPEN) {
-      const message = {
-        type: MESSAGE_TYPES.SETTINGS_CREATE_VERSION,
-        payload: { name, description },
-        timestamp: new Date().toISOString(),
-        clientId: clientIdRef.current
-      };
+      if (wsRef.current?.readyState === WebSocket.OPEN) {
+        const message = {
+          type: MESSAGE_TYPES.SETTINGS_CREATE_VERSION,
+          payload: { name, description },
+          timestamp: new Date().toISOString(),
+          clientId: clientIdRef.current,
+        };
 
-      wsRef.current.send(JSON.stringify(message));
-      console.log('📤 Phase 3 Settings: Sent create version request:', { name, description });
+        wsRef.current.send(JSON.stringify(message));
+        console.log("📤 Phase 3 Settings: Sent create version request:", {
+          name,
+          description,
+        });
 
-      return Promise.resolve();
-    } else {
-      const error = new Error('WebSocket not connected');
-      console.error('❌ Phase 3 Settings: Failed to create version - not connected');
-      return Promise.reject(error);
-    }
-  }, [enabled]);
+        return Promise.resolve();
+      } else {
+        const error = new Error("WebSocket not connected");
+        console.error(
+          "❌ Phase 3 Settings: Failed to create version - not connected",
+        );
+        return Promise.reject(error);
+      }
+    },
+    [enabled],
+  );
 
   /**
    * Activate config version
    */
-  const activateVersion = useCallback((versionId) => {
-    if (!enabled) {
-      const error = new Error('WebSocket disabled');
-      console.log('🚫 Phase 3 Settings: Activate version blocked - WebSocket disabled');
-      return Promise.reject(error);
-    }
+  const activateVersion = useCallback(
+    (versionId) => {
+      if (!enabled) {
+        const error = new Error("WebSocket disabled");
+        console.log(
+          "🚫 Phase 3 Settings: Activate version blocked - WebSocket disabled",
+        );
+        return Promise.reject(error);
+      }
 
-    if (wsRef.current?.readyState === WebSocket.OPEN) {
-      const message = {
-        type: MESSAGE_TYPES.SETTINGS_ACTIVATE_VERSION,
-        payload: { versionId },
-        timestamp: new Date().toISOString(),
-        clientId: clientIdRef.current
-      };
+      if (wsRef.current?.readyState === WebSocket.OPEN) {
+        const message = {
+          type: MESSAGE_TYPES.SETTINGS_ACTIVATE_VERSION,
+          payload: { versionId },
+          timestamp: new Date().toISOString(),
+          clientId: clientIdRef.current,
+        };
 
-      wsRef.current.send(JSON.stringify(message));
-      console.log('📤 Phase 3 Settings: Sent activate version request:', versionId);
+        wsRef.current.send(JSON.stringify(message));
+        console.log(
+          "📤 Phase 3 Settings: Sent activate version request:",
+          versionId,
+        );
 
-      return Promise.resolve();
-    } else {
-      const error = new Error('WebSocket not connected');
-      console.error('❌ Phase 3 Settings: Failed to activate version - not connected');
-      return Promise.reject(error);
-    }
-  }, [enabled]);
+        return Promise.resolve();
+      } else {
+        const error = new Error("WebSocket not connected");
+        console.error(
+          "❌ Phase 3 Settings: Failed to activate version - not connected",
+        );
+        return Promise.reject(error);
+      }
+    },
+    [enabled],
+  );
 
   /**
    * Manual reconnection
    */
   const reconnect = useCallback(() => {
     if (!enabled) {
-      console.log('🚫 Phase 3 Settings: Reconnection blocked - WebSocket disabled');
+      console.log(
+        "🚫 Phase 3 Settings: Reconnection blocked - WebSocket disabled",
+      );
       return;
     }
 
@@ -674,7 +866,7 @@ export const useWebSocketSettings = (options = {}) => {
     }
     reconnectAttempts.current = 0;
     connectionFailedPermanently.current = false;
-    setConnectionStatus('connecting');
+    setConnectionStatus("connecting");
     connect();
   }, [enabled, connect]);
 
@@ -703,7 +895,7 @@ export const useWebSocketSettings = (options = {}) => {
     // Connection state
     connectionStatus,
     isLoading,
-    isConnected: connectionStatus === 'connected',
+    isConnected: connectionStatus === "connected",
     lastError,
     connectionFailedPermanently: connectionFailedPermanently.current,
 
@@ -712,7 +904,7 @@ export const useWebSocketSettings = (options = {}) => {
 
     // Debug info
     reconnectAttempts: reconnectAttempts.current,
-    clientId: clientIdRef.current
+    clientId: clientIdRef.current,
   };
 };
 

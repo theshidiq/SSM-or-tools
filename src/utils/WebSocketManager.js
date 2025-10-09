@@ -3,7 +3,7 @@
  * Exact implementation from official plan lines 664-689
  */
 
-import { EventEmitter } from 'events';
+import { EventEmitter } from "events";
 
 // Enhanced WebSocketManager class with exponential backoff
 export class WebSocketManager extends EventEmitter {
@@ -18,13 +18,13 @@ export class WebSocketManager extends EventEmitter {
       maxDelay: 30000,
       heartbeatInterval: 30000,
       connectionTimeout: 10000,
-      ...options
+      ...options,
     };
 
     // Connection state
     this.ws = null;
     this.reconnectAttempts = 0;
-    this.connectionState = 'disconnected';
+    this.connectionState = "disconnected";
     this.reconnectTimeout = null;
     this.heartbeatInterval = null;
     this.connectionTimeout = null;
@@ -40,7 +40,7 @@ export class WebSocketManager extends EventEmitter {
       reconnectionCount: 0,
       lastLatency: 0,
       connectionUptime: 0,
-      connectionStartTime: null
+      connectionStartTime: null,
     };
 
     // Compression support
@@ -59,23 +59,26 @@ export class WebSocketManager extends EventEmitter {
     } catch (error) {
       if (this.reconnectAttempts < this.options.maxReconnectAttempts) {
         const delay = Math.min(
-          Math.pow(this.options.backoffMultiplier, this.reconnectAttempts) * this.options.initialDelay,
-          this.options.maxDelay
+          Math.pow(this.options.backoffMultiplier, this.reconnectAttempts) *
+            this.options.initialDelay,
+          this.options.maxDelay,
         );
         this.reconnectAttempts++;
         this.metrics.reconnectionCount++;
 
-        console.log(`Reconnection attempt ${this.reconnectAttempts} in ${delay}ms`);
-        this.emit('reconnecting', { attempt: this.reconnectAttempts, delay });
+        console.log(
+          `Reconnection attempt ${this.reconnectAttempts} in ${delay}ms`,
+        );
+        this.emit("reconnecting", { attempt: this.reconnectAttempts, delay });
 
-        await new Promise(resolve => {
+        await new Promise((resolve) => {
           this.reconnectTimeout = setTimeout(resolve, delay);
         });
 
         return this.connectWithRetry();
       } else {
-        const maxAttemptsError = new Error('Max reconnection attempts reached');
-        this.emit('maxReconnectAttemptsReached', maxAttemptsError);
+        const maxAttemptsError = new Error("Max reconnection attempts reached");
+        this.emit("maxReconnectAttemptsReached", maxAttemptsError);
         throw maxAttemptsError;
       }
     }
@@ -87,8 +90,8 @@ export class WebSocketManager extends EventEmitter {
   connect() {
     return new Promise((resolve, reject) => {
       try {
-        this.connectionState = 'connecting';
-        this.emit('connecting');
+        this.connectionState = "connecting";
+        this.emit("connecting");
 
         // Clear any existing connection
         this.cleanup();
@@ -100,17 +103,19 @@ export class WebSocketManager extends EventEmitter {
         this.connectionTimeout = setTimeout(() => {
           if (this.ws && this.ws.readyState === WebSocket.CONNECTING) {
             this.ws.close();
-            reject(new Error('Connection timeout'));
+            reject(new Error("Connection timeout"));
           }
         }, this.options.connectionTimeout);
 
         this.ws.onopen = () => {
           clearTimeout(this.connectionTimeout);
-          this.connectionState = 'connected';
+          this.connectionState = "connected";
           this.metrics.connectionStartTime = Date.now();
 
-          console.log('🔌 Phase 6: Enhanced WebSocket connected with retry logic');
-          this.emit('connected');
+          console.log(
+            "🔌 Phase 6: Enhanced WebSocket connected with retry logic",
+          );
+          this.emit("connected");
 
           // Start heartbeat
           this.startHeartbeat();
@@ -131,10 +136,9 @@ export class WebSocketManager extends EventEmitter {
 
         this.ws.onerror = (error) => {
           clearTimeout(this.connectionTimeout);
-          this.emit('error', error);
+          this.emit("error", error);
           reject(error);
         };
-
       } catch (error) {
         clearTimeout(this.connectionTimeout);
         reject(error);
@@ -161,22 +165,22 @@ export class WebSocketManager extends EventEmitter {
       }
 
       // Handle pong messages for latency calculation
-      if (message.type === 'PONG' && message.timestamp) {
-        this.metrics.lastLatency = Date.now() - new Date(message.timestamp).getTime();
-        this.emit('pong', { latency: this.metrics.lastLatency });
+      if (message.type === "PONG" && message.timestamp) {
+        this.metrics.lastLatency =
+          Date.now() - new Date(message.timestamp).getTime();
+        this.emit("pong", { latency: this.metrics.lastLatency });
         return;
       }
 
       // Handle compressed messages
-      if (message.type === 'COMPRESSED') {
+      if (message.type === "COMPRESSED") {
         message = this.decompressMessage(message);
       }
 
-      this.emit('message', message);
-
+      this.emit("message", message);
     } catch (error) {
-      console.error('❌ Phase 6: Failed to handle message:', error);
-      this.emit('messageError', error);
+      console.error("❌ Phase 6: Failed to handle message:", error);
+      this.emit("messageError", error);
     }
   }
 
@@ -184,21 +188,27 @@ export class WebSocketManager extends EventEmitter {
    * Handle connection close with automatic reconnection
    */
   handleClose(event) {
-    this.connectionState = 'disconnected';
+    this.connectionState = "disconnected";
     this.stopHeartbeat();
 
     if (this.metrics.connectionStartTime) {
-      this.metrics.connectionUptime += Date.now() - this.metrics.connectionStartTime;
+      this.metrics.connectionUptime +=
+        Date.now() - this.metrics.connectionStartTime;
       this.metrics.connectionStartTime = null;
     }
 
-    console.log(`🔌 Phase 6: WebSocket disconnected (${event.code}: ${event.reason})`);
-    this.emit('disconnected', { code: event.code, reason: event.reason });
+    console.log(
+      `🔌 Phase 6: WebSocket disconnected (${event.code}: ${event.reason})`,
+    );
+    this.emit("disconnected", { code: event.code, reason: event.reason });
 
     // Attempt reconnection if not manually closed
-    if (event.code !== 1000 && this.reconnectAttempts < this.options.maxReconnectAttempts) {
-      this.connectWithRetry().catch(error => {
-        console.error('❌ Phase 6: Reconnection failed:', error);
+    if (
+      event.code !== 1000 &&
+      this.reconnectAttempts < this.options.maxReconnectAttempts
+    ) {
+      this.connectWithRetry().catch((error) => {
+        console.error("❌ Phase 6: Reconnection failed:", error);
       });
     }
   }
@@ -213,7 +223,7 @@ export class WebSocketManager extends EventEmitter {
         const messageWithSeq = {
           ...message,
           sequenceNumber: ++this.sequenceNumber,
-          timestamp: new Date().toISOString()
+          timestamp: new Date().toISOString(),
         };
 
         let data;
@@ -228,18 +238,17 @@ export class WebSocketManager extends EventEmitter {
         this.ws.send(data);
         this.metrics.messagesSent++;
 
-        this.emit('messageSent', messageWithSeq);
+        this.emit("messageSent", messageWithSeq);
         return true;
-
       } else {
         // Queue message for when connection is restored
         this.messageQueue.push(message);
-        this.emit('messageQueued', message);
+        this.emit("messageQueued", message);
         return false;
       }
     } catch (error) {
-      console.error('❌ Phase 6: Failed to send message:', error);
-      this.emit('sendError', error);
+      console.error("❌ Phase 6: Failed to send message:", error);
+      this.emit("sendError", error);
       return false;
     }
   }
@@ -251,8 +260,8 @@ export class WebSocketManager extends EventEmitter {
     this.heartbeatInterval = setInterval(() => {
       if (this.ws && this.ws.readyState === WebSocket.OPEN) {
         this.send({
-          type: 'PING',
-          timestamp: new Date().toISOString()
+          type: "PING",
+          timestamp: new Date().toISOString(),
         });
       }
     }, this.options.heartbeatInterval);
@@ -292,10 +301,10 @@ export class WebSocketManager extends EventEmitter {
   compressMessage(message) {
     try {
       // For browser environment, use CompressionStream if available
-      if (typeof CompressionStream !== 'undefined') {
+      if (typeof CompressionStream !== "undefined") {
         // Modern browsers with compression support
         const jsonString = JSON.stringify(message);
-        const stream = new CompressionStream('gzip');
+        const stream = new CompressionStream("gzip");
         const writer = stream.writable.getWriter();
         const reader = stream.readable.getReader();
 
@@ -304,10 +313,10 @@ export class WebSocketManager extends EventEmitter {
 
         // Return compressed message structure
         return {
-          type: 'COMPRESSED',
+          type: "COMPRESSED",
           compressed: true,
           payload: reader.read(), // This would need proper async handling
-          checksum: this.calculateChecksum(jsonString)
+          checksum: this.calculateChecksum(jsonString),
         };
       } else {
         // Fallback: Use simple base64 encoding (not actual compression)
@@ -315,14 +324,14 @@ export class WebSocketManager extends EventEmitter {
         const encoded = btoa(jsonString);
 
         return JSON.stringify({
-          type: 'COMPRESSED',
+          type: "COMPRESSED",
           compressed: false, // Mark as not actually compressed
           payload: encoded,
-          checksum: this.calculateChecksum(jsonString)
+          checksum: this.calculateChecksum(jsonString),
         });
       }
     } catch (error) {
-      console.error('❌ Phase 6: Compression failed:', error);
+      console.error("❌ Phase 6: Compression failed:", error);
       return JSON.stringify(message); // Fallback to uncompressed
     }
   }
@@ -333,13 +342,15 @@ export class WebSocketManager extends EventEmitter {
   decompressMessage(compressedMessage) {
     try {
       // Handle different compression formats
-      if (typeof compressedMessage === 'string') {
+      if (typeof compressedMessage === "string") {
         const parsed = JSON.parse(compressedMessage);
 
-        if (parsed.type === 'COMPRESSED') {
+        if (parsed.type === "COMPRESSED") {
           if (parsed.compressed) {
             // Would implement actual decompression here
-            throw new Error('Actual gzip decompression not implemented in browser');
+            throw new Error(
+              "Actual gzip decompression not implemented in browser",
+            );
           } else {
             // Simple base64 decoding
             const decoded = atob(parsed.payload);
@@ -350,7 +361,7 @@ export class WebSocketManager extends EventEmitter {
 
       return compressedMessage;
     } catch (error) {
-      console.error('❌ Phase 6: Decompression failed:', error);
+      console.error("❌ Phase 6: Decompression failed:", error);
       throw error;
     }
   }
@@ -362,7 +373,7 @@ export class WebSocketManager extends EventEmitter {
     let hash = 0;
     for (let i = 0; i < data.length; i++) {
       const char = data.charCodeAt(i);
-      hash = ((hash << 5) - hash) + char;
+      hash = (hash << 5) - hash + char;
       hash = hash & hash; // Convert to 32-bit integer
     }
     return hash.toString(16);
@@ -381,7 +392,7 @@ export class WebSocketManager extends EventEmitter {
       connectionUptime: this.metrics.connectionUptime + currentUptime,
       connectionState: this.connectionState,
       queuedMessages: this.messageQueue.length,
-      reconnectAttempts: this.reconnectAttempts
+      reconnectAttempts: this.reconnectAttempts,
     };
   }
 
@@ -400,7 +411,7 @@ export class WebSocketManager extends EventEmitter {
   close() {
     this.cleanup();
     if (this.ws) {
-      this.ws.close(1000, 'Manual close');
+      this.ws.close(1000, "Manual close");
     }
   }
 
@@ -433,8 +444,11 @@ export class WebSocketManager extends EventEmitter {
    * Check if connection is stable (99.95% target)
    */
   getConnectionStability() {
-    const totalTime = this.metrics.connectionUptime +
-      (this.metrics.connectionStartTime ? Date.now() - this.metrics.connectionStartTime : 0);
+    const totalTime =
+      this.metrics.connectionUptime +
+      (this.metrics.connectionStartTime
+        ? Date.now() - this.metrics.connectionStartTime
+        : 0);
 
     if (totalTime === 0) return 0;
 

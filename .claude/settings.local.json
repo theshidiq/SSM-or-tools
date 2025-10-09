@@ -37,7 +37,15 @@
       "Bash(/bashes)",
       "Read(//tmp/**)",
       "Bash(npm run dev:*)",
-      "Bash(node:*)"
+      "Bash(node:*)",
+      "mcp__supabase__list_projects",
+      "mcp__supabase__apply_migration",
+      "Bash(go run:*)",
+      "Bash(timeout 5 go run main.go settings_multitable.go shifts_websocket.go)",
+      "Bash(test:*)",
+      "Bash(make:*)",
+      "Bash(/dev/null)",
+      "Bash(pgrep:*)"
     ],
     "deny": []
   },

@@ -66,69 +66,74 @@ const ScheduleTableSkeleton = ({
 
   // Generate date row skeletons
   const renderDateRows = () => {
-    return Array.from({ length: Math.min(dateCount, 20) }).map((_, dateIndex) => (
-      <TableRow key={`skeleton-row-${dateIndex}`} className="hover:bg-muted/50">
-        {/* Date Cell (Sticky Left Column) */}
-        <TableCell
-          className="text-center font-medium border-r-2 border-border sticky left-0 bg-background"
-          style={{
-            minWidth: "40px",
-            width: "40px",
-            zIndex: 300,
-          }}
+    return Array.from({ length: Math.min(dateCount, 20) }).map(
+      (_, dateIndex) => (
+        <TableRow
+          key={`skeleton-row-${dateIndex}`}
+          className="hover:bg-muted/50"
         >
-          <ContentLoader
-            speed={2}
-            width={35}
-            height={cellHeight - 10}
-            viewBox={`0 0 35 ${cellHeight - 10}`}
-            backgroundColor="#f3f4f6"
-            foregroundColor="#ffffff"
-          >
-            {/* Date number */}
-            <rect x="8" y="5" rx="2" ry="2" width="12" height="8" />
-            {/* Day of week */}
-            <rect x="6" y="18" rx="2" ry="2" width="16" height="6" />
-            {/* Additional date info */}
-            <rect x="10" y="28" rx="1" ry="1" width="8" height="4" />
-          </ContentLoader>
-        </TableCell>
-
-        {/* Staff Shift Cells */}
-        {Array.from({ length: staffCount }).map((_, staffIndex) => (
+          {/* Date Cell (Sticky Left Column) */}
           <TableCell
-            key={`skeleton-cell-${dateIndex}-${staffIndex}`}
-            className={`text-center border-r border-border relative hover:bg-accent ${
-              staffIndex === staffCount - 1 ? "border-r-2 border-border" : ""
-            }`}
+            className="text-center font-medium border-r-2 border-border sticky left-0 bg-background"
             style={{
               minWidth: "40px",
               width: "40px",
-              maxWidth: "40px",
-              height: `${cellHeight}px`,
-              padding: "0",
+              zIndex: 300,
             }}
           >
-            <div className="w-full h-full flex items-center justify-center">
-              <ContentLoader
-                speed={2}
-                width={30}
-                height={30}
-                viewBox="0 0 30 30"
-                backgroundColor="#f9fafb"
-                foregroundColor="#ffffff"
-              >
-                {/* Shift symbol placeholder - circular to represent shift symbols */}
-                <circle cx="15" cy="15" r="8" />
-                {/* Small indicator dots */}
-                <circle cx="8" cy="8" r="1.5" />
-                <circle cx="22" cy="22" r="1.5" />
-              </ContentLoader>
-            </div>
+            <ContentLoader
+              speed={2}
+              width={35}
+              height={cellHeight - 10}
+              viewBox={`0 0 35 ${cellHeight - 10}`}
+              backgroundColor="#f3f4f6"
+              foregroundColor="#ffffff"
+            >
+              {/* Date number */}
+              <rect x="8" y="5" rx="2" ry="2" width="12" height="8" />
+              {/* Day of week */}
+              <rect x="6" y="18" rx="2" ry="2" width="16" height="6" />
+              {/* Additional date info */}
+              <rect x="10" y="28" rx="1" ry="1" width="8" height="4" />
+            </ContentLoader>
           </TableCell>
-        ))}
-      </TableRow>
-    ));
+
+          {/* Staff Shift Cells */}
+          {Array.from({ length: staffCount }).map((_, staffIndex) => (
+            <TableCell
+              key={`skeleton-cell-${dateIndex}-${staffIndex}`}
+              className={`text-center border-r border-border relative hover:bg-accent ${
+                staffIndex === staffCount - 1 ? "border-r-2 border-border" : ""
+              }`}
+              style={{
+                minWidth: "40px",
+                width: "40px",
+                maxWidth: "40px",
+                height: `${cellHeight}px`,
+                padding: "0",
+              }}
+            >
+              <div className="w-full h-full flex items-center justify-center">
+                <ContentLoader
+                  speed={2}
+                  width={30}
+                  height={30}
+                  viewBox="0 0 30 30"
+                  backgroundColor="#f9fafb"
+                  foregroundColor="#ffffff"
+                >
+                  {/* Shift symbol placeholder - circular to represent shift symbols */}
+                  <circle cx="15" cy="15" r="8" />
+                  {/* Small indicator dots */}
+                  <circle cx="8" cy="8" r="1.5" />
+                  <circle cx="22" cy="22" r="1.5" />
+                </ContentLoader>
+              </div>
+            </TableCell>
+          ))}
+        </TableRow>
+      ),
+    );
   };
 
   // Generate footer row skeleton
@@ -233,14 +238,10 @@ const ScheduleTableSkeleton = ({
           </TableHeader>
 
           {/* Table Body: Date Rows */}
-          <TableBody>
-            {renderDateRows()}
-          </TableBody>
+          <TableBody>{renderDateRows()}</TableBody>
 
           {/* Day Off Count Footer */}
-          <TableFooter>
-            {renderFooterRow()}
-          </TableFooter>
+          <TableFooter>{renderFooterRow()}</TableFooter>
         </Table>
       </div>
 
@@ -263,7 +264,10 @@ export const ScheduleTableSkeletonCompact = ({ staffCount = 3 }) => {
       <div className="flex space-x-2">
         <div className="w-10 h-8 bg-gray-200 rounded animate-pulse"></div>
         {Array.from({ length: staffCount }).map((_, i) => (
-          <div key={i} className="w-10 h-8 bg-gray-200 rounded animate-pulse"></div>
+          <div
+            key={i}
+            className="w-10 h-8 bg-gray-200 rounded animate-pulse"
+          ></div>
         ))}
       </div>
 
@@ -272,7 +276,10 @@ export const ScheduleTableSkeletonCompact = ({ staffCount = 3 }) => {
         <div key={rowIndex} className="flex space-x-2">
           <div className="w-10 h-10 bg-gray-100 rounded animate-pulse"></div>
           {Array.from({ length: staffCount }).map((_, i) => (
-            <div key={i} className="w-10 h-10 bg-gray-50 rounded animate-pulse flex items-center justify-center">
+            <div
+              key={i}
+              className="w-10 h-10 bg-gray-50 rounded animate-pulse flex items-center justify-center"
+            >
               <div className="w-4 h-4 bg-gray-200 rounded-full animate-pulse"></div>
             </div>
           ))}

@@ -6,12 +6,25 @@ import { supabase } from "./supabase";
 const generateInitialPeriods = (startYear = null, periodCount = 12) => {
   const periods = [];
   const monthNames = [
-    "", "1月", "2月", "3月", "4月", "5月", "6月",
-    "7月", "8月", "9月", "10月", "11月", "12月"
+    "",
+    "1月",
+    "2月",
+    "3月",
+    "4月",
+    "5月",
+    "6月",
+    "7月",
+    "8月",
+    "9月",
+    "10月",
+    "11月",
+    "12月",
   ];
 
   const today = new Date();
-  const currentDate = new Date(Date.UTC(today.getFullYear(), today.getMonth(), today.getDate()));
+  const currentDate = new Date(
+    Date.UTC(today.getFullYear(), today.getMonth(), today.getDate()),
+  );
 
   // Determine starting year and month based on current date
   let currentYear = startYear || currentDate.getFullYear();
@@ -35,7 +48,9 @@ const generateInitialPeriods = (startYear = null, periodCount = 12) => {
     }
   }
 
-  console.log(`🏗️ Generating ${periodCount} periods starting from ${currentYear}-${currentMonth + 1} (today: ${currentDate.toISOString().split("T")[0]})`);
+  console.log(
+    `🏗️ Generating ${periodCount} periods starting from ${currentYear}-${currentMonth + 1} (today: ${currentDate.toISOString().split("T")[0]})`,
+  );
 
   for (let i = 0; i < periodCount; i++) {
     const startDate = new Date(Date.UTC(currentYear, currentMonth, 21));
@@ -62,7 +77,9 @@ const generateInitialPeriods = (startYear = null, periodCount = 12) => {
       label: label,
     });
 
-    console.log(`🏗️ Generated period ${i}: ${label} (${startDate.toISOString().split("T")[0]} to ${endDate.toISOString().split("T")[0]})`);
+    console.log(
+      `🏗️ Generated period ${i}: ${label} (${startDate.toISOString().split("T")[0]} to ${endDate.toISOString().split("T")[0]})`,
+    );
 
     // Move to next month
     currentMonth++;
@@ -624,13 +641,17 @@ export const getCurrentMonthIndex = async (periods = null) => {
   );
 
   // Debug: Log all periods to understand what we have
-  console.log(`📅 Debugging getCurrentMonthIndex for ${todayUTC.toISOString().split("T")[0]}`);
+  console.log(
+    `📅 Debugging getCurrentMonthIndex for ${todayUTC.toISOString().split("T")[0]}`,
+  );
   console.log(`📅 Total periods available: ${periodsToUse.length}`);
   periodsToUse.forEach((period, index) => {
     const startDate = new Date(period.start);
     const endDate = new Date(period.end);
     const containsToday = todayUTC >= startDate && todayUTC <= endDate;
-    console.log(`📅 Period ${index}: ${period.label} (${startDate.toISOString().split("T")[0]} to ${endDate.toISOString().split("T")[0]}) - Contains today: ${containsToday}`);
+    console.log(
+      `📅 Period ${index}: ${period.label} (${startDate.toISOString().split("T")[0]} to ${endDate.toISOString().split("T")[0]}) - Contains today: ${containsToday}`,
+    );
   });
 
   // Find the period that contains today's date
@@ -686,12 +707,18 @@ export const getCurrentMonthIndex = async (periods = null) => {
             return 0;
           }
 
-          currentLastEndDate = new Date(periodsToUse[periodsToUse.length - 1].end);
-          console.log(`📅 Extended to period ending ${currentLastEndDate.toISOString().split("T")[0]}`);
+          currentLastEndDate = new Date(
+            periodsToUse[periodsToUse.length - 1].end,
+          );
+          console.log(
+            `📅 Extended to period ending ${currentLastEndDate.toISOString().split("T")[0]}`,
+          );
 
           // Safety check to prevent infinite loop
           if (extendedPeriods > 12) {
-            console.warn("📅 Extended more than 12 periods, stopping to prevent infinite loop");
+            console.warn(
+              "📅 Extended more than 12 periods, stopping to prevent infinite loop",
+            );
             break;
           }
         } catch (error) {
@@ -701,7 +728,9 @@ export const getCurrentMonthIndex = async (periods = null) => {
       }
 
       if (extendedPeriods > 0) {
-        console.log(`📅 Auto-extended ${extendedPeriods} periods to cover current date`);
+        console.log(
+          `📅 Auto-extended ${extendedPeriods} periods to cover current date`,
+        );
 
         // Now find the period that contains today's date
         for (let i = 0; i < periodsToUse.length; i++) {
@@ -732,7 +761,7 @@ export const getCurrentMonthIndex = async (periods = null) => {
       if (todayUTC > currentEnd && todayUTC < nextStart) {
         console.log(
           `📅 Today falls in gap between period ${i} (${currentPeriod.label}, ends ${currentEnd.toISOString().split("T")[0]}) ` +
-          `and period ${i + 1} (${nextPeriod.label}, starts ${nextStart.toISOString().split("T")[0]})`
+            `and period ${i + 1} (${nextPeriod.label}, starts ${nextStart.toISOString().split("T")[0]})`,
         );
 
         // Calculate the missing period dates
@@ -746,13 +775,24 @@ export const getCurrentMonthIndex = async (periods = null) => {
         const startMonth = missingStart.getUTCMonth() + 1;
         const endMonth = missingEnd.getUTCMonth() + 1;
         const monthNames = [
-          "", "1月", "2月", "3月", "4月", "5月", "6月",
-          "7月", "8月", "9月", "10月", "11月", "12月"
+          "",
+          "1月",
+          "2月",
+          "3月",
+          "4月",
+          "5月",
+          "6月",
+          "7月",
+          "8月",
+          "9月",
+          "10月",
+          "11月",
+          "12月",
         ];
         const missingLabel = `${monthNames[startMonth]}・${monthNames[endMonth]}`;
 
         console.log(
-          `📅 Adding missing period: ${missingLabel} (${missingStart.toISOString().split("T")[0]} to ${missingEnd.toISOString().split("T")[0]})`
+          `📅 Adding missing period: ${missingLabel} (${missingStart.toISOString().split("T")[0]} to ${missingEnd.toISOString().split("T")[0]})`,
         );
 
         try {
@@ -836,7 +876,7 @@ export const getCurrentMonthIndex = async (periods = null) => {
 
   // Final fallback: return last available period
   console.log(
-    `📅 Fallback: using last available period (${periodsToUse[periodsToUse.length - 1]?.label || 'undefined'})`,
+    `📅 Fallback: using last available period (${periodsToUse[periodsToUse.length - 1]?.label || "undefined"})`,
   );
   return Math.max(0, periodsToUse.length - 1);
 };
