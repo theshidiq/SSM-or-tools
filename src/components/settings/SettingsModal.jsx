@@ -79,6 +79,11 @@ const SettingsModal = ({
   const [isResetting, setIsResetting] = useState(false);
   const modalRef = useRef(null);
 
+  // State for StaffGroupsTab delete confirmation (lifted to avoid z-index issues)
+  const [deleteGroupConfirmation, setDeleteGroupConfirmation] = useState(null); // { groupId, groupName, onConfirm }
+  const [isDeletingGroup, setIsDeletingGroup] = useState(false);
+  const [deleteGroupSuccess, setDeleteGroupSuccess] = useState(false);
+
   // Configuration cache management
   const { onSettingSaved, onSettingsBulkSaved, cacheStatus, isRefreshing } =
     useSettingsCache();
@@ -174,6 +179,47 @@ const SettingsModal = ({
     setResetConfirmation(false);
   };
 
+  // Handlers for StaffGroupsTab delete confirmation
+  const handleDeleteGroup = (groupId, groupName, onConfirm) => {
+    console.log('🗑️ [SettingsModal] handleDeleteGroup called:', { groupId, groupName });
+
+    // Close any open select dropdowns (native selects have higher z-index than modals)
+    document.activeElement?.blur();
+
+    setDeleteGroupConfirmation({ groupId, groupName, onConfirm });
+    setDeleteGroupSuccess(false);
+  };
+
+  const handleDeleteGroupConfirm = async () => {
+    console.log('🗑️ [SettingsModal] handleDeleteGroupConfirm called');
+    if (!deleteGroupConfirmation) return;
+
+    setIsDeletingGroup(true);
+    try {
+      // Call the confirmation handler passed from StaffGroupsTab
+      await deleteGroupConfirmation.onConfirm();
+
+      // Show success state
+      setDeleteGroupSuccess(true);
+      setIsDeletingGroup(false);
+
+      // Auto-close after showing success
+      setTimeout(() => {
+        setDeleteGroupConfirmation(null);
+        setDeleteGroupSuccess(false);
+      }, 1500);
+    } catch (error) {
+      console.error('🗑️ [SettingsModal] Error during delete:', error);
+      setIsDeletingGroup(false);
+    }
+  };
+
+  const handleDeleteGroupCancel = () => {
+    console.log('🗑️ [SettingsModal] handleDeleteGroupCancel called');
+    setDeleteGroupConfirmation(null);
+    setDeleteGroupSuccess(false);
+  };
+
   const renderTabContent = () => {
     const commonProps = {
       // Phase 3: settings & updateSettings now from Context (not passed as props)
@@ -184,7 +230,7 @@ const SettingsModal = ({
 
     switch (activeTab) {
       case "staff-groups":
-        return <StaffGroupsTab {...commonProps} />;
+        return <StaffGroupsTab {...commonProps} onDeleteGroup={handleDeleteGroup} isDeleteModalOpen={deleteGroupConfirmation !== null} />;
       case "daily-limits":
         // Phase 4.3: DailyLimitsTab now uses useSettings() hook
         return <DailyLimitsTab
@@ -215,7 +261,8 @@ const SettingsModal = ({
   if (!isVisible) return null;
 
   return (
-    <Dialog open={isOpen} onOpenChange={onClose}>
+    <>
+      <Dialog open={isOpen} onOpenChange={onClose}>
       <DialogContent className="max-w-6xl max-h-[90vh] h-[90vh] flex flex-col overflow-hidden">
         <DialogHeader className="flex-shrink-0">
           <DialogTitle className="flex items-center gap-3">
@@ -381,8 +428,9 @@ const SettingsModal = ({
           </div>
         </div>
       </DialogContent>
+    </Dialog>
 
-      {/* Reset Confirmation Modal - Moved outside to prevent z-index issues */}
+      {/* Reset Confirmation Modal - Rendered outside Dialog to prevent pointer-events issues */}
       {resetConfirmation && (
         <ConfirmationModal
           isOpen={resetConfirmation}
@@ -396,7 +444,28 @@ const SettingsModal = ({
           isLoading={isResetting}
         />
       )}
-    </Dialog>
+
+      {/* Delete Group Confirmation Modal - Rendered outside Dialog to prevent pointer-events issues */}
+      {deleteGroupConfirmation && (
+        <ConfirmationModal
+          isOpen={deleteGroupConfirmation !== null}
+          onClose={handleDeleteGroupCancel}
+          onConfirm={deleteGroupSuccess ? null : handleDeleteGroupConfirm}
+          title={
+            deleteGroupSuccess ? "Group Deleted Successfully" : "Delete Staff Group"
+          }
+          message={
+            deleteGroupSuccess
+              ? `The group "${deleteGroupConfirmation.groupName}" has been successfully deleted along with any related conflict rules and backup assignments.`
+              : `Are you sure you want to delete the group "${deleteGroupConfirmation.groupName}"? This action cannot be undone and will also remove any related conflict rules and backup assignments.`
+          }
+          confirmText={deleteGroupSuccess ? null : "Delete Group"}
+          cancelText={deleteGroupSuccess ? null : "Cancel"}
+          variant={deleteGroupSuccess ? "info" : "danger"}
+          isLoading={isDeletingGroup}
+        />
+      )}
+    </>
   );
 };
 

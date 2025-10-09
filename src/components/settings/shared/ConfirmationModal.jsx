@@ -17,12 +17,46 @@ const ConfirmationModal = ({
 
   // Focus management and escape key handling
   useEffect(() => {
+    console.log('🗑️ [MODAL] ConfirmationModal isOpen changed:', isOpen);
     if (isOpen && modalRef.current) {
+      console.log('🗑️ [MODAL] Focusing modal element');
       modalRef.current.focus();
     }
   }, [isOpen]);
 
-  if (!isOpen) return null;
+  // Hide all select elements when modal is open to prevent z-index issues
+  useEffect(() => {
+    if (isOpen) {
+      // Add class to body to hide all select elements
+      document.body.classList.add('confirmation-modal-open');
+
+      // Also hide select elements directly as a fallback
+      const selects = document.querySelectorAll('select');
+      selects.forEach(select => {
+        select.setAttribute('data-hidden-by-modal', 'true');
+        select.style.display = 'none';
+      });
+    }
+
+    // Cleanup function runs when component unmounts OR when isOpen changes
+    return () => {
+      // Remove class and restore select elements
+      document.body.classList.remove('confirmation-modal-open');
+
+      const selects = document.querySelectorAll('select[data-hidden-by-modal="true"]');
+      selects.forEach(select => {
+        select.removeAttribute('data-hidden-by-modal');
+        select.style.display = '';
+      });
+    };
+  }, [isOpen]);
+
+  console.log('🗑️ [MODAL] ConfirmationModal rendering, isOpen:', isOpen);
+  if (!isOpen) {
+    console.log('🗑️ [MODAL] Modal not open, returning null');
+    return null;
+  }
+  console.log('🗑️ [MODAL] Modal is open, creating portal');
 
   const variantStyles = {
     danger: {
@@ -78,13 +112,25 @@ const ConfirmationModal = ({
     // eslint-disable-next-line jsx-a11y/no-noninteractive-element-interactions
     <div
       ref={modalRef}
-      className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[50000] p-4"
+      className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4"
       onClick={handleBackdropClick}
       onKeyDown={handleKeyDown}
       tabIndex={-1}
       role="dialog"
       aria-modal="true"
-      style={{ zIndex: 50000 }} // Inline style as backup
+      style={{
+        zIndex: 99999,
+        position: 'fixed',
+        top: 0,
+        left: 0,
+        right: 0,
+        bottom: 0,
+        backgroundColor: 'rgba(0, 0, 0, 0.5)',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        pointerEvents: 'auto' // Override Radix Dialog's pointer-events: none
+      }}
     >
       <div
         className="bg-white rounded-xl w-full max-w-md shadow-2xl transform transition-all"

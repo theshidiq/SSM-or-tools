@@ -19,7 +19,6 @@ import {
   ChevronDown,
 } from "lucide-react";
 import { toast } from "sonner";
-import ConfirmationModal from "../shared/ConfirmationModal";
 import ConflictsModal from "../shared/ConflictsModal";
 import { useBackupStaffService } from "../../../hooks/useBackupStaffService";
 import { useScheduleValidation } from "../../../hooks/useScheduleValidation";
@@ -63,6 +62,8 @@ const StaffGroupsTab = ({
   staffMembers = [],
   validationErrors = {},
   currentScheduleId = null, // Phase 2: Schedule ID for validation
+  onDeleteGroup, // Callback to handle delete confirmation via parent modal
+  isDeleteModalOpen = false, // Track if delete modal is open to hide interfering elements
 }) => {
   // Phase 3: Get settings from Context instead of props (eliminates prop drilling)
   const { settings, updateSettings } = useSettings();
@@ -71,9 +72,6 @@ const StaffGroupsTab = ({
   const [originalGroupData, setOriginalGroupData] = useState(null);
   const [draggedStaff, setDraggedStaff] = useState(null);
   const [dragOverGroup, setDragOverGroup] = useState(null);
-  const [deleteConfirmation, setDeleteConfirmation] = useState(null); // null or { groupId, groupName }
-  const [isDeleting, setIsDeleting] = useState(false);
-  const [deleteSuccess, setDeleteSuccess] = useState(false); // Track if delete was successful
 
   // Phase 2: Validation state
   const [validationConflicts, setValidationConflicts] = useState([]);
@@ -94,24 +92,6 @@ const StaffGroupsTab = ({
     refreshBackupAssignments,
     getAvailableBackupStaff: hookGetAvailableBackupStaff,
   } = useBackupStaffService();
-
-  // Use ref to persist modal state across parent re-renders
-  const modalStateRef = useRef({
-    deleteConfirmation: null,
-    deleteSuccess: false,
-  });
-
-  // Synchronize local state with ref to handle parent re-renders
-  // Remove this useEffect - it causes infinite loop by setting state that it depends on
-  // Modal state should be managed directly without this synchronization
-  // useEffect(() => {
-  //   if (modalStateRef.current.deleteConfirmation && !deleteConfirmation) {
-  //     setDeleteConfirmation(modalStateRef.current.deleteConfirmation);
-  //   }
-  //   if (modalStateRef.current.deleteSuccess && !deleteSuccess) {
-  //     setDeleteSuccess(modalStateRef.current.deleteSuccess);
-  //   }
-  // }, [deleteConfirmation, deleteSuccess]);
 
   // Fix: Memoize derived arrays to prevent unnecessary re-renders
   // Transform WebSocket multi-table format to localStorage-compatible format
@@ -404,31 +384,11 @@ const StaffGroupsTab = ({
     updateStaffGroups(updatedGroups);
   };
 
-  const deleteGroup = (groupId) => {
-    const group = staffGroups.find((g) => g.id === groupId);
-    if (group) {
-      const confirmationData = { groupId, groupName: group.name };
-      setDeleteConfirmation(confirmationData);
-      setDeleteSuccess(false); // Reset success state
-
-      // Update ref to persist across re-renders
-      modalStateRef.current = {
-        deleteConfirmation: confirmationData,
-        deleteSuccess: false,
-      };
-    }
-  };
-
-  const handleDeleteConfirm = async () => {
-    if (!deleteConfirmation) {
-      return;
-    }
-
-    setIsDeleting(true);
+  // Delete group logic - called when user confirms deletion
+  const performDeleteGroup = useCallback(async (groupId) => {
+    console.log('🗑️ [StaffGroupsTab] performDeleteGroup called with groupId:', groupId);
 
     try {
-      const { groupId } = deleteConfirmation;
-
       // Filter out the group to delete
       const updatedGroups = staffGroups.filter((group) => group.id !== groupId);
 
@@ -455,44 +415,39 @@ const StaffGroupsTab = ({
         conflictRules: [...updatedRules],
       };
 
-      // ✅ FIX: Update settings FIRST (before showing success state)
-      // This ensures change detection happens with correct old/new values
+      // Update settings (this will trigger change detection)
+      console.log('🗑️ [StaffGroupsTab] Calling updateSettings with:', {
+        oldGroupsCount: settings.staffGroups?.length,
+        newGroupsCount: updatedSettings.staffGroups?.length,
+        deletedGroupId: groupId
+      });
       updateSettings(updatedSettings);
-
-      // Show success state after update (modal will stay open briefly)
-      setDeleteSuccess(true);
-      setIsDeleting(false);
-
-      // Auto-close the confirmation modal after showing success message
-      setTimeout(() => {
-        // Clean up modal state
-        setDeleteConfirmation(null);
-        setDeleteSuccess(false);
-        modalStateRef.current = {
-          deleteConfirmation: null,
-          deleteSuccess: false,
-        };
-      }, 1500); // Show success message for 1.5 seconds
+      console.log('🗑️ [StaffGroupsTab] updateSettings called successfully');
     } catch (error) {
-      console.error("Error deleting group:", error);
-    } finally {
-      // Only set if not already set above for success case
-      if (!deleteSuccess) {
-        setIsDeleting(false);
+      console.error("🗑️ [StaffGroupsTab] Error deleting group:", error);
+      throw error;
+    }
+  }, [staffGroups, conflictRules, backupAssignments, settings, updateSettings, hookRemoveBackupAssignment]);
+
+  // Delete group - trigger confirmation modal via parent
+  const deleteGroup = useCallback((groupId) => {
+    console.log('🗑️ [StaffGroupsTab] deleteGroup called with groupId:', groupId);
+    const group = staffGroups.find((g) => g.id === groupId);
+    console.log('🗑️ [StaffGroupsTab] Found group:', group);
+
+    if (group && onDeleteGroup) {
+      console.log('🗑️ [StaffGroupsTab] Calling onDeleteGroup callback');
+      // Pass the group info and delete handler to parent
+      onDeleteGroup(groupId, group.name, () => performDeleteGroup(groupId));
+    } else {
+      if (!group) {
+        console.error('🗑️ [StaffGroupsTab] Group not found for ID:', groupId);
+      }
+      if (!onDeleteGroup) {
+        console.error('🗑️ [StaffGroupsTab] onDeleteGroup callback not provided');
       }
     }
-  };
-
-  const handleDeleteCancel = () => {
-    setDeleteConfirmation(null);
-    setDeleteSuccess(false);
-
-    // Reset ref state
-    modalStateRef.current = {
-      deleteConfirmation: null,
-      deleteSuccess: false,
-    };
-  };
+  }, [staffGroups, onDeleteGroup, performDeleteGroup]);
 
   const addStaffToGroup = (groupId, staffId) => {
     console.log('⭐ [addStaffToGroup] START:', {
@@ -1122,27 +1077,8 @@ const StaffGroupsTab = ({
         </div>
       )}
 
-      {/* Backup Management Section */}
-      <BackupManagementSection />
-
-      {/* Delete Confirmation Modal */}
-      <ConfirmationModal
-        isOpen={deleteConfirmation !== null}
-        onClose={handleDeleteCancel}
-        onConfirm={deleteSuccess ? null : handleDeleteConfirm}
-        title={
-          deleteSuccess ? "Group Deleted Successfully" : "Delete Staff Group"
-        }
-        message={
-          deleteSuccess
-            ? `The group "${deleteConfirmation?.groupName}" has been successfully deleted along with any related conflict rules and backup assignments.`
-            : `Are you sure you want to delete the group "${deleteConfirmation?.groupName}"? This action cannot be undone and will also remove any related conflict rules and backup assignments.`
-        }
-        confirmText={deleteSuccess ? null : "Delete Group"}
-        cancelText={deleteSuccess ? null : "Cancel"}
-        variant={deleteSuccess ? "info" : "danger"}
-        isLoading={isDeleting}
-      />
+      {/* Backup Management Section - Hide when delete modal is open to prevent dropdown from appearing inside modal */}
+      {!isDeleteModalOpen && <BackupManagementSection />}
 
       {/* Phase 2: Validation Conflicts Modal */}
       <ConflictsModal
