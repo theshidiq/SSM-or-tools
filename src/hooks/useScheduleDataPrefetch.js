@@ -985,12 +985,20 @@ export const useScheduleDataPrefetch = (
     ],
   );
 
-  // Setup real-time schedule subscriptions
+  // Setup real-time schedule subscriptions (DISABLED - using Go WebSocket instead)
   useEffect(() => {
+    // Skip Supabase Realtime when using Go WebSocket server
+    if (isWebSocketEnabled) {
+      console.log(
+        "⏭️ [WEBSOCKET-PREFETCH] Skipping Supabase Realtime (using Go WebSocket instead)",
+      );
+      return;
+    }
+
     if (!currentScheduleId) return;
 
     console.log(
-      `🔔 [WEBSOCKET-PREFETCH] Setting up schedule subscription for ${currentScheduleId}`,
+      `🔔 [WEBSOCKET-PREFETCH] Setting up Supabase Realtime subscription for ${currentScheduleId}`,
     );
 
     const scheduleChannel = supabase
@@ -1012,7 +1020,7 @@ export const useScheduleDataPrefetch = (
           if (payload.eventType === "UPDATE" && payload.new?.schedule_data) {
             setSchedule(payload.new.schedule_data);
             console.log(
-              "✅ [WEBSOCKET-PREFETCH] Schedule updated from real-time subscription",
+              "✅ [WEBSOCKET-PREFETCH] Schedule updated from Supabase Realtime",
             );
           }
         },
@@ -1021,9 +1029,9 @@ export const useScheduleDataPrefetch = (
 
     return () => {
       supabase.removeChannel(scheduleChannel);
-      console.log("🔌 [WEBSOCKET-PREFETCH] Cleaned up schedule subscription");
+      console.log("🔌 [WEBSOCKET-PREFETCH] Cleaned up Supabase Realtime subscription");
     };
-  }, [currentScheduleId]);
+  }, [currentScheduleId, isWebSocketEnabled]);
 
   // Phase 3: Memory usage monitoring
   const getMemoryUsage = useCallback(() => {
