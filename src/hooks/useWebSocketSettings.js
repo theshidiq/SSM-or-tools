@@ -108,19 +108,17 @@ export const useWebSocketSettings = (options = {}) => {
         // Separate version from settings
         const { version: _, ...actualSettings } = settingsData;
 
-        // ✅ FIX #2: Filter out soft-deleted groups (is_active = false)
-        if (actualSettings.staffGroups) {
-          const beforeCount = actualSettings.staffGroups.length;
-          actualSettings.staffGroups = actualSettings.staffGroups.filter(
-            (group) => group.is_active !== false && group.isActive !== false,
+        // ✅ CRITICAL FIX: Keep soft-deleted groups in WebSocket state (DON'T filter them)
+        // The UI layer (StaffGroupsTab.jsx) filters them for display
+        // This maintains state consistency between server and client
+        // Filtering here causes deleted groups to reappear due to state mismatch
+        const softDeletedCount = (actualSettings.staffGroups || []).filter(
+          g => g.is_active === false
+        ).length;
+        if (softDeletedCount > 0) {
+          console.log(
+            `🗑️ [SYNC] Received ${softDeletedCount} soft-deleted groups from server (kept in state, hidden in UI)`,
           );
-          const afterCount = actualSettings.staffGroups.length;
-
-          if (beforeCount !== afterCount) {
-            console.log(
-              `🗑️ [SYNC] Filtered out ${beforeCount - afterCount} soft-deleted groups`,
-            );
-          }
         }
 
         // ✅ FIX #3: DEDUPLICATION - Skip sync if data hasn't actually changed

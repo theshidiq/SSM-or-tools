@@ -106,14 +106,21 @@ export const useSettingsData = (autosaveEnabled = true) => {
 
       console.log("🔄 Syncing WebSocket multi-table settings to local state");
 
-      // ✅ FIX: Filter out soft-deleted groups before syncing to local state
-      const filteredStaffGroups = (wsSettings.staffGroups || []).filter(
-        (group) => group.is_active !== false && group.isActive !== false,
-      );
+      // ✅ CRITICAL FIX: Keep soft-deleted groups in local state (DON'T filter them out here)
+      // The UI layer (StaffGroupsTab.jsx) will filter them for display
+      // This maintains state consistency between client and server
+      // Otherwise, client state != server state, causing deleted groups to reappear
+      const staffGroups = wsSettings.staffGroups || [];
+
+      console.log(`🗑️ [SYNC] Received ${staffGroups.length} total groups from server (including soft-deleted)`);
+      const softDeletedCount = staffGroups.filter(g => g.is_active === false).length;
+      if (softDeletedCount > 0) {
+        console.log(`🗑️ [SYNC] ${softDeletedCount} soft-deleted groups kept in local state (hidden in UI)`);
+      }
 
       // Transform multi-table response to localStorage-compatible format
       const aggregatedSettings = {
-        staffGroups: filteredStaffGroups,
+        staffGroups: staffGroups, // Include all groups, including soft-deleted
         dailyLimits: wsSettings.dailyLimits || [],
         monthlyLimits: wsSettings.monthlyLimits || [],
         priorityRules: wsSettings.priorityRules || [],
@@ -278,17 +285,32 @@ export const useSettingsData = (autosaveEnabled = true) => {
             });
           }
 
-          // Detect DELETED groups (exist in old but not in new)
-          const deletedGroupIds = [...oldGroupIds].filter(
-            (id) => !newGroupIds.has(id),
-          );
+          // Detect DELETED groups (exist in old but not in new, OR soft-deleted via is_active=false)
+          const deletedGroupIds = [
+            // Hard-deleted: removed from array
+            ...[...oldGroupIds].filter((id) => !newGroupIds.has(id)),
+            // Soft-deleted: is_active changed from true to false
+            ...newGroups
+              .filter((newGroup) => {
+                const oldGroup = oldGroups.find((g) => g.id === newGroup.id);
+                // Detect soft-delete: was active (or undefined), now inactive
+                return (
+                  oldGroup &&
+                  oldGroup.is_active !== false &&
+                  newGroup.is_active === false
+                );
+              })
+              .map((g) => g.id),
+          ];
           deletedGroupsCount = deletedGroupIds.length;
           if (deletedGroupIds.length > 0) {
-            console.log(`    - ${deletedGroupIds.length} group(s) deleted`);
+            console.log(`    - ${deletedGroupIds.length} group(s) deleted (hard or soft-delete)`);
             deletedGroupIds.forEach((groupId) => {
-              const deletedGroup = oldGroups.find((g) => g.id === groupId);
+              const deletedGroup = oldGroups.find((g) => g.id === groupId) ||
+                newGroups.find((g) => g.id === groupId);
+              const deleteType = newGroupIds.has(groupId) ? 'soft-delete' : 'hard-delete';
               console.log(
-                `      - Deleting group "${deletedGroup?.name}" (${groupId})`,
+                `      - Deleting group "${deletedGroup?.name}" (${groupId}) - ${deleteType}`,
               );
               callbacks.wsDeleteStaffGroup(groupId);
             });
@@ -297,6 +319,7 @@ export const useSettingsData = (autosaveEnabled = true) => {
           // Detect UPDATED groups (exist in both, but content changed)
           const updatedGroups = newGroups.filter((newGroup) => {
             if (!oldGroupIds.has(newGroup.id)) return false; // Skip newly created
+            if (newGroup.is_active === false) return false; // Skip soft-deleted groups
 
             const oldGroup = oldGroups.find((g) => g.id === newGroup.id);
             // ✅ FIX: ONLY compare user-editable fields
