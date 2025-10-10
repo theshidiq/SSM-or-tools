@@ -606,14 +606,22 @@ const StaffGroupsTab = ({
     // Generate a unique group name based on existing ACTIVE groups
     // ✅ FIX: Only check active groups (is_active !== false)
     // Soft-deleted groups don't count for uniqueness
+
+    console.log('🔍 [createNewGroup] START - Current staffGroups:', staffGroups);
+    console.log('🔍 [createNewGroup] Active groups:', staffGroups.filter(g => g.is_active !== false));
+    console.log('🔍 [createNewGroup] Inactive groups:', staffGroups.filter(g => g.is_active === false));
+
     let groupNumber = 1;
     let newGroupName = `New Group ${groupNumber}`;
 
     // Keep incrementing until we find a unique name among ACTIVE groups only
     while (staffGroups.some((group) => group.is_active !== false && group.name === newGroupName)) {
+      console.log(`🔍 [createNewGroup] "${newGroupName}" already exists in active groups, trying next number`);
       groupNumber++;
       newGroupName = `New Group ${groupNumber}`;
     }
+
+    console.log(`✅ [createNewGroup] Generated unique name: "${newGroupName}"`);
 
     const newGroup = {
       id: crypto.randomUUID(), // Generate proper UUID for Supabase
@@ -622,6 +630,9 @@ const StaffGroupsTab = ({
       color: getNextAvailableColor(),
       members: [], // Always initialize members array (WebSocket multi-table backend compatibility)
     };
+
+    console.log('✅ [createNewGroup] New group object:', newGroup);
+
     setEditingGroup(newGroup.id);
     updateStaffGroups([...staffGroups, newGroup]);
 
