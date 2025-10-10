@@ -286,9 +286,18 @@ export const useSettingsData = (autosaveEnabled = true) => {
           }
 
           // Detect DELETED groups (exist in old but not in new, OR soft-deleted via is_active=false)
+          // ✅ RACE CONDITION FIX: Only send DELETE for ACTIVE groups
+          // Already-inactive groups (is_active=false) don't need DELETE messages
           const deletedGroupIds = [
-            // Hard-deleted: removed from array
-            ...[...oldGroupIds].filter((id) => !newGroupIds.has(id)),
+            // Hard-deleted: removed from array (but only if was active)
+            ...[...oldGroupIds].filter((id) => {
+              if (!newGroupIds.has(id)) {
+                const oldGroup = oldGroups.find((g) => g.id === id);
+                // Only delete if group was active (skip already soft-deleted groups)
+                return oldGroup && oldGroup.is_active !== false;
+              }
+              return false;
+            }),
             // Soft-deleted: is_active changed from true to false
             ...newGroups
               .filter((newGroup) => {
