@@ -276,15 +276,38 @@ const StaffGroupsTab = ({
   // Transform WebSocket multi-table format to localStorage-compatible format
   const staffGroups = useMemo(() => {
     const groups = settings?.staffGroups || [];
+
+    // 🔍 DEBUG: Log all groups before filtering
+    console.log('🔍 [staffGroups useMemo] Total groups from settings:', groups.length);
+    groups.forEach((group, index) => {
+      console.log(`🔍 [staffGroups useMemo] Group ${index}:`, {
+        id: group.id,
+        name: group.name,
+        is_active: group.is_active,
+        isActive: group.isActive,
+        willBeFiltered: group.is_active === false || group.isActive === false,
+      });
+    });
+
     // ✅ FIX: Filter out soft-deleted groups and ensure members array exists
-    return groups
-      .filter((group) => group.is_active !== false && group.isActive !== false)
+    const filtered = groups
+      .filter((group) => {
+        const shouldKeep = group.is_active !== false && group.isActive !== false;
+        if (!shouldKeep) {
+          console.log(`🗑️ [staffGroups useMemo] Filtering out deleted group: ${group.name} (${group.id})`);
+        }
+        return shouldKeep;
+      })
       .map((group) => ({
         ...group,
         // Extract members from groupConfig if stored there (multi-table backend)
         // Otherwise use members directly, or default to empty array
         members: group.members || group.groupConfig?.members || [],
       }));
+
+    console.log('🔍 [staffGroups useMemo] Filtered groups count:', filtered.length);
+
+    return filtered;
   }, [settings?.staffGroups]);
   const conflictRules = useMemo(
     () => settings?.conflictRules || [],
@@ -580,12 +603,14 @@ const StaffGroupsTab = ({
   };
 
   const createNewGroup = () => {
-    // Generate a unique group name based on existing groups
+    // Generate a unique group name based on existing ACTIVE groups
+    // ✅ FIX: Only check active groups (is_active !== false)
+    // Soft-deleted groups don't count for uniqueness
     let groupNumber = 1;
     let newGroupName = `New Group ${groupNumber}`;
 
-    // Keep incrementing until we find a unique name
-    while (staffGroups.some((group) => group.name === newGroupName)) {
+    // Keep incrementing until we find a unique name among ACTIVE groups only
+    while (staffGroups.some((group) => group.is_active !== false && group.name === newGroupName)) {
       groupNumber++;
       newGroupName = `New Group ${groupNumber}`;
     }
@@ -683,11 +708,26 @@ const StaffGroupsTab = ({
         groupId,
       );
 
+      // 🔍 DEBUG: Log the group being deleted
+      const groupToDelete = staffGroups.find((g) => g.id === groupId);
+      console.log("🗑️ [StaffGroupsTab] Group to delete:", groupToDelete);
+
       try {
-        // Filter out the group to delete
-        const updatedGroups = staffGroups.filter(
-          (group) => group.id !== groupId,
+        // ❌ PROBLEM IDENTIFIED: We're REMOVING the group from the array instead of soft-deleting it
+        // This causes the Go server to detect a DELETE operation, but then it broadcasts back
+        // the full list including the soft-deleted group, which should be filtered out
+
+        // 🔧 FIX: Instead of filtering out, mark as deleted (soft-delete)
+        const updatedGroups = staffGroups.map((group) =>
+          group.id === groupId
+            ? { ...group, is_active: false } // Soft-delete
+            : group
         );
+
+        console.log("🗑️ [StaffGroupsTab] Updated groups (with soft-delete):", {
+          totalGroups: updatedGroups.length,
+          deletedGroup: updatedGroups.find((g) => g.id === groupId),
+        });
 
         // Remove related intra-group conflict rules
         const updatedRules = conflictRules.filter(
@@ -717,6 +757,11 @@ const StaffGroupsTab = ({
           oldGroupsCount: settings.staffGroups?.length,
           newGroupsCount: updatedSettings.staffGroups?.length,
           deletedGroupId: groupId,
+          updatedSettingsStaffGroups: updatedSettings.staffGroups.map((g) => ({
+            id: g.id,
+            name: g.name,
+            is_active: g.is_active,
+          })),
         });
         updateSettings(updatedSettings);
         console.log("🗑️ [StaffGroupsTab] updateSettings called successfully");
