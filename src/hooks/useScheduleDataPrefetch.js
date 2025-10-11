@@ -370,35 +370,28 @@ export const useScheduleDataPrefetch = (
           return;
         }
 
-        // Create new schedule in Supabase
-        const { data: newSchedule, error: createError } = await supabase
-          .from("schedules")
-          .insert([
-            {
-              schedule_data: {},
-              created_at: new Date().toISOString(),
-              updated_at: new Date().toISOString(),
-            },
-          ])
-          .select()
-          .single();
+        // Create schedule with assignment in a transaction-safe way
+        // Use RPC to ensure atomic creation (schedule + assignment together)
+        const { data: result, error: createError } = await supabase.rpc(
+          "create_schedule_with_assignment",
+          {
+            p_period_index: currentMonthIndex,
+            p_schedule_data: {},
+          }
+        );
 
-        if (createError) throw createError;
+        if (createError) {
+          console.error(
+            `❌ [WEBSOCKET-PREFETCH] Failed to create schedule via RPC:`,
+            createError
+          );
+          throw createError;
+        }
 
-        // Create schedule_staff_assignment for this period
-        const { error: assignmentError } = await supabase
-          .from("schedule_staff_assignments")
-          .insert([
-            {
-              schedule_id: newSchedule.id,
-              period_index: currentMonthIndex,
-            },
-          ]);
+        const newSchedule = { id: result };
 
-        if (assignmentError) {
-          // If assignment creation fails, delete the orphaned schedule
-          await supabase.from("schedules").delete().eq("id", newSchedule.id);
-          throw assignmentError;
+        if (!newSchedule.id) {
+          throw new Error("Schedule creation returned no ID");
         }
 
         console.log(
@@ -804,38 +797,27 @@ export const useScheduleDataPrefetch = (
               shiftCreationAttemptedRef.current[currentMonthIndex] = false; // Reset flag
               // Continue with the update using the existing schedule ID (fall through)
             } else {
-              // Create new schedule in Supabase
-              const { data: newSchedule, error: createError } = await supabase
-                .from("schedules")
-                .insert([
-                  {
-                    schedule_data: {},
-                    created_at: new Date().toISOString(),
-                    updated_at: new Date().toISOString(),
-                  },
-                ])
-                .select()
-                .single();
+              // Create schedule with assignment atomically via RPC
+              const { data: result, error: createError } = await supabase.rpc(
+                "create_schedule_with_assignment",
+                {
+                  p_period_index: currentMonthIndex,
+                  p_schedule_data: {},
+                }
+              );
 
-              if (createError) throw createError;
+              if (createError) {
+                console.error(
+                  `❌ [WEBSOCKET-PREFETCH] Failed to create schedule on-demand:`,
+                  createError
+                );
+                throw createError;
+              }
 
-              // Create schedule_staff_assignment for this period
-              const { error: assignmentError } = await supabase
-                .from("schedule_staff_assignments")
-                .insert([
-                  {
-                    schedule_id: newSchedule.id,
-                    period_index: currentMonthIndex,
-                  },
-                ]);
+              const newSchedule = { id: result };
 
-              if (assignmentError) {
-                // If assignment creation fails, delete the orphaned schedule
-                await supabase
-                  .from("schedules")
-                  .delete()
-                  .eq("id", newSchedule.id);
-                throw assignmentError;
+              if (!newSchedule.id) {
+                throw new Error("Schedule creation returned no ID");
               }
 
               console.log(
