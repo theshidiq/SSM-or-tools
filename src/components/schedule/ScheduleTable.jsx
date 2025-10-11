@@ -672,6 +672,10 @@ const ScheduleTable = ({
             onClick={() => handleQuickAction("early")}
             className="px-2 py-1 text-sm hover:bg-gray-100 rounded font-black text-blue-600"
             title="Early Shift (Press 1)"
+            style={{
+              textShadow: '0 0 0.5px currentColor, 0 0 0.5px currentColor',
+              letterSpacing: '0.02em'
+            }}
           >
             △
           </button>
@@ -1047,6 +1051,10 @@ const ScheduleTable = ({
                                       >
                                         <span
                                           className={`${shift.symbol === '△' ? 'font-black' : 'font-bold'} ${shift.color}`}
+                                          style={shift.symbol === '△' ? {
+                                            textShadow: '0 0 0.5px currentColor, 0 0 0.5px currentColor',
+                                            letterSpacing: '0.02em'
+                                          } : {}}
                                         >
                                           {shift.symbol}
                                         </span>
@@ -1253,6 +1261,10 @@ const ScheduleTable = ({
           <button
             className="w-full px-4 py-2 text-left hover:bg-gray-100 text-blue-600 font-black"
             onClick={() => handleQuickAction("early")}
+            style={{
+              textShadow: '0 0 0.5px currentColor, 0 0 0.5px currentColor',
+              letterSpacing: '0.02em'
+            }}
           >
             △ Early Shift
           </button>
