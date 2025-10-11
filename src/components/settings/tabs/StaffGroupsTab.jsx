@@ -117,16 +117,15 @@ const StaffDropdown = ({
   };
 
   return (
-    <div className="relative w-full" ref={dropdownRef}>
-      {/* Dropdown Button */}
+    <div ref={dropdownRef}>
+      {/* Dropdown Button - Icon Only */}
       <button
         onClick={() => setIsOpen(!isOpen)}
-        className="w-full text-xs px-3 py-1.5 border border-gray-300 rounded-lg text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer transition-all duration-200 hover:border-gray-400 flex items-center justify-center gap-1.5 font-medium"
+        className="p-1.5 text-gray-500 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
         title="Add staff to group"
         type="button"
       >
-        <UserPlus size={14} />
-        <span>Add staff...</span>
+        <UserPlus size={16} />
       </button>
 
       {/* Dropdown Menu */}
@@ -1310,19 +1309,18 @@ const StaffGroupsTab = ({
 
         {/* Staff Members */}
         <div className="space-y-2">
-          <div className="flex items-center justify-between gap-2">
-            <div className="flex items-center gap-2 text-sm font-medium text-gray-700 flex-shrink-0">
+          <div className="relative flex items-center justify-between gap-2">
+            <div className="flex items-center gap-2 text-sm font-medium text-gray-700">
               <Users size={16} />
               Members ({groupMembers.length})
             </div>
-            <div className="flex-1 min-w-0">
-              <StaffDropdown
-                availableStaff={[
-                  ...getAvailableStaffForGroup(group.id),
-                  ...groupMembers,
-                ]}
-                assignedStaffIds={group.members || []}
-                onSelectStaff={(staffId) => {
+            <StaffDropdown
+              availableStaff={[
+                ...getAvailableStaffForGroup(group.id),
+                ...groupMembers,
+              ]}
+              assignedStaffIds={group.members || []}
+              onSelectStaff={(staffId) => {
                 console.log("🔵 [StaffDropdown onSelectStaff] Event fired:", {
                   staffId,
                   groupId: group.id,
@@ -1359,8 +1357,7 @@ const StaffGroupsTab = ({
                 }
               }}
               groupName={group.name}
-              />
-            </div>
+            />
           </div>
 
           <div className="space-y-1.5 max-h-32 overflow-y-auto">
