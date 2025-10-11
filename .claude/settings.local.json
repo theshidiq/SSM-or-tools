@@ -46,7 +46,8 @@
       "Bash(make:*)",
       "Bash(/dev/null)",
       "Bash(pgrep:*)",
-      "Bash(psql:*)"
+      "Bash(psql:*)",
+      "Bash(netstat:*)"
     ],
     "deny": []
   },

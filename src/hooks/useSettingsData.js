@@ -238,9 +238,9 @@ export const useSettingsData = (autosaveEnabled = true) => {
 
         console.log("🔄 Updating settings via WebSocket multi-table backend");
 
-        // ✅ CRITICAL: Use settings state (NOT ref) as old value for comparison
-        // The ref gets updated by the useEffect above, so it may already contain new values
-        const oldSettings = settings || {};
+        // ✅ CRITICAL FIX: Use settingsRef for old value to get most recent state
+        // The settings state might be stale due to React batching, but ref is always current
+        const oldSettings = settingsRef.current || {};
         const callbacks = wsCallbacksRef.current;
 
         // Detect and send changes to server FIRST (while we still have old settings for comparison)

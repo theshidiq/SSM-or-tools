@@ -978,6 +978,10 @@ func (s *StaffSyncServer) deleteStaffGroup(versionID string, groupID string) err
 	url := fmt.Sprintf("%s/rest/v1/staff_groups?id=eq.%s&version_id=eq.%s",
 		s.supabaseURL, groupID, versionID)
 
+	log.Printf("🗑️ [deleteStaffGroup] Starting soft-delete for group: %s", groupID)
+	log.Printf("🗑️ [deleteStaffGroup] Version ID: %s", versionID)
+	log.Printf("🗑️ [deleteStaffGroup] URL: %s", url)
+
 	// Soft delete by setting is_active to false
 	updateData := map[string]interface{}{
 		"is_active":  false,
@@ -985,8 +989,11 @@ func (s *StaffSyncServer) deleteStaffGroup(versionID string, groupID string) err
 	}
 
 	jsonData, _ := json.Marshal(updateData)
+	log.Printf("🗑️ [deleteStaffGroup] PATCH data: %s", string(jsonData))
+
 	req, err := http.NewRequest("PATCH", url, bytes.NewBuffer(jsonData))
 	if err != nil {
+		log.Printf("❌ [deleteStaffGroup] Failed to create request: %v", err)
 		return fmt.Errorf("failed to create request: %w", err)
 	}
 
@@ -995,18 +1002,26 @@ func (s *StaffSyncServer) deleteStaffGroup(versionID string, groupID string) err
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Prefer", "return=minimal")
 
+	log.Printf("🗑️ [deleteStaffGroup] Request headers: Authorization=[REDACTED], apikey=[REDACTED], Content-Type=application/json")
+
 	client := &http.Client{Timeout: 10 * time.Second}
 	resp, err := client.Do(req)
 	if err != nil {
+		log.Printf("❌ [deleteStaffGroup] HTTP request failed: %v", err)
 		return fmt.Errorf("failed to delete staff group: %w", err)
 	}
 	defer resp.Body.Close()
 
+	body, _ := io.ReadAll(resp.Body)
+	log.Printf("🗑️ [deleteStaffGroup] Response status: %d", resp.StatusCode)
+	log.Printf("🗑️ [deleteStaffGroup] Response body: %s", string(body))
+
 	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusNoContent {
-		body, _ := io.ReadAll(resp.Body)
+		log.Printf("❌ [deleteStaffGroup] Delete failed with status %d: %s", resp.StatusCode, string(body))
 		return fmt.Errorf("delete failed with status %d: %s", resp.StatusCode, string(body))
 	}
 
+	log.Printf("✅ [deleteStaffGroup] Successfully soft-deleted group: %s", groupID)
 	return nil
 }
 
@@ -1624,31 +1639,41 @@ func (s *StaffSyncServer) handleStaffGroupDelete(client *Client, msg *Message) {
 
 	payload, ok := msg.Payload.(map[string]interface{})
 	if !ok {
-		log.Printf("❌ Invalid payload format")
+		log.Printf("❌ Invalid payload format - got type %T", msg.Payload)
 		return
 	}
 
+	log.Printf("🔍 [handleStaffGroupDelete] Payload: %+v", payload)
+
 	groupID, ok := payload["groupId"].(string)
 	if !ok {
-		log.Printf("❌ Missing group ID")
+		log.Printf("❌ Missing group ID - payload[\"groupId\"] type: %T, value: %v", payload["groupId"], payload["groupId"])
 		return
 	}
+
+	log.Printf("🔍 [handleStaffGroupDelete] Group ID to delete: %s", groupID)
 
 	// Get active version
 	version, err := s.fetchActiveConfigVersion()
 	if err != nil {
+		log.Printf("❌ [handleStaffGroupDelete] Failed to fetch active version: %v", err)
 		s.sendErrorResponse(client, "Failed to fetch active version", err)
 		return
 	}
 
+	log.Printf("🔍 [handleStaffGroupDelete] Active version: %s (locked: %v)", version.ID, version.IsLocked)
+
 	// Check if version is locked
 	if version.IsLocked {
+		log.Printf("⚠️ [handleStaffGroupDelete] Version is locked, cannot delete")
 		s.sendErrorResponse(client, "Cannot modify locked version", nil)
 		return
 	}
 
 	// Delete staff group from database
+	log.Printf("🔍 [handleStaffGroupDelete] Calling deleteStaffGroup with versionID=%s, groupID=%s", version.ID, groupID)
 	if err := s.deleteStaffGroup(version.ID, groupID); err != nil {
+		log.Printf("❌ [handleStaffGroupDelete] deleteStaffGroup failed: %v", err)
 		s.sendErrorResponse(client, "Failed to delete staff group", err)
 		return
 	}
