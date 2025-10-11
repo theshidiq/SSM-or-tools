@@ -117,11 +117,11 @@ const StaffDropdown = ({
   };
 
   return (
-    <div className="relative" ref={dropdownRef}>
+    <div className="relative w-full" ref={dropdownRef}>
       {/* Dropdown Button */}
       <button
         onClick={() => setIsOpen(!isOpen)}
-        className="text-xs px-3 py-1.5 border border-gray-300 rounded-lg text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer transition-all duration-200 hover:border-gray-400 flex items-center gap-1.5 font-medium"
+        className="w-full text-xs px-3 py-1.5 border border-gray-300 rounded-lg text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer transition-all duration-200 hover:border-gray-400 flex items-center justify-center gap-1.5 font-medium"
         title="Add staff to group"
         type="button"
       >
@@ -132,7 +132,7 @@ const StaffDropdown = ({
       {/* Dropdown Menu */}
       {isOpen && (
         <div
-          className="absolute right-0 mt-2 w-64 bg-white rounded-lg shadow-xl border border-gray-200 z-50 overflow-hidden animate-in fade-in slide-in-from-top-2 duration-200"
+          className="absolute left-0 right-0 mt-2 bg-white rounded-lg shadow-xl border border-gray-200 z-50 overflow-hidden animate-in fade-in slide-in-from-top-2 duration-200"
           onKeyDown={handleKeyDown}
         >
           {/* Search Input */}
@@ -1310,18 +1310,19 @@ const StaffGroupsTab = ({
 
         {/* Staff Members */}
         <div className="space-y-2">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2 text-sm font-medium text-gray-700">
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex items-center gap-2 text-sm font-medium text-gray-700 flex-shrink-0">
               <Users size={16} />
               Members ({groupMembers.length})
             </div>
-            <StaffDropdown
-              availableStaff={[
-                ...getAvailableStaffForGroup(group.id),
-                ...groupMembers,
-              ]}
-              assignedStaffIds={group.members || []}
-              onSelectStaff={(staffId) => {
+            <div className="flex-1 min-w-0">
+              <StaffDropdown
+                availableStaff={[
+                  ...getAvailableStaffForGroup(group.id),
+                  ...groupMembers,
+                ]}
+                assignedStaffIds={group.members || []}
+                onSelectStaff={(staffId) => {
                 console.log("🔵 [StaffDropdown onSelectStaff] Event fired:", {
                   staffId,
                   groupId: group.id,
@@ -1358,7 +1359,8 @@ const StaffGroupsTab = ({
                 }
               }}
               groupName={group.name}
-            />
+              />
+            </div>
           </div>
 
           <div className="space-y-1.5 max-h-32 overflow-y-auto">
