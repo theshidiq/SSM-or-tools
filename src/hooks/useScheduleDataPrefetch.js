@@ -303,122 +303,25 @@ export const useScheduleDataPrefetch = (
     }
   }, [currentScheduleData]);
 
-  // Auto-create schedule if it doesn't exist for the current period
+  // DON'T auto-create schedule - only create when user actually updates a shift
+  // This prevents empty orphaned schedules in the database
   const creationAttemptedRef = useRef({});
   const shiftCreationAttemptedRef = useRef({}); // For updateShift code path
   useEffect(() => {
-    const createScheduleForPeriod = async () => {
-      // Check if schedule is still loading
-      if (scheduleLoading) {
-        return;
-      }
+    // Just track the schedule ID if it exists, don't create proactively
+    if (currentScheduleData?.scheduleId) {
+      console.log(
+        `✅ [WEBSOCKET-PREFETCH] Using existing schedule: ${currentScheduleData.scheduleId} for period ${currentMonthIndex}`,
+      );
+      creationAttemptedRef.current[currentMonthIndex] = false; // Reset creation flag
+      return;
+    }
 
-      // Wait for query to actually run (data will be undefined until query executes)
-      if (!currentScheduleData) {
-        return;
-      }
-
-      // Check if we already have a valid schedule ID for this period
-      if (currentScheduleData.scheduleId) {
-        console.log(
-          `✅ [WEBSOCKET-PREFETCH] Using existing schedule: ${currentScheduleData.scheduleId} for period ${currentMonthIndex}`,
-        );
-        creationAttemptedRef.current[currentMonthIndex] = false; // Reset creation flag
-        return;
-      }
-
-      // Prevent duplicate creation attempts for the same period
-      if (creationAttemptedRef.current[currentMonthIndex]) {
-        console.log(
-          `⏭️ [WEBSOCKET-PREFETCH] Already attempted creation for period ${currentMonthIndex}, skipping...`,
-        );
-        return;
-      }
-
-      try {
-        // Mark that we're attempting to create for this period
-        creationAttemptedRef.current[currentMonthIndex] = true;
-
-        console.log(
-          `🆕 [WEBSOCKET-PREFETCH] No schedule found for period ${currentMonthIndex}, creating new one...`,
-        );
-
-        // Double-check: Query again to ensure no schedule exists (race condition protection)
-        const { data: existingSchedules, error: checkError } = await supabase
-          .from("schedules")
-          .select(
-            `
-            id,
-            schedule_staff_assignments!inner (
-              period_index
-            )
-          `,
-          )
-          .eq("schedule_staff_assignments.period_index", currentMonthIndex)
-          .limit(1);
-
-        if (checkError) throw checkError;
-
-        if (existingSchedules && existingSchedules.length > 0) {
-          console.log(
-            `✅ [WEBSOCKET-PREFETCH] Found existing schedule during double-check: ${existingSchedules[0].id}`,
-          );
-          setCurrentScheduleId(existingSchedules[0].id);
-          queryClient.invalidateQueries(
-            PREFETCH_QUERY_KEYS.scheduleData(currentMonthIndex),
-          );
-          return;
-        }
-
-        // Create schedule with assignment in a transaction-safe way
-        // Use RPC to ensure atomic creation (schedule + assignment together)
-        const { data: result, error: createError } = await supabase.rpc(
-          "create_schedule_with_assignment",
-          {
-            p_period_index: currentMonthIndex,
-            p_schedule_data: {},
-          }
-        );
-
-        if (createError) {
-          console.error(
-            `❌ [WEBSOCKET-PREFETCH] Failed to create schedule via RPC:`,
-            createError
-          );
-          throw createError;
-        }
-
-        const newSchedule = { id: result };
-
-        if (!newSchedule.id) {
-          throw new Error("Schedule creation returned no ID");
-        }
-
-        console.log(
-          `✅ [WEBSOCKET-PREFETCH] Created schedule ${newSchedule.id} for period ${currentMonthIndex}`,
-        );
-
-        // Update local state with new schedule ID
-        setCurrentScheduleId(newSchedule.id);
-        setSchedule({});
-
-        // Invalidate and refetch to get the new schedule
-        queryClient.invalidateQueries(
-          PREFETCH_QUERY_KEYS.scheduleData(currentMonthIndex),
-        );
-      } catch (error) {
-        console.error(
-          `❌ [WEBSOCKET-PREFETCH] Failed to create schedule for period ${currentMonthIndex}:`,
-          error,
-        );
-        setError(`スケジュールの作成に失敗しました: ${error.message}`);
-        // Reset creation flag on error so it can be retried
-        creationAttemptedRef.current[currentMonthIndex] = false;
-      }
-    };
-
-    createScheduleForPeriod();
-  }, [currentScheduleData, scheduleLoading, currentMonthIndex, queryClient]);
+    // No schedule exists - that's OK, it will be created on-demand when user updates a shift
+    console.log(
+      `📋 [WEBSOCKET-PREFETCH] No schedule for period ${currentMonthIndex} - will create on first shift update`,
+    );
+  }, [currentScheduleData, currentMonthIndex]);
 
   // Sync WebSocket shift data with local schedule state
   useEffect(() => {
