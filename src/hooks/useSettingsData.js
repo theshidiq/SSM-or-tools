@@ -251,12 +251,14 @@ export const useSettingsData = (autosaveEnabled = true) => {
         // Detect and update staff groups (CREATE, UPDATE, DELETE operations)
         // ✅ FIX: Normalize groups before comparison to exclude auto-generated fields
         // This prevents infinite loops from server-side timestamp updates
+        // ⚠️ IMPORTANT: Include is_active to detect soft-delete changes!
         const normalizeGroup = (group) => ({
           id: group.id,
           name: group.name,
           description: group.description,
           color: group.color,
           members: group.members || [],
+          is_active: group.is_active, // ✅ Include to detect soft-deletes
         });
 
         const oldGroups = oldSettings.staffGroups || [];
