@@ -997,6 +997,13 @@ const ScheduleTable = ({
                                 ? "text-gray-400"
                                 : getSymbolColor(cellValue, staff)
                             }`}
+                            style={cellValue === '△' ? {
+                              textShadow: '0 0 1px currentColor, 0 0 1px currentColor, 0 0 1px currentColor, 0 0 1px currentColor, 0.5px 0.5px 0 currentColor, -0.5px -0.5px 0 currentColor, 0.5px -0.5px 0 currentColor, -0.5px 0.5px 0 currentColor',
+                              letterSpacing: '0.05em',
+                              transform: 'scaleX(1.1)',
+                              display: 'inline-block',
+                              fontWeight: '900'
+                            } : {}}
                           >
                             {!isActiveForDate
                               ? "-"
