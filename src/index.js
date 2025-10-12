@@ -32,18 +32,9 @@ if (process.env.NODE_ENV === "development") {
       const { configService } = await import("./services/ConfigurationService");
       return configService.getSettings();
     },
-    // Phase 4: Staff Migration Test Utilities
-    staffMigration: async () => {
-      const { quickTests } = await import("./utils/testMigration");
-      return quickTests;
-    },
+    // Staff Migration Test Utilities removed - testMigration deleted
   };
   console.log("🔧 Debug utilities available: window.debugConfig (async)");
-
-  // Phase 4: Migration utilities available but not verbose logged (prefetch working)
-  import("./utils/testMigration").then(({ quickTests }) => {
-    window.migrationTest = quickTests;
-  });
 }
 
 const root = ReactDOM.createRoot(document.getElementById("root"));
