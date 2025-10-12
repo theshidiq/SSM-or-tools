@@ -27,6 +27,7 @@ import DailyLimitsTab from "./tabs/DailyLimitsTab";
 import PriorityRulesTab from "./tabs/PriorityRulesTab";
 import MLParametersTab from "./tabs/MLParametersTab";
 import DataMigrationTab from "./tabs/DataMigrationTab";
+import PeriodsTab from "./tabs/PeriodsTab";
 
 // Import shared components
 import TabButton from "./shared/TabButton";
@@ -39,6 +40,7 @@ const TABS = [
   { id: "daily-limits", label: "Daily Limits", icon: "📅" },
   { id: "priority-rules", label: "Priority Rules", icon: "⭐" },
   { id: "ml-parameters", label: "ML Parameters", icon: "🤖" },
+  { id: "periods", label: "Periods", icon: "📆" },
   { id: "data-migration", label: "Data Migration", icon: "🔄" },
 ];
 
@@ -262,6 +264,8 @@ const SettingsModal = ({
             validationErrors={validationErrors[activeTab] || {}}
           />
         );
+      case "periods":
+        return <PeriodsTab />;
       case "data-migration":
         return <DataMigrationTab />;
       default:
