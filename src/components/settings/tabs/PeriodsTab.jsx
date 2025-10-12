@@ -24,6 +24,7 @@ const PeriodsTab = () => {
     updatePeriodConfiguration,
     regeneratePeriods,
     clearError,
+    forceRefresh, // Add forceRefresh from hook
   } = usePeriodsRealtime();
 
   const { restaurant } = useRestaurant();
@@ -31,6 +32,7 @@ const PeriodsTab = () => {
   const [config, setConfig] = useState(null);
   const [isLoadingConfig, setIsLoadingConfig] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
+  const [isRefreshingPeriods, setIsRefreshingPeriods] = useState(false);
   const [formData, setFormData] = useState({
     startDay: 21,
     periodLength: 30,
@@ -127,6 +129,7 @@ const PeriodsTab = () => {
     }
 
     setIsSaving(true);
+    setIsRefreshingPeriods(true);
     try {
       const result = await updatePeriodConfiguration(
         restaurant.id,
@@ -139,9 +142,16 @@ const PeriodsTab = () => {
       });
 
       setHasUnsavedChanges(false);
+
+      // Wait a moment for database to finish, then force refresh periods
+      await new Promise(resolve => setTimeout(resolve, 300));
+      await forceRefresh();
       await loadConfiguration();
+
+      setIsRefreshingPeriods(false);
     } catch (err) {
       toast.error(`Failed to update configuration: ${err.message}`);
+      setIsRefreshingPeriods(false);
     } finally {
       setIsSaving(false);
     }
@@ -150,6 +160,7 @@ const PeriodsTab = () => {
     formData,
     updatePeriodConfiguration,
     loadConfiguration,
+    forceRefresh,
   ]);
 
   // Manual regenerate
@@ -332,7 +343,12 @@ const PeriodsTab = () => {
           </Button>
         </div>
 
-        {periods.length > 0 ? (
+        {isRefreshingPeriods ? (
+          <div className="text-center py-8">
+            <div className="w-8 h-8 border-4 border-blue-200 border-t-blue-600 rounded-full animate-spin mx-auto mb-3"></div>
+            <p className="text-gray-600">Updating periods...</p>
+          </div>
+        ) : periods.length > 0 ? (
           <div className="space-y-2">
             {/* Show first 3 and last 3 periods */}
             {periods.slice(0, 3).map((period, index) => (
