@@ -20,7 +20,7 @@ import { Label } from "../ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "../ui/card";
 
 // Import tab components
-import { useSettingsCache } from "../../hooks/useConfigurationCache";
+// useConfigurationCache removed - hook was deleted as unused
 import { useSettings } from "../../contexts/SettingsContext";
 import StaffGroupsTab from "./tabs/StaffGroupsTab";
 import DailyLimitsTab from "./tabs/DailyLimitsTab";
@@ -84,9 +84,7 @@ const SettingsModal = ({
   const [isDeletingGroup, setIsDeletingGroup] = useState(false);
   const [deleteGroupSuccess, setDeleteGroupSuccess] = useState(false);
 
-  // Configuration cache management
-  const { onSettingSaved, onSettingsBulkSaved, cacheStatus, isRefreshing } =
-    useSettingsCache();
+  // Configuration cache management removed - hook was deleted as unused
 
   // Don't wrap onSettingsChange - pass it directly to avoid infinite loops
   // The wrapper was causing handleSettingsChange to recreate, which triggered

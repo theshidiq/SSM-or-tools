@@ -47,7 +47,10 @@
       "Bash(/dev/null)",
       "Bash(pgrep:*)",
       "Bash(psql:*)",
-      "Bash(netstat:*)"
+      "Bash(netstat:*)",
+      "Bash(for hook in useStaffManagementEnhanced useStaffManagementMigrated useStaffManagementRealtime useStaffRealtime useScheduleDataEnhanced useScheduleDataRealtime useSettingsDataEnhanced useSettingsDataRealtime useSupabaseRealtime useEmergencyRollback useCollaboration)",
+      "Bash(do echo \"=== $hook ===\")",
+      "Bash(done)"
     ],
     "deny": []
   },
