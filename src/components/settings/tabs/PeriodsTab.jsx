@@ -24,7 +24,6 @@ const PeriodsTab = () => {
     updatePeriodConfiguration,
     regeneratePeriods,
     clearError,
-    forceRefresh, // Add forceRefresh from hook
   } = usePeriodsRealtime();
 
   const { restaurant } = useRestaurant();
@@ -137,17 +136,15 @@ const PeriodsTab = () => {
         periodLength
       );
 
+      // updatePeriodConfiguration already calls loadPeriods() internally
+      // Just reload the configuration to update the "Last updated" timestamp
+      await loadConfiguration();
+
       toast.success("Period configuration updated!", {
         description: `All ${result.periods_regenerated} periods have been regenerated.`,
       });
 
       setHasUnsavedChanges(false);
-
-      // Wait a moment for database to finish, then force refresh periods
-      await new Promise(resolve => setTimeout(resolve, 300));
-      await forceRefresh();
-      await loadConfiguration();
-
       setIsRefreshingPeriods(false);
     } catch (err) {
       toast.error(`Failed to update configuration: ${err.message}`);
@@ -160,7 +157,6 @@ const PeriodsTab = () => {
     formData,
     updatePeriodConfiguration,
     loadConfiguration,
-    forceRefresh,
   ]);
 
   // Manual regenerate
