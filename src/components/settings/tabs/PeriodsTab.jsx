@@ -70,16 +70,36 @@ const PeriodsTab = () => {
 
   // Handle form changes
   const handleStartDayChange = useCallback((e) => {
-    const value = parseInt(e.target.value, 10);
-    if (!isNaN(value) && value >= 1 && value <= 31) {
+    const rawValue = e.target.value;
+
+    // Allow empty string for clearing
+    if (rawValue === "") {
+      setFormData((prev) => ({ ...prev, startDay: "" }));
+      setHasUnsavedChanges(true);
+      return;
+    }
+
+    const value = parseInt(rawValue, 10);
+    // Allow any numeric input while typing, validation happens on save
+    if (!isNaN(value)) {
       setFormData((prev) => ({ ...prev, startDay: value }));
       setHasUnsavedChanges(true);
     }
   }, []);
 
   const handlePeriodLengthChange = useCallback((e) => {
-    const value = parseInt(e.target.value, 10);
-    if (!isNaN(value) && value >= 1 && value <= 60) {
+    const rawValue = e.target.value;
+
+    // Allow empty string for clearing
+    if (rawValue === "") {
+      setFormData((prev) => ({ ...prev, periodLength: "" }));
+      setHasUnsavedChanges(true);
+      return;
+    }
+
+    const value = parseInt(rawValue, 10);
+    // Allow any numeric input while typing, validation happens on save
+    if (!isNaN(value)) {
       setFormData((prev) => ({ ...prev, periodLength: value }));
       setHasUnsavedChanges(true);
     }
@@ -92,12 +112,26 @@ const PeriodsTab = () => {
       return;
     }
 
+    // Validate before saving
+    const startDay = parseInt(formData.startDay, 10);
+    const periodLength = parseInt(formData.periodLength, 10);
+
+    if (isNaN(startDay) || startDay < 1 || startDay > 31) {
+      toast.error("Start day must be between 1 and 31");
+      return;
+    }
+
+    if (isNaN(periodLength) || periodLength < 1 || periodLength > 60) {
+      toast.error("Period length must be between 1 and 60 days");
+      return;
+    }
+
     setIsSaving(true);
     try {
       const result = await updatePeriodConfiguration(
         restaurant.id,
-        formData.startDay,
-        formData.periodLength
+        startDay,
+        periodLength
       );
 
       toast.success("Period configuration updated!", {
