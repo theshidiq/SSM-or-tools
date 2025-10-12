@@ -128,11 +128,11 @@ export const usePeriodsRealtime = () => {
         .from("period_configuration")
         .select("*")
         .eq("restaurant_id", restaurantId)
-        .single();
+        .maybeSingle(); // Use maybeSingle() instead of single() to handle 0 rows gracefully
 
       if (error) throw error;
 
-      return data;
+      return data; // Will be null if no config exists
     } catch (err) {
       console.error("Failed to get period configuration:", err);
       setError(err.message);
