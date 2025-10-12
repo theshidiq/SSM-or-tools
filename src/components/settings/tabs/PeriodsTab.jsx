@@ -24,6 +24,7 @@ const PeriodsTab = () => {
     updatePeriodConfiguration,
     regeneratePeriods,
     clearError,
+    forceRefresh,
   } = usePeriodsRealtime();
 
   const { restaurant } = useRestaurant();
@@ -136,8 +137,8 @@ const PeriodsTab = () => {
         periodLength
       );
 
-      // updatePeriodConfiguration already calls loadPeriods() internally
-      // Just reload the configuration to update the "Last updated" timestamp
+      // Force an explicit refresh to ensure UI updates immediately
+      await forceRefresh();
       await loadConfiguration();
 
       toast.success("Period configuration updated!", {
@@ -156,6 +157,7 @@ const PeriodsTab = () => {
     restaurant?.id,
     formData,
     updatePeriodConfiguration,
+    forceRefresh,
     loadConfiguration,
   ]);
 
