@@ -119,6 +119,89 @@ export const usePeriodsRealtime = () => {
     [loadPeriods],
   );
 
+  // Get period configuration
+  const getPeriodConfiguration = useCallback(async (restaurantId) => {
+    try {
+      setError(null);
+
+      const { data, error } = await supabase
+        .from("period_configuration")
+        .select("*")
+        .eq("restaurant_id", restaurantId)
+        .single();
+
+      if (error) throw error;
+
+      return data;
+    } catch (err) {
+      console.error("Failed to get period configuration:", err);
+      setError(err.message);
+      throw err;
+    }
+  }, []);
+
+  // Update period configuration and regenerate all periods
+  const updatePeriodConfiguration = useCallback(
+    async (restaurantId, startDay, periodLengthDays = 30) => {
+      try {
+        setError(null);
+
+        const { data, error } = await supabase.rpc(
+          "update_period_configuration",
+          {
+            p_restaurant_id: restaurantId,
+            p_start_day: startDay,
+            p_period_length_days: periodLengthDays,
+          },
+        );
+
+        if (error) throw error;
+
+        console.log("✅ Period configuration updated:", data);
+        console.log(`  - Start Day: ${data.start_day}`);
+        console.log(`  - Period Length: ${data.period_length_days} days`);
+        console.log(`  - Periods Regenerated: ${data.periods_regenerated}`);
+
+        // Reload periods to get updated list
+        await loadPeriods();
+
+        return data;
+      } catch (err) {
+        console.error("Failed to update period configuration:", err);
+        setError(err.message);
+        throw err;
+      }
+    },
+    [loadPeriods],
+  );
+
+  // Regenerate all periods based on current configuration
+  const regeneratePeriods = useCallback(
+    async (restaurantId = null) => {
+      try {
+        setError(null);
+
+        const { data, error } = await supabase.rpc("regenerate_periods", {
+          p_restaurant_id: restaurantId,
+        });
+
+        if (error) throw error;
+
+        console.log("✅ Regenerated periods:", data?.length || 0);
+
+        // Reload periods to get updated list
+        await loadPeriods();
+
+        return data;
+      } catch (err) {
+        console.error("Failed to regenerate periods:", err);
+        setError(err.message);
+        throw err;
+      }
+    },
+    [loadPeriods],
+  );
+
   // Set up real-time subscription
   const subscribeToUpdates = useCallback(() => {
     if (subscriptionRef.current) {
@@ -190,6 +273,11 @@ export const usePeriodsRealtime = () => {
     deletePeriod,
     updatePeriod,
     refresh: loadPeriods,
+
+    // Period Configuration (NEW)
+    getPeriodConfiguration,
+    updatePeriodConfiguration,
+    regeneratePeriods,
 
     // Utilities
     clearError: () => setError(null),
