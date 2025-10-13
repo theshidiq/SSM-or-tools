@@ -160,7 +160,7 @@ export const usePeriodsRealtime = () => {
 
   // Update period configuration and regenerate all periods
   const updatePeriodConfiguration = useCallback(
-    async (restaurantId, startDay, periodLengthDays = 30) => {
+    async (restaurantId, startDay, endDay) => {
       try {
         setError(null);
 
@@ -173,7 +173,7 @@ export const usePeriodsRealtime = () => {
           {
             p_restaurant_id: restaurantId,
             p_start_day: startDay,
-            p_period_length_days: periodLengthDays,
+            p_end_day: endDay,
           },
         );
 
@@ -181,7 +181,8 @@ export const usePeriodsRealtime = () => {
 
         console.log("✅ Period configuration updated:", data);
         console.log(`  - Start Day: ${data.start_day}`);
-        console.log(`  - Period Length: ${data.period_length_days} days`);
+        console.log(`  - End Day: ${data.end_day}`);
+        console.log(`  - Period Length: ${data.period_length_days} days (calculated)`);
         console.log(`  - Periods Regenerated: ${data.periods_regenerated}`);
 
         // Reload periods to get updated list

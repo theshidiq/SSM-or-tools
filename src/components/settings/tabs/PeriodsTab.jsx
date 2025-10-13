@@ -35,7 +35,7 @@ const PeriodsTab = () => {
   const [isRefreshingPeriods, setIsRefreshingPeriods] = useState(false);
   const [formData, setFormData] = useState({
     startDay: 21,
-    periodLength: 30,
+    endDay: 20,
   });
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
   const [refreshCounter, setRefreshCounter] = useState(0); // Force re-render trigger
@@ -65,7 +65,7 @@ const PeriodsTab = () => {
         setConfig(data);
         setFormData({
           startDay: data.start_day,
-          periodLength: data.period_length_days,
+          endDay: data.end_day || 20,  // Default to 20 if null
         });
       }
     } catch (err) {
@@ -73,7 +73,7 @@ const PeriodsTab = () => {
       // Config might not exist yet, use defaults
       setFormData({
         startDay: 21,
-        periodLength: 30,
+        endDay: 20,
       });
     } finally {
       setIsLoadingConfig(false);
@@ -103,12 +103,12 @@ const PeriodsTab = () => {
     }
   }, []);
 
-  const handlePeriodLengthChange = useCallback((e) => {
+  const handleEndDayChange = useCallback((e) => {
     const rawValue = e.target.value;
 
     // Allow empty string for clearing
     if (rawValue === "") {
-      setFormData((prev) => ({ ...prev, periodLength: "" }));
+      setFormData((prev) => ({ ...prev, endDay: "" }));
       setHasUnsavedChanges(true);
       return;
     }
@@ -116,7 +116,7 @@ const PeriodsTab = () => {
     const value = parseInt(rawValue, 10);
     // Allow any numeric input while typing, validation happens on save
     if (!isNaN(value)) {
-      setFormData((prev) => ({ ...prev, periodLength: value }));
+      setFormData((prev) => ({ ...prev, endDay: value }));
       setHasUnsavedChanges(true);
     }
   }, []);
@@ -130,15 +130,15 @@ const PeriodsTab = () => {
 
     // Validate before saving
     const startDay = parseInt(formData.startDay, 10);
-    const periodLength = parseInt(formData.periodLength, 10);
+    const endDay = parseInt(formData.endDay, 10);
 
     if (isNaN(startDay) || startDay < 1 || startDay > 31) {
       toast.error("Start day must be between 1 and 31");
       return;
     }
 
-    if (isNaN(periodLength) || periodLength < 1 || periodLength > 60) {
-      toast.error("Period length must be between 1 and 60 days");
+    if (isNaN(endDay) || endDay < 1 || endDay > 31) {
+      toast.error("End day must be between 1 and 31");
       return;
     }
 
@@ -148,7 +148,7 @@ const PeriodsTab = () => {
       const result = await updatePeriodConfiguration(
         restaurant.id,
         startDay,
-        periodLength
+        endDay
       );
 
       // Wait longer for database to fully commit before refreshing
@@ -261,8 +261,8 @@ const PeriodsTab = () => {
             <p className="font-medium mb-1">Universal Period Rules</p>
             <p>
               One configuration applies to all {periods.length} periods. When you
-              change the start day, all periods will be automatically regenerated
-              with the new settings.
+              change the start day or end day, all periods will be automatically
+              regenerated with continuous dates and no gaps between periods.
             </p>
           </div>
         </div>
@@ -308,32 +308,32 @@ const PeriodsTab = () => {
           </div>
         </div>
 
-        {/* Period Length Input */}
+        {/* End Day Input */}
         <div className="space-y-2">
           <label
-            htmlFor="periodLength"
+            htmlFor="endDay"
             className="block text-sm font-medium text-gray-700"
           >
-            Period Length (Days)
+            End Day of Month
           </label>
           <div className="flex items-center gap-4">
             <input
-              id="periodLength"
+              id="endDay"
               type="number"
               min="1"
-              max="60"
-              value={formData.periodLength}
-              onChange={handlePeriodLengthChange}
+              max="31"
+              value={formData.endDay}
+              onChange={handleEndDayChange}
               onKeyDown={handleKeyDown}
               className="w-24 px-4 py-2 text-lg font-semibold border-2 border-gray-300 rounded-lg focus:border-blue-500 focus:outline-none transition-colors"
             />
             <div className="flex-1">
               <p className="text-sm text-gray-600">
-                Each period will be <strong>{formData.periodLength} days</strong>{" "}
-                long
+                All periods will end on day <strong>{formData.endDay}</strong> of the{" "}
+                {formData.endDay < formData.startDay ? "following" : "same"} month
               </p>
               <p className="text-xs text-gray-500 mt-1">
-                Current system default: 30 days per period
+                Example: Start {formData.startDay} → End {formData.endDay} = continuous coverage with no gaps
               </p>
             </div>
           </div>
@@ -463,7 +463,13 @@ const PeriodsTab = () => {
         <p className="font-medium mb-2">How it works:</p>
         <ul className="list-disc list-inside space-y-1 text-gray-600">
           <li>
-            Set the start day (e.g., "21") and all periods will begin on that day
+            Set the <strong>start day</strong> (e.g., "21") and <strong>end day</strong> (e.g., "20") for all periods
+          </li>
+          <li>
+            Periods run continuously from start day to end day with <strong>no gaps</strong>
+          </li>
+          <li>
+            Example: Jan 21 → Feb 20, Feb 21 → Mar 20, Mar 21 → Apr 20
           </li>
           <li>
             Changes apply universally to all periods (past, present, and future)
