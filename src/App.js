@@ -5,6 +5,7 @@ import DashboardLayout from "./components/layout/DashboardLayout.jsx";
 import PeriodMigration from "./components/migration/PeriodMigration.jsx";
 import { useSupabase } from "./hooks/useSupabase.js";
 import { RestaurantProvider } from "./contexts/RestaurantContext";
+import { SettingsProvider } from "./contexts/SettingsContext";
 
 function AppContent() {
   const {
@@ -45,7 +46,9 @@ function AppContent() {
 function App() {
   return (
     <RestaurantProvider>
-      <AppContent />
+      <SettingsProvider>
+        <AppContent />
+      </SettingsProvider>
     </RestaurantProvider>
   );
 }

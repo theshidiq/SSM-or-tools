@@ -577,8 +577,7 @@ const ShiftScheduleEditorPhase3 = ({
   const currentPeriod = realtimePeriods[currentMonthIndex];
 
   return (
-    <SettingsProvider>
-      <div className="shift-schedule-container space-y-6 p-6">
+    <div className="shift-schedule-container space-y-6 p-6">
         {/* Header with Phase 4 instant navigation indicator */}
         <Card>
           <CardHeader>
@@ -783,7 +782,6 @@ const ShiftScheduleEditorPhase3 = ({
           />
         )}
       </div>
-    </SettingsProvider>
   );
 };
 

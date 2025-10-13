@@ -79,6 +79,7 @@ export const useWebSocketShifts = (
   const reconnectTimerRef = useRef(null);
   const offlineQueueRef = useRef([]);
   const clientIdRef = useRef(null);
+  const isPeriodSwitchingRef = useRef(false); // Flag to prevent reconnection during period switches
 
   /**
    * Calculate reconnection delay with exponential backoff
@@ -309,8 +310,8 @@ export const useWebSocketShifts = (
           heartbeatTimerRef.current = null;
         }
 
-        // Auto-reconnect if enabled
-        if (autoReconnect && enabled) {
+        // Auto-reconnect if enabled and not during period switch
+        if (autoReconnect && enabled && !isPeriodSwitchingRef.current) {
           const delay = getReconnectDelay();
           console.log(`🔄 [WEBSOCKET-SHIFTS] Reconnecting in ${delay}ms...`);
 
@@ -318,6 +319,8 @@ export const useWebSocketShifts = (
             setReconnectAttempts((prev) => prev + 1);
             connect();
           }, delay);
+        } else if (isPeriodSwitchingRef.current) {
+          console.log(`⏸️ [WEBSOCKET-SHIFTS] Skipping auto-reconnect during period switch`);
         }
       };
     } catch (error) {
@@ -338,9 +341,19 @@ export const useWebSocketShifts = (
   /**
    * Disconnect from WebSocket server
    */
-  const disconnect = useCallback(() => {
+  const disconnect = useCallback((isPeriodSwitch = false) => {
+    // Set flag if this is a period switch to prevent auto-reconnect
+    if (isPeriodSwitch) {
+      isPeriodSwitchingRef.current = true;
+      console.log(`🔄 [WEBSOCKET-SHIFTS] Period switch detected - preventing auto-reconnect`);
+    }
+
     if (wsRef.current) {
-      wsRef.current.close();
+      // Only close if connection is open or connecting
+      if (wsRef.current.readyState === WebSocket.OPEN ||
+          wsRef.current.readyState === WebSocket.CONNECTING) {
+        wsRef.current.close();
+      }
       wsRef.current = null;
     }
 
@@ -466,11 +479,22 @@ export const useWebSocketShifts = (
   // Connect on mount and when enabled/period changes
   useEffect(() => {
     if (enabled) {
-      connect();
+      // Clear the period switching flag and connect
+      isPeriodSwitchingRef.current = false;
+
+      // Small delay to ensure cleanup is complete before new connection
+      const timer = setTimeout(() => {
+        connect();
+      }, 50);
+
+      return () => {
+        clearTimeout(timer);
+      };
     }
 
     return () => {
-      disconnect();
+      // Mark as period switch cleanup to prevent auto-reconnect
+      disconnect(true);
     };
   }, [enabled, currentPeriod]); // Intentionally omitting connect/disconnect to avoid infinite loop
 

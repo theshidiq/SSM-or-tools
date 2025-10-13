@@ -186,6 +186,14 @@ const PeriodsTab = () => {
     loadConfiguration,
   ]);
 
+  // Handle Enter key press to save
+  const handleKeyDown = useCallback((e) => {
+    if (e.key === "Enter" && hasUnsavedChanges && !isSaving) {
+      e.preventDefault();
+      handleSaveConfiguration();
+    }
+  }, [hasUnsavedChanges, isSaving, handleSaveConfiguration]);
+
   // Manual regenerate
   const handleRegeneratePeriods = useCallback(async () => {
     if (!restaurant?.id) {
@@ -285,6 +293,7 @@ const PeriodsTab = () => {
               max="31"
               value={formData.startDay}
               onChange={handleStartDayChange}
+              onKeyDown={handleKeyDown}
               className="w-24 px-4 py-2 text-lg font-semibold border-2 border-gray-300 rounded-lg focus:border-blue-500 focus:outline-none transition-colors"
             />
             <div className="flex-1">
@@ -315,6 +324,7 @@ const PeriodsTab = () => {
               max="60"
               value={formData.periodLength}
               onChange={handlePeriodLengthChange}
+              onKeyDown={handleKeyDown}
               className="w-24 px-4 py-2 text-lg font-semibold border-2 border-gray-300 rounded-lg focus:border-blue-500 focus:outline-none transition-colors"
             />
             <div className="flex-1">

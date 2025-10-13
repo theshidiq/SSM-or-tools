@@ -85,6 +85,7 @@ export const useWebSocketSettings = (options = {}) => {
   const reconnectTimeoutRef = useRef(null);
   const connectionFailedPermanently = useRef(false);
   const initialConnectionTimer = useRef(null);
+  const isComponentMountedRef = useRef(true); // Track if component is mounted
 
   // 🔧 FIX: Use ref to track current settings to prevent useCallback recreation
   const settingsRef = useRef(null);
@@ -345,16 +346,25 @@ export const useWebSocketSettings = (options = {}) => {
         console.log(`   - Close reason: '${event.reason}'`);
         console.log(`   - Was clean: ${event.wasClean}`);
         console.log(`   - Current readyState: ${wsRef.current?.readyState}`);
+        console.log(`   - Component mounted: ${isComponentMountedRef.current}`);
 
         // 🔧 FIX: Code 1005 means "no status received" - often caused by client closing connection
         if (event.code === 1005) {
           console.warn("⚠️ [DISCONNECT] Close code 1005 detected - connection closed abnormally");
-          console.warn("   - This usually means the client closed the connection without sending a close frame");
-          console.warn("   - Check for useEffect cleanup running prematurely");
+          if (!isComponentMountedRef.current) {
+            console.log("⏸️ [DISCONNECT] Component unmounted - skipping reconnection");
+            return; // Don't reconnect if component is unmounting
+          }
         }
 
         clearTimeout(connectionTimer);
         setConnectionStatus("disconnected");
+
+        // Don't reconnect if component is unmounting
+        if (!isComponentMountedRef.current) {
+          console.log("⏸️ [DISCONNECT] Component unmounted during connection - skipping reconnection");
+          return;
+        }
 
         // Check if permanently disabled
         if (connectionFailedPermanently.current) {
@@ -366,7 +376,7 @@ export const useWebSocketSettings = (options = {}) => {
           return;
         }
 
-        // Implement exponential backoff reconnection
+        // Implement exponential backoff reconnection (only if component is still mounted)
         if (reconnectAttempts.current < maxReconnectAttempts) {
           const delay = Math.pow(2, reconnectAttempts.current) * 1000; // 1s, 2s, 4s
           reconnectAttempts.current++;
@@ -376,7 +386,12 @@ export const useWebSocketSettings = (options = {}) => {
           );
 
           reconnectTimeoutRef.current = setTimeout(() => {
-            connect();
+            // Double-check component is still mounted before reconnecting
+            if (isComponentMountedRef.current) {
+              connect();
+            } else {
+              console.log("⏸️ [DISCONNECT] Component unmounted during reconnect delay - cancelling");
+            }
           }, delay);
         } else {
           console.error(
@@ -411,6 +426,7 @@ export const useWebSocketSettings = (options = {}) => {
   // The useEffect should ONLY run once on mount, not on every render
   useEffect(() => {
     console.log("🚀 [MOUNT] useWebSocketSettings mounted - initializing connection");
+    isComponentMountedRef.current = true; // Mark component as mounted
 
     const timeoutId = setTimeout(() => {
       connect();
@@ -419,6 +435,8 @@ export const useWebSocketSettings = (options = {}) => {
     // Cleanup function only runs on UNMOUNT, not on every render
     return () => {
       console.log("🔌 [UNMOUNT] useWebSocketSettings unmounting - cleaning up connection");
+      isComponentMountedRef.current = false; // Mark component as unmounted
+
       clearTimeout(timeoutId);
       if (reconnectTimeoutRef.current) {
         clearTimeout(reconnectTimeoutRef.current);
