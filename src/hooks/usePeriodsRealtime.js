@@ -10,6 +10,7 @@ export const usePeriodsRealtime = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
   const subscriptionRef = useRef(null);
+  const isManualUpdateRef = useRef(false); // Flag to prevent realtime interference
 
   // Load periods from database
   const loadPeriods = useCallback(async () => {
@@ -21,14 +22,19 @@ export const usePeriodsRealtime = () => {
 
       if (error) throw error;
 
+      // Create a completely new array with new object references
+      // This forces React to detect the change and re-render
       const formattedPeriods = (data || []).map((period) => ({
         id: period.id,
         start: new Date(period.start_date + "T00:00:00.000Z"),
         end: new Date(period.end_date + "T00:00:00.000Z"),
         label: period.label,
+        // Add a timestamp to force object reference change
+        _loadedAt: Date.now(),
       }));
 
-      setPeriods(formattedPeriods);
+      // Force setState with a function to ensure React sees this as a new reference
+      setPeriods(() => [...formattedPeriods]);
 
       // Synchronize the dateUtils cache with our fresh data
       synchronizePeriodsCache(formattedPeriods);
@@ -146,6 +152,10 @@ export const usePeriodsRealtime = () => {
       try {
         setError(null);
 
+        // Set flag to prevent realtime interference
+        isManualUpdateRef.current = true;
+        console.log("🔒 Manual update started - blocking realtime updates");
+
         const { data, error } = await supabase.rpc(
           "update_period_configuration",
           {
@@ -165,10 +175,18 @@ export const usePeriodsRealtime = () => {
         // Reload periods to get updated list
         await loadPeriods();
 
+        // Re-enable realtime updates after a delay
+        setTimeout(() => {
+          isManualUpdateRef.current = false;
+          console.log("🔓 Manual update complete - realtime updates re-enabled");
+        }, 500);
+
         return data;
       } catch (err) {
         console.error("Failed to update period configuration:", err);
         setError(err.message);
+        // Re-enable realtime updates on error
+        isManualUpdateRef.current = false;
         throw err;
       }
     },
@@ -181,6 +199,10 @@ export const usePeriodsRealtime = () => {
       try {
         setError(null);
 
+        // Set flag to prevent realtime interference
+        isManualUpdateRef.current = true;
+        console.log("🔒 Manual regenerate started - blocking realtime updates");
+
         const { data, error } = await supabase.rpc("regenerate_periods", {
           p_restaurant_id: restaurantId,
         });
@@ -192,10 +214,18 @@ export const usePeriodsRealtime = () => {
         // Reload periods to get updated list
         await loadPeriods();
 
+        // Re-enable realtime updates after a delay
+        setTimeout(() => {
+          isManualUpdateRef.current = false;
+          console.log("🔓 Manual regenerate complete - realtime updates re-enabled");
+        }, 500);
+
         return data;
       } catch (err) {
         console.error("Failed to regenerate periods:", err);
         setError(err.message);
+        // Re-enable realtime updates on error
+        isManualUpdateRef.current = false;
         throw err;
       }
     },
@@ -218,6 +248,16 @@ export const usePeriodsRealtime = () => {
           table: "periods",
         },
         (payload) => {
+          // Skip realtime updates if manual update is in progress
+          if (isManualUpdateRef.current) {
+            console.log(
+              "⏸️ Skipping realtime update (manual update in progress):",
+              payload.eventType,
+              payload.new?.label || payload.old?.label,
+            );
+            return;
+          }
+
           console.log(
             "🔄 Periods table changed:",
             payload.eventType,
@@ -281,9 +321,20 @@ export const usePeriodsRealtime = () => {
 
     // Utilities
     clearError: () => setError(null),
-    forceRefresh: () => {
+    forceRefresh: async () => {
       console.log("🔄 Forcing period refresh...");
-      return loadPeriods();
+      // Temporarily block realtime during force refresh
+      const wasBlocked = isManualUpdateRef.current;
+      isManualUpdateRef.current = true;
+
+      await loadPeriods();
+
+      // Restore previous state or keep blocked for 200ms
+      if (!wasBlocked) {
+        setTimeout(() => {
+          isManualUpdateRef.current = false;
+        }, 200);
+      }
     },
   };
 };

@@ -148,8 +148,15 @@ const PeriodsTab = () => {
         periodLength
       );
 
-      // Force an explicit refresh to ensure UI updates immediately
+      // Wait longer for database to fully commit before refreshing
+      // This prevents race condition with Supabase realtime subscription
+      await new Promise(resolve => setTimeout(resolve, 150));
+
+      // Force multiple refreshes to ensure UI updates
       await forceRefresh();
+      await new Promise(resolve => setTimeout(resolve, 50));
+      await forceRefresh();
+
       await loadConfiguration();
 
       toast.success("Period configuration updated!", {
@@ -157,7 +164,11 @@ const PeriodsTab = () => {
       });
 
       setHasUnsavedChanges(false);
-      setIsRefreshingPeriods(false);
+
+      // Keep refresh indicator visible longer to show user the update is processing
+      setTimeout(() => {
+        setIsRefreshingPeriods(false);
+      }, 200);
     } catch (err) {
       toast.error(`Failed to update configuration: ${err.message}`);
       setIsRefreshingPeriods(false);
@@ -359,14 +370,11 @@ const PeriodsTab = () => {
             <p className="text-gray-600">Updating periods...</p>
           </div>
         ) : periods.length > 0 ? (
-          <div
-            key={`periods-list-${periods.length}-${periods[0]?.label}-${periods[0]?.start?.getTime() || 'empty'}`}
-            className="space-y-2"
-          >
+          <div className="space-y-2">
             {/* Show first 3 and last 3 periods */}
             {periods.slice(0, 3).map((period, index) => (
               <div
-                key={period.id}
+                key={`period-${period.id}-${period.label}-${index}`}
                 className="flex items-center justify-between py-2 px-3 bg-gray-50 rounded-lg"
               >
                 <div className="flex items-center gap-3">
@@ -395,7 +403,7 @@ const PeriodsTab = () => {
                 const actualIndex = periods.length - 3 + index;
                 return (
                   <div
-                    key={period.id}
+                    key={`period-${period.id}-${period.label}-${actualIndex}`}
                     className="flex items-center justify-between py-2 px-3 bg-gray-50 rounded-lg"
                   >
                     <div className="flex items-center gap-3">
