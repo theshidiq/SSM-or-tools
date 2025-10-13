@@ -79,7 +79,7 @@ CREATE OR REPLACE FUNCTION regenerate_periods(
 ) AS $$
 DECLARE
   v_config RECORD;
-  v_base_date DATE := '2025-01-21'; -- Current system base date
+  v_base_date DATE;
   v_start_date DATE;
   v_end_date DATE;
   v_label TEXT;
@@ -105,6 +105,10 @@ BEGIN
     v_config.start_day := 21;
     v_config.period_length_days := 30;
   END IF;
+
+  -- Calculate base date dynamically from current year and configured start_day
+  -- Use January of current year with the configured start day
+  v_base_date := MAKE_DATE(EXTRACT(YEAR FROM CURRENT_DATE)::INTEGER, 1, v_config.start_day);
 
   -- Get all period IDs in order by start_date (this gives us the period_index mapping)
   -- Fix: Qualify column name with table alias to avoid ambiguity

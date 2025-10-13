@@ -341,6 +341,7 @@ export const useScheduleDataPrefetch = (
     periodsLoading || scheduleLoading || webSocketStaff.isLoading;
 
   // Generate date range for current period
+  // IMPORTANT: Depends on periods to trigger regeneration when periods are updated
   const dateRange = useMemo(() => {
     try {
       return generateDateRange(currentMonthIndex);
@@ -348,7 +349,7 @@ export const useScheduleDataPrefetch = (
       console.warn("Failed to generate date range:", error);
       return [];
     }
-  }, [currentMonthIndex]);
+  }, [currentMonthIndex, periods]);
 
   // Process and clean staff data from WebSocket
   const processedStaffMembers = useMemo(() => {

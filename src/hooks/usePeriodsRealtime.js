@@ -44,9 +44,15 @@ export const usePeriodsRealtime = () => {
         `🔄 Synchronized dateUtils cache with ${formattedPeriods.length} periods`,
       );
 
-      // Invalidate React Query cache used by main schedule table
-      queryClient.invalidateQueries({ queryKey: ["periods", "list"] });
-      console.log("🔄 Invalidated React Query periods cache for main table");
+      // Also force refresh dateUtils cache from database to ensure dates are updated
+      const { refreshPeriodsCache } = await import("../utils/dateUtils");
+      await refreshPeriodsCache();
+      console.log("🔄 Force refreshed dateUtils cache from database");
+
+      // Force refetch React Query cache used by main schedule table
+      // Using refetchQueries instead of invalidateQueries to force immediate refetch
+      queryClient.refetchQueries({ queryKey: ["periods", "list"] });
+      console.log("🔄 Refetching React Query periods cache for main table");
     } catch (err) {
       console.error("Failed to load periods:", err);
       setError(err.message);
