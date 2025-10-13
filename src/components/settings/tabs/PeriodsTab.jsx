@@ -38,8 +38,9 @@ const PeriodsTab = () => {
     periodLength: 30,
   });
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
+  const [refreshCounter, setRefreshCounter] = useState(0); // Force re-render trigger
 
-  // Debug: Track when periods state updates
+  // Debug: Track when periods state updates and force re-render
   useEffect(() => {
     if (periods.length > 0) {
       console.log("📅 Periods state updated in UI:", {
@@ -47,6 +48,8 @@ const PeriodsTab = () => {
         firstPeriod: periods[0]?.label,
         lastPeriod: periods[periods.length - 1]?.label,
       });
+      // Force re-render by incrementing counter
+      setRefreshCounter(prev => prev + 1);
     }
   }, [periods]);
 
@@ -370,11 +373,11 @@ const PeriodsTab = () => {
             <p className="text-gray-600">Updating periods...</p>
           </div>
         ) : periods.length > 0 ? (
-          <div className="space-y-2">
+          <div key={`periods-container-${refreshCounter}`} className="space-y-2">
             {/* Show first 3 and last 3 periods */}
             {periods.slice(0, 3).map((period, index) => (
               <div
-                key={`period-${period.id}-${period.label}-${index}`}
+                key={`period-${period.id}-${period.label}-${index}-${refreshCounter}`}
                 className="flex items-center justify-between py-2 px-3 bg-gray-50 rounded-lg"
               >
                 <div className="flex items-center gap-3">
@@ -403,7 +406,7 @@ const PeriodsTab = () => {
                 const actualIndex = periods.length - 3 + index;
                 return (
                   <div
-                    key={`period-${period.id}-${period.label}-${actualIndex}`}
+                    key={`period-${period.id}-${period.label}-${actualIndex}-${refreshCounter}`}
                     className="flex items-center justify-between py-2 px-3 bg-gray-50 rounded-lg"
                   >
                     <div className="flex items-center gap-3">
