@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { supabase } from "../utils/supabase";
 import {
   refreshPeriodsCache,
@@ -6,6 +7,7 @@ import {
 } from "../utils/dateUtils";
 
 export const usePeriodsRealtime = () => {
+  const queryClient = useQueryClient();
   const [periods, setPeriods] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -41,13 +43,17 @@ export const usePeriodsRealtime = () => {
       console.log(
         `🔄 Synchronized dateUtils cache with ${formattedPeriods.length} periods`,
       );
+
+      // Invalidate React Query cache used by main schedule table
+      queryClient.invalidateQueries({ queryKey: ["periods", "list"] });
+      console.log("🔄 Invalidated React Query periods cache for main table");
     } catch (err) {
       console.error("Failed to load periods:", err);
       setError(err.message);
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [queryClient]);
 
   // Add a new period
   const addPeriod = useCallback(
