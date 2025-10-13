@@ -142,6 +142,17 @@ const PeriodsTab = () => {
       return;
     }
 
+    // NEW VALIDATION: Ensure period spans to next month
+    if (endDay >= startDay) {
+      toast.error(
+        `End day (${endDay}) must be less than start day (${startDay})`,
+        {
+          description: "Periods must span to the next month. Example: Start 21 → End 20 creates Jan 21 - Feb 20.",
+        }
+      );
+      return;
+    }
+
     setIsSaving(true);
     setIsRefreshingPeriods(true);
     try {
@@ -464,6 +475,9 @@ const PeriodsTab = () => {
         <ul className="list-disc list-inside space-y-1 text-gray-600">
           <li>
             Set the <strong>start day</strong> (e.g., "21") and <strong>end day</strong> (e.g., "20") for all periods
+          </li>
+          <li>
+            <strong>Important:</strong> End day must be <strong>less than</strong> start day to span to the next month
           </li>
           <li>
             Periods run continuously from start day to end day with <strong>no gaps</strong>
