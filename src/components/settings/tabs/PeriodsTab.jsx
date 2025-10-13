@@ -360,7 +360,7 @@ const PeriodsTab = () => {
           </div>
         ) : periods.length > 0 ? (
           <div
-            key={`periods-list-${periods.length}-${periods[0]?.id || 'empty'}`}
+            key={`periods-list-${periods.length}-${periods[0]?.label}-${periods[0]?.start?.getTime() || 'empty'}`}
             className="space-y-2"
           >
             {/* Show first 3 and last 3 periods */}
