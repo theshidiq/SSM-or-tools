@@ -39,6 +39,17 @@ const PeriodsTab = () => {
   });
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
 
+  // Debug: Track when periods state updates
+  useEffect(() => {
+    if (periods.length > 0) {
+      console.log("📅 Periods state updated in UI:", {
+        count: periods.length,
+        firstPeriod: periods[0]?.label,
+        lastPeriod: periods[periods.length - 1]?.label,
+      });
+    }
+  }, [periods]);
+
   // Load period configuration
   const loadConfiguration = useCallback(async () => {
     if (!restaurant?.id) return;
@@ -176,7 +187,8 @@ const PeriodsTab = () => {
     }
   }, [restaurant?.id, regeneratePeriods]);
 
-  if (isLoading || isLoadingConfig) {
+  // Only show loading on initial config load, not on period refresh
+  if (isLoadingConfig) {
     return (
       <div className="flex items-center justify-center py-12">
         <div className="text-center">
@@ -347,7 +359,10 @@ const PeriodsTab = () => {
             <p className="text-gray-600">Updating periods...</p>
           </div>
         ) : periods.length > 0 ? (
-          <div className="space-y-2">
+          <div
+            key={`periods-list-${periods.length}-${periods[0]?.id || 'empty'}`}
+            className="space-y-2"
+          >
             {/* Show first 3 and last 3 periods */}
             {periods.slice(0, 3).map((period, index) => (
               <div
