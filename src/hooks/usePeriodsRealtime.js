@@ -179,11 +179,14 @@ export const usePeriodsRealtime = () => {
 
         if (error) throw error;
 
-        console.log("✅ Period configuration updated:", data);
-        console.log(`  - Start Day: ${data.start_day}`);
-        console.log(`  - End Day: ${data.end_day}`);
-        console.log(`  - Period Length: ${data.period_length_days} days (calculated)`);
-        console.log(`  - Periods Regenerated: ${data.periods_regenerated}`);
+        // Extract data with new output column names (out_ prefix)
+        const result = Array.isArray(data) ? data[0] : data;
+
+        console.log("✅ Period configuration updated:", result);
+        console.log(`  - Start Day: ${result.out_start_day}`);
+        console.log(`  - End Day: ${result.out_end_day}`);
+        console.log(`  - Period Length: ${result.out_period_length_days} days (calculated)`);
+        console.log(`  - Periods Regenerated: ${result.out_periods_regenerated}`);
 
         // Reload periods to get updated list
         await loadPeriods();
@@ -194,7 +197,14 @@ export const usePeriodsRealtime = () => {
           console.log("🔓 Manual update complete - realtime updates re-enabled");
         }, 500);
 
-        return data;
+        // Return data in normalized format (without out_ prefix)
+        return {
+          restaurant_id: result.out_restaurant_id,
+          start_day: result.out_start_day,
+          end_day: result.out_end_day,
+          period_length_days: result.out_period_length_days,
+          periods_regenerated: result.out_periods_regenerated,
+        };
       } catch (err) {
         console.error("Failed to update period configuration:", err);
         setError(err.message);
