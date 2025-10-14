@@ -846,17 +846,129 @@ export const useScheduleDataPrefetch = (
           staffMembers: processedStaffMembers,
         });
       },
-      updateSchedule: (newScheduleData, staffForSave = null) => {
-        if (!currentScheduleId) {
-          console.warn(
-            "⚠️ [WEBSOCKET-PREFETCH] No schedule ID for bulk update",
-          );
-          return Promise.reject(new Error("No schedule ID"));
+      updateSchedule: async (newScheduleData, staffForSave = null) => {
+        // Track the schedule ID to use (either existing or newly created)
+        let scheduleIdToUse = currentScheduleId;
+
+        // Create schedule on-demand if it doesn't exist (same as updateShift logic)
+        if (!scheduleIdToUse) {
+          // Check if we're already attempting creation (prevent race conditions)
+          if (creationAttemptedRef.current[currentMonthIndex]) {
+            console.log(
+              `⏭️ [WEBSOCKET-PREFETCH] Already attempting schedule creation via updateSchedule for period ${currentMonthIndex}, waiting...`,
+            );
+            // Wait briefly for ongoing creation
+            await new Promise((resolve) => setTimeout(resolve, 100));
+            // Check again after waiting
+            scheduleIdToUse = currentScheduleId;
+            if (!scheduleIdToUse) {
+              return Promise.reject(
+                new Error("Schedule creation in progress, please retry"),
+              );
+            }
+            // Schedule now exists, fall through to update
+          } else {
+            console.warn(
+              "⏳ [WEBSOCKET-PREFETCH] No schedule ID for bulk update, creating on-demand...",
+            );
+
+            try {
+              // Mark that we're attempting creation
+              creationAttemptedRef.current[currentMonthIndex] = true;
+
+              // First, check if a schedule already exists for this period (race condition protection)
+              const { data: existingSchedules, error: checkError } =
+                await supabase
+                  .from("schedules")
+                  .select(
+                    `
+                id,
+                schedule_staff_assignments!inner (
+                  period_index
+                )
+              `,
+                  )
+                  .eq(
+                    "schedule_staff_assignments.period_index",
+                    currentMonthIndex,
+                  )
+                  .limit(1);
+
+              if (checkError) throw checkError;
+
+              if (existingSchedules && existingSchedules.length > 0) {
+                console.log(
+                  `✅ [WEBSOCKET-PREFETCH] Found existing schedule: ${existingSchedules[0].id}, using it`,
+                );
+                scheduleIdToUse = existingSchedules[0].id;
+                setCurrentScheduleId(scheduleIdToUse);
+                queryClient.invalidateQueries(
+                  PREFETCH_QUERY_KEYS.scheduleData(currentMonthIndex),
+                );
+                creationAttemptedRef.current[currentMonthIndex] = false; // Reset flag
+                // Continue with the update using the existing schedule ID (fall through)
+              } else {
+                // Create schedule with assignment atomically via RPC
+                const { data: result, error: createError } = await supabase.rpc(
+                  "create_schedule_with_assignment",
+                  {
+                    p_period_index: currentMonthIndex,
+                    p_schedule_data: newScheduleData, // Use the bulk data for initial creation
+                  },
+                );
+
+                if (createError) {
+                  console.error(
+                    `❌ [WEBSOCKET-PREFETCH] Failed to create schedule on-demand:`,
+                    createError,
+                  );
+                  throw createError;
+                }
+
+                const newSchedule = { id: result };
+
+                if (!newSchedule.id) {
+                  throw new Error("Schedule creation returned no ID");
+                }
+
+                console.log(
+                  `✅ [WEBSOCKET-PREFETCH] Created schedule ${newSchedule.id} on-demand for bulk update, period ${currentMonthIndex}`,
+                );
+
+                // Use the newly created schedule ID immediately
+                scheduleIdToUse = newSchedule.id;
+
+                // Update local state
+                setCurrentScheduleId(scheduleIdToUse);
+                setSchedule(newScheduleData);
+
+                // Reset flag after successful creation
+                creationAttemptedRef.current[currentMonthIndex] = false;
+
+                // Invalidate cache to refetch with new schedule
+                queryClient.invalidateQueries(
+                  PREFETCH_QUERY_KEYS.scheduleData(currentMonthIndex),
+                );
+
+                // Return early - schedule already created with the data
+                return Promise.resolve();
+              }
+            } catch (error) {
+              console.error(
+                "❌ [WEBSOCKET-PREFETCH] Failed to create schedule on-demand:",
+                error,
+              );
+              creationAttemptedRef.current[currentMonthIndex] = false; // Reset on error
+              return Promise.reject(
+                new Error(`Failed to create schedule: ${error.message}`),
+              );
+            }
+          }
         }
 
-        // WebSocket-first bulk update
+        // WebSocket-first bulk update (with existing or newly created schedule ID)
         if (isWebSocketEnabled && webSocketShifts.isConnected) {
-          console.log(`📅 [WEBSOCKET-PREFETCH] WebSocket bulk schedule update`);
+          console.log(`📅 [WEBSOCKET-PREFETCH] WebSocket bulk schedule update (Schedule: ${scheduleIdToUse})`);
 
           return webSocketShifts
             .bulkUpdateSchedule(newScheduleData)
@@ -871,27 +983,37 @@ export const useScheduleDataPrefetch = (
                 "❌ [WEBSOCKET-PREFETCH] WebSocket bulk update failed:",
                 error,
               );
-              // Fallback to Supabase
+              // Fallback to Supabase with explicit schedule ID
               return scheduleOperations.updateScheduleViaSupabase(
                 newScheduleData,
                 staffForSave,
+                scheduleIdToUse,
               );
             });
         }
 
-        // Fallback to Supabase
+        // Fallback to Supabase with explicit schedule ID
         return scheduleOperations.updateScheduleViaSupabase(
           newScheduleData,
           staffForSave,
+          scheduleIdToUse,
         );
       },
 
-      updateScheduleViaSupabase: (newScheduleData, staffForSave = null) => {
-        console.log(`📅 [WEBSOCKET-PREFETCH] Supabase bulk schedule update`);
+      updateScheduleViaSupabase: (newScheduleData, staffForSave = null, explicitScheduleId = null) => {
+        // Use explicit schedule ID if provided (for newly created schedules)
+        const scheduleIdToSave = explicitScheduleId || currentScheduleId;
+
+        if (!scheduleIdToSave) {
+          console.error("❌ [WEBSOCKET-PREFETCH] Cannot bulk save schedule: No schedule ID");
+          return Promise.reject(new Error("No schedule ID available"));
+        }
+
+        console.log(`📅 [WEBSOCKET-PREFETCH] Supabase bulk schedule update (Schedule: ${scheduleIdToSave})`);
 
         return saveScheduleMutation.mutateAsync({
           scheduleData: newScheduleData,
-          scheduleId: currentScheduleId,
+          scheduleId: scheduleIdToSave,
           staffMembers: staffForSave || processedStaffMembers,
         });
       },
@@ -899,10 +1021,12 @@ export const useScheduleDataPrefetch = (
     [
       schedule,
       currentScheduleId,
+      currentMonthIndex,
       processedStaffMembers,
       saveScheduleMutation,
       isWebSocketEnabled,
       webSocketShifts,
+      queryClient,
     ],
   );
 
