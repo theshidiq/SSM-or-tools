@@ -39,6 +39,7 @@ const PeriodsTab = () => {
   });
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
   const [refreshCounter, setRefreshCounter] = useState(0); // Force re-render trigger
+  const [validationError, setValidationError] = useState(null);
 
   // Debug: Track when periods state updates and force re-render
   useEffect(() => {
@@ -84,6 +85,47 @@ const PeriodsTab = () => {
     loadConfiguration();
   }, [loadConfiguration]);
 
+  // Validation helper function
+  const validateConfiguration = useCallback((startDay, endDay) => {
+    // Ensure we have valid numbers
+    const start = parseInt(startDay, 10);
+    const end = parseInt(endDay, 10);
+
+    if (isNaN(start) || start < 1 || start > 31) {
+      return "Start day must be between 1 and 31";
+    }
+
+    if (isNaN(end) || end < 1 || end > 31) {
+      return "End day must be between 1 and 31";
+    }
+
+    // Check validation rules:
+    // 1. end_day < start_day (spans to next month)
+    // 2. OR start_day = 1 AND end_day >= 28 (full month starting from day 1)
+    const isValidSpanning = end < start;
+    const isValidFullMonth = start === 1 && end >= 28 && end <= 31;
+
+    if (!isValidSpanning && !isValidFullMonth) {
+      if (start === 1) {
+        return `For start day 1, end day must be 28-31 (full month period). Current: ${end}`;
+      } else {
+        return `End day (${end}) must be less than start day (${start}) to span to the next month. Example: Start 21 → End 20 creates Jan 21 - Feb 20.`;
+      }
+    }
+
+    return null; // Valid configuration
+  }, []);
+
+  // Real-time validation on form data change
+  useEffect(() => {
+    if (formData.startDay !== "" && formData.endDay !== "") {
+      const error = validateConfiguration(formData.startDay, formData.endDay);
+      setValidationError(error);
+    } else {
+      setValidationError(null);
+    }
+  }, [formData.startDay, formData.endDay, validateConfiguration]);
+
   // Handle form changes
   const handleStartDayChange = useCallback((e) => {
     const rawValue = e.target.value;
@@ -128,30 +170,18 @@ const PeriodsTab = () => {
       return;
     }
 
-    // Validate before saving
+    // Validate before saving using validation helper
+    const error = validateConfiguration(formData.startDay, formData.endDay);
+    if (error) {
+      toast.error("Invalid Configuration", {
+        description: error,
+      });
+      return;
+    }
+
+    // Parse validated values
     const startDay = parseInt(formData.startDay, 10);
     const endDay = parseInt(formData.endDay, 10);
-
-    if (isNaN(startDay) || startDay < 1 || startDay > 31) {
-      toast.error("Start day must be between 1 and 31");
-      return;
-    }
-
-    if (isNaN(endDay) || endDay < 1 || endDay > 31) {
-      toast.error("End day must be between 1 and 31");
-      return;
-    }
-
-    // NEW VALIDATION: Ensure period spans to next month
-    if (endDay >= startDay) {
-      toast.error(
-        `End day (${endDay}) must be less than start day (${startDay})`,
-        {
-          description: "Periods must span to the next month. Example: Start 21 → End 20 creates Jan 21 - Feb 20.",
-        }
-      );
-      return;
-    }
 
     setIsSaving(true);
     setIsRefreshingPeriods(true);
@@ -192,6 +222,7 @@ const PeriodsTab = () => {
   }, [
     restaurant?.id,
     formData,
+    validateConfiguration,
     updatePeriodConfiguration,
     forceRefresh,
     loadConfiguration,
@@ -350,11 +381,24 @@ const PeriodsTab = () => {
           </div>
         </div>
 
+        {/* Validation Error Display */}
+        {validationError && (
+          <div className="bg-red-50 border border-red-200 rounded-lg p-3">
+            <div className="flex items-start gap-2">
+              <AlertTriangle size={16} className="text-red-600 flex-shrink-0 mt-0.5" />
+              <div className="text-sm text-red-800">
+                <p className="font-medium">Invalid Configuration</p>
+                <p className="mt-1">{validationError}</p>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Action Buttons */}
         <div className="flex items-center gap-3 pt-4 border-t border-gray-200">
           <Button
             onClick={handleSaveConfiguration}
-            disabled={!hasUnsavedChanges || isSaving}
+            disabled={!hasUnsavedChanges || isSaving || validationError}
             className="flex items-center gap-2"
           >
             <CheckCircle2 size={16} />
@@ -363,6 +407,11 @@ const PeriodsTab = () => {
           {hasUnsavedChanges && (
             <Badge variant="secondary" className="text-xs">
               Unsaved changes
+            </Badge>
+          )}
+          {validationError && (
+            <Badge variant="destructive" className="text-xs">
+              Fix errors to save
             </Badge>
           )}
         </div>
@@ -474,16 +523,21 @@ const PeriodsTab = () => {
         <p className="font-medium mb-2">How it works:</p>
         <ul className="list-disc list-inside space-y-1 text-gray-600">
           <li>
-            Set the <strong>start day</strong> (e.g., "21") and <strong>end day</strong> (e.g., "20") for all periods
+            Set the <strong>start day</strong> and <strong>end day</strong> for all periods
           </li>
           <li>
-            <strong>Important:</strong> End day must be <strong>less than</strong> start day to span to the next month
+            <strong>Two valid configurations:</strong>
+            <ul className="list-circle list-inside ml-6 mt-1 space-y-1">
+              <li>
+                <strong>Spanning periods:</strong> End day &lt; Start day (e.g., Start 21 → End 20 = Jan 21 - Feb 20)
+              </li>
+              <li>
+                <strong>Full month periods:</strong> Start day = 1, End day = 28-31 (e.g., Start 1 → End 31 = Jan 1 - Jan 31)
+              </li>
+            </ul>
           </li>
           <li>
             Periods run continuously from start day to end day with <strong>no gaps</strong>
-          </li>
-          <li>
-            Example: Jan 21 → Feb 20, Feb 21 → Mar 20, Mar 21 → Apr 20
           </li>
           <li>
             Changes apply universally to all periods (past, present, and future)
