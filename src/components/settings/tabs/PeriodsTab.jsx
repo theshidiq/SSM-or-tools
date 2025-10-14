@@ -85,61 +85,30 @@ const PeriodsTab = () => {
     loadConfiguration();
   }, [loadConfiguration]);
 
-  // Validation helper function
-  const validateConfiguration = useCallback((startDay, endDay) => {
-    // Ensure we have valid numbers
+  // Auto-calculate end day based on start day
+  // Rule: if start_day = 1 → end_day = 31
+  //       if start_day = 2-31 → end_day = start_day - 1
+  const calculateEndDay = useCallback((startDay) => {
     const start = parseInt(startDay, 10);
-    const end = parseInt(endDay, 10);
-
-    if (isNaN(start) || start < 1 || start > 31) {
-      return "Start day must be between 1 and 31";
-    }
-
-    if (isNaN(end) || end < 1 || end > 31) {
-      return "End day must be between 1 and 31";
-    }
-
-    // Calculate period length
-    let periodLength;
-    if (start === 1) {
-      // Full month period
-      periodLength = end;
-    } else {
-      // Spanning period
-      periodLength = (31 - start + 1) + end;
-    }
-
-    // Check validation rules:
-    // 1. Full month: start_day = 1 AND end_day = 28-31
-    // 2. Spanning: end_day < start_day AND period_length >= 31
+    if (isNaN(start)) return "";
 
     if (start === 1) {
-      // Full month validation
-      if (end < 28 || end > 31) {
-        return `For full-month periods starting from day 1, end day must be 28-31. Current: ${end}`;
-      }
-    } else if (end < start) {
-      // Spanning period validation - must be at least 31 days
-      if (periodLength < 31) {
-        return `Period is only ${periodLength} days. Periods must be at least 31 days to prevent gaps. Try: Start ${start} → End ${start - 1} (31 days)`;
-      }
-    } else {
-      // Invalid: end >= start (not spanning, not full month)
-      return `End day (${end}) must be less than start day (${start}) to span to the next month. Example: Start 21 → End 20 creates Jan 21 - Feb 20.`;
+      return 31;
+    } else if (start >= 2 && start <= 31) {
+      return start - 1;
     }
-
-    return null; // Valid configuration
+    return "";
   }, []);
 
-  // Real-time validation on form data change
+  // Auto-update end day when start day changes
   useEffect(() => {
-    if (formData.startDay !== "" && formData.endDay !== "") {
-      const error = validateConfiguration(formData.startDay, formData.endDay);
-      setValidationError(error);
-    } else {
-      setValidationError(null);
+    if (formData.startDay !== "") {
+      const autoEndDay = calculateEndDay(formData.startDay);
+      if (autoEndDay !== "" && autoEndDay !== formData.endDay) {
+        setFormData((prev) => ({ ...prev, endDay: autoEndDay }));
+      }
     }
-  }, [formData.startDay, formData.endDay, validateConfiguration]);
+  }, [formData.startDay, calculateEndDay]);
 
   // Handle form changes
   const handleStartDayChange = useCallback((e) => {
@@ -160,24 +129,6 @@ const PeriodsTab = () => {
     }
   }, []);
 
-  const handleEndDayChange = useCallback((e) => {
-    const rawValue = e.target.value;
-
-    // Allow empty string for clearing
-    if (rawValue === "") {
-      setFormData((prev) => ({ ...prev, endDay: "" }));
-      setHasUnsavedChanges(true);
-      return;
-    }
-
-    const value = parseInt(rawValue, 10);
-    // Allow any numeric input while typing, validation happens on save
-    if (!isNaN(value)) {
-      setFormData((prev) => ({ ...prev, endDay: value }));
-      setHasUnsavedChanges(true);
-    }
-  }, []);
-
   // Save configuration and regenerate periods
   const handleSaveConfiguration = useCallback(async () => {
     if (!restaurant?.id) {
@@ -185,18 +136,19 @@ const PeriodsTab = () => {
       return;
     }
 
-    // Validate before saving using validation helper
-    const error = validateConfiguration(formData.startDay, formData.endDay);
-    if (error) {
-      toast.error("Invalid Configuration", {
-        description: error,
-      });
+    // Simple validation - just check range
+    const startDay = parseInt(formData.startDay, 10);
+    const endDay = parseInt(formData.endDay, 10);
+
+    if (isNaN(startDay) || startDay < 1 || startDay > 31) {
+      toast.error("Start day must be between 1 and 31");
       return;
     }
 
-    // Parse validated values
-    const startDay = parseInt(formData.startDay, 10);
-    const endDay = parseInt(formData.endDay, 10);
+    if (isNaN(endDay) || endDay < 1 || endDay > 31) {
+      toast.error("End day must be between 1 and 31");
+      return;
+    }
 
     setIsSaving(true);
     setIsRefreshingPeriods(true);
@@ -237,7 +189,6 @@ const PeriodsTab = () => {
   }, [
     restaurant?.id,
     formData,
-    validateConfiguration,
     updatePeriodConfiguration,
     forceRefresh,
     loadConfiguration,
@@ -365,13 +316,13 @@ const PeriodsTab = () => {
           </div>
         </div>
 
-        {/* End Day Input */}
+        {/* End Day Input - Auto-calculated */}
         <div className="space-y-2">
           <label
             htmlFor="endDay"
             className="block text-sm font-medium text-gray-700"
           >
-            End Day of Month
+            End Day of Month <span className="text-xs text-gray-500 font-normal">(Auto-calculated)</span>
           </label>
           <div className="flex items-center gap-4">
             <input
@@ -380,9 +331,8 @@ const PeriodsTab = () => {
               min="1"
               max="31"
               value={formData.endDay}
-              onChange={handleEndDayChange}
-              onKeyDown={handleKeyDown}
-              className="w-24 px-4 py-2 text-lg font-semibold border-2 border-gray-300 rounded-lg focus:border-blue-500 focus:outline-none transition-colors"
+              disabled
+              className="w-24 px-4 py-2 text-lg font-semibold border-2 border-gray-200 rounded-lg bg-gray-50 text-gray-700 cursor-not-allowed"
             />
             <div className="flex-1">
               <p className="text-sm text-gray-600">
@@ -390,30 +340,17 @@ const PeriodsTab = () => {
                 {formData.endDay < formData.startDay ? "following" : "same"} month
               </p>
               <p className="text-xs text-gray-500 mt-1">
-                Example: Start {formData.startDay} → End {formData.endDay} = continuous coverage with no gaps
+                Automatically calculated to ensure 31-day periods with no gaps
               </p>
             </div>
           </div>
         </div>
 
-        {/* Validation Error Display */}
-        {validationError && (
-          <div className="bg-red-50 border border-red-200 rounded-lg p-3">
-            <div className="flex items-start gap-2">
-              <AlertTriangle size={16} className="text-red-600 flex-shrink-0 mt-0.5" />
-              <div className="text-sm text-red-800">
-                <p className="font-medium">Invalid Configuration</p>
-                <p className="mt-1">{validationError}</p>
-              </div>
-            </div>
-          </div>
-        )}
-
         {/* Action Buttons */}
         <div className="flex items-center gap-3 pt-4 border-t border-gray-200">
           <Button
             onClick={handleSaveConfiguration}
-            disabled={!hasUnsavedChanges || isSaving || validationError}
+            disabled={!hasUnsavedChanges || isSaving}
             className="flex items-center gap-2"
           >
             <CheckCircle2 size={16} />
@@ -422,11 +359,6 @@ const PeriodsTab = () => {
           {hasUnsavedChanges && (
             <Badge variant="secondary" className="text-xs">
               Unsaved changes
-            </Badge>
-          )}
-          {validationError && (
-            <Badge variant="destructive" className="text-xs">
-              Fix errors to save
             </Badge>
           )}
         </div>
