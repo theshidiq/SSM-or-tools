@@ -99,18 +99,33 @@ const PeriodsTab = () => {
       return "End day must be between 1 and 31";
     }
 
-    // Check validation rules:
-    // 1. end_day < start_day (spans to next month)
-    // 2. OR start_day = 1 AND end_day >= 28 (full month starting from day 1)
-    const isValidSpanning = end < start;
-    const isValidFullMonth = start === 1 && end >= 28 && end <= 31;
+    // Calculate period length
+    let periodLength;
+    if (start === 1) {
+      // Full month period
+      periodLength = end;
+    } else {
+      // Spanning period
+      periodLength = (31 - start + 1) + end;
+    }
 
-    if (!isValidSpanning && !isValidFullMonth) {
-      if (start === 1) {
-        return `For start day 1, end day must be 28-31 (full month period). Current: ${end}`;
-      } else {
-        return `End day (${end}) must be less than start day (${start}) to span to the next month. Example: Start 21 → End 20 creates Jan 21 - Feb 20.`;
+    // Check validation rules:
+    // 1. Full month: start_day = 1 AND end_day = 28-31
+    // 2. Spanning: end_day < start_day AND period_length >= 31
+
+    if (start === 1) {
+      // Full month validation
+      if (end < 28 || end > 31) {
+        return `For full-month periods starting from day 1, end day must be 28-31. Current: ${end}`;
       }
+    } else if (end < start) {
+      // Spanning period validation - must be at least 31 days
+      if (periodLength < 31) {
+        return `Period is only ${periodLength} days. Periods must be at least 31 days to prevent gaps. Try: Start ${start} → End ${start - 1} (31 days)`;
+      }
+    } else {
+      // Invalid: end >= start (not spanning, not full month)
+      return `End day (${end}) must be less than start day (${start}) to span to the next month. Example: Start 21 → End 20 creates Jan 21 - Feb 20.`;
     }
 
     return null; // Valid configuration
@@ -529,15 +544,15 @@ const PeriodsTab = () => {
             <strong>Two valid configurations:</strong>
             <ul className="list-circle list-inside ml-6 mt-1 space-y-1">
               <li>
-                <strong>Spanning periods:</strong> End day &lt; Start day (e.g., Start 21 → End 20 = Jan 21 - Feb 20)
+                <strong>Spanning periods:</strong> End day &lt; Start day with minimum 31 days (e.g., Start 21 → End 20 = 31 days)
               </li>
               <li>
-                <strong>Full month periods:</strong> Start day = 1, End day = 28-31 (e.g., Start 1 → End 31 = Jan 1 - Jan 31)
+                <strong>Full month periods:</strong> Start day = 1, End day = 28-31 (e.g., Start 1 → End 31 = 31 days)
               </li>
             </ul>
           </li>
           <li>
-            Periods run continuously from start day to end day with <strong>no gaps</strong>
+            <strong>Important:</strong> Periods must be at least 31 days to ensure continuous coverage with no gaps
           </li>
           <li>
             Changes apply universally to all periods (past, present, and future)
