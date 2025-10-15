@@ -70,6 +70,7 @@ export const useWebSocketShifts = (
 
   // Schedule state
   const [scheduleData, setScheduleData] = useState({});
+  const [syncedPeriodIndex, setSyncedPeriodIndex] = useState(null); // Track which period this data belongs to
   const [isLoading, setIsLoading] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
 
@@ -193,9 +194,10 @@ export const useWebSocketShifts = (
 
           case MESSAGE_TYPES.SHIFT_SYNC_RESPONSE:
             setScheduleData(message.payload.scheduleData || {});
+            setSyncedPeriodIndex(message.payload.periodIndex ?? currentPeriod); // Track which period this data is for
             setIsSyncing(false);
             console.log(
-              `✅ [WEBSOCKET-SHIFTS] Schedule synced: ${Object.keys(message.payload.scheduleData || {}).length} staff members`,
+              `✅ [WEBSOCKET-SHIFTS] Schedule synced for period ${message.payload.periodIndex ?? currentPeriod}: ${Object.keys(message.payload.scheduleData || {}).length} staff members`,
             );
 
             // Update React Query cache
@@ -534,6 +536,7 @@ export const useWebSocketShifts = (
 
     // Schedule data
     scheduleData,
+    syncedPeriodIndex, // Which period this data belongs to
 
     // Operations
     updateShift,

@@ -323,18 +323,28 @@ export const useScheduleDataPrefetch = (
     );
   }, [currentScheduleData, currentMonthIndex]);
 
-  // Sync WebSocket shift data with local schedule state
+  // Sync WebSocket shift data with local schedule state (WITH PERIOD VALIDATION)
   useEffect(() => {
     if (
       webSocketShifts.isConnected &&
       Object.keys(webSocketShifts.scheduleData).length > 0
     ) {
-      console.log(
-        "🔄 [WEBSOCKET-PREFETCH] Syncing WebSocket shift data to local state",
-      );
-      setSchedule(webSocketShifts.scheduleData);
+      // CRITICAL FIX: Only sync if WebSocket data matches current period
+      const syncedPeriod = webSocketShifts.syncedPeriodIndex;
+
+      if (syncedPeriod === currentMonthIndex) {
+        console.log(
+          `🔄 [WEBSOCKET-PREFETCH] Syncing WebSocket shift data for period ${currentMonthIndex} to local state`,
+        );
+        setSchedule(webSocketShifts.scheduleData);
+      } else {
+        console.warn(
+          `⚠️ [WEBSOCKET-PREFETCH] Ignoring WebSocket data for period ${syncedPeriod} (currently viewing period ${currentMonthIndex})`,
+        );
+        // Don't sync - this prevents wrong period data from overwriting current display
+      }
     }
-  }, [webSocketShifts.scheduleData, webSocketShifts.isConnected]);
+  }, [webSocketShifts.scheduleData, webSocketShifts.isConnected, webSocketShifts.syncedPeriodIndex, currentMonthIndex]);
 
   // Overall loading state
   const isPrefetching =
