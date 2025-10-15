@@ -93,9 +93,9 @@ export const generatePrintHTML = (staffMembers, dateRange, schedule) => {
         <title>Shift Schedule</title>
         <meta charset="utf-8">
         <style>
-          body { font-family: Arial, sans-serif; margin: 20px; }
-          table { border-collapse: collapse; width: 100%; margin-bottom: 20px; }
-          th, td { border: 1px solid #ddd; padding: 8px; text-align: center; }
+          body { font-family: Arial, sans-serif; margin: 10px; }
+          table { border-collapse: collapse; width: 100%; margin-bottom: 10px; }
+          th, td { border: 1px solid #ddd; padding: 4px; text-align: center; font-size: 10px; }
           th { background-color: #f2f2f2; font-weight: bold; }
           .date-header { font-weight: bold; background-color: #f9f9f9; }
           .not-working { background-color: #f0f0f0; color: #999; }
@@ -105,10 +105,19 @@ export const generatePrintHTML = (staffMembers, dateRange, schedule) => {
           .off { color: #dc2626; }
           .holiday { color: #eab308; }
           .unavailable { color: #991b1b; }
+          h1 { font-size: 16px; margin: 8px 0; }
+
+          @media print {
+            @page { size: A4; margin: 10mm; }
+            body { font-size: 10px; margin: 5px; }
+            table { font-size: 9px; }
+            th, td { padding: 3px; }
+            h1 { font-size: 14px; margin: 5px 0; }
+          }
         </style>
       </head>
       <body>
-        <h1>🍣 Japanese Restaurant Shift Schedule</h1>
+        <h1>調理場シフト表</h1>
         <p>期間: ${
           dateRange && dateRange.length > 0
             ? (() => {
@@ -143,11 +152,24 @@ export const generatePrintHTML = (staffMembers, dateRange, schedule) => {
                       if (!isDateWithinWorkPeriod(validDate, staff)) {
                         return '<td class="not-working">-</td>'; // Show dash for dates outside work period
                       }
+
                       const shift = schedule[staff.id]?.[dateKey] || "";
-                      const symbol = shift
-                        ? shiftSymbols[shift]?.symbol || ""
-                        : "";
-                      return `<td class="${shift}">${symbol}</td>`;
+                      let symbol = "";
+
+                      // Handle empty string as normal shift (different display for パート vs others)
+                      if (!shift || shift === "" || shift === "normal") {
+                        // Normal shift - show circle for パート, blank for others
+                        symbol = staff.status === "パート" ? "○" : "";
+                      } else {
+                        // Try to find symbol by direct value match first (for symbols stored directly)
+                        const symbolEntry = Object.entries(shiftSymbols).find(
+                          ([key, val]) => val.symbol === shift
+                        );
+                        // If found as symbol, use it; otherwise lookup by key; fallback to original value
+                        symbol = symbolEntry ? shift : (shiftSymbols[shift]?.symbol || shift);
+                      }
+
+                      return `<td class="${shift || 'normal'}">${symbol}</td>`;
                     })
                     .join("")}
                 </tr>
