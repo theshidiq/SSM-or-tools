@@ -507,19 +507,12 @@ const ShiftScheduleEditorPhase3 = ({
 
   // Export handlers
   const handleExportCSV = useCallback(() => {
-    const currentPeriod = realtimePeriods[currentMonthIndex];
-    exportToCSV(schedule, currentStaff, dateRange, currentPeriod?.label || "");
-  }, [schedule, currentStaff, dateRange, realtimePeriods, currentMonthIndex]);
+    exportToCSV(currentStaff, dateRange, schedule);
+  }, [currentStaff, dateRange, schedule]);
 
   const handlePrint = useCallback(() => {
-    const currentPeriod = realtimePeriods[currentMonthIndex];
-    printSchedule(
-      schedule,
-      currentStaff,
-      dateRange,
-      currentPeriod?.label || "",
-    );
-  }, [schedule, currentStaff, dateRange, realtimePeriods, currentMonthIndex]);
+    printSchedule(currentStaff, dateRange, schedule);
+  }, [currentStaff, dateRange, schedule]);
 
   // Loading state - Skip intermediate loading, go directly to skeleton
   if (periodsLoading) {
