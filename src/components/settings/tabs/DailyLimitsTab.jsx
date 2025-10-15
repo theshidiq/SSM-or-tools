@@ -69,6 +69,7 @@ const DailyLimitsTab = ({
   const [validationViolations, setValidationViolations] = useState([]);
   const [showViolationsModal, setShowViolationsModal] = useState(false);
   const [isValidating, setIsValidating] = useState(false);
+  const [pendingValidationErrors, setPendingValidationErrors] = useState([]); // Show validation errors in UI
 
   // Schedule validation hook
   const { validateDailyLimits } = useScheduleValidation(currentScheduleId);
@@ -83,51 +84,13 @@ const DailyLimitsTab = ({
     updateSettingsRef.current = updateSettings;
   }, [settings, updateSettings]);
 
-  // Fix: Memoize derived arrays to prevent unnecessary re-renders
-  // Transform WebSocket multi-table format to localStorage-compatible format
+  // Get limits directly from settings (no transformation needed)
   const dailyLimits = useMemo(() => {
-    const limits = settings?.dailyLimits || [];
-    // Ensure all limits have required properties (WebSocket multi-table backend compatibility)
-    return limits.map((limit) => ({
-      ...limit,
-      // Extract properties from limitConfig if stored there (multi-table backend)
-      // Otherwise use properties directly, or default to safe values
-      daysOfWeek: limit.daysOfWeek || limit.limitConfig?.daysOfWeek || [],
-      targetIds: limit.targetIds || limit.limitConfig?.targetIds || [],
-      shiftType: limit.shiftType || limit.limitConfig?.shiftType || "any",
-      maxCount: limit.maxCount ?? limit.limitConfig?.maxCount ?? 0,
-      scope: limit.scope || limit.limitConfig?.scope || "all",
-      isHardConstraint:
-        limit.isHardConstraint ?? limit.limitConfig?.isHardConstraint ?? true,
-      penaltyWeight:
-        limit.penaltyWeight ?? limit.limitConfig?.penaltyWeight ?? 10,
-      description: limit.description || limit.limitConfig?.description || "",
-    }));
+    return settings?.dailyLimits || [];
   }, [settings?.dailyLimits]);
 
   const monthlyLimits = useMemo(() => {
-    const limits = settings?.monthlyLimits || [];
-    // Ensure all limits have required properties (WebSocket multi-table backend compatibility)
-    return limits.map((limit) => ({
-      ...limit,
-      // Extract properties from limitConfig if stored there (multi-table backend)
-      // Otherwise use properties directly, or default to safe values
-      limitType:
-        limit.limitType || limit.limitConfig?.limitType || "max_off_days",
-      maxCount: limit.maxCount ?? limit.limitConfig?.maxCount ?? 0,
-      scope: limit.scope || limit.limitConfig?.scope || "all",
-      targetIds: limit.targetIds || limit.limitConfig?.targetIds || [],
-      distributionRules: limit.distributionRules ||
-        limit.limitConfig?.distributionRules || {
-          maxConsecutive: 2,
-          preferWeekends: false,
-        },
-      isHardConstraint:
-        limit.isHardConstraint ?? limit.limitConfig?.isHardConstraint ?? false,
-      penaltyWeight:
-        limit.penaltyWeight ?? limit.limitConfig?.penaltyWeight ?? 5,
-      description: limit.description || limit.limitConfig?.description || "",
-    }));
+    return settings?.monthlyLimits || [];
   }, [settings?.monthlyLimits]);
 
   // Add escape key listener to exit edit mode
@@ -150,7 +113,7 @@ const DailyLimitsTab = ({
   const updateDailyLimits = useCallback(
     async (newLimits, skipValidation = false) => {
       try {
-        // Phase 2: Validate against current schedule before saving (unless skipped)
+        // ✅ STEP 1: Validate FIRST (before saving)
         if (!skipValidation && currentScheduleId) {
           setIsValidating(true);
           try {
@@ -158,51 +121,67 @@ const DailyLimitsTab = ({
               newLimits,
               staffMembers,
             );
+            setIsValidating(false);
 
             if (violations.length > 0) {
-              // Show warning toast with violation count
-              toast.warning(
-                `Warning: ${violations.length} daily limit violation${violations.length !== 1 ? "s" : ""} detected`,
+              // ❌ Validation failed - DON'T save
+              console.error(
+                "❌ Daily limits validation failed:",
+                violations.length,
+                "violations detected",
+              );
+
+              // Store violations for UI display
+              setPendingValidationErrors(violations);
+              setValidationViolations(violations);
+
+              // Show error toast
+              toast.error(
+                `Validation failed: ${violations.length} issue${violations.length !== 1 ? "s" : ""} found`,
                 {
-                  description: "Current schedule exceeds new daily limits",
+                  description: "Current schedule exceeds new daily limits. Please fix violations first.",
                   action: {
-                    label: "View Violations",
+                    label: "View Details",
                     onClick: () => {
-                      setValidationViolations(violations);
                       setShowViolationsModal(true);
                     },
                   },
-                  duration: 6000,
+                  duration: 8000,
                 },
               );
 
-              console.log(
-                "⚠️ Daily limits validation detected violations:",
-                violations,
-              );
+              return; // ❌ Exit without saving
             }
+
+            // ✅ Validation passed - clear any previous errors
+            setPendingValidationErrors([]);
           } catch (validationError) {
+            setIsValidating(false);
             console.error(
-              "❌ Daily limits validation failed:",
+              "❌ Daily limits validation error:",
               validationError,
             );
-            // Continue with save even if validation fails
-          } finally {
-            setIsValidating(false);
+            toast.error(`Validation error: ${validationError.message}`);
+            return; // ❌ Exit without saving
           }
         }
 
-        // Use refs to avoid dependency on settings/updateSettings
+        // ✅ STEP 2: Save ONLY if validation passed
         updateSettingsRef.current({
           ...settingsRef.current,
           dailyLimits: newLimits,
         });
+
+        // ✅ Success feedback
+        toast.success("Daily limits updated successfully");
+        console.log("✅ Daily limits updated successfully");
       } catch (error) {
         console.error("Error updating daily limits:", error);
+        toast.error(`Failed to update daily limits: ${error.message}`);
         throw error;
       }
     },
-    [currentScheduleId, validateDailyLimits, staffMembers], // Removed settings/onSettingsChange
+    [currentScheduleId, validateDailyLimits, staffMembers],
   );
 
   // Phase 4.3: Wrap updateMonthlyLimits with useCallback and refs
@@ -211,7 +190,7 @@ const DailyLimitsTab = ({
       ...settingsRef.current,
       monthlyLimits: newLimits,
     });
-  }, []); // Empty deps - uses refs
+  }, []);
 
   // Daily Limits Edit Management
   const startEditingDailyLimit = (limitId) => {
@@ -225,6 +204,8 @@ const DailyLimitsTab = ({
   const handleSaveDailyEdit = () => {
     setEditingLimit(null);
     setOriginalLimitData(null);
+    // Clear validation errors on successful save
+    setPendingValidationErrors([]);
   };
 
   const handleCancelDailyEdit = () => {
@@ -232,10 +213,13 @@ const DailyLimitsTab = ({
       const updatedLimits = dailyLimits.map((limit) =>
         limit.id === editingLimit ? originalLimitData : limit,
       );
-      updateDailyLimits(updatedLimits);
+      // Skip validation when canceling (restoring original data)
+      updateDailyLimits(updatedLimits, true);
     }
     setEditingLimit(null);
     setOriginalLimitData(null);
+    // Clear validation errors on cancel
+    setPendingValidationErrors([]);
   };
 
   // Monthly Limits Edit Management
@@ -267,18 +251,21 @@ const DailyLimitsTab = ({
     const newLimit = {
       id: `daily-limit-${Date.now()}`,
       name: "New Daily Limit",
-      shiftType: "any",
-      maxCount: 3,
-      daysOfWeek: DAYS_OF_WEEK.map((d) => d.id), // All days by default
-      scope: "all",
-      targetIds: [],
+      limitConfig: {
+        shiftType: "any",
+        maxCount: 3,
+        daysOfWeek: DAYS_OF_WEEK.map((d) => d.id), // All days by default
+        scope: "all",
+        targetIds: [],
+      },
       isHardConstraint: true,
       penaltyWeight: 10,
       description: "",
     };
     setOriginalLimitData({ ...newLimit });
     setEditingLimit(newLimit.id);
-    updateDailyLimits([...dailyLimits, newLimit]);
+    // Skip validation when creating new limit (default values are safe)
+    updateDailyLimits([...dailyLimits, newLimit], true);
     setShowAddForm(false);
   };
 
@@ -286,13 +273,15 @@ const DailyLimitsTab = ({
     const newLimit = {
       id: `monthly-limit-${Date.now()}`,
       name: "New Monthly Limit",
-      limitType: "max_off_days",
-      maxCount: 8,
-      scope: "individual",
-      targetIds: [],
-      distributionRules: {
-        maxConsecutive: 2,
-        preferWeekends: false,
+      limitConfig: {
+        limitType: "max_off_days",
+        maxCount: 8,
+        scope: "individual",
+        targetIds: [],
+        distributionRules: {
+          maxConsecutive: 2,
+          preferWeekends: false,
+        },
       },
       isHardConstraint: false,
       penaltyWeight: 5,
@@ -361,15 +350,19 @@ const DailyLimitsTab = ({
 
   const toggleDayOfWeek = (limitId, dayId) => {
     const limit = dailyLimits.find((l) => l.id === limitId);
-    if (!limit) return;
+    if (!limit || !limit.limitConfig) return;
 
-    // Defensive: Ensure daysOfWeek is an array
-    const currentDays = Array.isArray(limit.daysOfWeek) ? limit.daysOfWeek : [];
+    const currentDays = limit.limitConfig.daysOfWeek || [];
     const updatedDays = currentDays.includes(dayId)
       ? currentDays.filter((d) => d !== dayId)
       : [...currentDays, dayId];
 
-    updateDailyLimit(limitId, { daysOfWeek: updatedDays });
+    updateDailyLimit(limitId, {
+      limitConfig: {
+        ...limit.limitConfig,
+        daysOfWeek: updatedDays,
+      },
+    });
   };
 
   // Get active staff members (filter out those with endPeriod in the past)
@@ -413,8 +406,7 @@ const DailyLimitsTab = ({
   };
 
   const renderDaySelector = (limit) => {
-    // Defensive: Ensure daysOfWeek is an array
-    const daysOfWeek = Array.isArray(limit.daysOfWeek) ? limit.daysOfWeek : [];
+    const daysOfWeek = limit.limitConfig?.daysOfWeek || [];
 
     return (
       <div className="space-y-2">
@@ -445,18 +437,17 @@ const DailyLimitsTab = ({
   };
 
   const renderTargetSelector = (limit, isMonthly = false) => {
-    if (limit.scope === "all") return null;
+    const scope = limit.limitConfig?.scope || "all";
+    if (scope === "all") return null;
 
-    const options = getTargetOptions(limit.scope);
+    const options = getTargetOptions(scope);
     const updateFunc = isMonthly ? updateMonthlyLimit : updateDailyLimit;
-
-    // Defensive: Ensure targetIds is an array
-    const targetIds = Array.isArray(limit.targetIds) ? limit.targetIds : [];
+    const targetIds = limit.limitConfig?.targetIds || [];
 
     return (
       <div className="space-y-2">
         <label className="text-sm font-medium text-gray-700">
-          {limit.scope === "staff_status" ? "Staff Status" : "Staff Members"}
+          {scope === "staff_status" ? "Staff Status" : "Staff Members"}
         </label>
         <div className="space-y-2 max-h-32 overflow-y-auto border border-gray-200 rounded-lg p-2">
           {options.map((option) => (
@@ -471,7 +462,12 @@ const DailyLimitsTab = ({
                   const updatedTargets = e.target.checked
                     ? [...targetIds, option.id]
                     : targetIds.filter((id) => id !== option.id);
-                  updateFunc(limit.id, { targetIds: updatedTargets });
+                  updateFunc(limit.id, {
+                    limitConfig: {
+                      ...limit.limitConfig,
+                      targetIds: updatedTargets,
+                    },
+                  });
                 }}
                 className="w-4 h-4 text-blue-600 rounded focus:ring-blue-500"
               />
@@ -490,12 +486,12 @@ const DailyLimitsTab = ({
 
   // Helper function to get target display text
   const getTargetDisplayText = (limit) => {
-    if (limit.scope === "all") return "";
+    const scope = limit.limitConfig?.scope || "all";
+    if (scope === "all") return "";
 
-    // Defensive: Ensure targetIds is an array
-    const targetIds = Array.isArray(limit.targetIds) ? limit.targetIds : [];
+    const targetIds = limit.limitConfig?.targetIds || [];
 
-    if (limit.scope === "individual") {
+    if (scope === "individual") {
       const selectedStaff = staffMembers.filter((staff) =>
         targetIds.includes(staff.id),
       );
@@ -503,15 +499,17 @@ const DailyLimitsTab = ({
         ? selectedStaff.map((staff) => staff.name).join(", ")
         : "No staff selected";
     }
-    if (limit.scope === "staff_status") {
+    if (scope === "staff_status") {
       return targetIds.length > 0 ? targetIds.join(", ") : "No status selected";
     }
-    return limit.scope;
+    return scope;
   };
 
   const renderDailyLimitCard = (limit) => {
     const isEditing = editingLimit === limit.id;
-    const shiftType = SHIFT_TYPES.find((st) => st.id === limit.shiftType);
+    const shiftType = SHIFT_TYPES.find(
+      (st) => st.id === (limit.limitConfig?.shiftType || "any"),
+    );
     const targetDisplayText = getTargetDisplayText(limit);
 
     return (
@@ -542,8 +540,9 @@ const DailyLimitsTab = ({
                 </h3>
               )}
               <p className="text-sm text-gray-600">
-                {shiftType?.label} • Max {limit.maxCount} per day
-                {limit.scope !== "all" &&
+                {shiftType?.label} • Max {limit.limitConfig?.maxCount || 0} per
+                day
+                {limit.limitConfig?.scope !== "all" &&
                   targetDisplayText &&
                   ` • ${targetDisplayText}`}
               </p>
@@ -594,7 +593,7 @@ const DailyLimitsTab = ({
             {/* Description */}
             <FormField label="Description">
               <textarea
-                value={limit.description}
+                value={limit.description || ""}
                 onChange={(e) =>
                   updateDailyLimit(limit.id, { description: e.target.value })
                 }
@@ -607,9 +606,14 @@ const DailyLimitsTab = ({
             {/* Shift Type */}
             <FormField label="Shift Type">
               <select
-                value={limit.shiftType}
+                value={limit.limitConfig?.shiftType || "any"}
                 onChange={(e) =>
-                  updateDailyLimit(limit.id, { shiftType: e.target.value })
+                  updateDailyLimit(limit.id, {
+                    limitConfig: {
+                      ...limit.limitConfig,
+                      shiftType: e.target.value,
+                    },
+                  })
                 }
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
               >
@@ -624,11 +628,16 @@ const DailyLimitsTab = ({
             {/* Max Count */}
             <NumberInput
               label="Maximum Count"
-              value={limit.maxCount}
+              value={limit.limitConfig?.maxCount || 0}
               min={0}
               max={20}
               onChange={(value) =>
-                updateDailyLimit(limit.id, { maxCount: value })
+                updateDailyLimit(limit.id, {
+                  limitConfig: {
+                    ...limit.limitConfig,
+                    maxCount: value,
+                  },
+                })
               }
               description="Maximum number of this shift type allowed per day"
             />
@@ -639,11 +648,14 @@ const DailyLimitsTab = ({
             {/* Scope */}
             <FormField label="Apply To">
               <select
-                value={limit.scope}
+                value={limit.limitConfig?.scope || "all"}
                 onChange={(e) =>
                   updateDailyLimit(limit.id, {
-                    scope: e.target.value,
-                    targetIds: [], // Reset targets when scope changes
+                    limitConfig: {
+                      ...limit.limitConfig,
+                      scope: e.target.value,
+                      targetIds: [], // Reset targets when scope changes
+                    },
                   })
                 }
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
@@ -694,10 +706,9 @@ const DailyLimitsTab = ({
           <div className="flex items-center gap-4 text-sm text-gray-600">
             <span className="flex items-center gap-1">
               <Calendar size={14} />
-              {/* Defensive: Ensure daysOfWeek is an array */}
-              {Array.isArray(limit.daysOfWeek) && limit.daysOfWeek.length === 7
+              {(limit.limitConfig?.daysOfWeek || []).length === 7
                 ? "All days"
-                : `${Array.isArray(limit.daysOfWeek) ? limit.daysOfWeek.length : 0} days`}
+                : `${(limit.limitConfig?.daysOfWeek || []).length} days`}
             </span>
             <span
               className={`px-2 py-1 rounded text-xs ${
@@ -755,12 +766,16 @@ const DailyLimitsTab = ({
                 </h3>
               )}
               <p className="text-sm text-gray-600">
-                {limit.limitType.replace(/_/g, " ")} • Max{" "}
-                {limit.maxCount % 1 === 0
-                  ? Math.floor(limit.maxCount)
-                  : limit.maxCount}{" "}
+                {(limit.limitConfig?.limitType || "max_off_days").replace(
+                  /_/g,
+                  " ",
+                )}{" "}
+                • Max{" "}
+                {(limit.limitConfig?.maxCount || 0) % 1 === 0
+                  ? Math.floor(limit.limitConfig?.maxCount || 0)
+                  : limit.limitConfig?.maxCount || 0}{" "}
                 per month
-                {limit.scope !== "all" &&
+                {limit.limitConfig?.scope !== "all" &&
                   targetDisplayText &&
                   ` • ${targetDisplayText}`}
               </p>
@@ -811,7 +826,7 @@ const DailyLimitsTab = ({
             {/* Description */}
             <FormField label="Description">
               <textarea
-                value={limit.description}
+                value={limit.description || ""}
                 onChange={(e) =>
                   updateMonthlyLimit(limit.id, { description: e.target.value })
                 }
@@ -824,9 +839,14 @@ const DailyLimitsTab = ({
             {/* Limit Type */}
             <FormField label="Limit Type">
               <select
-                value={limit.limitType}
+                value={limit.limitConfig?.limitType || "max_off_days"}
                 onChange={(e) =>
-                  updateMonthlyLimit(limit.id, { limitType: e.target.value })
+                  updateMonthlyLimit(limit.id, {
+                    limitConfig: {
+                      ...limit.limitConfig,
+                      limitType: e.target.value,
+                    },
+                  })
                 }
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
               >
@@ -841,15 +861,22 @@ const DailyLimitsTab = ({
             {/* Max Count */}
             <NumberInput
               label="Count"
-              value={limit.maxCount}
+              value={limit.limitConfig?.maxCount || 0}
               min={0}
               max={31}
-              step={limit.limitType === "max_off_days" ? 0.5 : 1}
+              step={
+                limit.limitConfig?.limitType === "max_off_days" ? 0.5 : 1
+              }
               onChange={(value) =>
-                updateMonthlyLimit(limit.id, { maxCount: value })
+                updateMonthlyLimit(limit.id, {
+                  limitConfig: {
+                    ...limit.limitConfig,
+                    maxCount: value,
+                  },
+                })
               }
               description={
-                limit.limitType === "max_off_days"
+                limit.limitConfig?.limitType === "max_off_days"
                   ? "Maximum count for this limit type per month (supports half-days: 6.5, 7, 7.5, etc.)"
                   : "Maximum count for this limit type per month"
               }
@@ -858,11 +885,14 @@ const DailyLimitsTab = ({
             {/* Scope */}
             <FormField label="Apply To">
               <select
-                value={limit.scope}
+                value={limit.limitConfig?.scope || "all"}
                 onChange={(e) =>
                   updateMonthlyLimit(limit.id, {
-                    scope: e.target.value,
-                    targetIds: [], // Reset targets when scope changes
+                    limitConfig: {
+                      ...limit.limitConfig,
+                      scope: e.target.value,
+                      targetIds: [], // Reset targets when scope changes
+                    },
                   })
                 }
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
@@ -916,14 +946,19 @@ const DailyLimitsTab = ({
           <div className="mb-4">
             <NumberInput
               label="Max Consecutive"
-              value={limit.distributionRules?.maxConsecutive || 2}
+              value={
+                limit.limitConfig?.distributionRules?.maxConsecutive || 2
+              }
               min={1}
               max={7}
               onChange={(value) =>
                 updateMonthlyLimit(limit.id, {
-                  distributionRules: {
-                    ...limit.distributionRules,
-                    maxConsecutive: value,
+                  limitConfig: {
+                    ...limit.limitConfig,
+                    distributionRules: {
+                      ...limit.limitConfig?.distributionRules,
+                      maxConsecutive: value,
+                    },
                   },
                 })
               }
@@ -935,12 +970,17 @@ const DailyLimitsTab = ({
 
           <ToggleSwitch
             label="Prefer Weekends"
-            checked={limit.distributionRules?.preferWeekends || false}
+            checked={
+              limit.limitConfig?.distributionRules?.preferWeekends || false
+            }
             onChange={(checked) =>
               updateMonthlyLimit(limit.id, {
-                distributionRules: {
-                  ...limit.distributionRules,
-                  preferWeekends: checked,
+                limitConfig: {
+                  ...limit.limitConfig,
+                  distributionRules: {
+                    ...limit.limitConfig?.distributionRules,
+                    preferWeekends: checked,
+                  },
                 },
               })
             }
@@ -982,7 +1022,7 @@ const DailyLimitsTab = ({
         </div>
       </div>
 
-      {/* Error Messages */}
+      {/* Phase 2: Validation Errors from Props */}
       {Object.keys(validationErrors).length > 0 && (
         <div className="bg-red-50 border border-red-200 rounded-lg p-4">
           <div className="flex items-center gap-2 mb-2">
@@ -994,6 +1034,52 @@ const DailyLimitsTab = ({
               <li key={field}>{error}</li>
             ))}
           </ul>
+        </div>
+      )}
+
+      {/* Phase 2: Real-time Validation Violations Alert */}
+      {pendingValidationErrors.length > 0 && (
+        <div className="bg-red-50 border-2 border-red-300 rounded-lg p-5 shadow-md">
+          <div className="flex items-start gap-3 mb-3">
+            <AlertTriangle size={24} className="text-red-600 flex-shrink-0 mt-0.5" />
+            <div className="flex-1">
+              <h3 className="font-bold text-red-800 text-lg">
+                Cannot Save Daily Limits
+              </h3>
+              <p className="text-red-700 text-sm mt-1">
+                The current schedule violates the new daily limits. Please fix these issues before saving.
+              </p>
+            </div>
+            <button
+              onClick={() => setPendingValidationErrors([])}
+              className="text-red-600 hover:text-red-800 flex-shrink-0"
+              title="Dismiss"
+            >
+              <XCircle size={20} />
+            </button>
+          </div>
+
+          <div className="ml-9">
+            <p className="font-semibold text-red-800 mb-2">
+              {pendingValidationErrors.length} Violation{pendingValidationErrors.length !== 1 ? "s" : ""} Detected:
+            </p>
+            <ul className="list-disc list-inside text-red-700 text-sm space-y-1.5 max-h-40 overflow-y-auto">
+              {pendingValidationErrors.slice(0, 8).map((violation, idx) => (
+                <li key={idx} className="leading-relaxed">{violation}</li>
+              ))}
+            </ul>
+            {pendingValidationErrors.length > 8 && (
+              <p className="text-sm text-red-600 mt-2 font-medium">
+                ...and {pendingValidationErrors.length - 8} more violation{pendingValidationErrors.length - 8 !== 1 ? "s" : ""}
+              </p>
+            )}
+            <button
+              onClick={() => setShowViolationsModal(true)}
+              className="mt-3 text-sm font-medium text-red-700 hover:text-red-900 underline"
+            >
+              View All Violations
+            </button>
+          </div>
         </div>
       )}
 
