@@ -160,8 +160,13 @@ export const generatePrintHTML = (staffMembers, dateRange, schedule) => {
 
                       // Handle empty string as normal shift (different display for パート vs others)
                       if (!shift || shift === "" || shift === "normal") {
-                        // Normal shift - show circle for パート, blank for others
-                        symbol = staff.status === "パート" ? "○" : "";
+                        // Special case: Nakata (中田) shows unavailable symbol for normal/empty shifts
+                        if (staff.name === "中田") {
+                          symbol = "⊘";
+                        } else {
+                          // Normal shift - show circle for パート, blank for others
+                          symbol = staff.status === "パート" ? "○" : "";
+                        }
                       } else {
                         // Try to find symbol by direct value match first (for symbols stored directly)
                         const symbolEntry = Object.entries(shiftSymbols).find(
