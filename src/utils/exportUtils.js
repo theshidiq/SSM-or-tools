@@ -135,7 +135,7 @@ export const generatePrintHTML = (staffMembers, dateRange, schedule) => {
           <thead>
             <tr>
               <th>日付 / Date</th>
-              ${staffMembers.map((staff) => `<th>${staff.name}<br><small>${staff.position}</small></th>`).join("")}
+              ${staffMembers.map((staff) => `<th>${staff.name}</th>`).join("")}
             </tr>
           </thead>
           <tbody>
