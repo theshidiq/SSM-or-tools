@@ -178,6 +178,13 @@ export const useWebSocketShifts = (
                 scheduleId,
                 periodIndex: currentPeriod,
               });
+              console.log(
+                `📡 [WEBSOCKET-SHIFTS] Initial sync requested for schedule ${scheduleId}`,
+              );
+            } else {
+              console.log(
+                `⏳ [WEBSOCKET-SHIFTS] Connected but no scheduleId yet - sync will be triggered when available`,
+              );
             }
 
             // Process offline queue
@@ -255,10 +262,13 @@ export const useWebSocketShifts = (
     heartbeatTimerRef.current = setInterval(() => {
       if (wsRef.current?.readyState === WebSocket.OPEN) {
         // Send heartbeat (sync request acts as heartbeat)
-        sendMessage(MESSAGE_TYPES.SHIFT_SYNC_REQUEST, {
-          scheduleId,
-          periodIndex: currentPeriod,
-        });
+        // Only send if scheduleId is available
+        if (scheduleId) {
+          sendMessage(MESSAGE_TYPES.SHIFT_SYNC_REQUEST, {
+            scheduleId,
+            periodIndex: currentPeriod,
+          });
+        }
       }
     }, HEARTBEAT_INTERVAL);
   }, [scheduleId, currentPeriod, sendMessage]);
