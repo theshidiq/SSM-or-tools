@@ -475,7 +475,15 @@ export const useWebSocketShifts = (
    */
   const syncSchedule = useCallback(() => {
     if (!scheduleId) {
-      console.warn(`⚠️ [WEBSOCKET-SHIFTS] Cannot sync: No scheduleId`);
+      console.log(`⏳ [WEBSOCKET-SHIFTS] Skipping sync: No scheduleId`);
+      return;
+    }
+
+    // Don't attempt sync if not connected
+    if (!isConnected || wsRef.current?.readyState !== WebSocket.OPEN) {
+      console.log(
+        `⏳ [WEBSOCKET-SHIFTS] Skipping sync: Not connected (will sync after reconnection)`,
+      );
       return;
     }
 
@@ -484,7 +492,7 @@ export const useWebSocketShifts = (
       scheduleId,
       periodIndex: currentPeriod,
     });
-  }, [scheduleId, currentPeriod, sendMessage]);
+  }, [scheduleId, currentPeriod, sendMessage, isConnected]);
 
   // Connect on mount and when enabled/period changes
   useEffect(() => {
