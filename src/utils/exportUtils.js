@@ -165,9 +165,9 @@ export const generatePrintHTML = (staffMembers, dateRange, schedule) => {
               width: 100%;
             }
             th, td {
-              padding: 6px 2px;
+              padding: 3px 2px;
               font-size: 12px;
-              height: 24px;
+              height: 18px;
             }
             .shift-symbol { font-size: 16px; }
             h1 { font-size: 14px; margin: 5px 0; }
