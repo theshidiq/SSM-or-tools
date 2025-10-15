@@ -154,7 +154,7 @@ export const generatePrintHTML = (staffMembers, dateRange, schedule) => {
           }
 
           @media print {
-            @page { size: A4 landscape; margin: 10mm; }
+            @page { size: A4 portrait; margin: 10mm; }
             body {
               font-size: 10px;
               margin: 0;
