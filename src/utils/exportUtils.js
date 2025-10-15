@@ -124,7 +124,7 @@ export const generatePrintHTML = (staffMembers, dateRange, schedule) => {
             border: 1px solid #ddd;
             padding: 4px;
             text-align: center;
-            font-size: 10px;
+            font-size: 12px;
             width: auto;
             overflow: hidden;
             text-overflow: ellipsis;
@@ -156,19 +156,19 @@ export const generatePrintHTML = (staffMembers, dateRange, schedule) => {
           @media print {
             @page { size: A4 portrait; margin: 10mm; }
             body {
-              font-size: 10px;
+              font-size: 12px;
               margin: 0;
               padding: 5px;
             }
             table {
-              font-size: 9px;
+              font-size: 12px;
               width: 100%;
             }
             th, td {
               padding: 2px;
-              font-size: 8px;
+              font-size: 12px;
             }
-            .shift-symbol { font-size: 14px; }
+            .shift-symbol { font-size: 16px; }
             h1 { font-size: 14px; margin: 5px 0; }
             .date-header {
               min-width: 40px;
@@ -245,7 +245,7 @@ export const generatePrintHTML = (staffMembers, dateRange, schedule) => {
           </tbody>
         </table>
         <div class="legend">
-          <p>△ = Early Shift (10:00-18:00) | ○ = Normal Shift (11:00-20:00) | ◇ = Late Shift (15:00-23:00) | × = Off Day | ⊘ = Unavailable</p>
+          <p>△ = Early Shift | ○ = Normal Shift | ◇ = Late Shift | × = Off Day | ⊘ = Unavailable</p>
         </div>
       </body>
     </html>
