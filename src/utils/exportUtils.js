@@ -90,7 +90,7 @@ export const generatePrintHTML = (staffMembers, dateRange, schedule) => {
     <!DOCTYPE html>
     <html>
       <head>
-        <title>Shift Schedule</title>
+        <title>調理場シフト表</title>
         <meta charset="utf-8">
         <style>
           body {
@@ -154,7 +154,10 @@ export const generatePrintHTML = (staffMembers, dateRange, schedule) => {
           }
 
           @media print {
-            @page { size: A4 portrait; margin: 10mm; }
+            @page {
+              size: A4 portrait;
+              margin: 10mm;
+            }
             body {
               font-size: 12px;
               margin: 0;
