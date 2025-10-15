@@ -93,11 +93,52 @@ export const generatePrintHTML = (staffMembers, dateRange, schedule) => {
         <title>Shift Schedule</title>
         <meta charset="utf-8">
         <style>
-          body { font-family: Arial, sans-serif; margin: 10px; }
-          table { border-collapse: collapse; width: 100%; margin-bottom: 10px; }
-          th, td { border: 1px solid #ddd; padding: 4px; text-align: center; font-size: 10px; }
-          th { background-color: #f2f2f2; font-weight: bold; }
-          .date-header { font-weight: bold; background-color: #f9f9f9; }
+          body {
+            font-family: Arial, sans-serif;
+            margin: 10px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+          }
+          .content-wrapper {
+            max-width: 100%;
+            width: 100%;
+          }
+          h1 {
+            font-size: 16px;
+            margin: 8px 0;
+            text-align: center;
+          }
+          p {
+            text-align: center;
+            margin: 5px 0;
+          }
+          table {
+            border-collapse: collapse;
+            width: 100%;
+            max-width: 100%;
+            margin: 10px auto;
+            table-layout: fixed;
+          }
+          th, td {
+            border: 1px solid #ddd;
+            padding: 4px;
+            text-align: center;
+            font-size: 10px;
+            width: auto;
+            overflow: hidden;
+            text-overflow: ellipsis;
+          }
+          th {
+            background-color: #f2f2f2;
+            font-weight: bold;
+          }
+          .date-header {
+            font-weight: bold;
+            background-color: #f9f9f9;
+            min-width: 50px;
+            width: 50px;
+          }
           .not-working { background-color: #f0f0f0; color: #999; }
           .shift-symbol { font-size: 18px; font-weight: bold; }
           .early { color: #2563eb; }
@@ -106,15 +147,33 @@ export const generatePrintHTML = (staffMembers, dateRange, schedule) => {
           .off { color: #dc2626; }
           .holiday { color: #eab308; }
           .unavailable { color: #991b1b; }
-          h1 { font-size: 16px; margin: 8px 0; }
+          .legend {
+            margin-top: 10px;
+            font-size: 10px;
+            text-align: center;
+          }
 
           @media print {
-            @page { size: A4; margin: 10mm; }
-            body { font-size: 10px; margin: 5px; }
-            table { font-size: 9px; }
-            th, td { padding: 3px; }
-            .shift-symbol { font-size: 16px; }
+            @page { size: A4 landscape; margin: 10mm; }
+            body {
+              font-size: 10px;
+              margin: 0;
+              padding: 5px;
+            }
+            table {
+              font-size: 9px;
+              width: 100%;
+            }
+            th, td {
+              padding: 2px;
+              font-size: 8px;
+            }
+            .shift-symbol { font-size: 14px; }
             h1 { font-size: 14px; margin: 5px 0; }
+            .date-header {
+              min-width: 40px;
+              width: 40px;
+            }
           }
         </style>
       </head>
@@ -185,7 +244,7 @@ export const generatePrintHTML = (staffMembers, dateRange, schedule) => {
               .join("")}
           </tbody>
         </table>
-        <div style="margin-top: 20px; font-size: 12px;">
+        <div class="legend">
           <p>△ = Early Shift (10:00-18:00) | ○ = Normal Shift (11:00-20:00) | ◇ = Late Shift (15:00-23:00) | × = Off Day | ⊘ = Unavailable</p>
         </div>
       </body>
