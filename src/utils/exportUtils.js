@@ -206,7 +206,7 @@ export const generatePrintHTML = (staffMembers, dateRange, schedule) => {
                 const dateKey = format(validDate, "yyyy-MM-dd");
                 return `
                 <tr>
-                  <td class="date-header">${format(validDate, "dd-MMM")}<br><small>${format(validDate, "EEE", { locale: ja })}</small></td>
+                  <td class="date-header">${format(validDate, "d")}<br><small>${format(validDate, "EEE", { locale: ja })}</small></td>
                   ${staffMembers
                     .map((staff) => {
                       // Check if date is within work period
