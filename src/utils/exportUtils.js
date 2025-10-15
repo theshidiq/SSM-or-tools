@@ -99,6 +99,7 @@ export const generatePrintHTML = (staffMembers, dateRange, schedule) => {
           th { background-color: #f2f2f2; font-weight: bold; }
           .date-header { font-weight: bold; background-color: #f9f9f9; }
           .not-working { background-color: #f0f0f0; color: #999; }
+          .shift-symbol { font-size: 18px; font-weight: bold; }
           .early { color: #2563eb; }
           .normal { color: #374151; }
           .late { color: #7c3aed; }
@@ -112,6 +113,7 @@ export const generatePrintHTML = (staffMembers, dateRange, schedule) => {
             body { font-size: 10px; margin: 5px; }
             table { font-size: 9px; }
             th, td { padding: 3px; }
+            .shift-symbol { font-size: 16px; }
             h1 { font-size: 14px; margin: 5px 0; }
           }
         </style>
@@ -169,7 +171,7 @@ export const generatePrintHTML = (staffMembers, dateRange, schedule) => {
                         symbol = symbolEntry ? shift : (shiftSymbols[shift]?.symbol || shift);
                       }
 
-                      return `<td class="${shift || 'normal'}">${symbol}</td>`;
+                      return `<td class="${shift || 'normal'}"><span class="shift-symbol">${symbol}</span></td>`;
                     })
                     .join("")}
                 </tr>
