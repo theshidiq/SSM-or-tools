@@ -157,6 +157,12 @@ export const generatePrintHTML = (staffMembers, dateRange, schedule) => {
             @page {
               size: A4 portrait;
               margin: 10mm;
+              @bottom-left { content: ''; }
+              @bottom-center { content: ''; }
+              @bottom-right { content: ''; }
+              @top-left { content: ''; }
+              @top-center { content: ''; }
+              @top-right { content: ''; }
             }
             body {
               font-size: 12px;
