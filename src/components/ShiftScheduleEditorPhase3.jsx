@@ -49,6 +49,7 @@ const ShiftScheduleEditorPhase3 = ({
   loadScheduleData: _legacyLoadScheduleData, // Legacy prop - not used
   showSettingsModal: externalShowSettingsModal, // External control from App.js
   setShowSettingsModal: externalSetShowSettingsModal, // External control from App.js
+  onConnectionPropsChange, // Callback to send connection props to parent
 }) => {
   // Main state - initialize with 0, will be updated when periods load
   const [currentMonthIndex, setCurrentMonthIndex] = useState(0);
@@ -529,6 +530,17 @@ const ShiftScheduleEditorPhase3 = ({
       document.removeEventListener('fullscreenchange', handleFullscreenChange);
     };
   }, []);
+
+  // Send connection props to parent for sidebar
+  useEffect(() => {
+    if (onConnectionPropsChange) {
+      onConnectionPropsChange({
+        isConnected,
+        isSaving,
+        prefetchStats,
+      });
+    }
+  }, [isConnected, isSaving, prefetchStats, onConnectionPropsChange]);
 
   // Loading state - Skip intermediate loading, go directly to skeleton
   if (periodsLoading) {

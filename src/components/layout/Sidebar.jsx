@@ -17,7 +17,32 @@ const Sidebar = ({
   currentView = "schedule",
   onViewChange,
   onShowSettings,
+  // Connection status props
+  isConnected = true,
+  isSaving = false,
+  prefetchStats = null,
 }) => {
+  // Calculate realtime status
+  const hasAllPeriodsData = prefetchStats?.memoryUsage?.periodCount > 0;
+  const isInstantNavEnabled = hasAllPeriodsData;
+
+  const realtimeStatus = (() => {
+    if (!isConnected && !hasAllPeriodsData)
+      return { type: "error", message: "Offline Mode", instantNav: false };
+    if (isSaving)
+      return {
+        type: "saving",
+        message: "Saving...",
+        instantNav: isInstantNavEnabled,
+      };
+
+    return {
+      type: "connected",
+      message: isInstantNavEnabled ? "⚡ Instant Navigation" : "Database Sync",
+      instantNav: isInstantNavEnabled,
+      periodsCached: prefetchStats?.memoryUsage?.periodCount || 0,
+    };
+  })();
   const menuItems = [
     { id: "schedule", label: "Schedule", icon: Calendar, type: "nav" },
     { id: "monitor", label: "Monitor", icon: Monitor, type: "nav" },
@@ -100,6 +125,39 @@ const Sidebar = ({
 
       {/* Status and User Section */}
       <div className="p-4 border-t border-sidebar-border">
+        {/* Connection Status Badges */}
+        <div className="flex flex-col gap-2 mb-3">
+          {/* Connection Status Badge */}
+          <Badge
+            variant={isConnected ? "default" : "destructive"}
+            className={
+              isConnected
+                ? realtimeStatus.instantNav
+                  ? "bg-gradient-to-r from-green-500 to-blue-500 text-white animate-pulse"
+                  : "bg-green-500 text-white"
+                : "bg-red-500 text-white"
+            }
+            title={
+              realtimeStatus.instantNav
+                ? `All ${realtimeStatus.periodsCached} periods cached - Navigation is instant!`
+                : realtimeStatus.message
+            }
+          >
+            {realtimeStatus.message}
+          </Badge>
+
+          {/* Cache Status Badge */}
+          {realtimeStatus.instantNav && prefetchStats?.memoryUsage && (
+            <Badge
+              variant="outline"
+              className="bg-blue-50 text-blue-700 border-blue-300"
+              title={`Memory: ${prefetchStats.memoryUsage.estimatedMemoryKB} KB | Cache Hit Rate: ${prefetchStats.cacheStats?.hitRate || "N/A"}`}
+            >
+              📦 {prefetchStats.memoryUsage.periodCount} periods cached
+            </Badge>
+          )}
+        </div>
+
         {/* Status and ID */}
         <div className="flex flex-col gap-2 mb-4">
           <div className="flex items-center gap-2">

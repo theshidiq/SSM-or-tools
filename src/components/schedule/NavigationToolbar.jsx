@@ -340,40 +340,8 @@ const NavigationToolbar = ({
       <Card className="mb-6">
         <CardContent className="p-4">
           <div className="flex flex-col lg:flex-row lg:items-center gap-4">
-            {/* Title and Status Badges */}
-            <div className="flex items-center gap-3">
-              <h1 className="text-2xl font-bold japanese-text">調理場シフト表</h1>
-
-              {/* Connection Status Badge */}
-              <Badge
-                variant={isConnected ? "default" : "destructive"}
-                className={
-                  isConnected
-                    ? realtimeStatus.instantNav
-                      ? "bg-gradient-to-r from-green-500 to-blue-500 text-white animate-pulse"
-                      : "bg-green-500 text-white"
-                    : "bg-red-500 text-white"
-                }
-                title={
-                  realtimeStatus.instantNav
-                    ? `All ${realtimeStatus.periodsCached} periods cached - Navigation is instant!`
-                    : realtimeStatus.message
-                }
-              >
-                {realtimeStatus.message}
-              </Badge>
-
-              {/* Cache Status Badge */}
-              {realtimeStatus.instantNav && prefetchStats?.memoryUsage && (
-                <Badge
-                  variant="outline"
-                  className="bg-blue-50 text-blue-700 border-blue-300"
-                  title={`Memory: ${prefetchStats.memoryUsage.estimatedMemoryKB} KB | Cache Hit Rate: ${prefetchStats.cacheStats?.hitRate || "N/A"}`}
-                >
-                  📦 {prefetchStats.memoryUsage.periodCount} periods cached
-                </Badge>
-              )}
-            </div>
+            {/* Title - Smaller */}
+            <h1 className="text-lg font-bold japanese-text">調理場シフト表</h1>
 
             <Separator orientation="vertical" className="h-8 hidden lg:block" />
 

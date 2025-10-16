@@ -1,7 +1,14 @@
 import React, { useState } from "react";
 import Sidebar from "./Sidebar";
 
-const DashboardLayout = ({ children, onShowSettings }) => {
+const DashboardLayout = ({
+  children,
+  onShowSettings,
+  // Connection status props for sidebar
+  isConnected,
+  isSaving,
+  prefetchStats,
+}) => {
   const [currentView, setCurrentView] = useState("schedule");
 
   const handleViewChange = (view) => {
@@ -38,6 +45,9 @@ const DashboardLayout = ({ children, onShowSettings }) => {
         currentView={currentView}
         onViewChange={handleViewChange}
         onShowSettings={onShowSettings}
+        isConnected={isConnected}
+        isSaving={isSaving}
+        prefetchStats={prefetchStats}
       />
 
       {/* Main Content */}

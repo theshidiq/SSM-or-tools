@@ -19,6 +19,13 @@ function AppContent() {
   const [migrationComplete, setMigrationComplete] = useState(false);
   const [showSettingsModal, setShowSettingsModal] = useState(false);
 
+  // State to receive connection props from ShiftScheduleEditorPhase3
+  const [connectionProps, setConnectionProps] = useState({
+    isConnected: false,
+    isSaving: false,
+    prefetchStats: null,
+  });
+
   // Phase 4: Use prefetch architecture directly - no forced data needed
   const effectiveScheduleData = scheduleData;
 
@@ -27,7 +34,12 @@ function AppContent() {
       {/* Period Migration - handles localStorage to database migration */}
       <PeriodMigration onMigrationComplete={() => setMigrationComplete(true)} />
 
-      <DashboardLayout onShowSettings={() => setShowSettingsModal(true)}>
+      <DashboardLayout
+        onShowSettings={() => setShowSettingsModal(true)}
+        isConnected={connectionProps.isConnected}
+        isSaving={connectionProps.isSaving}
+        prefetchStats={connectionProps.prefetchStats}
+      >
         {/* PHASE 4 PREFETCH ARCHITECTURE - Production Implementation */}
         <ShiftScheduleEditorPhase3
           supabaseScheduleData={effectiveScheduleData}
@@ -37,6 +49,7 @@ function AppContent() {
           loadScheduleData={loadScheduleData}
           showSettingsModal={showSettingsModal}
           setShowSettingsModal={setShowSettingsModal}
+          onConnectionPropsChange={setConnectionProps}
         />
       </DashboardLayout>
     </>
