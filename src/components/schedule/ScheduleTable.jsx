@@ -706,12 +706,12 @@ const ScheduleTable = ({
 
       {/* Sticky Staff Names Header Row - Separate from table */}
       <div
-        className="sticky top-0 z-[1050] bg-white"
+        className="sticky top-[96px] z-[1050] bg-white shadow-sm"
         style={{
           minWidth: `${40 + (orderedStaffMembers?.length || 0) * 40}px`,
         }}
       >
-        <div className="flex border-b-2 border-border">
+        <div className="flex border-b border-border">
           {/* Corner Cell - 日付 */}
           <div
             className="bg-gray-700 text-white font-bold hover:bg-gray-600 border-r-2 border-border flex items-center justify-center"
