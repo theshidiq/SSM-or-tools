@@ -523,7 +523,8 @@ const ShiftScheduleEditorPhase3 = ({
 
   // Header auto-hide handlers (only when scrolling table with cursor on it)
   const handleTableScroll = useCallback((event) => {
-    if (!isMouseOverTable) return; // Only hide if cursor is on table
+    // Use ref to avoid stale closure - check current mouse state
+    if (!tableContainerRef.current?.dataset?.mouseOver) return;
 
     const currentScrollY = event.target.scrollTop;
     const scrollDifference = currentScrollY - lastScrollY.current;
@@ -549,15 +550,23 @@ const ShiftScheduleEditorPhase3 = ({
     scrollTimeoutRef.current = setTimeout(() => {
       setIsHeaderVisible(true);
     }, 1000);
-  }, [isMouseOverTable]);
+  }, []);
 
   const handleTableMouseEnter = useCallback(() => {
     setIsMouseOverTable(true);
+    // Set data attribute to track mouse state for scroll handler
+    if (tableContainerRef.current) {
+      tableContainerRef.current.dataset.mouseOver = 'true';
+    }
   }, []);
 
   const handleTableMouseLeave = useCallback(() => {
     setIsMouseOverTable(false);
     setIsHeaderVisible(true); // Always show header when cursor leaves table
+    // Clear data attribute
+    if (tableContainerRef.current) {
+      delete tableContainerRef.current.dataset.mouseOver;
+    }
   }, []);
 
   // Cleanup scroll timeout on unmount
@@ -754,9 +763,6 @@ const ShiftScheduleEditorPhase3 = ({
               ? "none"
               : "opacity 200ms ease-in-out",
           }}
-          onMouseEnter={handleTableMouseEnter}
-          onMouseLeave={handleTableMouseLeave}
-          ref={tableContainerRef}
         >
           {viewMode === "table" ? (
             // Phase 4: Only show skeleton during initial load, not during navigation
@@ -767,16 +773,21 @@ const ShiftScheduleEditorPhase3 = ({
                 showConnectionStatus={false}
               />
             ) : (
-              <ScheduleTable
-                orderedStaffMembers={currentStaff}
-                dateRange={dateRange}
-                schedule={schedule}
-                editingColumn={editingColumn}
-                editingSpecificColumn={editingSpecificColumn}
-                editingNames={editingNames}
-                setEditingNames={setEditingNames}
-                setEditingSpecificColumn={setEditingSpecificColumn}
-                showDropdown={showDropdown}
+              <div
+                onMouseEnter={handleTableMouseEnter}
+                onMouseLeave={handleTableMouseLeave}
+                ref={tableContainerRef}
+              >
+                <ScheduleTable
+                  orderedStaffMembers={currentStaff}
+                  dateRange={dateRange}
+                  schedule={schedule}
+                  editingColumn={editingColumn}
+                  editingSpecificColumn={editingSpecificColumn}
+                  editingNames={editingNames}
+                  setEditingNames={setEditingNames}
+                  setEditingSpecificColumn={setEditingSpecificColumn}
+                  showDropdown={showDropdown}
                 setShowDropdown={setShowDropdown}
                 updateShift={handleShiftUpdate}
                 customText={customText}
@@ -792,6 +803,7 @@ const ShiftScheduleEditorPhase3 = ({
                 hasAllPeriodsData={prefetchStats?.memoryUsage?.periodCount > 0}
                 onTableScroll={handleTableScroll}
               />
+              </div>
             )
           ) : viewMode === "card" ? (
             <StaffCardView
