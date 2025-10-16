@@ -706,8 +706,7 @@ const ScheduleTable = ({
 
       <div
         ref={tableRef}
-        className="table-container overflow-auto relative"
-        style={{ maxHeight: "calc(100vh - 110px)" }}
+        className="table-container relative"
         tabIndex={0}
         onMouseUp={() => {
           // End selection on mouse up and clear drag state
@@ -737,7 +736,7 @@ const ScheduleTable = ({
             style={{
               position: "sticky",
               top: 0,
-              zIndex: 500,
+              zIndex: 1000,
               backgroundColor: "hsl(var(--background))",
             }}
           >
