@@ -706,41 +706,22 @@ const ScheduleTable = ({
 
       {/* Sticky Staff Names Header Row - Separate from table */}
       <div
-        className="sticky top-[96px] z-[1050] bg-white shadow-sm"
+        className="sticky top-[96px] z-[1050] bg-white"
         style={{
           minWidth: `${40 + (orderedStaffMembers?.length || 0) * 40}px`,
         }}
       >
-        <div className="flex border-b border-border">
-          {/* Corner Cell - 日付 */}
-          <div
-            className="bg-gray-700 text-white font-bold hover:bg-gray-600 border-r-2 border-border flex items-center justify-center"
-            style={{
-              minWidth: "40px",
-              width: "40px",
-              maxWidth: "40px",
-              height: "50px",
-            }}
-          >
-            <span className="text-xs font-bold">日付</span>
-          </div>
-
-          {/* Staff Name Cells */}
-          {(orderedStaffMembers || []).map((staff, staffIndex) => {
-            if (!staff) return null;
-            return (
-              <div
-                key={staff.id}
-                className={`bg-gray-700 text-white text-center border-r border-border cursor-pointer font-bold hover:bg-gray-600 relative ${
-                  staffIndex === (orderedStaffMembers?.length || 0) - 1
-                    ? "border-r-2"
-                    : ""
-                }`}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  selectWeek(staff.id);
-                }}
-                title={`Click to select entire week for ${staff.name}`}
+        <table
+          className="w-full text-sm border-collapse"
+          style={{
+            minWidth: `${40 + (orderedStaffMembers?.length || 0) * 40}px`,
+          }}
+        >
+          <TableHeader>
+            <TableRow>
+              {/* Corner Cell - 日付 */}
+              <TableHead
+                className="text-center bg-gray-700 text-white font-bold hover:bg-gray-600 border-r-2 border-border p-0"
                 style={{
                   minWidth: "40px",
                   width: "40px",
@@ -748,6 +729,32 @@ const ScheduleTable = ({
                   height: "50px",
                 }}
               >
+                <span className="text-xs font-bold">日付</span>
+              </TableHead>
+
+              {/* Staff Name Cells */}
+              {(orderedStaffMembers || []).map((staff, staffIndex) => {
+                if (!staff) return null;
+                return (
+                  <TableHead
+                    key={staff.id}
+                    className={`bg-gray-700 text-white text-center border-r border-border cursor-pointer font-bold hover:bg-gray-600 relative p-0 ${
+                      staffIndex === (orderedStaffMembers?.length || 0) - 1
+                        ? "border-r-2"
+                        : ""
+                    }`}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      selectWeek(staff.id);
+                    }}
+                    title={`Click to select entire week for ${staff.name}`}
+                    style={{
+                      minWidth: "40px",
+                      width: "40px",
+                      maxWidth: "40px",
+                      height: "50px",
+                    }}
+                  >
                 <div className="flex flex-col items-center justify-center py-1 px-1 h-full">
                   {/* Delete Button (only visible in delete mode) */}
                   {editingColumn === "delete-mode" && (
@@ -806,10 +813,12 @@ const ScheduleTable = ({
                     </span>
                   )}
                 </div>
-              </div>
-            );
-          })}
-        </div>
+                  </TableHead>
+                );
+              })}
+            </TableRow>
+          </TableHeader>
+        </table>
       </div>
 
       {/* Table Container */}
