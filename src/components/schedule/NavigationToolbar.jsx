@@ -69,6 +69,10 @@ const NavigationToolbar = ({
   onEnableAI,
   // Fullscreen prop
   isFullscreen = false,
+  // Connection status props
+  isConnected = true,
+  isSaving = false,
+  prefetchStats = null,
 }) => {
   const [showAIModal, setShowAIModal] = useState(false);
   const monthPickerRef = useRef(null);
@@ -309,11 +313,70 @@ const NavigationToolbar = ({
     };
   }, [showMonthPicker, setShowMonthPicker]);
 
+  // Calculate realtime status
+  const hasAllPeriodsData = prefetchStats?.memoryUsage?.periodCount > 0;
+  const isInstantNavEnabled = hasAllPeriodsData;
+
+  const realtimeStatus = (() => {
+    if (!isConnected && !hasAllPeriodsData)
+      return { type: "error", message: "Offline Mode", instantNav: false };
+    if (isSaving)
+      return {
+        type: "saving",
+        message: "Saving...",
+        instantNav: isInstantNavEnabled,
+      };
+
+    return {
+      type: "connected",
+      message: isInstantNavEnabled ? "⚡ Instant Navigation" : "Database Sync",
+      instantNav: isInstantNavEnabled,
+      periodsCached: prefetchStats?.memoryUsage?.periodCount || 0,
+    };
+  })();
+
   return (
     <TooltipProvider>
       <Card className="mb-6">
         <CardContent className="p-4">
           <div className="flex flex-col lg:flex-row lg:items-center gap-4">
+            {/* Title and Status Badges */}
+            <div className="flex items-center gap-3">
+              <h1 className="text-2xl font-bold japanese-text">調理場シフト表</h1>
+
+              {/* Connection Status Badge */}
+              <Badge
+                variant={isConnected ? "default" : "destructive"}
+                className={
+                  isConnected
+                    ? realtimeStatus.instantNav
+                      ? "bg-gradient-to-r from-green-500 to-blue-500 text-white animate-pulse"
+                      : "bg-green-500 text-white"
+                    : "bg-red-500 text-white"
+                }
+                title={
+                  realtimeStatus.instantNav
+                    ? `All ${realtimeStatus.periodsCached} periods cached - Navigation is instant!`
+                    : realtimeStatus.message
+                }
+              >
+                {realtimeStatus.message}
+              </Badge>
+
+              {/* Cache Status Badge */}
+              {realtimeStatus.instantNav && prefetchStats?.memoryUsage && (
+                <Badge
+                  variant="outline"
+                  className="bg-blue-50 text-blue-700 border-blue-300"
+                  title={`Memory: ${prefetchStats.memoryUsage.estimatedMemoryKB} KB | Cache Hit Rate: ${prefetchStats.cacheStats?.hitRate || "N/A"}`}
+                >
+                  📦 {prefetchStats.memoryUsage.periodCount} periods cached
+                </Badge>
+              )}
+            </div>
+
+            <Separator orientation="vertical" className="h-8 hidden lg:block" />
+
             {/* Left Side - Month Navigation */}
             <div className="flex items-center gap-2">
               {/* Previous Month Button */}

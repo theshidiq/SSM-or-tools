@@ -587,54 +587,7 @@ const ShiftScheduleEditorPhase3 = ({
 
   return (
     <div className="shift-schedule-container space-y-6 p-6">
-        {/* Header with Phase 4 instant navigation indicator - Hidden in fullscreen */}
-        {!isFullscreen && (
-          <Card>
-            <CardHeader>
-              <div className="flex items-center justify-between">
-                <CardTitle className="text-2xl font-bold">
-                  調理場シフト表
-                </CardTitle>
-                <div className="flex items-center space-x-2">
-                  <Badge
-                    variant="secondary"
-                    className="bg-green-100 text-green-800"
-                  >
-                    Phase 4: Instant Navigation
-                  </Badge>
-                  {/* Phase 4: Connection status with instant nav indicator */}
-                  <Badge
-                    variant={isConnected ? "default" : "destructive"}
-                    className={
-                      isConnected
-                        ? realtimeStatus.instantNav
-                          ? "bg-gradient-to-r from-green-500 to-blue-500 text-white animate-pulse"
-                          : "bg-green-500 text-white"
-                        : "bg-red-500 text-white"
-                    }
-                    title={
-                      realtimeStatus.instantNav
-                        ? `All ${realtimeStatus.periodsCached} periods cached - Navigation is instant!`
-                        : realtimeStatus.message
-                    }
-                  >
-                    {realtimeStatus.message}
-                  </Badge>
-                  {/* Phase 4: Cache status indicator */}
-                  {realtimeStatus.instantNav && prefetchStats?.memoryUsage && (
-                    <Badge
-                      variant="outline"
-                      className="bg-blue-50 text-blue-700 border-blue-300"
-                      title={`Memory: ${prefetchStats.memoryUsage.estimatedMemoryKB} KB | Cache Hit Rate: ${prefetchStats.cacheStats?.hitRate || "N/A"}`}
-                    >
-                      📦 {prefetchStats.memoryUsage.periodCount} periods cached
-                    </Badge>
-                  )}
-                </div>
-              </div>
-            </CardHeader>
-          </Card>
-        )}
+        {/* Header card hidden - title moved to toolbar */}
 
         {/* Error Display - Hidden in fullscreen */}
         {error && !isFullscreen && (
