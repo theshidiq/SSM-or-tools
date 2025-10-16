@@ -609,7 +609,7 @@ const ShiftScheduleEditorPhase3 = ({
         )}
 
         {/* Navigation Toolbar - Sticky at top */}
-        <div className="sticky top-0 z-40 bg-white">
+        <div className="sticky top-0 z-[1100] bg-white">
           <NavigationToolbar
           currentMonthIndex={currentMonthIndex}
           periods={realtimePeriods}
