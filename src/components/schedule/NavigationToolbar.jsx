@@ -67,6 +67,8 @@ const NavigationToolbar = ({
   // AI loading props
   aiEnabled = false,
   onEnableAI,
+  // Fullscreen prop
+  isFullscreen = false,
 }) => {
   const [showAIModal, setShowAIModal] = useState(false);
   const monthPickerRef = useRef(null);
@@ -499,7 +501,7 @@ const NavigationToolbar = ({
               <Tooltip>
                 <TooltipTrigger asChild>
                   <Button
-                    variant="outline"
+                    variant={isFullscreen ? "default" : "outline"}
                     size="sm"
                     onClick={() => {
                       if (!document.fullscreenElement) {
@@ -513,7 +515,7 @@ const NavigationToolbar = ({
                   </Button>
                 </TooltipTrigger>
                 <TooltipContent>
-                  <p>Toggle fullscreen</p>
+                  <p>{isFullscreen ? 'Exit Fullscreen (ESC)' : 'Enter Fullscreen'}</p>
                 </TooltipContent>
               </Tooltip>
 

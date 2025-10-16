@@ -71,6 +71,9 @@ const ShiftScheduleEditorPhase3 = ({
   const [customText, setCustomText] = useState("");
   const [aiEnabled, setAiEnabled] = useState(false);
 
+  // Fullscreen mode state
+  const [isFullscreen, setIsFullscreen] = useState(false);
+
   // Header auto-hide state (only when scrolling table)
   const [isHeaderVisible, setIsHeaderVisible] = useState(true);
   const [isMouseOverTable, setIsMouseOverTable] = useState(false);
@@ -578,6 +581,19 @@ const ShiftScheduleEditorPhase3 = ({
     };
   }, []);
 
+  // Fullscreen change detection
+  useEffect(() => {
+    const handleFullscreenChange = () => {
+      setIsFullscreen(!!document.fullscreenElement);
+    };
+
+    document.addEventListener('fullscreenchange', handleFullscreenChange);
+
+    return () => {
+      document.removeEventListener('fullscreenchange', handleFullscreenChange);
+    };
+  }, []);
+
   // Loading state - Skip intermediate loading, go directly to skeleton
   if (periodsLoading) {
     return (
@@ -635,63 +651,65 @@ const ShiftScheduleEditorPhase3 = ({
 
   return (
     <div className="shift-schedule-container space-y-6 p-6">
-        {/* Header with Phase 4 instant navigation indicator */}
-        <Card
-          className="transition-all duration-300 ease-in-out"
-          style={{
-            transform: isHeaderVisible ? 'translateY(0)' : 'translateY(-100%)',
-            opacity: isHeaderVisible ? 1 : 0,
-            pointerEvents: isHeaderVisible ? 'auto' : 'none',
-            marginBottom: isHeaderVisible ? '0' : '-100px',
-          }}
-        >
-          <CardHeader>
-            <div className="flex items-center justify-between">
-              <CardTitle className="text-2xl font-bold">
-                調理場シフト表
-              </CardTitle>
-              <div className="flex items-center space-x-2">
-                <Badge
-                  variant="secondary"
-                  className="bg-green-100 text-green-800"
-                >
-                  Phase 4: Instant Navigation
-                </Badge>
-                {/* Phase 4: Connection status with instant nav indicator */}
-                <Badge
-                  variant={isConnected ? "default" : "destructive"}
-                  className={
-                    isConnected
-                      ? realtimeStatus.instantNav
-                        ? "bg-gradient-to-r from-green-500 to-blue-500 text-white animate-pulse"
-                        : "bg-green-500 text-white"
-                      : "bg-red-500 text-white"
-                  }
-                  title={
-                    realtimeStatus.instantNav
-                      ? `All ${realtimeStatus.periodsCached} periods cached - Navigation is instant!`
-                      : realtimeStatus.message
-                  }
-                >
-                  {realtimeStatus.message}
-                </Badge>
-                {/* Phase 4: Cache status indicator */}
-                {realtimeStatus.instantNav && prefetchStats?.memoryUsage && (
+        {/* Header with Phase 4 instant navigation indicator - Hidden in fullscreen */}
+        {!isFullscreen && (
+          <Card
+            className="transition-all duration-300 ease-in-out"
+            style={{
+              transform: isHeaderVisible ? 'translateY(0)' : 'translateY(-100%)',
+              opacity: isHeaderVisible ? 1 : 0,
+              pointerEvents: isHeaderVisible ? 'auto' : 'none',
+              marginBottom: isHeaderVisible ? '0' : '-100px',
+            }}
+          >
+            <CardHeader>
+              <div className="flex items-center justify-between">
+                <CardTitle className="text-2xl font-bold">
+                  調理場シフト表
+                </CardTitle>
+                <div className="flex items-center space-x-2">
                   <Badge
-                    variant="outline"
-                    className="bg-blue-50 text-blue-700 border-blue-300"
-                    title={`Memory: ${prefetchStats.memoryUsage.estimatedMemoryKB} KB | Cache Hit Rate: ${prefetchStats.cacheStats?.hitRate || "N/A"}`}
+                    variant="secondary"
+                    className="bg-green-100 text-green-800"
                   >
-                    📦 {prefetchStats.memoryUsage.periodCount} periods cached
+                    Phase 4: Instant Navigation
                   </Badge>
-                )}
+                  {/* Phase 4: Connection status with instant nav indicator */}
+                  <Badge
+                    variant={isConnected ? "default" : "destructive"}
+                    className={
+                      isConnected
+                        ? realtimeStatus.instantNav
+                          ? "bg-gradient-to-r from-green-500 to-blue-500 text-white animate-pulse"
+                          : "bg-green-500 text-white"
+                        : "bg-red-500 text-white"
+                    }
+                    title={
+                      realtimeStatus.instantNav
+                        ? `All ${realtimeStatus.periodsCached} periods cached - Navigation is instant!`
+                        : realtimeStatus.message
+                    }
+                  >
+                    {realtimeStatus.message}
+                  </Badge>
+                  {/* Phase 4: Cache status indicator */}
+                  {realtimeStatus.instantNav && prefetchStats?.memoryUsage && (
+                    <Badge
+                      variant="outline"
+                      className="bg-blue-50 text-blue-700 border-blue-300"
+                      title={`Memory: ${prefetchStats.memoryUsage.estimatedMemoryKB} KB | Cache Hit Rate: ${prefetchStats.cacheStats?.hitRate || "N/A"}`}
+                    >
+                      📦 {prefetchStats.memoryUsage.periodCount} periods cached
+                    </Badge>
+                  )}
+                </div>
               </div>
-            </div>
-          </CardHeader>
-        </Card>
+            </CardHeader>
+          </Card>
+        )}
 
-        {/* Show Header Button - Appears when header is hidden */}
-        {!isHeaderVisible && (
+        {/* Show Header Button - Appears when header is hidden (not in fullscreen) */}
+        {!isHeaderVisible && !isFullscreen && (
           <button
             onClick={() => setIsHeaderVisible(true)}
             className="fixed top-2 right-1/2 transform translate-x-1/2 z-50 px-4 py-2 bg-blue-500 hover:bg-blue-600 text-white text-sm font-medium rounded-full shadow-lg transition-all duration-200 flex items-center gap-2"
@@ -714,8 +732,8 @@ const ShiftScheduleEditorPhase3 = ({
           </button>
         )}
 
-        {/* Error Display - Temporarily disabled for Phase 3 testing */}
-        {error && (
+        {/* Error Display - Hidden in fullscreen */}
+        {error && !isFullscreen && (
           <Alert className="mb-4">
             <AlertDescription>Error: {error}</AlertDescription>
           </Alert>
@@ -749,6 +767,7 @@ const ShiftScheduleEditorPhase3 = ({
           onEnableAI={setAiEnabled}
           isConnected={isConnected}
           isSaving={isSaving}
+          isFullscreen={isFullscreen}
         />
 
         {/* Main Interface - Switch between views with Phase 4 smooth transitions */}
@@ -817,8 +836,8 @@ const ShiftScheduleEditorPhase3 = ({
           ) : null}
         </div>
 
-        {/* Statistics Dashboard - Always visible below editor/view tabs */}
-        {viewMode !== "stats" && (
+        {/* Statistics Dashboard - Hidden in fullscreen */}
+        {viewMode !== "stats" && !isFullscreen && (
           <StatisticsDashboard
             data={statsData}
             currentPeriod={currentPeriod}
