@@ -66,8 +66,11 @@ const ScheduleTable = ({
   isConnected = true,
   offlineQueue = [],
   hasAllPeriodsData = false,
-  // Header auto-hide callback
+  // Header auto-hide callbacks
   onTableScroll,
+  onTableMouseEnter,
+  onTableMouseLeave,
+  tableContainerRef,
 }) => {
   // Prepare date keys for selection hook
   const dateKeys = dateRange.map((date) => date.toISOString().split("T")[0]);
@@ -707,11 +710,21 @@ const ScheduleTable = ({
       )}
 
       <div
-        ref={tableRef}
+        ref={(node) => {
+          // Set both refs - tableRef for selection hook and tableContainerRef for header auto-hide
+          if (node) {
+            tableRef.current = node;
+            if (tableContainerRef) {
+              tableContainerRef.current = node;
+            }
+          }
+        }}
         className="table-container overflow-auto relative"
         style={{ maxHeight: "calc(100vh - 110px)" }}
         tabIndex={0}
         onScroll={onTableScroll}
+        onMouseEnter={onTableMouseEnter}
+        onMouseLeave={onTableMouseLeave}
         onMouseUp={() => {
           // End selection on mouse up and clear drag state
           endSelection();
