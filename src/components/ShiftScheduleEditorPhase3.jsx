@@ -698,30 +698,32 @@ const ShiftScheduleEditorPhase3 = ({
                 showConnectionStatus={false}
               />
             ) : (
-              <ScheduleTable
-                orderedStaffMembers={currentStaff}
-                dateRange={dateRange}
-                schedule={schedule}
-                editingColumn={editingColumn}
-                editingSpecificColumn={editingSpecificColumn}
-                editingNames={editingNames}
-                setEditingNames={setEditingNames}
-                setEditingSpecificColumn={setEditingSpecificColumn}
-                showDropdown={showDropdown}
-                setShowDropdown={setShowDropdown}
-                updateShift={handleShiftUpdate}
-                customText={customText}
-                setCustomText={setCustomText}
-                editingCell={editingCell}
-                setEditingCell={setEditingCell}
-                deleteStaff={effectiveStaffOps.deleteStaff}
-                staffMembers={localStaffData}
-                updateSchedule={handleScheduleUpdate}
-                currentMonthIndex={currentMonthIndex}
-                editStaffName={editStaffName}
-                isConnected={isConnected}
-                hasAllPeriodsData={prefetchStats?.memoryUsage?.periodCount > 0}
-              />
+              <div className="sticky top-[64px] z-30 bg-white">
+                <ScheduleTable
+                  orderedStaffMembers={currentStaff}
+                  dateRange={dateRange}
+                  schedule={schedule}
+                  editingColumn={editingColumn}
+                  editingSpecificColumn={editingSpecificColumn}
+                  editingNames={editingNames}
+                  setEditingNames={setEditingNames}
+                  setEditingSpecificColumn={setEditingSpecificColumn}
+                  showDropdown={showDropdown}
+                  setShowDropdown={setShowDropdown}
+                  updateShift={handleShiftUpdate}
+                  customText={customText}
+                  setCustomText={setCustomText}
+                  editingCell={editingCell}
+                  setEditingCell={setEditingCell}
+                  deleteStaff={effectiveStaffOps.deleteStaff}
+                  staffMembers={localStaffData}
+                  updateSchedule={handleScheduleUpdate}
+                  currentMonthIndex={currentMonthIndex}
+                  editStaffName={editStaffName}
+                  isConnected={isConnected}
+                  hasAllPeriodsData={prefetchStats?.memoryUsage?.periodCount > 0}
+                />
+              </div>
             )
           ) : viewMode === "card" ? (
             <StaffCardView
