@@ -74,12 +74,6 @@ const ShiftScheduleEditorPhase3 = ({
   // Fullscreen mode state
   const [isFullscreen, setIsFullscreen] = useState(false);
 
-  // Header auto-hide state (only when scrolling table)
-  const [isHeaderVisible, setIsHeaderVisible] = useState(true);
-  const scrollTimeoutRef = useRef(null);
-  const lastScrollY = useRef(0);
-  const tableContainerRef = useRef(null);
-
   // Modal states
   const [deleteModal, setDeleteModal] = useState({
     isOpen: false,
@@ -523,61 +517,6 @@ const ShiftScheduleEditorPhase3 = ({
     printSchedule(currentStaff, dateRange, schedule);
   }, [currentStaff, dateRange, schedule]);
 
-  // Header auto-hide handlers (only when scrolling table with cursor on it)
-  const handleTableScroll = useCallback((event) => {
-    // Use ref to avoid stale closure - check current mouse state
-    if (!tableContainerRef.current?.dataset?.mouseOver) return;
-
-    const currentScrollY = event.target.scrollTop;
-    const scrollDifference = currentScrollY - lastScrollY.current;
-
-    // Clear existing timeout
-    if (scrollTimeoutRef.current) {
-      clearTimeout(scrollTimeoutRef.current);
-    }
-
-    // Hide header when scrolling down more than 50px
-    if (scrollDifference > 50 && currentScrollY > 100) {
-      setIsHeaderVisible(false);
-    }
-    // Show header when scrolling up
-    else if (scrollDifference < -20) {
-      setIsHeaderVisible(true);
-    }
-
-    // Update last scroll position
-    lastScrollY.current = currentScrollY;
-
-    // Show header after 1 second of no scrolling
-    scrollTimeoutRef.current = setTimeout(() => {
-      setIsHeaderVisible(true);
-    }, 1000);
-  }, []);
-
-  const handleTableMouseEnter = useCallback(() => {
-    // Set data attribute to track mouse state for scroll handler
-    if (tableContainerRef.current) {
-      tableContainerRef.current.dataset.mouseOver = 'true';
-    }
-  }, []);
-
-  const handleTableMouseLeave = useCallback(() => {
-    setIsHeaderVisible(true); // Always show header when cursor leaves table
-    // Clear data attribute
-    if (tableContainerRef.current) {
-      delete tableContainerRef.current.dataset.mouseOver;
-    }
-  }, []);
-
-  // Cleanup scroll timeout on unmount
-  useEffect(() => {
-    return () => {
-      if (scrollTimeoutRef.current) {
-        clearTimeout(scrollTimeoutRef.current);
-      }
-    };
-  }, []);
-
   // Fullscreen change detection
   useEffect(() => {
     const handleFullscreenChange = () => {
@@ -650,15 +589,7 @@ const ShiftScheduleEditorPhase3 = ({
     <div className="shift-schedule-container space-y-6 p-6">
         {/* Header with Phase 4 instant navigation indicator - Hidden in fullscreen */}
         {!isFullscreen && (
-          <Card
-            className="transition-all duration-300 ease-in-out"
-            style={{
-              transform: isHeaderVisible ? 'translateY(0)' : 'translateY(-100%)',
-              opacity: isHeaderVisible ? 1 : 0,
-              pointerEvents: isHeaderVisible ? 'auto' : 'none',
-              marginBottom: isHeaderVisible ? '0' : '-100px',
-            }}
-          >
+          <Card>
             <CardHeader>
               <div className="flex items-center justify-between">
                 <CardTitle className="text-2xl font-bold">
@@ -705,30 +636,6 @@ const ShiftScheduleEditorPhase3 = ({
           </Card>
         )}
 
-        {/* Show Header Button - Appears when header is hidden (not in fullscreen) */}
-        {!isHeaderVisible && !isFullscreen && (
-          <button
-            onClick={() => setIsHeaderVisible(true)}
-            className="fixed top-2 right-1/2 transform translate-x-1/2 z-50 px-4 py-2 bg-blue-500 hover:bg-blue-600 text-white text-sm font-medium rounded-full shadow-lg transition-all duration-200 flex items-center gap-2"
-            title="Show Header"
-          >
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              width="16"
-              height="16"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            >
-              <polyline points="18 15 12 9 6 15"></polyline>
-            </svg>
-            ヘッダーを表示
-          </button>
-        )}
-
         {/* Error Display - Hidden in fullscreen */}
         {error && !isFullscreen && (
           <Alert className="mb-4">
@@ -736,8 +643,9 @@ const ShiftScheduleEditorPhase3 = ({
           </Alert>
         )}
 
-        {/* Navigation Toolbar */}
-        <NavigationToolbar
+        {/* Navigation Toolbar - Sticky at top */}
+        <div className="sticky top-0 z-40 bg-white">
+          <NavigationToolbar
           currentMonthIndex={currentMonthIndex}
           periods={realtimePeriods}
           onMonthChange={navigateToMonth}
@@ -765,7 +673,8 @@ const ShiftScheduleEditorPhase3 = ({
           isConnected={isConnected}
           isSaving={isSaving}
           isFullscreen={isFullscreen}
-        />
+          />
+        </div>
 
         {/* Main Interface - Switch between views with Phase 4 smooth transitions */}
         <div
@@ -812,10 +721,6 @@ const ShiftScheduleEditorPhase3 = ({
                 editStaffName={editStaffName}
                 isConnected={isConnected}
                 hasAllPeriodsData={prefetchStats?.memoryUsage?.periodCount > 0}
-                onTableScroll={handleTableScroll}
-                onTableMouseEnter={handleTableMouseEnter}
-                onTableMouseLeave={handleTableMouseLeave}
-                tableContainerRef={tableContainerRef}
               />
             )
           ) : viewMode === "card" ? (
