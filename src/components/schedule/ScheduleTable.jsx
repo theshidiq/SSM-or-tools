@@ -706,7 +706,7 @@ const ScheduleTable = ({
 
       {/* Sticky Staff Names Header Row - Separate from table */}
       <div
-        className="sticky top-[96px] z-[1050] bg-white"
+        className="sticky top-[96px] z-[1050] bg-white -mb-px"
         style={{
           minWidth: `${40 + (orderedStaffMembers?.length || 0) * 40}px`,
         }}
@@ -715,18 +715,20 @@ const ScheduleTable = ({
           className="w-full text-sm border-collapse"
           style={{
             minWidth: `${40 + (orderedStaffMembers?.length || 0) * 40}px`,
+            marginBottom: 0,
           }}
         >
           <TableHeader>
-            <TableRow>
+            <TableRow className="border-0">
               {/* Corner Cell - 日付 */}
               <TableHead
-                className="text-center bg-gray-700 text-white font-bold hover:bg-gray-600 border-r-2 border-border p-0"
+                className="text-center bg-gray-700 text-white font-bold hover:bg-gray-600 border-r-2 border-border h-[50px]"
                 style={{
                   minWidth: "40px",
                   width: "40px",
                   maxWidth: "40px",
                   height: "50px",
+                  padding: "0",
                 }}
               >
                 <span className="text-xs font-bold">日付</span>
@@ -738,7 +740,7 @@ const ScheduleTable = ({
                 return (
                   <TableHead
                     key={staff.id}
-                    className={`bg-gray-700 text-white text-center border-r border-border cursor-pointer font-bold hover:bg-gray-600 relative p-0 ${
+                    className={`bg-gray-700 text-white text-center border-r border-border cursor-pointer font-bold hover:bg-gray-600 relative h-[50px] ${
                       staffIndex === (orderedStaffMembers?.length || 0) - 1
                         ? "border-r-2"
                         : ""
@@ -753,6 +755,7 @@ const ScheduleTable = ({
                       width: "40px",
                       maxWidth: "40px",
                       height: "50px",
+                      padding: "0",
                     }}
                   >
                 <div className="flex flex-col items-center justify-center py-1 px-1 h-full">
