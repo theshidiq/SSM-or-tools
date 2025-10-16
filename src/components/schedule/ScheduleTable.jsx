@@ -704,6 +704,115 @@ const ScheduleTable = ({
         </div>
       )}
 
+      {/* Sticky Staff Names Header Row - Separate from table */}
+      <div
+        className="sticky top-0 z-[1050] bg-white"
+        style={{
+          minWidth: `${40 + (orderedStaffMembers?.length || 0) * 40}px`,
+        }}
+      >
+        <div className="flex border-b-2 border-border">
+          {/* Corner Cell - 日付 */}
+          <div
+            className="bg-gray-700 text-white font-bold hover:bg-gray-600 border-r-2 border-border flex items-center justify-center"
+            style={{
+              minWidth: "40px",
+              width: "40px",
+              maxWidth: "40px",
+              height: "50px",
+            }}
+          >
+            <span className="text-xs font-bold">日付</span>
+          </div>
+
+          {/* Staff Name Cells */}
+          {(orderedStaffMembers || []).map((staff, staffIndex) => {
+            if (!staff) return null;
+            return (
+              <div
+                key={staff.id}
+                className={`bg-gray-700 text-white text-center border-r border-border cursor-pointer font-bold hover:bg-gray-600 relative ${
+                  staffIndex === (orderedStaffMembers?.length || 0) - 1
+                    ? "border-r-2"
+                    : ""
+                }`}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  selectWeek(staff.id);
+                }}
+                title={`Click to select entire week for ${staff.name}`}
+                style={{
+                  minWidth: "40px",
+                  width: "40px",
+                  maxWidth: "40px",
+                  height: "50px",
+                }}
+              >
+                <div className="flex flex-col items-center justify-center py-1 px-1 h-full">
+                  {/* Delete Button (only visible in delete mode) */}
+                  {editingColumn === "delete-mode" && (
+                    <Button
+                      variant="destructive"
+                      size="sm"
+                      onClick={() => handleDeleteStaff(staff.id)}
+                      className="absolute -top-1 -right-1 w-4 h-4 p-0 rounded-full z-10"
+                      title={`Delete ${staff.name}`}
+                    >
+                      <Trash2 size={8} />
+                    </Button>
+                  )}
+
+                  {/* Staff Name (editable in edit-name mode) */}
+                  {editingColumn === "edit-name-mode" ? (
+                    <Input
+                      type="text"
+                      value={
+                        editingNames[staff.id] !== undefined
+                          ? editingNames[staff.id]
+                          : staff.name
+                      }
+                      onChange={(e) =>
+                        handleNameEdit(staff.id, e.target.value)
+                      }
+                      onBlur={() => handleNameSubmit(staff.id)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") {
+                          handleNameSubmit(staff.id);
+                        }
+                      }}
+                      className="w-full text-center text-xs h-5 px-1"
+                      autoFocus={editingSpecificColumn === staff.id}
+                    />
+                  ) : (
+                    <span
+                      className="text-sm font-bold cursor-pointer px-1 py-0.5 rounded transition-colors duration-200"
+                      style={{
+                        fontSize: "14px",
+                        lineHeight: "16px",
+                        maxWidth: "80px",
+                        overflow: "hidden",
+                        wordBreak: "break-all",
+                        whiteSpace: "nowrap",
+                        textOverflow: "ellipsis",
+                      }}
+                      onClick={() => {
+                        if (editingColumn === "edit-name-mode") {
+                          setEditingSpecificColumn(staff.id);
+                        }
+                      }}
+                      title={staff.name}
+                    >
+                      {staff.name}
+                    </span>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Table Container */}
       <div
         ref={tableRef}
         className="table-container relative"
@@ -731,123 +840,6 @@ const ScheduleTable = ({
             minWidth: `${40 + (orderedStaffMembers?.length || 0) * 40}px`,
           }}
         >
-          {/* Sticky Header Row: Staff Names as Column Headers */}
-          <TableHeader
-            style={{
-              position: "sticky",
-              top: 0,
-              zIndex: 1000,
-              backgroundColor: "hsl(var(--background))",
-            }}
-          >
-            <TableRow>
-              <TableHead
-                className="bg-gray-700 text-white min-w-[40px] border-r-2 border-border font-bold hover:bg-gray-600 sticky-header-cell"
-                style={{
-                  minWidth: "40px",
-                  width: "40px",
-                  maxWidth: "40px",
-                  position: "sticky",
-                  top: 0,
-                  left: 0,
-                  zIndex: 503,
-                  backgroundColor: "#374151",
-                }}
-              >
-                <div className="flex items-center justify-center gap-1 py-0.5">
-                  <span className="text-xs font-bold">日付</span>
-                </div>
-              </TableHead>
-
-              {/* Staff Column Headers */}
-              {(orderedStaffMembers || []).map((staff, staffIndex) => {
-                if (!staff) return null;
-                return (
-                  <TableHead
-                    key={staff.id}
-                    className={`bg-gray-700 text-white text-center sticky-header-cell border-r border-border cursor-pointer font-bold hover:bg-gray-600 ${
-                      staffIndex === (orderedStaffMembers?.length || 0) - 1
-                        ? "border-r-2"
-                        : ""
-                    }`}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      selectWeek(staff.id);
-                    }}
-                    title={`Click to select entire week for ${staff.name}`}
-                    style={{
-                      minWidth: "40px",
-                      width: "40px",
-                      maxWidth: "40px",
-                      position: "sticky",
-                      top: 0,
-                      zIndex: 501,
-                      backgroundColor: "#374151",
-                    }}
-                  >
-                    <div className="flex flex-col items-center justify-center py-1 px-1 h-full">
-                      {/* Delete Button (only visible in delete mode) */}
-                      {editingColumn === "delete-mode" && (
-                        <Button
-                          variant="destructive"
-                          size="sm"
-                          onClick={() => handleDeleteStaff(staff.id)}
-                          className="absolute -top-1 -right-1 w-4 h-4 p-0 rounded-full z-10"
-                          title={`Delete ${staff.name}`}
-                        >
-                          <Trash2 size={8} />
-                        </Button>
-                      )}
-
-                      {/* Staff Name (editable in edit-name mode) */}
-                      {editingColumn === "edit-name-mode" ? (
-                        <Input
-                          type="text"
-                          value={
-                            editingNames[staff.id] !== undefined
-                              ? editingNames[staff.id]
-                              : staff.name
-                          }
-                          onChange={(e) =>
-                            handleNameEdit(staff.id, e.target.value)
-                          }
-                          onBlur={() => handleNameSubmit(staff.id)}
-                          onKeyDown={(e) => {
-                            if (e.key === "Enter") {
-                              handleNameSubmit(staff.id);
-                            }
-                          }}
-                          className="w-full text-center text-xs h-5 px-1"
-                          autoFocus={editingSpecificColumn === staff.id}
-                        />
-                      ) : (
-                        <span
-                          className="text-sm font-bold cursor-pointer px-1 py-0.5 rounded transition-colors duration-200"
-                          style={{
-                            fontSize: "14px",
-                            lineHeight: "16px",
-                            maxWidth: "80px",
-                            overflow: "hidden",
-                            wordBreak: "break-all",
-                            whiteSpace: "nowrap",
-                            textOverflow: "ellipsis",
-                          }}
-                          onClick={() => {
-                            if (editingColumn === "edit-name-mode") {
-                              setEditingSpecificColumn(staff.id);
-                            }
-                          }}
-                          title={staff.name}
-                        >
-                          {staff.name}
-                        </span>
-                      )}
-                    </div>
-                  </TableHead>
-                );
-              })}
-            </TableRow>
-          </TableHeader>
 
           {/* Table Body: Date Rows */}
           <TableBody>
