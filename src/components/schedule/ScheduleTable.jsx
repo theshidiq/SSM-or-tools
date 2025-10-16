@@ -66,6 +66,8 @@ const ScheduleTable = ({
   isConnected = true,
   offlineQueue = [],
   hasAllPeriodsData = false,
+  // Header auto-hide callback
+  onTableScroll,
 }) => {
   // Prepare date keys for selection hook
   const dateKeys = dateRange.map((date) => date.toISOString().split("T")[0]);
@@ -663,8 +665,12 @@ const ScheduleTable = ({
           <div className="w-px h-6 bg-gray-300 mx-1"></div>
           <button
             onClick={() => handleQuickAction("off")}
-            className="px-2 py-1 text-sm hover:bg-gray-100 rounded font-bold text-red-600"
+            className="px-2 py-1 hover:bg-gray-100 rounded font-bold text-red-600"
             title="Day Off (Press 4)"
+            style={{
+              fontSize: '1.5rem',
+              lineHeight: '1.5rem'
+            }}
           >
             ×
           </button>
@@ -705,6 +711,7 @@ const ScheduleTable = ({
         className="table-container overflow-auto relative"
         style={{ maxHeight: "calc(100vh - 110px)" }}
         tabIndex={0}
+        onScroll={onTableScroll}
         onMouseUp={() => {
           // End selection on mouse up and clear drag state
           endSelection();
@@ -1003,6 +1010,10 @@ const ScheduleTable = ({
                               transform: 'scaleX(1.1)',
                               display: 'inline-block',
                               fontWeight: '900'
+                            } : cellValue === '×' ? {
+                              fontSize: '2rem',
+                              lineHeight: '2rem',
+                              display: 'inline-block'
                             } : {}}
                           >
                             {!isActiveForDate
@@ -1067,6 +1078,10 @@ const ScheduleTable = ({
                                             transform: 'scaleX(1.1)',
                                             display: 'inline-block',
                                             fontWeight: '900'
+                                          } : shift.symbol === '×' ? {
+                                            fontSize: '1.5rem',
+                                            lineHeight: '1.5rem',
+                                            display: 'inline-block'
                                           } : {}}
                                         >
                                           {shift.symbol}
@@ -1266,10 +1281,10 @@ const ScheduleTable = ({
           )}
           <hr className="my-1" />
           <button
-            className="w-full px-4 py-2 text-left hover:bg-gray-100 text-red-600 font-bold"
+            className="w-full px-4 py-2 text-left hover:bg-gray-100 text-red-600 font-bold flex items-center gap-2"
             onClick={() => handleQuickAction("off")}
           >
-            × Day Off
+            <span style={{ fontSize: '1.5rem', lineHeight: '1.5rem' }}>×</span> Day Off
           </button>
           <button
             className="w-full px-4 py-2 text-left hover:bg-gray-100 text-blue-600 font-black"

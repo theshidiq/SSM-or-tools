@@ -776,6 +776,9 @@ func (s *StaffSyncServer) updatePriorityRule(versionID string, ruleData map[stri
 		return fmt.Errorf("missing or invalid rule id")
 	}
 
+	// 🔍 DEBUG: Log what we received from React
+	log.Printf("🔍 [updatePriorityRule] Received ruleData: %+v", ruleData)
+
 	url := fmt.Sprintf("%s/rest/v1/priority_rules?id=eq.%s&version_id=eq.%s",
 		s.supabaseURL, ruleID, versionID)
 
@@ -794,9 +797,6 @@ func (s *StaffSyncServer) updatePriorityRule(versionID string, ruleData map[stri
 	if ruleDefinition, ok := ruleData["ruleDefinition"]; ok {
 		updateData["rule_definition"] = ruleDefinition
 	}
-	if ruleConfig, ok := ruleData["ruleConfig"]; ok {
-		updateData["rule_config"] = ruleConfig
-	}
 	if penaltyWeight, ok := ruleData["penaltyWeight"]; ok {
 		updateData["penalty_weight"] = penaltyWeight
 	}
@@ -808,6 +808,42 @@ func (s *StaffSyncServer) updatePriorityRule(versionID string, ruleData map[stri
 	}
 	if effectiveUntil, ok := ruleData["effectiveUntil"]; ok {
 		updateData["effective_until"] = effectiveUntil
+	}
+
+	// ✅ FIX: Merge top-level React fields into rule_config JSONB
+	// React sends fields at top level: { id, daysOfWeek: [...], shiftType: "early", staffId: "...", ruleType: "..." }
+	// We need to merge them into ruleConfig before storing in database
+	ruleConfig := make(map[string]interface{})
+	if existingConfig, ok := ruleData["ruleConfig"].(map[string]interface{}); ok {
+		// Preserve existing ruleConfig if present
+		ruleConfig = existingConfig
+	}
+
+	// Merge top-level fields into rule_config
+	if daysOfWeek, ok := ruleData["daysOfWeek"]; ok {
+		ruleConfig["daysOfWeek"] = daysOfWeek
+		log.Printf("🔍 [updatePriorityRule] Merging daysOfWeek: %+v", daysOfWeek)
+	}
+	if shiftType, ok := ruleData["shiftType"]; ok {
+		ruleConfig["shiftType"] = shiftType
+		log.Printf("🔍 [updatePriorityRule] Merging shiftType: %v", shiftType)
+	}
+	if staffId, ok := ruleData["staffId"]; ok {
+		ruleConfig["staffId"] = staffId
+		log.Printf("🔍 [updatePriorityRule] Merging staffId: %v", staffId)
+	}
+	if ruleType, ok := ruleData["ruleType"]; ok {
+		ruleConfig["ruleType"] = ruleType
+		log.Printf("🔍 [updatePriorityRule] Merging ruleType: %v", ruleType)
+	}
+	if preferenceStrength, ok := ruleData["preferenceStrength"]; ok {
+		ruleConfig["preferenceStrength"] = preferenceStrength
+	}
+
+	// Only update rule_config if we have fields to merge
+	if len(ruleConfig) > 0 {
+		updateData["rule_config"] = ruleConfig
+		log.Printf("🔍 [updatePriorityRule] Final rule_config: %+v", ruleConfig)
 	}
 
 	updateData["updated_at"] = time.Now().UTC().Format(time.RFC3339)
@@ -1145,6 +1181,9 @@ func (s *StaffSyncServer) insertMonthlyLimit(versionID string, limitData map[str
 func (s *StaffSyncServer) insertPriorityRule(versionID string, ruleData map[string]interface{}) error {
 	url := fmt.Sprintf("%s/rest/v1/priority_rules", s.supabaseURL)
 
+	// 🔍 DEBUG: Log what we received from React
+	log.Printf("🔍 [insertPriorityRule] Received ruleData: %+v", ruleData)
+
 	insertData := make(map[string]interface{})
 	insertData["version_id"] = versionID
 	insertData["restaurant_id"] = s.getRestaurantID()
@@ -1170,9 +1209,6 @@ func (s *StaffSyncServer) insertPriorityRule(versionID string, ruleData map[stri
 	if ruleDefinition, ok := ruleData["ruleDefinition"]; ok {
 		insertData["rule_definition"] = ruleDefinition
 	}
-	if ruleConfig, ok := ruleData["ruleConfig"]; ok {
-		insertData["rule_config"] = ruleConfig
-	}
 	if penaltyWeight, ok := ruleData["penaltyWeight"]; ok {
 		insertData["penalty_weight"] = penaltyWeight
 	} else {
@@ -1182,6 +1218,42 @@ func (s *StaffSyncServer) insertPriorityRule(versionID string, ruleData map[stri
 		insertData["is_hard_constraint"] = isHardConstraint
 	} else {
 		insertData["is_hard_constraint"] = false
+	}
+
+	// ✅ FIX: Merge top-level React fields into rule_config JSONB
+	// React sends fields at top level: { id, daysOfWeek: [...], shiftType: "early", staffId: "...", ruleType: "..." }
+	// We need to merge them into ruleConfig before storing in database
+	ruleConfig := make(map[string]interface{})
+	if existingConfig, ok := ruleData["ruleConfig"].(map[string]interface{}); ok {
+		// Preserve existing ruleConfig if present
+		ruleConfig = existingConfig
+	}
+
+	// Merge top-level fields into rule_config
+	if daysOfWeek, ok := ruleData["daysOfWeek"]; ok {
+		ruleConfig["daysOfWeek"] = daysOfWeek
+		log.Printf("🔍 [insertPriorityRule] Merging daysOfWeek: %+v", daysOfWeek)
+	}
+	if shiftType, ok := ruleData["shiftType"]; ok {
+		ruleConfig["shiftType"] = shiftType
+		log.Printf("🔍 [insertPriorityRule] Merging shiftType: %v", shiftType)
+	}
+	if staffId, ok := ruleData["staffId"]; ok {
+		ruleConfig["staffId"] = staffId
+		log.Printf("🔍 [insertPriorityRule] Merging staffId: %v", staffId)
+	}
+	if ruleType, ok := ruleData["ruleType"]; ok {
+		ruleConfig["ruleType"] = ruleType
+		log.Printf("🔍 [insertPriorityRule] Merging ruleType: %v", ruleType)
+	}
+	if preferenceStrength, ok := ruleData["preferenceStrength"]; ok {
+		ruleConfig["preferenceStrength"] = preferenceStrength
+	}
+
+	// Only set rule_config if we have fields to merge
+	if len(ruleConfig) > 0 {
+		insertData["rule_config"] = ruleConfig
+		log.Printf("🔍 [insertPriorityRule] Final rule_config: %+v", ruleConfig)
 	}
 
 	jsonData, _ := json.Marshal(insertData)
@@ -1207,6 +1279,58 @@ func (s *StaffSyncServer) insertPriorityRule(versionID string, ruleData map[stri
 		return fmt.Errorf("insert failed with status %d: %s", resp.StatusCode, string(body))
 	}
 
+	return nil
+}
+
+// deletePriorityRule soft-deletes a priority rule from the database by setting is_active to false
+func (s *StaffSyncServer) deletePriorityRule(versionID string, ruleID string) error {
+	url := fmt.Sprintf("%s/rest/v1/priority_rules?id=eq.%s&version_id=eq.%s",
+		s.supabaseURL, ruleID, versionID)
+
+	log.Printf("🗑️ [deletePriorityRule] Starting soft-delete for rule: %s", ruleID)
+	log.Printf("🗑️ [deletePriorityRule] Version ID: %s", versionID)
+	log.Printf("🗑️ [deletePriorityRule] URL: %s", url)
+
+	// Soft delete by setting is_active to false
+	updateData := map[string]interface{}{
+		"is_active":  false,
+		"updated_at": time.Now().UTC().Format(time.RFC3339),
+	}
+
+	jsonData, _ := json.Marshal(updateData)
+	log.Printf("🗑️ [deletePriorityRule] PATCH data: %s", string(jsonData))
+
+	req, err := http.NewRequest("PATCH", url, bytes.NewBuffer(jsonData))
+	if err != nil {
+		log.Printf("❌ [deletePriorityRule] Failed to create request: %v", err)
+		return fmt.Errorf("failed to create request: %w", err)
+	}
+
+	req.Header.Set("Authorization", "Bearer "+s.supabaseKey)
+	req.Header.Set("apikey", s.supabaseKey)
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Prefer", "return=minimal")
+
+	log.Printf("🗑️ [deletePriorityRule] Request headers: Authorization=[REDACTED], apikey=[REDACTED], Content-Type=application/json")
+
+	client := &http.Client{Timeout: 10 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		log.Printf("❌ [deletePriorityRule] HTTP request failed: %v", err)
+		return fmt.Errorf("failed to delete priority rule: %w", err)
+	}
+	defer resp.Body.Close()
+
+	body, _ := io.ReadAll(resp.Body)
+	log.Printf("🗑️ [deletePriorityRule] Response status: %d", resp.StatusCode)
+	log.Printf("🗑️ [deletePriorityRule] Response body: %s", string(body))
+
+	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusNoContent {
+		log.Printf("❌ [deletePriorityRule] Delete failed with status %d: %s", resp.StatusCode, string(body))
+		return fmt.Errorf("delete failed with status %d: %s", resp.StatusCode, string(body))
+	}
+
+	log.Printf("✅ [deletePriorityRule] Successfully soft-deleted rule: %s", ruleID)
 	return nil
 }
 
@@ -1880,6 +2004,80 @@ func (s *StaffSyncServer) handlePriorityRulesUpdate(client *Client, msg *Message
 
 	s.broadcastToAll(&freshMsg)
 	log.Printf("📡 Broadcasted updated priority rules to all clients")
+}
+
+// handlePriorityRuleDelete soft-deletes a priority rule and broadcasts changes
+func (s *StaffSyncServer) handlePriorityRuleDelete(client *Client, msg *Message) {
+	log.Printf("📊 Processing SETTINGS_DELETE_PRIORITY_RULE from client %s", client.clientId)
+
+	payload, ok := msg.Payload.(map[string]interface{})
+	if !ok {
+		log.Printf("❌ Invalid payload format - got type %T", msg.Payload)
+		return
+	}
+
+	log.Printf("🔍 [handlePriorityRuleDelete] Payload: %+v", payload)
+
+	ruleID, ok := payload["ruleId"].(string)
+	if !ok {
+		log.Printf("❌ Missing rule ID - payload[\"ruleId\"] type: %T, value: %v", payload["ruleId"], payload["ruleId"])
+		return
+	}
+
+	log.Printf("🔍 [handlePriorityRuleDelete] Rule ID to delete: %s", ruleID)
+
+	// Get active version
+	version, err := s.fetchActiveConfigVersion()
+	if err != nil {
+		log.Printf("❌ [handlePriorityRuleDelete] Failed to fetch active version: %v", err)
+		s.sendErrorResponse(client, "Failed to fetch active version", err)
+		return
+	}
+
+	log.Printf("🔍 [handlePriorityRuleDelete] Active version: %s (locked: %v)", version.ID, version.IsLocked)
+
+	// Check if version is locked
+	if version.IsLocked {
+		log.Printf("⚠️ [handlePriorityRuleDelete] Version is locked, cannot delete")
+		s.sendErrorResponse(client, "Cannot modify locked version", nil)
+		return
+	}
+
+	// Delete priority rule from database
+	log.Printf("🔍 [handlePriorityRuleDelete] Calling deletePriorityRule with versionID=%s, ruleID=%s", version.ID, ruleID)
+	if err := s.deletePriorityRule(version.ID, ruleID); err != nil {
+		log.Printf("❌ [handlePriorityRuleDelete] deletePriorityRule failed: %v", err)
+		s.sendErrorResponse(client, "Failed to delete priority rule", err)
+		return
+	}
+
+	// Log change to audit trail
+	if err := s.logConfigChange(version.ID, "priority_rules", "DELETE", map[string]interface{}{"id": ruleID}); err != nil {
+		log.Printf("⚠️ Failed to log config change: %v", err)
+	}
+
+	log.Printf("✅ Successfully deleted priority rule: %s", ruleID)
+
+	// Fetch updated settings
+	settings, err := s.fetchAggregatedSettings(version.ID)
+	if err != nil {
+		log.Printf("⚠️ Failed to fetch updated settings: %v", err)
+		return
+	}
+
+	// Broadcast updated settings to all clients
+	freshMsg := Message{
+		Type: "SETTINGS_SYNC_RESPONSE",
+		Payload: map[string]interface{}{
+			"settings": settings,
+			"updated":  "priority_rules",
+		},
+		Timestamp: time.Now(),
+		ClientID:  msg.ClientID,
+	}
+
+	s.broadcastToAll(&freshMsg)
+	log.Printf("📡 Broadcasted updated priority rules to all clients after deletion")
 }
 
 // handleMLConfigUpdate updates an ML model configuration and broadcasts changes

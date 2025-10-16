@@ -81,6 +81,12 @@ export const useWebSocketShifts = (
   const offlineQueueRef = useRef([]);
   const clientIdRef = useRef(null);
   const isPeriodSwitchingRef = useRef(false); // Flag to prevent reconnection during period switches
+  const currentPeriodRef = useRef(currentPeriod); // Ref to always have latest period for reconnections
+
+  // Update period ref whenever currentPeriod changes
+  useEffect(() => {
+    currentPeriodRef.current = currentPeriod;
+  }, [currentPeriod]);
 
   /**
    * Calculate reconnection delay with exponential backoff
@@ -287,7 +293,7 @@ export const useWebSocketShifts = (
     setIsLoading(true);
 
     try {
-      const url = `${WS_URL}${WS_ENDPOINT}?period=${currentPeriod}`;
+      const url = `${WS_URL}${WS_ENDPOINT}?period=${currentPeriodRef.current}`;
       console.log(`🔌 [WEBSOCKET-SHIFTS] Connecting to: ${url}`);
 
       const ws = new WebSocket(url);

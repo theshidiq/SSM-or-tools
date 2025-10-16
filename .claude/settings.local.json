@@ -2,7 +2,8 @@
   "permissions": {
     "allow": [
       "Bash(BashOutput 48c548)",
-      "Bash(REACT_APP_SUPABASE_URL=https://ymdyejrljmvajqjbejvh.supabase.co REACT_APP_SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InltZHllanJsam12YWpxamJlanZoIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTI3MjE1NDMsImV4cCI6MjA2ODI5NzU0M30.wFirIfjnpkgRqDhECW6XZKkzWg_Q-pvs7jX_FIAMYfE node /tmp/check_period_dates.js)"
+      "Bash(REACT_APP_SUPABASE_URL=https://ymdyejrljmvajqjbejvh.supabase.co REACT_APP_SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InltZHllanJsam12YWpxamJlanZoIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTI3MjE1NDMsImV4cCI6MjA2ODI5NzU0M30.wFirIfjnpkgRqDhECW6XZKkzWg_Q-pvs7jX_FIAMYfE node /tmp/check_period_dates.js)",
+      "Bash(npx @anthropic-ai/claude-code:*)"
     ],
     "deny": [],
     "ask": []

@@ -29,6 +29,7 @@ const MESSAGE_TYPES = {
   SETTINGS_UPDATE_DAILY_LIMITS: "SETTINGS_UPDATE_DAILY_LIMITS",
   SETTINGS_UPDATE_MONTHLY_LIMITS: "SETTINGS_UPDATE_MONTHLY_LIMITS",
   SETTINGS_UPDATE_PRIORITY_RULES: "SETTINGS_UPDATE_PRIORITY_RULES",
+  SETTINGS_DELETE_PRIORITY_RULE: "SETTINGS_DELETE_PRIORITY_RULE",
   SETTINGS_UPDATE_ML_CONFIG: "SETTINGS_UPDATE_ML_CONFIG",
 
   // Bulk operations
@@ -684,6 +685,42 @@ export const useWebSocketSettings = (options = {}) => {
   );
 
   /**
+   * Delete a priority rule (table-specific operation)
+   */
+  const deletePriorityRule = useCallback(
+    (ruleId) => {
+      if (!enabled) {
+        const error = new Error("WebSocket disabled");
+        console.log(
+          "🚫 Phase 3 Settings: Priority rule deletion blocked - WebSocket disabled",
+        );
+        return Promise.reject(error);
+      }
+
+      if (wsRef.current?.readyState === WebSocket.OPEN) {
+        const message = {
+          type: MESSAGE_TYPES.SETTINGS_DELETE_PRIORITY_RULE,
+          payload: { ruleId },
+          timestamp: new Date().toISOString(),
+          clientId: clientIdRef.current,
+        };
+
+        wsRef.current.send(JSON.stringify(message));
+        console.log("📤 Phase 3 Settings: Sent priority rule deletion:", ruleId);
+
+        return Promise.resolve();
+      } else {
+        const error = new Error("WebSocket not connected");
+        console.error(
+          "❌ Phase 3 Settings: Failed to delete priority rule - not connected",
+        );
+        return Promise.reject(error);
+      }
+    },
+    [enabled],
+  );
+
+  /**
    * Update ML model config (table-specific operation)
    */
   const updateMLConfig = useCallback(
@@ -898,6 +935,7 @@ export const useWebSocketSettings = (options = {}) => {
     updateDailyLimits,
     updateMonthlyLimits,
     updatePriorityRules,
+    deletePriorityRule,
     updateMLConfig,
 
     // Bulk operations
