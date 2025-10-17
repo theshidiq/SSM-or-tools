@@ -200,6 +200,7 @@ const StaffEditModal = ({
           const newEditingData = {
             name: updatedStaffData.name,
             position: updatedStaffData.position || "",
+            department: updatedStaffData.department || "調理",
             status: updatedStaffData.status || "社員",
             startPeriod: updatedStaffData.startPeriod || null,
             endPeriod: updatedStaffData.endPeriod || null,
@@ -252,6 +253,7 @@ const StaffEditModal = ({
   const safeEditingStaffData = editingStaffData || {
     name: "",
     position: "",
+    department: "調理", // Default to Kitchen department
     status: "社員",
     startPeriod: null,
     endPeriod: null,
@@ -371,6 +373,7 @@ const StaffEditModal = ({
           setEditingStaffData({
             name: "",
             position: "",
+            department: "調理",
             status: "社員",
             startPeriod: null,
             endPeriod: null,
@@ -501,6 +504,7 @@ const StaffEditModal = ({
           setEditingStaffData({
             name: selectedStaffForEdit.name,
             position: selectedStaffForEdit.position || "",
+            department: selectedStaffForEdit.department || "調理",
             status: selectedStaffForEdit.status || "社員",
             startPeriod: selectedStaffForEdit.startPeriod || null,
             endPeriod: selectedStaffForEdit.endPeriod || null,
@@ -664,6 +668,7 @@ const StaffEditModal = ({
     const newEditingData = {
       name: currentStaffData.name,
       position: currentStaffData.position || "",
+      department: currentStaffData.department || "調理",
       status: currentStaffData.status || "社員",
       startPeriod: currentStaffData.startPeriod || null,
       endPeriod: currentStaffData.endPeriod || null,
@@ -688,6 +693,7 @@ const StaffEditModal = ({
     setEditingStaffData({
       name: "",
       position: "",
+      department: "調理",
       status: "社員",
       startPeriod: null,
       endPeriod: null,
@@ -898,6 +904,31 @@ const StaffEditModal = ({
                         data-1p-ignore
                         data-lpignore="true"
                       />
+                    </div>
+
+                    {/* Department Field */}
+                    <div className="space-y-2">
+                      <Label htmlFor="staff-department">
+                        部門 <span className="text-destructive">*</span>
+                      </Label>
+                      <Select
+                        value={safeEditingStaffData.department}
+                        onValueChange={(value) =>
+                          updateEditingStaffData((prev) => ({
+                            ...prev,
+                            department: value,
+                          }))
+                        }
+                      >
+                        <SelectTrigger id="staff-department">
+                          <SelectValue placeholder="部門を選択" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="調理">調理 (Kitchen)</SelectItem>
+                          <SelectItem value="ホール">ホール (Front of House)</SelectItem>
+                          <SelectItem value="管理">管理 (Management)</SelectItem>
+                        </SelectContent>
+                      </Select>
                     </div>
 
                     {/* Status Field */}
