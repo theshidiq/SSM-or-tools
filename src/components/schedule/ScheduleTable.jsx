@@ -714,6 +714,7 @@ const ScheduleTable = ({
         <table
           className="w-full text-sm border-collapse"
           style={{
+            tableLayout: "fixed",
             minWidth: `${40 + (orderedStaffMembers?.length || 0) * 40}px`,
             marginBottom: 0,
           }}
@@ -849,6 +850,7 @@ const ScheduleTable = ({
         <table
           className="shift-table w-full text-sm relative border-collapse"
           style={{
+            tableLayout: "fixed",
             minWidth: `${40 + (orderedStaffMembers?.length || 0) * 40}px`,
           }}
         >
