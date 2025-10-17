@@ -1160,6 +1160,9 @@ func (s *StaffSyncServer) createStaffInSupabase(staffData map[string]interface{}
 	createData["created_at"] = time.Now().UTC().Format(time.RFC3339)
 	createData["updated_at"] = time.Now().UTC().Format(time.RFC3339)
 
+	// Set restaurant_id - hardcoded for now, should come from auth context in production
+	createData["restaurant_id"] = "e1661c71-b24f-4ee1-9e8b-7290a43c9575"
+
 	// DEBUG: Log the data being sent to Supabase
 	log.Printf("🔍 [DEBUG] Creating staff with data: %+v", createData)
 
