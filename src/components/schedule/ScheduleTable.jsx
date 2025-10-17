@@ -706,7 +706,7 @@ const ScheduleTable = ({
 
       {/* Sticky Staff Names Header Row - Separate from table */}
       <div
-        className="sticky top-[96px] z-[1050] bg-white -mb-px"
+        className="sticky top-[74px] z-[1050] bg-white -mb-px"
         style={{
           minWidth: `${40 + (orderedStaffMembers?.length || 0) * 40}px`,
         }}
