@@ -1126,9 +1126,22 @@ func (s *StaffSyncServer) createStaffInSupabase(staffData map[string]interface{}
 	}
 	if status, ok := staffData["status"]; ok {
 		createData["status"] = status
+		// Also map status to type field for database compatibility
+		// The database has both 'status' and 'type' fields
+		// 'status' stores the Japanese employment status (社員/派遣/パート)
+		// 'type' stores the English equivalent or defaults to 'regular'
+		if status == "社員" {
+			createData["type"] = "regular"
+		} else if status == "派遣" || status == "パート" {
+			createData["type"] = "part-time"
+		} else {
+			createData["type"] = "regular" // Default fallback
+		}
 	} else {
 		createData["status"] = "社員" // Default status
+		createData["type"] = "regular" // Default type
 	}
+	// Allow explicit type override if provided
 	if staffType, ok := staffData["type"]; ok {
 		createData["type"] = staffType
 	}
@@ -1147,11 +1160,17 @@ func (s *StaffSyncServer) createStaffInSupabase(staffData map[string]interface{}
 	createData["created_at"] = time.Now().UTC().Format(time.RFC3339)
 	createData["updated_at"] = time.Now().UTC().Format(time.RFC3339)
 
+	// DEBUG: Log the data being sent to Supabase
+	log.Printf("🔍 [DEBUG] Creating staff with data: %+v", createData)
+
 	// Marshal creation data to JSON
 	jsonData, err := json.Marshal(createData)
 	if err != nil {
 		return nil, fmt.Errorf("failed to marshal create data: %w", err)
 	}
+
+	// DEBUG: Log the JSON being sent
+	log.Printf("🔍 [DEBUG] JSON payload: %s", string(jsonData))
 
 	// Create POST request
 	req, err := http.NewRequest("POST", url, bytes.NewBuffer(jsonData))
