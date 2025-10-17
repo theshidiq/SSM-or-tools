@@ -276,6 +276,11 @@ const StaffEditModal = ({
       return;
     }
 
+    if (!safeEditingStaffData.position?.trim()) {
+      toast.error("職位を入力してください");
+      return;
+    }
+
     // Enhanced logging with feature flag
     if (enhancedLoggingEnabled) {
       console.log(
@@ -883,7 +888,9 @@ const StaffEditModal = ({
 
                     {/* Position Field */}
                     <div className="space-y-2">
-                      <Label htmlFor="staff-position">職位</Label>
+                      <Label htmlFor="staff-position">
+                        職位 <span className="text-destructive">*</span>
+                      </Label>
                       <Input
                         id="staff-position"
                         name="position"
@@ -895,6 +902,7 @@ const StaffEditModal = ({
                             position: e.target.value,
                           }))
                         }
+                        required
                         placeholder="例: Server, Kitchen, Manager"
                         autoComplete="new-password"
                         autoCapitalize="none"
@@ -1204,7 +1212,8 @@ const StaffEditModal = ({
                         onClick={handleSubmit}
                         disabled={
                           operationState.isProcessing ||
-                          !safeEditingStaffData.name?.trim()
+                          !safeEditingStaffData.name?.trim() ||
+                          !safeEditingStaffData.position?.trim()
                         }
                         className="flex-1"
                       >
