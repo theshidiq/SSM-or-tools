@@ -125,39 +125,6 @@ const Sidebar = ({
 
       {/* Status and User Section */}
       <div className="p-4 border-t border-sidebar-border">
-        {/* Connection Status Badges */}
-        <div className="flex flex-col gap-2 mb-3">
-          {/* Connection Status Badge */}
-          <Badge
-            variant={isConnected ? "default" : "destructive"}
-            className={
-              isConnected
-                ? realtimeStatus.instantNav
-                  ? "bg-gradient-to-r from-green-500 to-blue-500 text-white animate-pulse"
-                  : "bg-green-500 text-white"
-                : "bg-red-500 text-white"
-            }
-            title={
-              realtimeStatus.instantNav
-                ? `All ${realtimeStatus.periodsCached} periods cached - Navigation is instant!`
-                : realtimeStatus.message
-            }
-          >
-            {realtimeStatus.message}
-          </Badge>
-
-          {/* Cache Status Badge */}
-          {realtimeStatus.instantNav && prefetchStats?.memoryUsage && (
-            <Badge
-              variant="outline"
-              className="bg-blue-50 text-blue-700 border-blue-300"
-              title={`Memory: ${prefetchStats.memoryUsage.estimatedMemoryKB} KB | Cache Hit Rate: ${prefetchStats.cacheStats?.hitRate || "N/A"}`}
-            >
-              📦 {prefetchStats.memoryUsage.periodCount} periods cached
-            </Badge>
-          )}
-        </div>
-
         {/* Status and ID */}
         <div className="flex flex-col gap-2 mb-4">
           <div className="flex items-center gap-2">
