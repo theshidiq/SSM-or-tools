@@ -204,7 +204,7 @@
 
   /* Schedule table */
   .table-container {
-    @apply overflow-auto mt-5 border border-border bg-card;
+    @apply overflow-auto border border-border bg-card;
     position: relative;
     height: auto;
     max-height: calc(100vh - 300px);
