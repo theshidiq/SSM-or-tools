@@ -340,11 +340,6 @@ const NavigationToolbar = ({
       <Card className="mb-6">
         <CardContent className="p-4">
           <div className="flex flex-col lg:flex-row lg:items-center gap-4">
-            {/* Title - Smaller */}
-            <h1 className="text-lg font-bold japanese-text">調理場シフト表</h1>
-
-            <Separator orientation="vertical" className="h-8 hidden lg:block" />
-
             {/* Left Side - Month Navigation */}
             <div className="flex items-center gap-2">
               {/* Previous Month Button */}
