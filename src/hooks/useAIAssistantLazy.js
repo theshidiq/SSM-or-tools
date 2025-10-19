@@ -8,6 +8,7 @@
 import { useState, useCallback, useRef, useEffect, useMemo } from "react";
 import { optimizedStorage } from "../utils/storageUtils";
 import { generateDateRange } from "../utils/dateUtils";
+import { useAISettings } from "./useAISettings";
 
 // Lazy loading functions that only import when needed
 const loadAISystem = async () => {
@@ -64,7 +65,7 @@ export const useAIAssistantLazy = (
   scheduleData,
   staffMembers,
   currentMonthIndex,
-  updateSchedule,
+  saveSchedule, // Backend save operation (WebSocket + Database)
   options = {},
 ) => {
   const {
@@ -85,6 +86,9 @@ export const useAIAssistantLazy = (
   // AI System reference
   const aiSystemRef = useRef(null);
   const loadingPromiseRef = useRef(null);
+
+  // Get AI settings (WebSocket or localStorage)
+  const aiSettings = useAISettings();
 
   // Lightweight fallback system that works without AI
   const fallbackSystem = useMemo(
@@ -179,9 +183,20 @@ export const useAIAssistantLazy = (
           const enhancedSystem = await loadEnhancedAISystem();
           if (enhancedSystem) {
             // Enhanced AI system loaded
+
+            // Initialize HybridPredictor with settings provider
+            const predictor = new enhancedSystem.HybridPredictor();
+
+            // Configure predictor with AI settings if connected
+            if (aiSettings.isConnected && !aiSettings.isLoading) {
+              predictor.setSettingsProvider(aiSettings);
+              await predictor.initialize();
+            }
+
             const system = {
               type: "enhanced",
               ...enhancedSystem,
+              hybridPredictor: predictor,
               initialized: true,
             };
 
@@ -273,15 +288,20 @@ export const useAIAssistantLazy = (
             scheduleData,
             staffMembers,
             currentMonthIndex,
-            updateSchedule,
+            saveSchedule, // Pass backend save operation
             ...options,
           });
 
-          // Apply the generated schedule
+          // Apply the generated schedule to backend (WebSocket → Go Server → Database)
           if (result.success && result.schedule) {
-            updateSchedule(result.schedule);
+            console.log("💾 [AI] Saving AI-generated schedule to backend...");
 
-            // Save to storage
+            // Save to backend via WebSocket (this persists to database)
+            await saveSchedule(result.schedule);
+
+            console.log("✅ [AI] AI-generated schedule saved to backend successfully");
+
+            // Save to localStorage as backup cache
             optimizedStorage.saveScheduleData(result.schedule);
           }
 
@@ -305,7 +325,7 @@ export const useAIAssistantLazy = (
       scheduleData,
       staffMembers,
       currentMonthIndex,
-      updateSchedule,
+      saveSchedule, // Updated to use backend save operation
       initializeAI,
       fallbackSystem,
     ],

@@ -38,6 +38,7 @@ import { addNextPeriod } from "../../utils/dateUtils";
 import { usePeriodsRealtime } from "../../hooks/usePeriodsRealtime";
 import { useAIAssistant } from "../../hooks/useAIAssistant";
 import { useAIAssistantLazy } from "../../hooks/useAIAssistantLazy";
+import { AISettingsProvider } from "../../contexts/AISettingsProvider";
 import ErrorBoundary from "../ui/ErrorBoundary";
 import { AILoadingSpinner } from "../ui/LoadingStates";
 import { LazyAIAssistantModal } from "../lazy/LazyAIComponents";
@@ -154,7 +155,7 @@ const NavigationToolbar = ({
     scheduleData,
     staffMembers,
     currentMonthIndex,
-    updateSchedule,
+    updateSchedule, // This is handleScheduleUpdate which calls prefetchUpdateSchedule (backend save)
     {
       autoInitialize: aiEnabled,
       enableEnhanced: true,
@@ -668,29 +669,31 @@ const NavigationToolbar = ({
 
       {/* AI Assistant Modal - Show when AI is enabled OR when modal is requested */}
       {(aiEnabled || showAIModal) && (
-        <ErrorBoundary
-          userFriendlyMessage="AI Assistant failed to load. Core functionality remains available."
-          onDisableFeature={() => {
-            setShowAIModal(false);
-            if (onEnableAI) onEnableAI(false);
-          }}
-        >
-          <Suspense
-            fallback={
-              showAIModal ? (
-                <AILoadingSpinner message="Loading AI Assistant..." />
-              ) : null
-            }
+        <AISettingsProvider>
+          <ErrorBoundary
+            userFriendlyMessage="AI Assistant failed to load. Core functionality remains available."
+            onDisableFeature={() => {
+              setShowAIModal(false);
+              if (onEnableAI) onEnableAI(false);
+            }}
           >
-            <LazyAIAssistantModal
-              isOpen={showAIModal}
-              onClose={() => setShowAIModal(false)}
-              onAutoFillSchedule={generateAIPredictions || autoFillSchedule}
-              isProcessing={isProcessing}
-              systemStatus={getSystemStatus && getSystemStatus()}
-            />
-          </Suspense>
-        </ErrorBoundary>
+            <Suspense
+              fallback={
+                showAIModal ? (
+                  <AILoadingSpinner message="Loading AI Assistant..." />
+                ) : null
+              }
+            >
+              <LazyAIAssistantModal
+                isOpen={showAIModal}
+                onClose={() => setShowAIModal(false)}
+                onAutoFillSchedule={generateAIPredictions || autoFillSchedule}
+                isProcessing={isProcessing}
+                systemStatus={getSystemStatus && getSystemStatus()}
+              />
+            </Suspense>
+          </ErrorBoundary>
+        </AISettingsProvider>
       )}
     </TooltipProvider>
   );
