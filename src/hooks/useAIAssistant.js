@@ -463,7 +463,14 @@ export const useAIAssistant = (
         );
 
         if (cacheInvalidated) {
-        } else {
+          // 🎯 PERFORMANCE: Warmup cache after invalidation
+          console.log("🔥 Cache invalidated, warming up features...");
+          await featureCacheManager.warmupCache(
+            staffMembers,
+            dateRange,
+            { schedule: scheduleData },
+            {}, // allHistoricalData - will be loaded during prediction
+          );
         }
 
         // Log cache health status

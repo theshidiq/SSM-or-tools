@@ -154,6 +154,11 @@ export class TensorFlowScheduler {
       // Initialize model metadata
       await this.initializeModelMetadata();
 
+      // 🎯 PERFORMANCE: Warmup feature cache if enabled
+      if (options.warmupCache !== false) {
+        await this.warmupFeatureCache(options);
+      }
+
       this.isInitialized = true;
       const initTime = Date.now() - startTime;
       console.log(`✨ ML Scheduler initialized in ${initTime}ms`);
@@ -1738,21 +1743,27 @@ export class TensorFlowScheduler {
    */
   async loadModelWithVersionCheck() {
     try {
-      const modelData = await MODEL_STORAGE.loadModel();
-      if (!modelData) {
+      const modelResult = await MODEL_STORAGE.loadModel();
+      if (!modelResult || !modelResult.model) {
         return { success: false, reason: "No saved model found" };
       }
 
-      // Load version metadata if available
-      const versionInfo = await MODEL_STORAGE.loadModelMetadata();
+      // 🎯 PERFORMANCE FIX: Extract model from result object
+      this.model = modelResult.model;
+      this.modelVersion = modelResult.metadata?.version || "1.0.0";
 
-      this.model = modelData;
-      this.modelVersion = versionInfo?.version || "1.0.0";
+      if (modelResult.fromCache) {
+        console.log(`⚡ Model loaded from memory cache (v${this.modelVersion})`);
+      } else {
+        console.log(`📂 Model loaded from IndexedDB (v${this.modelVersion})`);
+      }
 
       return {
         success: true,
         version: this.modelVersion,
-        metadata: versionInfo,
+        metadata: modelResult.metadata,
+        fromCache: modelResult.fromCache,
+        loadTime: modelResult.loadTime,
       };
     } catch (error) {
       console.warn("⚠️ Model loading failed:", error.message);
@@ -1809,6 +1820,52 @@ export class TensorFlowScheduler {
       } catch (retryError) {
         console.error("❌ Recovery failed:", retryError.message);
       }
+    }
+  }
+
+  /**
+   * 🎯 PERFORMANCE: Warmup feature cache during initialization
+   * Pre-computes features to eliminate generation delay on first prediction
+   */
+  async warmupFeatureCache(options = {}) {
+    try {
+      console.log("🔥 [WARMUP] Starting feature cache warmup...");
+      const startTime = Date.now();
+
+      // Get sample data for warmup (if available from options)
+      const staffMembers = options.staffMembers || [];
+      const dateRange = options.dateRange || [];
+
+      // Only warmup if we have data
+      if (staffMembers.length === 0 || dateRange.length === 0) {
+        console.log(
+          "ℹ️ [WARMUP] Skipping cache warmup - no staff/date data provided",
+        );
+        return { success: true, skipped: true };
+      }
+
+      // Call warmupCache on featureCacheManager
+      const warmupResult = await featureCacheManager.warmupCache(
+        staffMembers,
+        dateRange,
+        {}, // periodData - will be loaded later
+        {}, // allHistoricalData - will be loaded later
+      );
+
+      const warmupTime = Date.now() - startTime;
+      console.log(
+        `✅ [WARMUP] Feature cache warmed up in ${warmupTime}ms (${warmupResult.featuresGenerated} features)`,
+      );
+
+      return {
+        success: true,
+        warmupTime,
+        featuresGenerated: warmupResult.featuresGenerated,
+      };
+    } catch (error) {
+      console.warn("⚠️ [WARMUP] Feature cache warmup failed:", error.message);
+      // Non-critical - continue without warmup
+      return { success: false, error: error.message };
     }
   }
 
