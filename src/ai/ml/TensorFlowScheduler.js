@@ -39,6 +39,7 @@ export class TensorFlowScheduler {
     // Enhanced model management
     this.modelVersion = "2.0.0"; // Updated to high-accuracy version
     this.lastTrainingData = null;
+    this.cacheWarmedUp = false; // 🔥 Track if cache has been warmed up
     this.modelPerformanceMetrics = {
       accuracy: 0.9, // Target 90%+ accuracy
       loss: 0,
@@ -405,6 +406,45 @@ export class TensorFlowScheduler {
       );
 
       // Cache invalidated if configuration changed
+
+      // 🔥 PERFORMANCE WARMUP: Warmup cache on first prediction call
+      if (!this.cacheWarmedUp) {
+        try {
+          console.log("🔥 [WARMUP] First prediction - warming up feature cache...");
+          const warmupStart = performance.now();
+
+          // Extract historical data for warmup context
+          const extractedDataForWarmup = extractAllDataForAI();
+          const allHistoricalDataForWarmup = {};
+
+          if (extractedDataForWarmup.success && extractedDataForWarmup.data.rawPeriodData) {
+            extractedDataForWarmup.data.rawPeriodData.forEach((periodData) => {
+              allHistoricalDataForWarmup[periodData.monthIndex] = {
+                schedule: periodData.scheduleData,
+                dateRange: periodData.dateRange,
+              };
+            });
+          }
+
+          // Warmup with actual data
+          const warmupResult = await featureCacheManager.warmupCache(
+            staffMembers,
+            dateRange,
+            { schedule: currentSchedule },
+            allHistoricalDataForWarmup
+          );
+
+          const warmupTime = performance.now() - warmupStart;
+          console.log(
+            `✅ [WARMUP] Cache warmed up in ${warmupTime.toFixed(2)}ms (${warmupResult.featuresGenerated} features)`
+          );
+
+          this.cacheWarmedUp = true; // Mark warmup as complete
+        } catch (warmupError) {
+          console.warn("⚠️ [WARMUP] Cache warmup failed:", warmupError.message);
+          // Continue without warmup - not critical
+        }
+      }
 
       // Filter out inactive staff members before processing
       const activeStaff = staffMembers.filter((staff) => {
