@@ -18,12 +18,32 @@ export class HybridPredictor {
     this.mlEngine = null;
     this.ruleValidator = null;
     this.predictionHistory = [];
+    this.settingsProvider = null; // Real-time settings provider
     this.metrics = {
       totalPredictions: 0,
       mlAcceptedRate: 0,
       rulesAppliedRate: 0,
       hybridSuccessRate: 0,
     };
+  }
+
+  /**
+   * Set settings provider for real-time configuration access
+   * @param {Object} provider - Settings provider with getSettings() method
+   */
+  setSettingsProvider(provider) {
+    if (!provider || typeof provider.getSettings !== "function") {
+      throw new Error(
+        "Invalid settings provider - must have getSettings() method",
+      );
+    }
+    this.settingsProvider = provider;
+    console.log("✅ HybridPredictor: Settings provider configured");
+
+    // Also pass settings provider to rule validator
+    if (this.ruleValidator) {
+      this.ruleValidator.setSettingsProvider(provider);
+    }
   }
 
   /**
@@ -46,6 +66,7 @@ export class HybridPredictor {
         strictValidation: true,
         allowPartialCorrection: false, // Enforce complete constraint compliance
         maxCorrectionAttempts: 5, // More attempts to fix violations
+        settingsProvider: this.settingsProvider, // Pass settings provider
       });
 
       this.options = {
@@ -124,36 +145,49 @@ export class HybridPredictor {
     this.status = "predicting";
     const startTime = Date.now();
 
+    // 🎯 PERFORMANCE INSTRUMENTATION: Track each phase
+    const perfMarks = {
+      start: performance.now(),
+      settingsLoadStart: null,
+      settingsLoadEnd: null,
+      mlPredictionStart: null,
+      mlPredictionEnd: null,
+      ruleValidationStart: null,
+      ruleValidationEnd: null,
+      correctionStart: null,
+      correctionEnd: null,
+      finalValidationStart: null,
+      finalValidationEnd: null
+    };
+
     try {
       console.log("🔮 Generating hybrid schedule predictions...");
 
-      // Use cached configuration for instant access (fully non-blocking)
-      const { configurationCache } = await import(
-        "../cache/ConfigurationCacheManager"
-      );
-
-      // **NON-BLOCKING: Initialize cache only if not healthy, but don't wait for it**
-      if (!configurationCache.isHealthy()) {
-        console.log("🔄 Background configuration cache initialization...");
-        // Start initialization in background - don't await it to avoid blocking
-        configurationCache.initialize().catch((error) => {
-          console.warn("⚠️ Background cache init failed:", error.message);
-        });
-      }
-
-      // Get cached configuration instantly (no waiting, use defaults if not ready)
-      let cachedConfig;
-      try {
-        cachedConfig = configurationCache.getAllConfigurations();
-        console.log(
-          "⚡ Using cached configuration for schedule prediction (instant access)",
+      // Get live settings from settings provider (real-time configuration)
+      perfMarks.settingsLoadStart = performance.now();
+      let liveSettings = null;
+      if (this.settingsProvider) {
+        try {
+          liveSettings = this.settingsProvider.getSettings();
+          console.log(
+            "⚡ Using live settings from WebSocket (real-time configuration)",
+          );
+        } catch (error) {
+          console.warn(
+            "⚠️ Failed to get live settings, using defaults:",
+            error.message,
+          );
+          liveSettings = null;
+        }
+      } else {
+        console.warn(
+          "⚠️ No settings provider configured - call setSettingsProvider() first",
         );
-      } catch (error) {
-        console.log("⚡ Using default configuration (cache not ready yet)");
-        cachedConfig = {}; // Use empty config as fallback - constraints will use defaults
       }
+      perfMarks.settingsLoadEnd = performance.now();
 
       // Step 1: Get ML predictions with confidence analysis
+      perfMarks.mlPredictionStart = performance.now();
       let mlPredictions = null;
       let mlConfidenceLevel = "none";
       let mlSuccess = false;
@@ -194,6 +228,7 @@ export class HybridPredictor {
           this.handleMLError(error);
         }
       }
+      perfMarks.mlPredictionEnd = performance.now();
 
       // Step 2: Intelligent decision engine for ML vs Rules
       const decisionResult = await this.makeIntelligentDecision(
@@ -207,6 +242,8 @@ export class HybridPredictor {
       let validatedPredictions = null;
       let ruleValidationResult = null;
 
+      // 🎯 PERFORMANCE: Track rule validation phase
+      perfMarks.ruleValidationStart = performance.now();
       if (decisionResult.useML && mlPredictions) {
         ruleValidationResult = await this.validateMLPredictions(
           mlPredictions.predictions,
@@ -238,8 +275,10 @@ export class HybridPredictor {
           console.log("🔄 Falling back to rule-based generation");
         }
       }
+      perfMarks.ruleValidationEnd = performance.now();
 
       // Step 3: Execute decision with smart corrections and fallbacks
+      perfMarks.correctionStart = performance.now();
       let finalSchedule = null;
       let predictionMethod = "unknown";
       let correctionAttempts = 0;
@@ -288,13 +327,32 @@ export class HybridPredictor {
       } else {
         throw new Error("Unable to generate valid schedule predictions");
       }
+      perfMarks.correctionEnd = performance.now();
 
       // Step 4: Final validation
+      perfMarks.finalValidationStart = performance.now();
       const finalValidation = await this.performFinalValidation(
         finalSchedule,
         staffMembers,
         dateRange,
       );
+      perfMarks.finalValidationEnd = performance.now();
+
+      // 🎯 PERFORMANCE: Calculate and log breakdown
+      const perfBreakdown = {
+        settingsLoad: (perfMarks.settingsLoadEnd || perfMarks.start) - (perfMarks.settingsLoadStart || perfMarks.start),
+        mlPrediction: (perfMarks.mlPredictionEnd || perfMarks.mlPredictionStart || 0) - (perfMarks.mlPredictionStart || 0),
+        ruleValidation: (perfMarks.ruleValidationEnd || perfMarks.ruleValidationStart || 0) - (perfMarks.ruleValidationStart || 0),
+        correction: (perfMarks.correctionEnd || perfMarks.correctionStart || 0) - (perfMarks.correctionStart || 0),
+        finalValidation: (perfMarks.finalValidationEnd || perfMarks.finalValidationStart || 0) - (perfMarks.finalValidationStart || 0),
+        total: performance.now() - perfMarks.start
+      };
+
+      console.log('⏱️ [PERFORMANCE] AI Generation Breakdown:', {
+        ...perfBreakdown,
+        method: predictionMethod,
+        breakdown: `${perfBreakdown.settingsLoad.toFixed(0)}ms settings + ${perfBreakdown.mlPrediction.toFixed(0)}ms ML + ${perfBreakdown.ruleValidation.toFixed(0)}ms validation + ${perfBreakdown.correction.toFixed(0)}ms correction + ${perfBreakdown.finalValidation.toFixed(0)}ms final = ${perfBreakdown.total.toFixed(0)}ms total`
+      });
 
       const result = {
         success: true,
@@ -309,6 +367,7 @@ export class HybridPredictor {
           finalValidation,
           violations: finalValidation.violations || [],
           quality: this.calculatePredictionQuality(finalValidation),
+          performance: perfBreakdown, // 🎯 Include performance breakdown
         },
       };
 

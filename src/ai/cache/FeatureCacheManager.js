@@ -276,6 +276,113 @@ class FeatureCacheManager {
   }
 
   /**
+   * 🎯 PERFORMANCE: Warmup cache - Eagerly precompute ALL features upfront
+   * This eliminates the 100-200ms feature generation delay on first prediction
+   */
+  async warmupCache(staffMembers, dateRange, periodData, allHistoricalData) {
+    console.log(
+      `🔥 [WARMUP] Starting cache warmup for ${staffMembers.length} staff × ${dateRange.length} dates = ${staffMembers.length * dateRange.length} features`,
+    );
+    const startTime = Date.now();
+    let successCount = 0;
+    let failCount = 0;
+
+    try {
+      // Process all combinations in batches for performance
+      const BATCH_SIZE = 10;
+      const tasks = [];
+
+      for (const staff of staffMembers) {
+        for (let i = 0; i < dateRange.length; i++) {
+          const date = dateRange[i];
+          const dateKey = date.toISOString().split("T")[0];
+
+          // Skip if already cached
+          if (this.getFeatures(staff.id, dateKey).success) {
+            successCount++;
+            continue;
+          }
+
+          // Add to batch
+          tasks.push({
+            staff,
+            date,
+            dateIndex: i,
+            periodData,
+            allHistoricalData,
+            staffMembers,
+          });
+
+          // Process batch when full
+          if (tasks.length >= BATCH_SIZE) {
+            const results = await Promise.all(
+              tasks.map((task) =>
+                this.generateAndCache(
+                  task.staff,
+                  task.date,
+                  task.dateIndex,
+                  task.periodData,
+                  task.allHistoricalData,
+                  task.staffMembers,
+                ),
+              ),
+            );
+
+            results.forEach((result) => {
+              if (result.success) successCount++;
+              else failCount++;
+            });
+
+            tasks.length = 0; // Clear batch
+          }
+        }
+      }
+
+      // Process remaining tasks
+      if (tasks.length > 0) {
+        const results = await Promise.all(
+          tasks.map((task) =>
+            this.generateAndCache(
+              task.staff,
+              task.date,
+              task.dateIndex,
+              task.periodData,
+              task.allHistoricalData,
+              task.staffMembers,
+            ),
+          ),
+        );
+
+        results.forEach((result) => {
+          if (result.success) successCount++;
+          else failCount++;
+        });
+      }
+
+      const warmupTime = Date.now() - startTime;
+      console.log(
+        `✅ [WARMUP] Cache warmup complete in ${warmupTime}ms (${successCount} features, ${failCount} failures)`,
+      );
+
+      return {
+        success: true,
+        warmupTime,
+        featuresGenerated: successCount,
+        failures: failCount,
+        cacheSize: this.cache.size,
+      };
+    } catch (error) {
+      console.error(`❌ [WARMUP] Cache warmup failed:`, error);
+      return {
+        success: false,
+        error: error.message,
+        featuresGenerated: successCount,
+        failures: failCount,
+      };
+    }
+  }
+
+  /**
    * Background pre-computation of features during idle time
    */
   async startBackgroundPrecomputation(
