@@ -48,7 +48,8 @@ export class BusinessRuleValidator {
       successRate: 0,
     };
 
-    // Configuration service integration
+    // Real-time settings provider (replaces ConfigurationService)
+    this.settingsProvider = null;
     this.configService = null;
     this.restaurantId = null;
     this.configurationCache = new Map();
@@ -57,6 +58,20 @@ export class BusinessRuleValidator {
 
     // Initialize correction strategies
     this.initializeCorrectionStrategies();
+  }
+
+  /**
+   * Set settings provider for real-time configuration access
+   * @param {Object} provider - Settings provider with getSettings() method
+   */
+  setSettingsProvider(provider) {
+    if (!provider || typeof provider.getSettings !== "function") {
+      throw new Error(
+        "Invalid settings provider - must have getSettings() method",
+      );
+    }
+    this.settingsProvider = provider;
+    console.log("✅ BusinessRuleValidator: Settings provider configured");
   }
 
   /**
@@ -74,11 +89,16 @@ export class BusinessRuleValidator {
         ...options,
       };
 
-      // Extract restaurant ID for configuration service
+      // Set settings provider if provided
+      if (options.settingsProvider) {
+        this.setSettingsProvider(options.settingsProvider);
+      }
+
+      // Extract restaurant ID for configuration service (legacy fallback)
       this.restaurantId = options.restaurantId;
 
-      // Initialize configuration service if restaurant ID provided
-      if (this.restaurantId) {
+      // Initialize configuration service if restaurant ID provided (legacy path)
+      if (this.restaurantId && !this.settingsProvider) {
         try {
           // Initialize constraint engine configuration
           this.configService = await initializeConstraintConfiguration(
@@ -103,8 +123,14 @@ export class BusinessRuleValidator {
         }
       }
 
-      // Load dynamic configurations
-      await this.refreshConfiguration();
+      // Load dynamic configurations (only if not using settings provider)
+      if (!this.settingsProvider) {
+        await this.refreshConfiguration();
+      } else {
+        console.log(
+          "✅ Using real-time settings provider (skipping legacy config refresh)",
+        );
+      }
 
       this.initialized = true;
       this.status = "ready";
@@ -122,6 +148,39 @@ export class BusinessRuleValidator {
    */
   isReady() {
     return this.initialized && this.status === "ready";
+  }
+
+  /**
+   * Get live settings from settings provider or fallback to cached configuration
+   * @returns {Object} Live settings object
+   */
+  getLiveSettings() {
+    if (this.settingsProvider) {
+      try {
+        const settings = this.settingsProvider.getSettings();
+        return {
+          staffGroups: settings.staffGroups || [],
+          dailyLimits: settings.dailyLimits || DAILY_LIMITS,
+          monthlyLimits: settings.monthlyLimits || {},
+          priorityRules: settings.priorityRules || PRIORITY_RULES,
+        };
+      } catch (error) {
+        console.warn(
+          "⚠️ Failed to get live settings, using cached config:",
+          error.message,
+        );
+      }
+    }
+
+    // Fallback to cached configuration (legacy path)
+    return {
+      staffGroups:
+        this.configurationCache.get("staffGroups") || STAFF_CONFLICT_GROUPS,
+      dailyLimits: this.configurationCache.get("dailyLimits") || DAILY_LIMITS,
+      monthlyLimits: this.configurationCache.get("monthlyLimits") || {},
+      priorityRules:
+        this.configurationCache.get("priorityRules") || PRIORITY_RULES,
+    };
   }
 
   /**
@@ -529,8 +588,8 @@ export class BusinessRuleValidator {
       if (weekendWorkRatio > 0.7) staffSatisfaction -= 15; // Too many weekends
 
       // Priority rule satisfaction
-      const priorityRules =
-        this.configurationCache.get("priorityRules") || PRIORITY_RULES;
+      const liveSettings = this.getLiveSettings();
+      const priorityRules = liveSettings.priorityRules;
       if (priorityRules[staff.name] || priorityRules[staff.id]) {
         // Check if priority rules are followed (simplified check)
         staffSatisfaction += 10; // Bonus for having priority rules considered
@@ -948,9 +1007,9 @@ export class BusinessRuleValidator {
    * @param {Array} dateRange - Date range
    */
   async applyPriorityRules(schedule, staffMembers, dateRange) {
-    // Get priority rules from cache or fallback to static
-    const priorityRules =
-      this.configurationCache.get("priorityRules") || PRIORITY_RULES;
+    // Get priority rules from live settings
+    const liveSettings = this.getLiveSettings();
+    const priorityRules = liveSettings.priorityRules;
 
     Object.keys(priorityRules).forEach((staffIdentifier) => {
       // Find staff by name or ID
@@ -998,10 +1057,82 @@ export class BusinessRuleValidator {
    * @param {Array} dateRange - Date range
    */
   async applyStaffGroupConstraints(schedule, staffMembers, dateRange) {
-    // This is a simplified implementation
-    // In a full implementation, this would check all group constraints
-    // and make adjustments to prevent conflicts
-    console.log("🔧 Applying staff group constraints...");
+    console.log("🔧 [AI] Applying staff group constraints...");
+
+    // Get staff groups from live settings
+    const liveSettings = this.getLiveSettings();
+    if (!liveSettings || !liveSettings.staffGroups || liveSettings.staffGroups.length === 0) {
+      console.log("⚠️ [AI] No staff groups configured, skipping constraint application");
+      return;
+    }
+
+    const staffGroups = liveSettings.staffGroups;
+    console.log(`📋 [AI] Processing ${staffGroups.length} staff group(s)`);
+
+    // For each date in the range
+    dateRange.forEach((date) => {
+      const dateKey = date.toISOString().split("T")[0];
+
+      // For each staff group
+      staffGroups.forEach((group) => {
+        const groupMembers = group.members || [];
+        if (groupMembers.length === 0) return;
+
+        // Find members in this group and their shift status
+        const membersWithShifts = [];
+
+        groupMembers.forEach((memberId) => {
+          // Try to find staff by ID first, then by name (backward compatibility)
+          let staff = staffMembers.find(s => s.id === memberId);
+          if (!staff) {
+            staff = staffMembers.find(s => s.name === memberId);
+          }
+
+          if (staff && schedule[staff.id]) {
+            const shift = schedule[staff.id][dateKey];
+            membersWithShifts.push({
+              staffId: staff.id,
+              staffName: staff.name,
+              shift: shift,
+              isOffOrEarly: shift !== undefined && (isOffDay(shift) || isEarlyShift(shift))
+            });
+          }
+        });
+
+        // Count members with off/early shifts
+        const offOrEarlyMembers = membersWithShifts.filter(m => m.isOffOrEarly);
+
+        // ✅ CRITICAL FIX: If more than 1 member has off/early shift, enforce opposite pattern
+        if (offOrEarlyMembers.length > 1) {
+          console.log(
+            `⚠️ [AI] ${dateKey}: Group "${group.name}" has ${offOrEarlyMembers.length} members with off/early shifts - fixing conflict`
+          );
+
+          // Strategy: Keep the first member's shift, change the rest to working (○ or empty)
+          // This ensures opposite patterns: if one is off (×), others must work (○)
+          offOrEarlyMembers.slice(1).forEach((member) => {
+            const previousShift = schedule[member.staffId][dateKey];
+
+            // Change to working shift (normal shift = empty string or ○)
+            schedule[member.staffId][dateKey] = "○"; // Normal working shift
+
+            console.log(
+              `  ✏️ [AI] Changed ${member.staffName}: "${previousShift}" → "○" (working shift)`
+            );
+          });
+
+          console.log(
+            `  ✅ [AI] Group "${group.name}" conflict resolved: 1 member off/early, ${offOrEarlyMembers.length - 1} changed to working`
+          );
+        } else if (offOrEarlyMembers.length === 1) {
+          console.log(
+            `  ✓ [AI] ${dateKey}: Group "${group.name}" OK - 1 member off/early, others working`
+          );
+        }
+      });
+    });
+
+    console.log("✅ [AI] Staff group constraints applied successfully");
   }
 
   /**
@@ -1011,18 +1142,16 @@ export class BusinessRuleValidator {
    * @param {Array} dateRange - Date range
    */
   async distributeOffDays(schedule, staffMembers, dateRange) {
-    // Use cached monthly limits or fallback
-    const cachedMonthlyLimits = this.configurationCache.get("monthlyLimits");
+    // Use live settings
+    const liveSettings = this.getLiveSettings();
     const monthLimits =
-      cachedMonthlyLimits ||
+      liveSettings.monthlyLimits ||
       (await getMonthlyLimits(
         dateRange[0].getFullYear(),
         dateRange[0].getMonth() + 1,
       ));
 
-    // Use cached daily limits or fallback
-    const dailyLimits =
-      this.configurationCache.get("dailyLimits") || DAILY_LIMITS;
+    const dailyLimits = liveSettings.dailyLimits;
 
     staffMembers.forEach((staff) => {
       if (!schedule[staff.id]) return;
@@ -1066,9 +1195,9 @@ export class BusinessRuleValidator {
    * @param {Array} dateRange - Date range
    */
   async applyCoverageCompensation(schedule, staffMembers, dateRange) {
-    // Get staff groups from cache or fallback
-    const staffGroups =
-      this.configurationCache.get("staffGroups") || STAFF_CONFLICT_GROUPS;
+    // Get staff groups from live settings
+    const liveSettings = this.getLiveSettings();
+    const staffGroups = liveSettings.staffGroups;
 
     // Apply Group 2 coverage compensation rule
     const group2 = staffGroups.find((g) => g.name === "Group 2");
@@ -1106,9 +1235,9 @@ export class BusinessRuleValidator {
    * @param {Array} dateRange - Date range
    */
   async applyFinalAdjustments(schedule, staffMembers, dateRange) {
-    // Use cached daily limits or fallback
-    const dailyLimits =
-      this.configurationCache.get("dailyLimits") || DAILY_LIMITS;
+    // Use live settings
+    const liveSettings = this.getLiveSettings();
+    const dailyLimits = liveSettings.dailyLimits;
 
     // Ensure minimum coverage each day
     dateRange.forEach((date) => {
@@ -1462,8 +1591,8 @@ export class BusinessRuleValidator {
    * @returns {number} Compliance score (0-1)
    */
   async calculatePreferenceCompliance(staffSchedule, staff, dateRange) {
-    const priorityRules =
-      this.configurationCache.get("priorityRules") || PRIORITY_RULES;
+    const liveSettings = this.getLiveSettings();
+    const priorityRules = liveSettings.priorityRules;
     const rules = priorityRules[staff.name] || priorityRules[staff.id];
     if (!rules || !rules.preferredShifts) return 0.8; // Default good score if no rules
 
