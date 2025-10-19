@@ -1058,6 +1058,7 @@ export class BusinessRuleValidator {
    */
   async applyStaffGroupConstraints(schedule, staffMembers, dateRange) {
     console.log("🔧 [AI] Applying staff group constraints...");
+    console.log(`📊 [AI] Input - Schedule keys: ${Object.keys(schedule).length}, Staff: ${staffMembers.length}, Dates: ${dateRange.length}`);
 
     // Get staff groups from live settings
     const liveSettings = this.getLiveSettings();
@@ -1068,6 +1069,7 @@ export class BusinessRuleValidator {
 
     const staffGroups = liveSettings.staffGroups;
     console.log(`📋 [AI] Processing ${staffGroups.length} staff group(s)`);
+    console.log(`📋 [AI] Staff groups:`, staffGroups.map(g => ({ name: g.name, members: g.members })));
 
     // For each date in the range
     dateRange.forEach((date) => {
@@ -1088,15 +1090,25 @@ export class BusinessRuleValidator {
             staff = staffMembers.find(s => s.name === memberId);
           }
 
-          if (staff && schedule[staff.id]) {
-            const shift = schedule[staff.id][dateKey];
-            membersWithShifts.push({
-              staffId: staff.id,
-              staffName: staff.name,
-              shift: shift,
-              isOffOrEarly: shift !== undefined && (isOffDay(shift) || isEarlyShift(shift))
-            });
+          if (!staff) {
+            console.log(`  ⚠️ [AI] ${dateKey}: Group "${group.name}" - Member "${memberId}" not found in staffMembers`);
+            console.log(`  📋 [AI] Available staff IDs:`, staffMembers.map(s => s.id));
+            console.log(`  📋 [AI] Available staff names:`, staffMembers.map(s => s.name));
+            return;
           }
+
+          if (!schedule[staff.id]) {
+            console.log(`  ⚠️ [AI] ${dateKey}: Staff "${staff.name}" (ID: ${staff.id}) has no schedule entry`);
+            return;
+          }
+
+          const shift = schedule[staff.id][dateKey];
+          membersWithShifts.push({
+            staffId: staff.id,
+            staffName: staff.name,
+            shift: shift,
+            isOffOrEarly: shift !== undefined && (isOffDay(shift) || isEarlyShift(shift))
+          });
         });
 
         // Count members with off/early shifts
