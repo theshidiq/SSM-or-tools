@@ -71,6 +71,7 @@ export const useWebSocketShifts = (
   // Schedule state
   const [scheduleData, setScheduleData] = useState({});
   const [syncedPeriodIndex, setSyncedPeriodIndex] = useState(null); // Track which period this data belongs to
+  const [lastSyncTimestamp, setLastSyncTimestamp] = useState(null); // Track when last sync occurred (for AI conflict detection)
   const [isLoading, setIsLoading] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
 
@@ -201,6 +202,7 @@ export const useWebSocketShifts = (
           case MESSAGE_TYPES.SHIFT_SYNC_RESPONSE:
             setScheduleData(message.payload.scheduleData || {});
             setSyncedPeriodIndex(message.payload.periodIndex ?? currentPeriod); // Track which period this data is for
+            setLastSyncTimestamp(Date.now()); // Track timestamp for AI conflict detection
             setIsSyncing(false);
             console.log(
               `✅ [WEBSOCKET-SHIFTS] Schedule synced for period ${message.payload.periodIndex ?? currentPeriod}: ${Object.keys(message.payload.scheduleData || {}).length} staff members`,
@@ -543,6 +545,7 @@ export const useWebSocketShifts = (
     // Schedule data
     scheduleData,
     syncedPeriodIndex, // Which period this data belongs to
+    lastSyncTimestamp, // When last sync occurred (for AI conflict detection)
 
     // Operations
     updateShift,

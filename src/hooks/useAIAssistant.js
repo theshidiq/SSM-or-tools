@@ -9,6 +9,7 @@
 import { useState, useCallback, useRef, useEffect } from "react";
 import { optimizedStorage } from "../utils/storageUtils";
 import { generateDateRange } from "../utils/dateUtils";
+import { useAISettings } from "./useAISettings";
 // Lazy imports to prevent blocking main thread
 const loadConstraintEngine = async () => {
   const module = await import("../ai/constraints/ConstraintEngine");
@@ -111,6 +112,9 @@ export const useAIAssistant = (
     processingTimes: [],
     yieldOperations: 0,
   });
+
+  // Get AI settings (WebSocket or localStorage)
+  const aiSettings = useAISettings();
 
   // Set up configuration change monitoring and cache initialization
   useEffect(() => {
@@ -278,6 +282,12 @@ export const useAIAssistant = (
       if (aiSystem && aiSystem.isEnhanced) {
         // Initialize enhanced system components with strict rule enforcement
         const hybridPredictor = new aiSystem.HybridPredictor();
+
+        // Configure predictor with AI settings if connected
+        if (aiSettings.isConnected && !aiSettings.isLoading) {
+          hybridPredictor.setSettingsProvider(aiSettings);
+        }
+
         await hybridPredictor.initialize({
           mlConfidenceThreshold: 0.8,
           useMLPredictions: true,
@@ -513,7 +523,8 @@ export const useAIAssistant = (
 
       // Apply results if successful
       if (result && result.success && result.schedule) {
-        updateSchedule(result.schedule);
+        // 🤖 Mark this update as coming from AI to prevent WebSocket from wiping the data
+        updateSchedule(result.schedule, null, { fromAI: true });
 
         const filledDetails = countFilledCells(scheduleData, result.schedule);
         const processingTime = Date.now() - startTime;
@@ -576,7 +587,8 @@ export const useAIAssistant = (
         );
 
         if (emergencyResult.success && emergencyResult.newSchedule) {
-          updateSchedule(emergencyResult.newSchedule);
+          // 🤖 Emergency AI recovery - also mark as from AI
+          updateSchedule(emergencyResult.newSchedule, null, { fromAI: true });
           return {
             success: true,
             message: emergencyResult.message + " (緊急復旧・ルール適用済み)",

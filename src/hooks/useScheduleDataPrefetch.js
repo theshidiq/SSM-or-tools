@@ -93,6 +93,10 @@ export const useScheduleDataPrefetch = (
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
 
+  // AI modification tracking to prevent WebSocket from wiping AI-generated data
+  const lastAIModificationRef = useRef(null);
+  const localModificationsRef = useRef(new Set()); // Track modified cells
+
   // WebSocket connection state tracking
   const isConnected = useMemo(() => {
     return isWebSocketEnabled ? webSocketStaff.isConnected : true; // Always connected for Supabase mode
@@ -323,7 +327,7 @@ export const useScheduleDataPrefetch = (
     );
   }, [currentScheduleData, currentMonthIndex]);
 
-  // Sync WebSocket shift data with local schedule state (WITH PERIOD VALIDATION)
+  // Sync WebSocket shift data with local schedule state (WITH PERIOD VALIDATION + AI PROTECTION)
   useEffect(() => {
     if (
       webSocketShifts.isConnected &&
@@ -333,10 +337,57 @@ export const useScheduleDataPrefetch = (
       const syncedPeriod = webSocketShifts.syncedPeriodIndex;
 
       if (syncedPeriod === currentMonthIndex) {
+        // 🛡️ AI PROTECTION: Check if we have recent AI modifications
+        const wsTimestamp = webSocketShifts.lastSyncTimestamp || 0;
+        const aiTimestamp = lastAIModificationRef.current || 0;
+
+        if (aiTimestamp > wsTimestamp && localModificationsRef.current.size > 0) {
+          console.warn(
+            `⚠️ [WEBSOCKET-PREFETCH] Skipping WebSocket sync - AI changes (${localModificationsRef.current.size} cells) are newer than server data`,
+          );
+          // Schedule a backend persist to sync AI changes to server
+          setTimeout(() => {
+            if (webSocketShifts.bulkUpdateSchedule && typeof webSocketShifts.bulkUpdateSchedule === 'function') {
+              console.log('📤 [WEBSOCKET-PREFETCH] Persisting AI changes to backend');
+              webSocketShifts.bulkUpdateSchedule(schedule);
+              // Clear local modifications after successful persist
+              setTimeout(() => {
+                localModificationsRef.current.clear();
+                lastAIModificationRef.current = null;
+              }, 1000);
+            }
+          }, 500);
+          return;
+        }
+
         console.log(
           `🔄 [WEBSOCKET-PREFETCH] Syncing WebSocket shift data for period ${currentMonthIndex} to local state`,
         );
-        setSchedule(webSocketShifts.scheduleData);
+
+        // 🎯 SMART MERGE: Preserve locally-modified cells during sync
+        if (localModificationsRef.current.size > 0) {
+          console.log(
+            `🔀 [WEBSOCKET-PREFETCH] Smart merge: preserving ${localModificationsRef.current.size} locally-modified cells`,
+          );
+
+          setSchedule(prev => {
+            const merged = { ...webSocketShifts.scheduleData };
+
+            // Preserve AI-modified cells
+            localModificationsRef.current.forEach(cellKey => {
+              const [staffId, dateKey] = cellKey.split('::');
+              if (prev[staffId]?.[dateKey] !== undefined) {
+                if (!merged[staffId]) merged[staffId] = {};
+                merged[staffId][dateKey] = prev[staffId][dateKey];
+              }
+            });
+
+            return merged;
+          });
+        } else {
+          // No local modifications - safe to replace
+          setSchedule(webSocketShifts.scheduleData);
+        }
       } else {
         console.warn(
           `⚠️ [WEBSOCKET-PREFETCH] Ignoring WebSocket data for period ${syncedPeriod} (currently viewing period ${currentMonthIndex})`,
@@ -344,7 +395,7 @@ export const useScheduleDataPrefetch = (
         // Don't sync - this prevents wrong period data from overwriting current display
       }
     }
-  }, [webSocketShifts.scheduleData, webSocketShifts.isConnected, webSocketShifts.syncedPeriodIndex, currentMonthIndex]);
+  }, [webSocketShifts.scheduleData, webSocketShifts.isConnected, webSocketShifts.syncedPeriodIndex, currentMonthIndex, schedule, webSocketShifts.bulkUpdateSchedule, webSocketShifts.lastSyncTimestamp]);
 
   // Overall loading state
   const isPrefetching =
@@ -856,7 +907,24 @@ export const useScheduleDataPrefetch = (
           staffMembers: processedStaffMembers,
         });
       },
-      updateSchedule: async (newScheduleData, staffForSave = null) => {
+      updateSchedule: async (newScheduleData, staffForSave = null, options = {}) => {
+        // 🤖 Track AI modifications to prevent WebSocket from wiping generated data
+        const isFromAI = options.fromAI || false;
+        if (isFromAI) {
+          console.log('🤖 [AI-PROTECTION] Recording AI-generated schedule update');
+          lastAIModificationRef.current = Date.now();
+
+          // Track all modified cells
+          Object.keys(newScheduleData).forEach(staffId => {
+            Object.keys(newScheduleData[staffId] || {}).forEach(dateKey => {
+              const cellKey = `${staffId}::${dateKey}`;
+              localModificationsRef.current.add(cellKey);
+            });
+          });
+
+          console.log(`🤖 [AI-PROTECTION] Tracked ${localModificationsRef.current.size} AI-modified cells`);
+        }
+
         // Track the schedule ID to use (either existing or newly created)
         let scheduleIdToUse = currentScheduleId;
 
