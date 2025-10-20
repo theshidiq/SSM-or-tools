@@ -270,15 +270,33 @@ export const useAIAssistantLazy = (
 
   // Generate AI predictions
   const generateAIPredictions = useCallback(
-    async (options = {}) => {
+    async (onProgress) => {
       setIsProcessing(true);
       setError(null);
 
       try {
+        // Report initialization progress
+        if (onProgress) {
+          onProgress({
+            stage: "initializing",
+            progress: 10,
+            message: "AIシステム初期化中...",
+          });
+        }
+
         // Ensure AI is initialized
         const system = aiSystemRef.current || (await initializeAI());
         if (!system) {
           throw new Error("AI system not available");
+        }
+
+        // Report AI system ready
+        if (onProgress) {
+          onProgress({
+            stage: "starting",
+            progress: 20,
+            message: "AI予測を開始...",
+          });
         }
 
         // Generating predictions using AI system
@@ -289,12 +307,20 @@ export const useAIAssistantLazy = (
             staffMembers,
             currentMonthIndex,
             saveSchedule, // Pass backend save operation
-            ...options,
+            onProgress, // Pass progress callback through
           });
 
           // Apply the generated schedule to backend (WebSocket → Go Server → Database)
           if (result.success && result.schedule) {
             console.log("💾 [AI] Saving AI-generated schedule to backend...");
+
+            if (onProgress) {
+              onProgress({
+                stage: "saving",
+                progress: 90,
+                message: "スケジュール保存中...",
+              });
+            }
 
             // Save to backend via WebSocket (this persists to database)
             await saveSchedule(result.schedule);
@@ -305,6 +331,15 @@ export const useAIAssistantLazy = (
             optimizedStorage.saveScheduleData(result.schedule);
           }
 
+          // Report completion
+          if (onProgress) {
+            onProgress({
+              stage: "completed",
+              progress: 100,
+              message: "予測完了",
+            });
+          }
+
           return result;
         } else {
           // Fallback for systems without generateSchedule
@@ -313,6 +348,15 @@ export const useAIAssistantLazy = (
       } catch (err) {
         console.error("❌ Failed to generate AI predictions:", err);
         setError(err.message);
+
+        if (onProgress) {
+          onProgress({
+            stage: "error",
+            progress: 0,
+            message: `エラー: ${err.message}`,
+          });
+        }
+
         return {
           success: false,
           error: err.message,
