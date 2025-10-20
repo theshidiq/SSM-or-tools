@@ -17,7 +17,9 @@ import {
   Zap,
   Clock,
   Target,
+  Database,
 } from "lucide-react";
+import { useAISettings } from "../../hooks/useAISettings";
 
 // ShadCN UI Components
 import {
@@ -43,6 +45,9 @@ const AIAssistantModal = ({
   const [trainingProgress, setTrainingProgress] = useState(null);
   const [progressStage, setProgressStage] = useState("idle");
 
+  // Get AI settings for live status
+  const aiSettings = useAISettings();
+
   useEffect(() => {
     if (!isOpen) {
       setResults(null);
@@ -52,14 +57,17 @@ const AIAssistantModal = ({
   }, [isOpen]);
 
   const handleAutoFillSchedule = async () => {
+    console.log("🎯 [DEBUG] AI Button clicked - calling onAutoFillSchedule");
     setProgressStage("starting");
     setTrainingProgress({ progress: 0, message: "AIシステム初期化中..." });
 
+    console.log("🎯 [DEBUG] Calling onAutoFillSchedule callback...");
     const result = await onAutoFillSchedule((progress) => {
       setProgressStage(progress.stage);
       setTrainingProgress(progress);
     });
 
+    console.log("🎯 [DEBUG] onAutoFillSchedule completed with result:", result);
     setResults(result);
     setProgressStage("completed");
   };
@@ -80,6 +88,44 @@ const AIAssistantModal = ({
         </DialogHeader>
 
         <div className="max-h-[500px] overflow-y-auto space-y-4">
+          {/* Settings Status */}
+          <Card>
+            <CardContent className="p-3">
+              <div className="flex items-center gap-2 mb-2">
+                <Database size={16} className={aiSettings.isConnected ? "text-green-600" : "text-gray-400"} />
+                <span className="text-sm font-medium">
+                  Settings: {aiSettings.isConnected ? (
+                    <Badge variant="default" className="bg-green-600">
+                      {aiSettings.backendMode === "websocket-multitable" ? "Live (WebSocket)" : "Local Storage"}
+                    </Badge>
+                  ) : (
+                    <Badge variant="outline">Loading...</Badge>
+                  )}
+                </span>
+              </div>
+              <div className="text-xs text-muted-foreground space-y-1">
+                <div className="flex items-center justify-between">
+                  <span>Staff Groups:</span>
+                  <Badge variant="secondary">{aiSettings.staffGroups?.length || 0}</Badge>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span>Daily Limits:</span>
+                  <Badge variant="secondary">{aiSettings.dailyLimits?.length || 0}</Badge>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span>Priority Rules:</span>
+                  <Badge variant="secondary">{aiSettings.priorityRules?.length || 0}</Badge>
+                </div>
+                {aiSettings.hasSettings && (
+                  <div className="mt-2 pt-2 border-t flex items-center gap-1 text-green-600">
+                    <CheckCircle size={12} />
+                    <span>Business rules configured</span>
+                  </div>
+                )}
+              </div>
+            </CardContent>
+          </Card>
+
           {/* System Status Display */}
           {systemStatus && systemStatus.type === "enhanced" && (
             <Card>

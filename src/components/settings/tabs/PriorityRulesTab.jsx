@@ -148,18 +148,20 @@ const PriorityRulesTab = ({ staffMembers = [], validationErrors = {} }) => {
   ); // Only depends on staffMembers
 
   // Wrap updatePriorityRules in useCallback for stable reference (Phase 4.2)
+  // ✅ FIX: Use functional update to avoid dependency on settings object
   const updatePriorityRules = useCallback(
     (newRules) => {
       // Check for conflicts when updating rules
       const conflicts = detectRuleConflicts(newRules);
       setConflictingRules(conflicts);
 
-      updateSettings({
-        ...settings,
+      // ✅ Use functional update to get latest settings without adding to dependencies
+      updateSettings((prevSettings) => ({
+        ...prevSettings,
         priorityRules: newRules,
-      });
+      }));
     },
-    [settings, updateSettings, detectRuleConflicts],
+    [updateSettings, detectRuleConflicts],
   );
 
   // Cancel changes and restore original data (Phase 4.2: moved before useEffect for dependency)
@@ -674,12 +676,17 @@ const PriorityRulesTab = ({ staffMembers = [], validationErrors = {} }) => {
       )}
 
       {/* Delete Confirmation Modal */}
+      {/* ✅ FIX: Memoize computed message prop to prevent infinite re-renders */}
       <ConfirmationModal
         isOpen={deleteConfirmation !== null}
         onClose={handleDeleteCancel}
         onConfirm={handleDeleteConfirm}
         title="Delete Priority Rule"
-        message={`Are you sure you want to delete the priority rule "${deleteConfirmation?.name}"? This action cannot be undone.`}
+        message={useMemo(
+          () =>
+            `Are you sure you want to delete the priority rule "${deleteConfirmation?.name}"? This action cannot be undone.`,
+          [deleteConfirmation?.name],
+        )}
         confirmText="Delete Rule"
         cancelText="Cancel"
         variant="danger"

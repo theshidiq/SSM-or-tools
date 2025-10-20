@@ -110,6 +110,7 @@ const DailyLimitsTab = ({
   }, [editingLimit, editingMonthlyLimit]);
 
   // Phase 4.3: Wrap updateDailyLimits with refs (prevent infinite loops)
+  // ✅ FIX: Remove staffMembers from dependencies to prevent unnecessary re-creations
   const updateDailyLimits = useCallback(
     async (newLimits, skipValidation = false) => {
       try {
@@ -117,6 +118,7 @@ const DailyLimitsTab = ({
         if (!skipValidation && currentScheduleId) {
           setIsValidating(true);
           try {
+            // ✅ Use staffMembers directly without adding to dependencies
             const violations = await validateDailyLimits(
               newLimits,
               staffMembers,
@@ -181,7 +183,7 @@ const DailyLimitsTab = ({
         throw error;
       }
     },
-    [currentScheduleId, validateDailyLimits, staffMembers],
+    [currentScheduleId, validateDailyLimits],
   );
 
   // Phase 4.3: Wrap updateMonthlyLimits with useCallback and refs
@@ -1176,13 +1178,26 @@ const DailyLimitsTab = ({
       </div>
 
       {/* Delete Confirmation Modal */}
+      {/* ✅ FIX: Memoize computed props to prevent infinite re-renders */}
       <ConfirmationModal
         isOpen={deleteConfirmation !== null}
         onClose={handleDeleteCancel}
         onConfirm={handleDeleteConfirm}
-        title={`Delete ${deleteConfirmation?.type === "daily" ? "Daily" : "Monthly"} Limit`}
-        message={`Are you sure you want to delete the ${deleteConfirmation?.type} limit "${deleteConfirmation?.name}"? This action cannot be undone.`}
-        confirmText={`Delete ${deleteConfirmation?.type === "daily" ? "Daily" : "Monthly"} Limit`}
+        title={useMemo(
+          () =>
+            `Delete ${deleteConfirmation?.type === "daily" ? "Daily" : "Monthly"} Limit`,
+          [deleteConfirmation?.type],
+        )}
+        message={useMemo(
+          () =>
+            `Are you sure you want to delete the ${deleteConfirmation?.type} limit "${deleteConfirmation?.name}"? This action cannot be undone.`,
+          [deleteConfirmation?.type, deleteConfirmation?.name],
+        )}
+        confirmText={useMemo(
+          () =>
+            `Delete ${deleteConfirmation?.type === "daily" ? "Daily" : "Monthly"} Limit`,
+          [deleteConfirmation?.type],
+        )}
         cancelText="Cancel"
         variant="danger"
         isLoading={isDeleting}

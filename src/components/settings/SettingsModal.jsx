@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from "react";
+import React, { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { X, RotateCcw, AlertTriangle, Check } from "lucide-react";
 
 // ShadCN UI Components
@@ -222,6 +222,23 @@ const SettingsModal = ({
     setDeleteGroupConfirmation(null);
     setDeleteGroupSuccess(false);
   };
+
+  // ✅ Memoize delete confirmation modal props to prevent infinite re-renders
+  const deleteModalTitle = useMemo(
+    () =>
+      deleteGroupSuccess
+        ? "Group Deleted Successfully"
+        : "Delete Staff Group",
+    [deleteGroupSuccess],
+  );
+
+  const deleteModalMessage = useMemo(
+    () =>
+      deleteGroupSuccess
+        ? `The group "${deleteGroupConfirmation?.groupName}" has been successfully deleted along with any related conflict rules and backup assignments.`
+        : `Are you sure you want to delete the group "${deleteGroupConfirmation?.groupName}"? This action cannot be undone and will also remove any related conflict rules and backup assignments.`,
+    [deleteGroupSuccess, deleteGroupConfirmation?.groupName],
+  );
 
   const renderTabContent = () => {
     const commonProps = {
@@ -465,21 +482,14 @@ const SettingsModal = ({
       )}
 
       {/* Delete Group Confirmation Modal - Rendered outside Dialog to prevent pointer-events issues */}
+      {/* ✅ FIX: Memoized props to prevent infinite re-renders */}
       {deleteGroupConfirmation && (
         <ConfirmationModal
           isOpen={deleteGroupConfirmation !== null}
           onClose={handleDeleteGroupCancel}
           onConfirm={deleteGroupSuccess ? null : handleDeleteGroupConfirm}
-          title={
-            deleteGroupSuccess
-              ? "Group Deleted Successfully"
-              : "Delete Staff Group"
-          }
-          message={
-            deleteGroupSuccess
-              ? `The group "${deleteGroupConfirmation.groupName}" has been successfully deleted along with any related conflict rules and backup assignments.`
-              : `Are you sure you want to delete the group "${deleteGroupConfirmation.groupName}"? This action cannot be undone and will also remove any related conflict rules and backup assignments.`
-          }
+          title={deleteModalTitle}
+          message={deleteModalMessage}
           confirmText={deleteGroupSuccess ? null : "Delete Group"}
           cancelText={deleteGroupSuccess ? null : "Cancel"}
           variant={deleteGroupSuccess ? "info" : "danger"}

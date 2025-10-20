@@ -17,9 +17,7 @@ const ConfirmationModal = ({
 
   // Focus management and escape key handling
   useEffect(() => {
-    console.log("🗑️ [MODAL] ConfirmationModal isOpen changed:", isOpen);
     if (isOpen && modalRef.current) {
-      console.log("🗑️ [MODAL] Focusing modal element");
       modalRef.current.focus();
     }
   }, [isOpen]);
@@ -53,12 +51,9 @@ const ConfirmationModal = ({
     };
   }, [isOpen]);
 
-  console.log("🗑️ [MODAL] ConfirmationModal rendering, isOpen:", isOpen);
   if (!isOpen) {
-    console.log("🗑️ [MODAL] Modal not open, returning null");
     return null;
   }
-  console.log("🗑️ [MODAL] Modal is open, creating portal");
 
   const variantStyles = {
     danger: {

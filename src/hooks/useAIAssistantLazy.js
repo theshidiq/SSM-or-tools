@@ -207,6 +207,14 @@ export const useAIAssistantLazy = (
                 saveSchedule: inputSaveSchedule,
                 onProgress,
               }) => {
+                // Ensure predictor is initialized (lazy initialization)
+                if (!predictor.initialized || !predictor.isReady()) {
+                  console.log("🔧 Lazy-initializing HybridPredictor...");
+                  predictor.setSettingsProvider(aiSettings);
+                  await predictor.initialize();
+                  console.log("✅ HybridPredictor initialized");
+                }
+
                 const dateRange = generateDateRange(inputMonthIndex);
 
                 if (onProgress) {
