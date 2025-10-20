@@ -360,8 +360,17 @@ export class TensorFlowScheduler {
    * Predict shift assignments for empty schedule cells
    */
   async predictSchedule(currentSchedule, staffMembers, dateRange) {
+    console.log("🎯 [DEBUG] predictSchedule() CALLED", {
+      hasModel: !!this.model,
+      isInitialized: this.isInitialized,
+      cacheWarmedUp: this.cacheWarmedUp,
+      staffCount: staffMembers?.length,
+      dateCount: dateRange?.length
+    });
+
     if (!this.isInitialized || !this.model) {
       // Model not initialized, initializing
+      console.log("🎯 [DEBUG] Model not initialized, calling initialize()");
       await this.initialize();
     }
 
@@ -375,12 +384,26 @@ export class TensorFlowScheduler {
 
     // Check if model needs training
     const modelInfo = this.getModelInfo();
+    console.log("🎯 [DEBUG] Model training check:", {
+      hasModelInfo: !!modelInfo,
+      accuracy: modelInfo?.accuracy,
+      needsTraining: !modelInfo || modelInfo.accuracy === 0
+    });
+
     if (!modelInfo || modelInfo.accuracy === 0) {
       // Model needs training, training on current data
+      console.log("🎯 [DEBUG] Starting model training...");
+      const trainingStartTime = Date.now();
       try {
         const trainingResult = await this.trainModel(staffMembers, {
           forceRetrain: false,
         });
+        const trainingTime = Date.now() - trainingStartTime;
+        console.log(`🎯 [DEBUG] Model training completed in ${trainingTime}ms`, {
+          success: trainingResult?.success,
+          accuracy: trainingResult?.accuracy
+        });
+
         if (!trainingResult?.success) {
           console.warn(
             "⚠️ Training failed, will use untrained model with reduced accuracy",
@@ -397,6 +420,7 @@ export class TensorFlowScheduler {
 
     try {
       // Generating ML predictions for schedule
+      console.log("🎯 [DEBUG] Entering prediction try block");
 
       // **PHASE 2 ENHANCEMENT: Initialize cache with current configuration**
       const cacheInvalidated = featureCacheManager.invalidateOnConfigChange(
@@ -406,8 +430,13 @@ export class TensorFlowScheduler {
       );
 
       // Cache invalidated if configuration changed
+      console.log("🎯 [DEBUG] Cache invalidation check:", {
+        cacheInvalidated,
+        cacheWarmedUp: this.cacheWarmedUp
+      });
 
       // 🔥 PERFORMANCE WARMUP: Warmup cache on first prediction call
+      console.log("🎯 [DEBUG] Warmup check - will warmup:", !this.cacheWarmedUp);
       if (!this.cacheWarmedUp) {
         try {
           console.log("🔥 [WARMUP] First prediction - warming up feature cache...");
