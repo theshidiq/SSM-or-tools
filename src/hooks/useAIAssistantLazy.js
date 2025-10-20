@@ -225,7 +225,7 @@ export const useAIAssistantLazy = (
                   });
                 }
 
-                // Call hybrid predictor
+                // Call hybrid predictor with progress callback
                 const result = await predictor.predictSchedule(
                   {
                     scheduleData: inputScheduleData,
@@ -233,7 +233,8 @@ export const useAIAssistantLazy = (
                     timestamp: Date.now(),
                   },
                   inputStaffMembers,
-                  dateRange
+                  dateRange,
+                  onProgress // Forward progress callback
                 );
 
                 return {
@@ -305,7 +306,17 @@ export const useAIAssistantLazy = (
 
     loadingPromiseRef.current = loadingPromise;
     return await loadingPromise;
-  }, [isInitialized, isLoading, enableEnhanced, fallbackMode, fallbackSystem]);
+  }, [
+    isInitialized,
+    isLoading,
+    enableEnhanced,
+    fallbackMode,
+    fallbackSystem,
+    scheduleData,      // Fix stale closure
+    staffMembers,      // Fix stale closure
+    currentMonthIndex, // Fix stale closure
+    saveSchedule,      // Fix stale closure
+  ]);
 
   // Auto-initialize if requested
   useEffect(() => {
@@ -462,6 +473,7 @@ export const useAIAssistantLazy = (
     initializeAI,
     generateAIPredictions,
     autoFillSchedule,
+    generateSchedule: aiSystemRef.current?.generateSchedule, // Bridge to HybridPredictor
     getSystemStatus,
 
     // Enhanced features detection

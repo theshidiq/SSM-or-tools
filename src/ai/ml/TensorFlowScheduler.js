@@ -68,8 +68,9 @@ export class TensorFlowScheduler {
     };
 
     // Web Worker integration for non-blocking operations
+    // 🔧 FIX: Force worker fallback mode - Web Worker has broken communication for both batch and individual predictions
     this.useWebWorker = true;
-    this.workerFallbackMode = false;
+    this.workerFallbackMode = true; // Force fallback - prevents hanging on Worker calls
     this.workerInitialized = false;
 
     // Model backup system
@@ -358,8 +359,12 @@ export class TensorFlowScheduler {
 
   /**
    * Predict shift assignments for empty schedule cells
+   * @param {Object} currentSchedule - Current schedule data
+   * @param {Array} staffMembers - Staff member data
+   * @param {Array} dateRange - Date range for predictions
+   * @param {Function} onProgress - Optional progress callback
    */
-  async predictSchedule(currentSchedule, staffMembers, dateRange) {
+  async predictSchedule(currentSchedule, staffMembers, dateRange, onProgress = null) {
     console.log("🎯 [DEBUG] predictSchedule() CALLED", {
       hasModel: !!this.model,
       isInitialized: this.isInitialized,
@@ -435,44 +440,33 @@ export class TensorFlowScheduler {
         cacheWarmedUp: this.cacheWarmedUp
       });
 
-      // 🔥 PERFORMANCE WARMUP: Warmup cache on first prediction call
-      console.log("🎯 [DEBUG] Warmup check - will warmup:", !this.cacheWarmedUp);
-      if (!this.cacheWarmedUp) {
-        try {
-          console.log("🔥 [WARMUP] First prediction - warming up feature cache...");
-          const warmupStart = performance.now();
+      // 🔥 PERFORMANCE OPTIMIZATION: Skip synchronous warmup to prevent UI freeze
+      // Warmup was causing 30% progress hang (270+ features taking too long)
+      // Features will be generated on-demand with caching for subsequent predictions
+      console.log("🎯 [DEBUG] Using lazy feature generation (warmup disabled to prevent UI freeze)");
+      this.cacheWarmedUp = true; // Skip warmup, use on-demand feature generation
 
-          // Extract historical data for warmup context
-          const extractedDataForWarmup = extractAllDataForAI();
-          const allHistoricalDataForWarmup = {};
+      // ✅ Defensive validation: Ensure staffMembers is valid array
+      if (!staffMembers || !Array.isArray(staffMembers)) {
+        console.error("❌ predictSchedule: Invalid staffMembers parameter", {
+          staffMembers,
+          type: typeof staffMembers,
+          isArray: Array.isArray(staffMembers)
+        });
+        throw new Error(
+          `Invalid staffMembers parameter: expected array, got ${typeof staffMembers}`
+        );
+      }
 
-          if (extractedDataForWarmup.success && extractedDataForWarmup.data.rawPeriodData) {
-            extractedDataForWarmup.data.rawPeriodData.forEach((periodData) => {
-              allHistoricalDataForWarmup[periodData.monthIndex] = {
-                schedule: periodData.scheduleData,
-                dateRange: periodData.dateRange,
-              };
-            });
-          }
-
-          // Warmup with actual data
-          const warmupResult = await featureCacheManager.warmupCache(
-            staffMembers,
-            dateRange,
-            { schedule: currentSchedule },
-            allHistoricalDataForWarmup
-          );
-
-          const warmupTime = performance.now() - warmupStart;
-          console.log(
-            `✅ [WARMUP] Cache warmed up in ${warmupTime.toFixed(2)}ms (${warmupResult.featuresGenerated} features)`
-          );
-
-          this.cacheWarmedUp = true; // Mark warmup as complete
-        } catch (warmupError) {
-          console.warn("⚠️ [WARMUP] Cache warmup failed:", warmupError.message);
-          // Continue without warmup - not critical
-        }
+      if (!dateRange || !Array.isArray(dateRange)) {
+        console.error("❌ predictSchedule: Invalid dateRange parameter", {
+          dateRange,
+          type: typeof dateRange,
+          isArray: Array.isArray(dateRange)
+        });
+        throw new Error(
+          `Invalid dateRange parameter: expected array, got ${typeof dateRange}`
+        );
       }
 
       // Filter out inactive staff members before processing
@@ -529,26 +523,36 @@ export class TensorFlowScheduler {
 
       // Add progress callback for UI updates
       const updateProgress = (progress) => {
-        // Progress tracking for UI updates
-        // Dispatch custom event for UI progress updates
-        if (typeof window !== "undefined") {
-          window.dispatchEvent(
-            new CustomEvent("ml-progress", {
-              detail: {
-                progress,
-                processed: processedCount,
-                total: totalPredictions,
-              },
-            }),
-          );
+        // Call onProgress callback directly if provided
+        if (onProgress) {
+          onProgress({
+            stage: "predicting",
+            progress,
+            message: `AI予測中... (${progress}%)`,
+            processed: processedCount,
+            total: totalPredictions,
+          });
         }
       };
 
       // Starting prediction processing for active staff
 
-      // **ULTRA-PERFORMANCE FIX: Try batch processing first for massive speed improvement**
-      if (!this.workerFallbackMode && totalPredictions > 10) {
+      // 🔧 TEMPORARY FIX: Disable Web Worker batch processing to prevent hang at 30%
+      // Root cause: Web Worker never responds to BATCH_GENERATE_FEATURES messages
+      // The Worker Promise hangs indefinitely in optimizedFeatureManager.generateFeaturesBatch()
+      // Solution: Force fallback to individual processing mode (proven to work)
+      const skipBatchProcessing = true; // TODO: Fix Web Worker communication issue
+
+      console.log("🎯 [DEBUG] Batch processing check:", {
+        workerFallbackMode: this.workerFallbackMode,
+        totalPredictions,
+        skipBatchProcessing,
+        willUseBatch: !this.workerFallbackMode && !skipBatchProcessing && totalPredictions > 10
+      });
+
+      if (!this.workerFallbackMode && !skipBatchProcessing && totalPredictions > 10) {
         try {
+          console.log("🎯 [DEBUG] BEFORE processPredictionsBatch() call");
           // Attempting batch feature generation
           const batchResult = await this.processPredictionsBatch(
             activeStaff,
@@ -558,6 +562,10 @@ export class TensorFlowScheduler {
             allHistoricalData,
             updateProgress,
           );
+          console.log("🎯 [DEBUG] AFTER processPredictionsBatch() call", {
+            success: batchResult?.success,
+            processedCount: batchResult?.processedCount
+          });
 
           if (batchResult.success) {
             // Batch processing completed successfully
@@ -589,6 +597,13 @@ export class TensorFlowScheduler {
 
       // Fallback to individual processing for compatibility
       // Using individual prediction processing
+
+      console.log("🎯 [DEBUG] Starting individual prediction loop", {
+        activeStaffCount: activeStaff.length,
+        dateRangeLength: dateRange.length,
+        totalPredictions,
+        workerFallbackMode: this.workerFallbackMode
+      });
 
       // Process only active staff members with fully non-blocking chunked processing
       for (const staff of activeStaff) {
@@ -718,14 +733,18 @@ export class TensorFlowScheduler {
             processedCount++;
             yieldCounter++;
 
-            // **CRITICAL PERFORMANCE FIX: Ultra-responsive yielding with progress updates**
-            if (yieldCounter >= YIELD_INTERVAL) {
-              const progress = Math.round(
-                (processedCount / totalPredictions) * 100,
-              );
+            // **CRITICAL UX FIX: Update progress frequently (every 10 predictions = ~3% progress)**
+            // This prevents UI from appearing frozen during long 14-second prediction phase
+            if (processedCount % 10 === 0 || yieldCounter >= YIELD_INTERVAL) {
+              // Map 0-270 predictions to 30-95% progress range (30% already done, reserve 95-100% for validation/save)
+              const predictionProgress = (processedCount / totalPredictions) * 65; // 0-65%
+              const progress = Math.min(95, Math.round(30 + predictionProgress)); // 30-95%
 
               updateProgress(progress);
+            }
 
+            // Yield to event loop every YIELD_INTERVAL (every 3 predictions) to keep UI responsive
+            if (yieldCounter >= YIELD_INTERVAL) {
               // **ENHANCED: Use requestIdleCallback for intelligent yielding**
               await new Promise((resolve) => {
                 const yieldOperation = (deadline) => {
@@ -1035,12 +1054,19 @@ export class TensorFlowScheduler {
     allHistoricalData,
     updateProgress,
   ) {
+    console.log("🎯 [DEBUG] processPredictionsBatch() ENTRY", {
+      activeStaffCount: activeStaff.length,
+      dateRangeLength: dateRange.length,
+      totalPredictions: activeStaff.length * dateRange.length
+    });
+
     const startTime = Date.now();
     const predictions = {};
     const confidence = {};
     let processedCount = 0;
 
     try {
+      console.log("🎯 [DEBUG] Preparing batch parameters...");
       // Prepare batch parameters for all predictions
       const batchParams = [];
       for (const staff of activeStaff) {
@@ -1169,6 +1195,12 @@ export class TensorFlowScheduler {
     const dateKey = date.toISOString().split("T")[0];
     const startTime = Date.now();
 
+    console.log("🎯 [DEBUG] generateFeaturesAsync called", {
+      staffName: staff.name,
+      dateKey,
+      workerFallbackMode: this.workerFallbackMode
+    });
+
     try {
       // **PHASE 2 ENHANCEMENT: Try cache first for lightning-fast predictions (<10ms)**
       const cacheResult = featureCacheManager.getFeatures(staff.id, dateKey);
@@ -1212,13 +1244,16 @@ export class TensorFlowScheduler {
       // Fallback to main thread with timeout protection
       const features = await new Promise((resolve, reject) => {
         const timeoutId = setTimeout(() => {
-          reject(new Error("Feature generation timeout"));
-        }, 50); // 50ms timeout
+          reject(new Error("Feature generation timeout after 200ms"));
+        }, 200); // 200ms timeout - enhanced features need more time
 
         try {
           // Use requestIdleCallback for feature generation if available
           const performGeneration = () => {
             try {
+              console.log(`🔧 [FEATURE-GEN] Starting for ${staff.name} on ${dateKey}`);
+              const genStartTime = Date.now();
+
               const features = this.featureEngineer.generateFeatures({
                 staff,
                 date,
@@ -1227,9 +1262,14 @@ export class TensorFlowScheduler {
                 allHistoricalData,
                 staffMembers,
               });
+
+              const genTime = Date.now() - genStartTime;
+              console.log(`✅ [FEATURE-GEN] Completed for ${staff.name} in ${genTime}ms: ${features ? features.length : 0} features`);
+
               clearTimeout(timeoutId);
               resolve(features);
             } catch (error) {
+              console.error(`❌ [FEATURE-GEN] Failed for ${staff.name} on ${dateKey}:`, error.message, error.stack);
               clearTimeout(timeoutId);
               reject(error);
             }
@@ -1255,9 +1295,17 @@ export class TensorFlowScheduler {
 
       return features;
     } catch (error) {
-      console.warn("⚠️ Feature generation failed:", error.message);
+      console.error(`❌ [FEATURE-GEN] Critical failure for ${staff.name} on ${dateKey}:`, {
+        error: error.message,
+        stack: error.stack,
+        staff: staff.name,
+        dateKey,
+        hasperiodData: !!periodData,
+        hasHistoricalData: !!allHistoricalData,
+        staffCount: staffMembers?.length || 0
+      });
       // Return minimal features for fallback
-      return Array(MODEL_CONFIG.INPUT_FEATURES.ENHANCED_TOTAL || 42).fill(0);
+      return Array(MODEL_CONFIG.INPUT_FEATURES.ENHANCED_TOTAL || 65).fill(0);
     }
   }
 
@@ -1331,59 +1379,46 @@ export class TensorFlowScheduler {
         ? featuresArray[0]
         : featuresArray;
 
-      // **PERFORMANCE FIX: Use requestIdleCallback for tensor operations**
+      // 🔧 FIX: Remove broken requestIdleCallback that caused 30% hang
+      // Root cause: deadline.timeRemaining() check created infinite reschedule loop
+      // - During AI processing, browser is never idle (timeRemaining() always < 10ms)
+      // - Function kept rescheduling without resolving promise → 5s timeout
+      // - Cascading timeouts caused system to appear stuck at 30%
+      // Solution: Execute prediction directly without waiting for idle time
       const tensorResult = await new Promise((resolve, reject) => {
-        const performTensorOp = (deadline) => {
-          try {
-            // Check if we have enough time for this operation
-            if (deadline && deadline.timeRemaining() < 10) {
-              // Reschedule if not enough time
-              if (typeof requestIdleCallback !== "undefined") {
-                requestIdleCallback(performTensorOp, { timeout: 100 });
-              } else {
-                setTimeout(() => performTensorOp({}), 0);
-              }
-              return;
-            }
+        try {
+          // Create tensors and make prediction directly
+          const inputTensor = tf.tensor2d([features]);
+          const prediction = this.model.predict(inputTensor);
 
-            // Create tensors and make prediction
-            const inputTensor = tf.tensor2d([features]);
-            const prediction = this.model.predict(inputTensor);
+          // Extract probabilities asynchronously
+          prediction
+            .data()
+            .then((probabilities) => {
+              const predictedClass = probabilities.indexOf(
+                Math.max(...probabilities),
+              );
+              const confidence = Math.max(...probabilities);
 
-            // Use tidy to manage memory automatically
-            tf.tidy(() => {
-              // Schedule data extraction to avoid blocking
-              prediction
-                .data()
-                .then((probabilities) => {
-                  const predictedClass = probabilities.indexOf(
-                    Math.max(...probabilities),
-                  );
-                  const confidence = Math.max(...probabilities);
+              // Clean up tensors
+              inputTensor.dispose();
+              prediction.dispose();
 
-                  // Clean up tensors
-                  inputTensor.dispose();
-                  prediction.dispose();
-
-                  resolve({
-                    predictions: Array.from(probabilities),
-                    confidence,
-                    predictedClass,
-                    success: true,
-                  });
-                })
-                .catch(reject);
+              resolve({
+                predictions: Array.from(probabilities),
+                confidence,
+                predictedClass,
+                success: true,
+              });
+            })
+            .catch((error) => {
+              // Cleanup on error
+              inputTensor.dispose();
+              prediction.dispose();
+              reject(error);
             });
-          } catch (error) {
-            reject(error);
-          }
-        };
-
-        // Start the operation with idle callback if available
-        if (typeof requestIdleCallback !== "undefined") {
-          requestIdleCallback(performTensorOp, { timeout: 100 });
-        } else {
-          setTimeout(() => performTensorOp({}), 0);
+        } catch (error) {
+          reject(error);
         }
       });
 

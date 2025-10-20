@@ -135,9 +135,10 @@ export class HybridPredictor {
    * @param {Object} inputData - Schedule input data
    * @param {Array} staffMembers - Staff member data
    * @param {Array} dateRange - Date range for predictions
+   * @param {Function} onProgress - Optional progress callback
    * @returns {Object} Hybrid prediction results
    */
-  async predictSchedule(inputData, staffMembers, dateRange) {
+  async predictSchedule(inputData, staffMembers, dateRange, onProgress = null) {
     console.log("🎯 [DEBUG] HybridPredictor.predictSchedule() CALLED", {
       isReady: this.isReady(),
       hasInputData: !!inputData,
@@ -206,13 +207,21 @@ export class HybridPredictor {
       if (this.options.useMLPredictions) {
         try {
           // Ensure ML model is trained or train it
+          console.log("🎯 [DEBUG] BEFORE ensureMLModelTrained()");
           await this.ensureMLModelTrained(staffMembers);
+          console.log("🎯 [DEBUG] AFTER ensureMLModelTrained() - model is ready");
 
+          console.log("🎯 [DEBUG] BEFORE mlEngine.predictSchedule()");
           mlPredictions = await this.mlEngine.predictSchedule(
             inputData.scheduleData,
             staffMembers,
             dateRange,
+            onProgress, // Forward progress callback to ML engine
           );
+          console.log("🎯 [DEBUG] AFTER mlEngine.predictSchedule()", {
+            hasPredictions: !!mlPredictions,
+            predictionCount: mlPredictions?.predictions ? Object.keys(mlPredictions.predictions).length : 0
+          });
 
           if (
             mlPredictions?.predictions &&
@@ -846,19 +855,32 @@ export class HybridPredictor {
    * @param {Array} staffMembers - Current staff members
    */
   async ensureMLModelTrained(staffMembers) {
+    console.log("🎯 [DEBUG] ensureMLModelTrained() ENTRY");
+
     if (!this.mlEngine) {
       throw new Error("ML engine not initialized");
     }
 
     // Check if model is already trained
     const modelInfo = this.mlEngine.getModelInfo();
+    console.log("🎯 [DEBUG] Model info:", {
+      hasModelInfo: !!modelInfo,
+      isInitialized: modelInfo?.isInitialized,
+      accuracy: modelInfo?.accuracy
+    });
+
     if (modelInfo && modelInfo.isInitialized && modelInfo.accuracy > 0.5) {
       console.log("✅ Using existing trained ML model");
       return;
     }
 
     console.log("🎓 Training ML model on historical data...");
+    console.log("🎯 [DEBUG] BEFORE mlEngine.trainModel()");
     const trainingResult = await this.mlEngine.trainModel(staffMembers);
+    console.log("🎯 [DEBUG] AFTER mlEngine.trainModel()", {
+      success: trainingResult?.success,
+      accuracy: trainingResult?.finalAccuracy
+    });
 
     if (!trainingResult || !trainingResult.success) {
       throw new Error(
