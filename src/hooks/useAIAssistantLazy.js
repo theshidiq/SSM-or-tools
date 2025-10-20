@@ -198,6 +198,44 @@ export const useAIAssistantLazy = (
               ...enhancedSystem,
               hybridPredictor: predictor,
               initialized: true,
+
+              // Bridge method to connect generateAIPredictions to hybridPredictor
+              generateSchedule: async ({
+                scheduleData: inputScheduleData,
+                staffMembers: inputStaffMembers,
+                currentMonthIndex: inputMonthIndex,
+                saveSchedule: inputSaveSchedule,
+                onProgress,
+              }) => {
+                const dateRange = generateDateRange(inputMonthIndex);
+
+                if (onProgress) {
+                  onProgress({
+                    stage: "predicting",
+                    progress: 30,
+                    message: "ハイブリッドAI予測中...",
+                  });
+                }
+
+                // Call hybrid predictor
+                const result = await predictor.predictSchedule(
+                  {
+                    scheduleData: inputScheduleData,
+                    currentMonthIndex: inputMonthIndex,
+                    timestamp: Date.now(),
+                  },
+                  inputStaffMembers,
+                  dateRange
+                );
+
+                return {
+                  success: result.success !== false,
+                  schedule: result.schedule || result.predictions,
+                  message: result.message || "ハイブリッドAI予測完了",
+                  data: result,
+                  ...result,
+                };
+              },
             };
 
             aiSystemRef.current = system;
@@ -377,11 +415,8 @@ export const useAIAssistantLazy = (
 
   // Auto-fill schedule (alias for generateAIPredictions)
   const autoFillSchedule = useCallback(
-    (options = {}) => {
-      return generateAIPredictions({
-        autoFill: true,
-        ...options,
-      });
+    (onProgress) => {
+      return generateAIPredictions(onProgress);
     },
     [generateAIPredictions],
   );
