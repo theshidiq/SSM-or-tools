@@ -138,7 +138,18 @@ export class HybridPredictor {
    * @returns {Object} Hybrid prediction results
    */
   async predictSchedule(inputData, staffMembers, dateRange) {
+    console.log("🎯 [DEBUG] HybridPredictor.predictSchedule() CALLED", {
+      isReady: this.isReady(),
+      hasInputData: !!inputData,
+      hasScheduleData: !!inputData?.scheduleData,
+      staffCount: staffMembers?.length,
+      dateCount: dateRange?.length,
+      hasMlEngine: !!this.mlEngine,
+      hasRuleValidator: !!this.ruleValidator
+    });
+
     if (!this.isReady()) {
+      console.log("🎯 [DEBUG] HybridPredictor.predictSchedule() ERROR: Not ready");
       throw new Error("HybridPredictor not ready. Call initialize() first.");
     }
 

@@ -421,7 +421,15 @@ export const useAIAssistant = (
 
   // Non-blocking auto-fill with business rule compliance
   const autoFillSchedule = useCallback(async () => {
+    console.log("🎯 [DEBUG] autoFillSchedule() CALLED", {
+      hasScheduleData: !!scheduleData,
+      staffCount: staffMembers?.length,
+      hasUpdateSchedule: typeof updateSchedule === "function",
+      isProcessing
+    });
+
     if (!scheduleData || !staffMembers || staffMembers.length === 0) {
+      console.log("🎯 [DEBUG] autoFillSchedule() EARLY RETURN: No schedule/staff data");
       return {
         success: false,
         message: "スケジュールデータまたはスタッフデータがありません。",
@@ -429,6 +437,7 @@ export const useAIAssistant = (
     }
 
     if (!updateSchedule || typeof updateSchedule !== "function") {
+      console.log("🎯 [DEBUG] autoFillSchedule() EARLY RETURN: No updateSchedule function");
       return {
         success: false,
         message: "スケジュール更新機能が利用できません。",
@@ -437,6 +446,7 @@ export const useAIAssistant = (
 
     // Prevent multiple concurrent processing
     if (isProcessing) {
+      console.log("🎯 [DEBUG] autoFillSchedule() EARLY RETURN: Already processing");
       return {
         success: false,
         message: "他のAI処理が実行中です。少しお待ちください。",
@@ -632,9 +642,18 @@ export const useAIAssistant = (
   // Helper function to process with enhanced system (non-blocking with yielding)
   const processWithEnhancedSystemNonBlocking = useCallback(
     async (processingData, progressCallback, startTime) => {
+      console.log("🎯 [DEBUG] processWithEnhancedSystemNonBlocking() CALLED", {
+        hasProcessingData: !!processingData,
+        hasScheduleData: !!processingData?.scheduleData,
+        staffCount: processingData?.staffMembers?.length,
+        dateCount: processingData?.dateRange?.length,
+        hasProgressCallback: typeof progressCallback === "function"
+      });
+
       const system = aiSystemRef.current;
 
       if (!system || system.type !== "enhanced") {
+        console.log("🎯 [DEBUG] processWithEnhancedSystemNonBlocking() ERROR: Enhanced system not available");
         throw new Error("Enhanced system not available");
       }
 
@@ -654,9 +673,15 @@ export const useAIAssistant = (
       }, ENHANCED_TIMEOUT);
 
       try {
+        console.log("🎯 [DEBUG] processWithEnhancedSystemNonBlocking() calling processWithYielding with hybridPredictor.predictSchedule", {
+          hasHybridPredictor: !!system.hybridPredictor,
+          hybridPredictorType: system.hybridPredictor?.constructor?.name
+        });
+
         // Call enhanced system with yielding mechanism
         const result = await processWithYielding(
           async (yieldFn) => {
+            console.log("🎯 [DEBUG] processWithYielding yieldFn wrapper - calling hybridPredictor.predictSchedule");
             return await system.hybridPredictor.predictSchedule(
               {
                 scheduleData: processingData.scheduleData,
@@ -814,7 +839,15 @@ export const useAIAssistant = (
   // Generate AI predictions with true non-blocking progress tracking
   const generateAIPredictions = useCallback(
     async (onProgress) => {
+      console.log("🎯 [DEBUG] generateAIPredictions() CALLED", {
+        hasScheduleData: !!scheduleData,
+        staffCount: staffMembers?.length,
+        isProcessing,
+        isInitialized
+      });
+
       if (!scheduleData || !staffMembers || staffMembers.length === 0) {
+        console.log("🎯 [DEBUG] generateAIPredictions() EARLY RETURN: No schedule/staff data");
         return {
           success: false,
           message: "スケジュールデータまたはスタッフデータがありません。",
@@ -822,6 +855,7 @@ export const useAIAssistant = (
       }
 
       if (isProcessing) {
+        console.log("🎯 [DEBUG] generateAIPredictions() EARLY RETURN: Already processing");
         return {
           success: false,
           message: "他のAI処理が実行中です。",
