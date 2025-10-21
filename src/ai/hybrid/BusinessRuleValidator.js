@@ -967,6 +967,31 @@ export class BusinessRuleValidator {
     try {
       console.log("🎯 Generating rule-based schedule...");
 
+      // ✅ Defensive validation: Ensure parameters are valid
+      if (!staffMembers || !Array.isArray(staffMembers)) {
+        console.error("❌ generateRuleBasedSchedule: Invalid staffMembers parameter", {
+          staffMembers,
+          type: typeof staffMembers,
+          isArray: Array.isArray(staffMembers)
+        });
+        throw new Error(
+          `Invalid staffMembers parameter: expected array, got ${typeof staffMembers}`
+        );
+      }
+
+      if (!dateRange || !Array.isArray(dateRange)) {
+        console.error("❌ generateRuleBasedSchedule: Invalid dateRange parameter", {
+          dateRange,
+          type: typeof dateRange,
+          isArray: Array.isArray(dateRange)
+        });
+        throw new Error(
+          `Invalid dateRange parameter: expected array, got ${typeof dateRange}`
+        );
+      }
+
+      console.log(`✅ Validation passed: ${staffMembers.length} staff, ${dateRange.length} dates`);
+
       // Initialize empty schedule
       const schedule = {};
       staffMembers.forEach((staff) => {
@@ -1154,6 +1179,8 @@ export class BusinessRuleValidator {
    * @param {Array} dateRange - Date range
    */
   async distributeOffDays(schedule, staffMembers, dateRange) {
+    console.log("📅 [RULE-GEN] Distributing off days...");
+
     // Use live settings
     const liveSettings = this.getLiveSettings();
     const monthLimits =
@@ -1164,6 +1191,9 @@ export class BusinessRuleValidator {
       ));
 
     const dailyLimits = liveSettings.dailyLimits;
+    console.log(
+      `📅 [RULE-GEN] Limits: maxOffPerMonth=${monthLimits.maxOffDaysPerMonth}, maxOffPerDay=${dailyLimits.maxOffPerDay}`,
+    );
 
     staffMembers.forEach((staff) => {
       if (!schedule[staff.id]) return;
@@ -1197,7 +1227,13 @@ export class BusinessRuleValidator {
           }
         }
       });
+
+      console.log(
+        `📅 [RULE-GEN] ${staff.name}: Set ${offDaysSet} off days (target: ${targetOffDays})`,
+      );
     });
+
+    console.log("✅ [RULE-GEN] Off days distributed");
   }
 
   /**
