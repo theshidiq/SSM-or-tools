@@ -1454,7 +1454,7 @@ export class BusinessRuleValidator {
           if (converted >= deficit) break;
 
           if (schedule[staff.id][dateKey] === "×") {
-            schedule[staff.id][dateKey] = "○"; // Convert to normal shift
+            schedule[staff.id][dateKey] = ""; // Convert to normal shift (empty)
             converted++;
             coverageAdjustments++;
             console.log(
@@ -1469,26 +1469,10 @@ export class BusinessRuleValidator {
       `🔧 [FINAL] Coverage adjustments: ${coverageAdjustments} off days converted`,
     );
 
-    // Fill all remaining empty cells with normal shift symbol (○)
-    console.log("🔧 [FINAL] Filling remaining empty cells with normal shifts...");
-    let normalShiftsAdded = 0;
-
-    staffMembers.forEach((staff) => {
-      if (!schedule[staff.id]) return;
-
-      dateRange.forEach((date) => {
-        const dateKey = date.toISOString().split("T")[0];
-
-        // If cell is empty string, assign normal shift
-        if (schedule[staff.id][dateKey] === "") {
-          schedule[staff.id][dateKey] = "○";
-          normalShiftsAdded++;
-        }
-      });
-    });
-
+    // Note: Empty cells ("") represent normal working days
+    // Do NOT fill with ○ - empty is the correct representation
     console.log(
-      `✅ [FINAL] Added ${normalShiftsAdded} normal shift(s) to empty cells`,
+      `✅ [FINAL] Final adjustments complete (empty cells = normal working days)`,
     );
   }
 
