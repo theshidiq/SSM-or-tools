@@ -1032,19 +1032,58 @@ export class BusinessRuleValidator {
    * @param {Array} dateRange - Date range
    */
   async applyPriorityRules(schedule, staffMembers, dateRange) {
+    console.log("🎯 [PRIORITY] Applying priority rules...");
+
     // Get priority rules from live settings
     const liveSettings = this.getLiveSettings();
     const priorityRules = liveSettings.priorityRules;
+
+    if (!priorityRules || Object.keys(priorityRules).length === 0) {
+      console.log("⚠️ [PRIORITY] No priority rules configured");
+      return;
+    }
+
+    console.log(
+      `🎯 [PRIORITY] Found ${Object.keys(priorityRules).length} priority rule(s)`,
+    );
+
+    let totalRulesApplied = 0;
 
     Object.keys(priorityRules).forEach((staffIdentifier) => {
       // Find staff by name or ID
       const staff = staffMembers.find(
         (s) => s.name === staffIdentifier || s.id === staffIdentifier,
       );
-      if (!staff || !schedule[staff.id]) return;
+
+      if (!staff) {
+        console.log(
+          `⚠️ [PRIORITY] Staff not found for identifier: "${staffIdentifier}"`,
+        );
+        return;
+      }
+
+      if (!schedule[staff.id]) {
+        console.log(
+          `⚠️ [PRIORITY] No schedule entry for staff: ${staff.name}`,
+        );
+        return;
+      }
 
       const rules = priorityRules[staffIdentifier];
       const preferredShifts = rules.preferredShifts || [];
+
+      if (preferredShifts.length === 0) {
+        console.log(
+          `⚠️ [PRIORITY] ${staff.name}: No preferredShifts defined`,
+        );
+        return;
+      }
+
+      console.log(
+        `🎯 [PRIORITY] ${staff.name}: Processing ${preferredShifts.length} preferred shift(s)`,
+      );
+
+      let staffRulesApplied = 0;
 
       dateRange.forEach((date) => {
         const dateKey = date.toISOString().split("T")[0];
@@ -1069,10 +1108,23 @@ export class BusinessRuleValidator {
             }
 
             schedule[staff.id][dateKey] = shiftValue;
+            staffRulesApplied++;
+            console.log(
+              `🎯 [PRIORITY]   → ${staff.name}: Set "${shiftValue}" on ${date.toLocaleDateString('ja-JP')} (${dayOfWeek})`,
+            );
           }
         });
       });
+
+      console.log(
+        `🎯 [PRIORITY] ${staff.name}: Applied ${staffRulesApplied} rule(s)`,
+      );
+      totalRulesApplied += staffRulesApplied;
     });
+
+    console.log(
+      `✅ [PRIORITY] Total ${totalRulesApplied} priority rule(s) applied`,
+    );
   }
 
   /**
@@ -1191,45 +1243,136 @@ export class BusinessRuleValidator {
       ));
 
     const dailyLimits = liveSettings.dailyLimits;
+
     console.log(
-      `📅 [RULE-GEN] Limits: maxOffPerMonth=${monthLimits.maxOffDaysPerMonth}, maxOffPerDay=${dailyLimits.maxOffPerDay}`,
+      `📅 [RULE-GEN] monthLimits type: ${Array.isArray(monthLimits) ? 'array' : typeof monthLimits}`,
+    );
+    console.log(
+      `📅 [RULE-GEN] dailyLimits type: ${Array.isArray(dailyLimits) ? 'array' : typeof dailyLimits}`,
     );
 
+    // Extract actual limit values with safe defaults
+    // Handle both old format (object) and new format (array)
+    let maxOffPerMonth, maxOffPerDay;
+
+    if (Array.isArray(monthLimits)) {
+      // New format: array of limit objects with maxCount property
+      const offDayLimit = monthLimits.find(
+        (l) =>
+          l.limitType === "max_off_days" ||
+          l.name?.toLowerCase().includes("off"),
+      );
+      maxOffPerMonth = offDayLimit?.maxCount || 10;
+      console.log(
+        `📅 [RULE-GEN] Found monthly limit (array):`,
+        offDayLimit,
+      );
+    } else if (monthLimits && typeof monthLimits === "object") {
+      // Old format: object with maxOffDaysPerMonth property
+      maxOffPerMonth = monthLimits.maxOffDaysPerMonth || 10;
+      console.log(
+        `📅 [RULE-GEN] Using monthly limit (object): ${maxOffPerMonth}`,
+      );
+    } else {
+      maxOffPerMonth = 10; // Fallback default
+      console.log(`📅 [RULE-GEN] Using default monthly limit: 10`);
+    }
+
+    if (Array.isArray(dailyLimits)) {
+      // New format: array of limit objects with maxCount property
+      const offDayLimit = dailyLimits.find(
+        (l) =>
+          l.shiftType === "off" ||
+          l.name?.toLowerCase().includes("off"),
+      );
+      maxOffPerDay = offDayLimit?.maxCount || 4;
+      console.log(
+        `📅 [RULE-GEN] Found daily limit (array):`,
+        offDayLimit,
+      );
+    } else if (dailyLimits && typeof dailyLimits === "object") {
+      // Old format: object with maxOffPerDay property
+      maxOffPerDay = dailyLimits.maxOffPerDay || 4;
+      console.log(
+        `📅 [RULE-GEN] Using daily limit (object): ${maxOffPerDay}`,
+      );
+    } else {
+      maxOffPerDay = 4; // Fallback default
+      console.log(`📅 [RULE-GEN] Using default daily limit: 4`);
+    }
+
+    console.log(
+      `📅 [RULE-GEN] Final limits: maxOffPerMonth=${maxOffPerMonth}, maxOffPerDay=${maxOffPerDay}`,
+    );
+
+    // Deterministic distribution: assign off days fairly across staff
     staffMembers.forEach((staff) => {
       if (!schedule[staff.id]) return;
 
       let offDaysSet = 0;
-      const targetOffDays = Math.min(monthLimits.maxOffDaysPerMonth - 1, 6); // Conservative target
+      const targetOffDays = Math.min(maxOffPerMonth - 1, 6); // Conservative target
 
-      // Set off days, avoiding violations
-      dateRange.forEach((date) => {
+      console.log(
+        `📅 [RULE-GEN] ${staff.name}: Target ${targetOffDays} off days`,
+      );
+
+      // Build list of available days for this staff (not already set by priority rules)
+      const availableDays = [];
+      dateRange.forEach((date, index) => {
         const dateKey = date.toISOString().split("T")[0];
+        const dayOfWeek = date.getDay(); // 0=Sunday, 6=Saturday
 
-        if (
-          offDaysSet < targetOffDays &&
-          schedule[staff.id][dateKey] === "" && // Not already set by priority rules
-          Math.random() < 0.25
-        ) {
-          // 25% chance for each available day
-
-          // Check if setting this as off day would violate daily limits
-          let currentOffCount = 0;
-          staffMembers.forEach((otherStaff) => {
-            if (schedule[otherStaff.id][dateKey] === "×") {
-              currentOffCount++;
-            }
+        if (schedule[staff.id][dateKey] === "") {
+          // Not already set by priority rules
+          availableDays.push({
+            dateKey,
+            date,
+            index,
+            dayOfWeek,
+            // Prefer weekends for off days (higher score = better candidate)
+            score: dayOfWeek === 0 || dayOfWeek === 6 ? 2 : 1,
           });
-
-          const maxOffPerDay = dailyLimits.maxOffPerDay || 4;
-          if (currentOffCount < maxOffPerDay) {
-            schedule[staff.id][dateKey] = "×";
-            offDaysSet++;
-          }
         }
       });
 
+      // Sort by score (weekends first) then evenly distribute
+      availableDays.sort((a, b) => {
+        if (b.score !== a.score) return b.score - a.score;
+        return a.index - b.index; // Keep date order
+      });
+
+      // Distribute off days evenly across the period
+      const interval = Math.floor(availableDays.length / targetOffDays);
+      let nextOffDayIndex = 0;
+
+      while (offDaysSet < targetOffDays && nextOffDayIndex < availableDays.length) {
+        const candidate = availableDays[nextOffDayIndex];
+
+        // Check if setting this as off day would violate daily limits
+        let currentOffCount = 0;
+        staffMembers.forEach((otherStaff) => {
+          if (schedule[otherStaff.id]?.[candidate.dateKey] === "×") {
+            currentOffCount++;
+          }
+        });
+
+        if (currentOffCount < maxOffPerDay) {
+          schedule[staff.id][candidate.dateKey] = "×";
+          offDaysSet++;
+          console.log(
+            `📅 [RULE-GEN]   → ${staff.name}: Set off day on ${candidate.date.toLocaleDateString('ja-JP')} (${['日', '月', '火', '水', '木', '金', '土'][candidate.dayOfWeek]})`,
+          );
+          nextOffDayIndex += Math.max(interval, 1); // Move to next interval
+        } else {
+          console.log(
+            `📅 [RULE-GEN]   ⚠ ${staff.name}: Skipped ${candidate.dateKey} (${currentOffCount}/${maxOffPerDay} staff already off)`,
+          );
+          nextOffDayIndex++; // Try next day
+        }
+      }
+
       console.log(
-        `📅 [RULE-GEN] ${staff.name}: Set ${offDaysSet} off days (target: ${targetOffDays})`,
+        `📅 [RULE-GEN] ${staff.name}: Set ${offDaysSet}/${targetOffDays} off days`,
       );
     });
 
@@ -1283,11 +1426,14 @@ export class BusinessRuleValidator {
    * @param {Array} dateRange - Date range
    */
   async applyFinalAdjustments(schedule, staffMembers, dateRange) {
+    console.log("🔧 [FINAL] Applying final adjustments...");
+
     // Use live settings
     const liveSettings = this.getLiveSettings();
     const dailyLimits = liveSettings.dailyLimits;
 
     // Ensure minimum coverage each day
+    let coverageAdjustments = 0;
     dateRange.forEach((date) => {
       const dateKey = date.toISOString().split("T")[0];
 
@@ -1308,12 +1454,42 @@ export class BusinessRuleValidator {
           if (converted >= deficit) break;
 
           if (schedule[staff.id][dateKey] === "×") {
-            schedule[staff.id][dateKey] = ""; // Convert to normal shift
+            schedule[staff.id][dateKey] = "○"; // Convert to normal shift
             converted++;
+            coverageAdjustments++;
+            console.log(
+              `🔧 [FINAL]   → ${staff.name}: Converted off day to normal shift on ${dateKey}`,
+            );
           }
         }
       }
     });
+
+    console.log(
+      `🔧 [FINAL] Coverage adjustments: ${coverageAdjustments} off days converted`,
+    );
+
+    // Fill all remaining empty cells with normal shift symbol (○)
+    console.log("🔧 [FINAL] Filling remaining empty cells with normal shifts...");
+    let normalShiftsAdded = 0;
+
+    staffMembers.forEach((staff) => {
+      if (!schedule[staff.id]) return;
+
+      dateRange.forEach((date) => {
+        const dateKey = date.toISOString().split("T")[0];
+
+        // If cell is empty string, assign normal shift
+        if (schedule[staff.id][dateKey] === "") {
+          schedule[staff.id][dateKey] = "○";
+          normalShiftsAdded++;
+        }
+      });
+    });
+
+    console.log(
+      `✅ [FINAL] Added ${normalShiftsAdded} normal shift(s) to empty cells`,
+    );
   }
 
   /**
