@@ -1036,35 +1036,61 @@ export class BusinessRuleValidator {
 
     // Get priority rules from live settings
     const liveSettings = this.getLiveSettings();
-    const priorityRules = liveSettings.priorityRules;
+    let priorityRules = liveSettings.priorityRules;
 
-    if (!priorityRules || Object.keys(priorityRules).length === 0) {
+    if (!priorityRules) {
       console.log("⚠️ [PRIORITY] No priority rules configured");
       return;
     }
 
-    console.log(
-      `🎯 [PRIORITY] Found ${Object.keys(priorityRules).length} priority rule(s)`,
-    );
+    // TRANSFORMATION: Handle array format from UI
+    if (Array.isArray(priorityRules)) {
+      console.log(
+        `🎯 [PRIORITY] Received array format with ${priorityRules.length} rule(s)`,
+      );
+
+      if (priorityRules.length === 0) {
+        console.log("⚠️ [PRIORITY] Empty priority rules array");
+        return;
+      }
+
+      // Transform to object format
+      priorityRules = this.transformPriorityRulesArrayToObject(
+        priorityRules,
+        staffMembers,
+      );
+    }
+
+    // Check if we have any rules after transformation
+    const ruleCount = Object.keys(priorityRules || {}).length;
+    if (ruleCount === 0) {
+      console.log("⚠️ [PRIORITY] No valid priority rules after transformation");
+      return;
+    }
+
+    console.log(`🎯 [PRIORITY] Processing ${ruleCount} staff with priority rules`);
 
     let totalRulesApplied = 0;
 
     Object.keys(priorityRules).forEach((staffIdentifier) => {
-      // Find staff by name or ID
+      // Find staff by name or ID with multiple matching strategies
       const staff = staffMembers.find(
-        (s) => s.name === staffIdentifier || s.id === staffIdentifier,
+        (s) => s.id === staffIdentifier || s.name === staffIdentifier,
       );
 
       if (!staff) {
         console.log(
           `⚠️ [PRIORITY] Staff not found for identifier: "${staffIdentifier}"`,
         );
+        console.log(
+          `📋 [PRIORITY] Available staff: ${staffMembers.map((s) => `${s.name} (ID: ${s.id})`).join(", ")}`,
+        );
         return;
       }
 
       if (!schedule[staff.id]) {
         console.log(
-          `⚠️ [PRIORITY] No schedule entry for staff: ${staff.name}`,
+          `⚠️ [PRIORITY] No schedule entry for staff: ${staff.name} (ID: ${staff.id})`,
         );
         return;
       }
@@ -1125,6 +1151,92 @@ export class BusinessRuleValidator {
     console.log(
       `✅ [PRIORITY] Total ${totalRulesApplied} priority rule(s) applied`,
     );
+  }
+
+  /**
+   * Transform priority rules from array format (UI) to object format (AI)
+   * @param {Array} rulesArray - Priority rules in array format
+   * @param {Array} staffMembers - Staff member data for validation
+   * @returns {Object} Priority rules in object format keyed by staff identifier
+   */
+  transformPriorityRulesArrayToObject(rulesArray, staffMembers) {
+    console.log(
+      `🔄 [PRIORITY-TRANSFORM] Converting ${rulesArray.length} array rules to object format`,
+    );
+
+    const rulesObject = {};
+    const dayNames = [
+      "sunday",
+      "monday",
+      "tuesday",
+      "wednesday",
+      "thursday",
+      "friday",
+      "saturday",
+    ];
+
+    rulesArray.forEach((rule, index) => {
+      const staffId = rule.staffId || rule.staff_id;
+
+      if (!staffId) {
+        console.log(
+          `⚠️ [PRIORITY-TRANSFORM] Rule ${index}: Missing staffId, skipping`,
+        );
+        return;
+      }
+
+      // Find staff to validate and get both ID and name
+      const staff = staffMembers.find(
+        (s) => s.id === staffId || s.name === staffId,
+      );
+
+      if (!staff) {
+        console.log(
+          `⚠️ [PRIORITY-TRANSFORM] Rule ${index}: Staff not found for staffId "${staffId}"`,
+        );
+        return;
+      }
+
+      // Use staff ID as the primary key (fall back to name if no ID)
+      const staffKey = staff.id || staff.name;
+
+      // Initialize staff entry if not exists
+      if (!rulesObject[staffKey]) {
+        rulesObject[staffKey] = { preferredShifts: [] };
+      }
+
+      // Convert daysOfWeek array to individual preferred shifts
+      const daysOfWeek = rule.daysOfWeek || rule.days_of_week || [];
+      const shiftType = rule.shiftType || rule.shift_type || rule.ruleType;
+
+      if (daysOfWeek.length === 0) {
+        console.log(
+          `⚠️ [PRIORITY-TRANSFORM] Rule ${index} for ${staff.name}: No daysOfWeek specified`,
+        );
+        return;
+      }
+
+      daysOfWeek.forEach((dayNum) => {
+        const preferredShift = {
+          day: dayNames[dayNum] || dayNum,
+          shift: shiftType,
+          priority: rule.priorityLevel || rule.priority_level || 3,
+        };
+
+        rulesObject[staffKey].preferredShifts.push(preferredShift);
+
+        console.log(
+          `🔄 [PRIORITY-TRANSFORM]   → ${staff.name}: ${dayNames[dayNum]} = ${shiftType}`,
+        );
+      });
+    });
+
+    const transformedCount = Object.keys(rulesObject).length;
+    console.log(
+      `✅ [PRIORITY-TRANSFORM] Transformed to ${transformedCount} staff with rules`,
+    );
+
+    return rulesObject;
   }
 
   /**
