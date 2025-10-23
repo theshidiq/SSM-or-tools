@@ -30,7 +30,7 @@ type SettingsAggregate struct {
 }
 
 // MarshalJSON custom marshaler for SettingsAggregate
-// Converts StaffGroups to React format by extracting members from group_config JSONB
+// Converts StaffGroups and PriorityRules to React format (snake_case → camelCase)
 func (sa *SettingsAggregate) MarshalJSON() ([]byte, error) {
 	// Convert staff groups to React format
 	reactGroups := make([]map[string]interface{}, len(sa.StaffGroups))
@@ -43,12 +43,18 @@ func (sa *SettingsAggregate) MarshalJSON() ([]byte, error) {
 		}
 	}
 
-	// Create response structure with converted groups
+	// Convert priority rules to React format (CRITICAL FIX!)
+	reactPriorityRules := make([]map[string]interface{}, len(sa.PriorityRules))
+	for i, rule := range sa.PriorityRules {
+		reactPriorityRules[i] = rule.ToReactFormat()
+	}
+
+	// Create response structure with converted data
 	response := map[string]interface{}{
 		"staffGroups":    reactGroups,
 		"dailyLimits":    sa.DailyLimits,
 		"monthlyLimits":  sa.MonthlyLimits,
-		"priorityRules":  sa.PriorityRules,
+		"priorityRules":  reactPriorityRules, // ← FIXED: Now using converted format
 		"mlModelConfigs": sa.MLModelConfigs,
 		"version":        sa.Version,
 	}
@@ -173,32 +179,33 @@ func (ml *MonthlyLimit) ToReactFormat() map[string]interface{} {
 // PriorityRule represents scheduling priority rules
 type PriorityRule struct {
 	ID               string                 `json:"id"`
-	RestaurantID     string                 `json:"restaurantId"`
-	VersionID        string                 `json:"versionId"`
+	RestaurantID     string                 `json:"restaurant_id"`     // Fixed: Match Supabase snake_case
+	VersionID        string                 `json:"version_id"`        // Fixed: Match Supabase snake_case
 	Name             string                 `json:"name"`
 	Description      string                 `json:"description"`
-	PriorityLevel    int                    `json:"priorityLevel"`
-	RuleDefinition   map[string]interface{} `json:"ruleDefinition"`
-	RuleConfig       map[string]interface{} `json:"ruleConfig"`
-	PenaltyWeight    float64                `json:"penaltyWeight"`
-	IsHardConstraint bool                   `json:"isHardConstraint"`
-	EffectiveFrom    *time.Time             `json:"effectiveFrom"`
-	EffectiveUntil   *time.Time             `json:"effectiveUntil"`
-	IsActive         bool                   `json:"isActive"`
-	CreatedAt        time.Time              `json:"createdAt"`
-	UpdatedAt        time.Time              `json:"updatedAt"`
+	PriorityLevel    int                    `json:"priority_level"`    // Fixed: Match Supabase snake_case
+	RuleDefinition   map[string]interface{} `json:"rule_definition"`   // Fixed: Match Supabase snake_case (CRITICAL!)
+	RuleConfig       map[string]interface{} `json:"rule_config"`       // Fixed: Match Supabase snake_case
+	PenaltyWeight    float64                `json:"penalty_weight"`    // Fixed: Match Supabase snake_case
+	IsHardConstraint bool                   `json:"is_hard_constraint"` // Fixed: Match Supabase snake_case
+	EffectiveFrom    *time.Time             `json:"effective_from"`    // Fixed: Match Supabase snake_case
+	EffectiveUntil   *time.Time             `json:"effective_until"`   // Fixed: Match Supabase snake_case
+	IsActive         bool                   `json:"is_active"`         // Fixed: Match Supabase snake_case
+	CreatedAt        time.Time              `json:"created_at"`        // Fixed: Match Supabase snake_case
+	UpdatedAt        time.Time              `json:"updated_at"`        // Fixed: Match Supabase snake_case
 }
 
 // ToReactFormat converts snake_case to camelCase for React
+// AND extracts nested JSONB fields to top-level for easier React access
 func (pr *PriorityRule) ToReactFormat() map[string]interface{} {
-	return map[string]interface{}{
+	result := map[string]interface{}{
 		"id":               pr.ID,
 		"restaurantId":     pr.RestaurantID,
 		"versionId":        pr.VersionID,
 		"name":             pr.Name,
 		"description":      pr.Description,
 		"priorityLevel":    pr.PriorityLevel,
-		"ruleDefinition":   pr.RuleDefinition,
+		"ruleDefinition":   pr.RuleDefinition, // Keep original for compatibility
 		"ruleConfig":       pr.RuleConfig,
 		"penaltyWeight":    pr.PenaltyWeight,
 		"isHardConstraint": pr.IsHardConstraint,
@@ -208,6 +215,47 @@ func (pr *PriorityRule) ToReactFormat() map[string]interface{} {
 		"createdAt":        pr.CreatedAt,
 		"updatedAt":        pr.UpdatedAt,
 	}
+
+	// ✅ FIX: Extract nested fields from rule_definition JSONB to top-level properties
+	// React's useAISettings expects staffId, shiftType, daysOfWeek at top level
+	if len(pr.RuleDefinition) > 0 {
+		defMap := pr.RuleDefinition
+
+		// Extract staff_id → staffId
+		if staffID, exists := defMap["staff_id"]; exists {
+			result["staffId"] = staffID
+			log.Printf("✅ [ToReactFormat] Extracted staffId: %v", staffID)
+		}
+
+		// Extract type → ruleType
+		if ruleType, exists := defMap["type"]; exists {
+			result["ruleType"] = ruleType
+		}
+
+		// Extract preference_strength → preferenceStrength
+		if prefStrength, exists := defMap["preference_strength"]; exists {
+			result["preferenceStrength"] = prefStrength
+		}
+
+		// Extract nested conditions object
+		if conditions, exists := defMap["conditions"]; exists {
+			if condMap, condOk := conditions.(map[string]interface{}); condOk {
+				// Extract shift_type → shiftType
+				if shiftType, shiftExists := condMap["shift_type"]; shiftExists {
+					result["shiftType"] = shiftType
+					log.Printf("✅ [ToReactFormat] Extracted shiftType: %v", shiftType)
+				}
+
+				// Extract day_of_week → daysOfWeek
+				if dayOfWeek, dayExists := condMap["day_of_week"]; dayExists {
+					result["daysOfWeek"] = dayOfWeek
+					log.Printf("✅ [ToReactFormat] Extracted daysOfWeek: %v", dayOfWeek)
+				}
+			}
+		}
+	}
+
+	return result
 }
 
 // MLModelConfig represents ML model configuration
@@ -810,40 +858,54 @@ func (s *StaffSyncServer) updatePriorityRule(versionID string, ruleData map[stri
 		updateData["effective_until"] = effectiveUntil
 	}
 
-	// ✅ FIX: Merge top-level React fields into rule_config JSONB
+	// ✅ FIX: Merge top-level React fields into rule_definition JSONB (NOT rule_config!)
 	// React sends fields at top level: { id, daysOfWeek: [...], shiftType: "early", staffId: "...", ruleType: "..." }
-	// We need to merge them into ruleConfig before storing in database
-	ruleConfig := make(map[string]interface{})
-	if existingConfig, ok := ruleData["ruleConfig"].(map[string]interface{}); ok {
-		// Preserve existing ruleConfig if present
-		ruleConfig = existingConfig
+	// We need to merge them into rule_definition before storing in database
+	// DATABASE SCHEMA: priority_rules table has rule_definition column (JSONB)
+	ruleDefinition := make(map[string]interface{})
+
+	// Check if ruleDefinition already exists in the payload
+	if existingDef, ok := ruleData["ruleDefinition"].(map[string]interface{}); ok {
+		// Preserve existing ruleDefinition if present
+		ruleDefinition = existingDef
 	}
 
-	// Merge top-level fields into rule_config
-	if daysOfWeek, ok := ruleData["daysOfWeek"]; ok {
-		ruleConfig["daysOfWeek"] = daysOfWeek
-		log.Printf("🔍 [updatePriorityRule] Merging daysOfWeek: %+v", daysOfWeek)
-	}
-	if shiftType, ok := ruleData["shiftType"]; ok {
-		ruleConfig["shiftType"] = shiftType
-		log.Printf("🔍 [updatePriorityRule] Merging shiftType: %v", shiftType)
-	}
+	// Merge top-level fields into rule_definition with proper nested structure
+	// Database expects: { staff_id, conditions: { shift_type, day_of_week } }
 	if staffId, ok := ruleData["staffId"]; ok {
-		ruleConfig["staffId"] = staffId
+		ruleDefinition["staff_id"] = staffId
 		log.Printf("🔍 [updatePriorityRule] Merging staffId: %v", staffId)
 	}
+
+	// Create conditions object for shift_type and day_of_week
+	conditions := make(map[string]interface{})
+	if shiftType, ok := ruleData["shiftType"]; ok {
+		conditions["shift_type"] = shiftType
+		log.Printf("🔍 [updatePriorityRule] Merging shiftType: %v", shiftType)
+	}
+	if daysOfWeek, ok := ruleData["daysOfWeek"]; ok {
+		conditions["day_of_week"] = daysOfWeek
+		log.Printf("🔍 [updatePriorityRule] Merging daysOfWeek: %+v", daysOfWeek)
+	}
+
+	// Add conditions to ruleDefinition if we have any
+	if len(conditions) > 0 {
+		ruleDefinition["conditions"] = conditions
+	}
+
+	// Add other optional fields
 	if ruleType, ok := ruleData["ruleType"]; ok {
-		ruleConfig["ruleType"] = ruleType
+		ruleDefinition["type"] = ruleType
 		log.Printf("🔍 [updatePriorityRule] Merging ruleType: %v", ruleType)
 	}
 	if preferenceStrength, ok := ruleData["preferenceStrength"]; ok {
-		ruleConfig["preferenceStrength"] = preferenceStrength
+		ruleDefinition["preference_strength"] = preferenceStrength
 	}
 
-	// Only update rule_config if we have fields to merge
-	if len(ruleConfig) > 0 {
-		updateData["rule_config"] = ruleConfig
-		log.Printf("🔍 [updatePriorityRule] Final rule_config: %+v", ruleConfig)
+	// Only update rule_definition if we have fields to merge
+	if len(ruleDefinition) > 0 {
+		updateData["rule_definition"] = ruleDefinition
+		log.Printf("🔍 [updatePriorityRule] Final rule_definition: %+v", ruleDefinition)
 	}
 
 	updateData["updated_at"] = time.Now().UTC().Format(time.RFC3339)
@@ -1220,40 +1282,63 @@ func (s *StaffSyncServer) insertPriorityRule(versionID string, ruleData map[stri
 		insertData["is_hard_constraint"] = false
 	}
 
-	// ✅ FIX: Merge top-level React fields into rule_config JSONB
-	// React sends fields at top level: { id, daysOfWeek: [...], shiftType: "early", staffId: "...", ruleType: "..." }
-	// We need to merge them into ruleConfig before storing in database
-	ruleConfig := make(map[string]interface{})
-	if existingConfig, ok := ruleData["ruleConfig"].(map[string]interface{}); ok {
-		// Preserve existing ruleConfig if present
-		ruleConfig = existingConfig
+	// ✅ FIX: Build rule_definition JSONB with proper nested structure (NOT rule_config!)
+	// Database schema uses rule_definition column with nested conditions object
+	// Structure: { type, staff_id, conditions: { shift_type, day_of_week }, preference_strength }
+	ruleDefinitionMap := make(map[string]interface{})
+
+	// Check if ruleDefinition already exists (from React or migration)
+	if existingDef, ok := ruleData["ruleDefinition"].(map[string]interface{}); ok {
+		// Preserve existing ruleDefinition if present
+		ruleDefinitionMap = existingDef
+		log.Printf("🔍 [insertPriorityRule] Using existing ruleDefinition: %+v", existingDef)
 	}
 
-	// Merge top-level fields into rule_config
-	if daysOfWeek, ok := ruleData["daysOfWeek"]; ok {
-		ruleConfig["daysOfWeek"] = daysOfWeek
-		log.Printf("🔍 [insertPriorityRule] Merging daysOfWeek: %+v", daysOfWeek)
-	}
-	if shiftType, ok := ruleData["shiftType"]; ok {
-		ruleConfig["shiftType"] = shiftType
-		log.Printf("🔍 [insertPriorityRule] Merging shiftType: %v", shiftType)
-	}
-	if staffId, ok := ruleData["staffId"]; ok {
-		ruleConfig["staffId"] = staffId
-		log.Printf("🔍 [insertPriorityRule] Merging staffId: %v", staffId)
-	}
+	// Merge top-level React fields into rule_definition with proper structure
+	// Set type field
 	if ruleType, ok := ruleData["ruleType"]; ok {
-		ruleConfig["ruleType"] = ruleType
-		log.Printf("🔍 [insertPriorityRule] Merging ruleType: %v", ruleType)
-	}
-	if preferenceStrength, ok := ruleData["preferenceStrength"]; ok {
-		ruleConfig["preferenceStrength"] = preferenceStrength
+		ruleDefinitionMap["type"] = ruleType
+		log.Printf("🔍 [insertPriorityRule] Setting type: %v", ruleType)
 	}
 
-	// Only set rule_config if we have fields to merge
-	if len(ruleConfig) > 0 {
-		insertData["rule_config"] = ruleConfig
-		log.Printf("🔍 [insertPriorityRule] Final rule_config: %+v", ruleConfig)
+	// Set staff_id field (snake_case for database)
+	if staffId, ok := ruleData["staffId"]; ok {
+		ruleDefinitionMap["staff_id"] = staffId
+		log.Printf("🔍 [insertPriorityRule] Setting staff_id: %v", staffId)
+	}
+
+	// Build nested conditions object
+	conditions := make(map[string]interface{})
+	if shiftType, ok := ruleData["shiftType"]; ok {
+		conditions["shift_type"] = shiftType
+		log.Printf("🔍 [insertPriorityRule] Setting conditions.shift_type: %v", shiftType)
+	}
+	if daysOfWeek, ok := ruleData["daysOfWeek"]; ok {
+		conditions["day_of_week"] = daysOfWeek
+		log.Printf("🔍 [insertPriorityRule] Setting conditions.day_of_week: %+v", daysOfWeek)
+	}
+
+	// Only add conditions if we have data
+	if len(conditions) > 0 {
+		ruleDefinitionMap["conditions"] = conditions
+	}
+
+	// Set preference_strength field (snake_case for database)
+	if preferenceStrength, ok := ruleData["preferenceStrength"]; ok {
+		ruleDefinitionMap["preference_strength"] = preferenceStrength
+		log.Printf("🔍 [insertPriorityRule] Setting preference_strength: %v", preferenceStrength)
+	} else {
+		// Default to 0.8 if not provided
+		ruleDefinitionMap["preference_strength"] = 0.8
+	}
+
+	// ✅ CRITICAL FIX: Save to rule_definition column (NOT rule_config!)
+	// This matches the database schema and updatePriorityRule logic
+	if len(ruleDefinitionMap) > 0 {
+		insertData["rule_definition"] = ruleDefinitionMap
+		log.Printf("✅ [insertPriorityRule] Final rule_definition (will save to database): %+v", ruleDefinitionMap)
+	} else {
+		log.Printf("⚠️ [insertPriorityRule] No rule_definition data to save!")
 	}
 
 	jsonData, _ := json.Marshal(insertData)
