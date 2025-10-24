@@ -425,7 +425,7 @@ async function makePrediction(features) {
         }
       }
 
-      const shiftMap = ["○", "△", "▽", "×"]; // normal, early, late, off
+      const shiftMap = ["○", "△", "◇", "×"]; // normal, early, late, off
 
       return {
         class: shiftMap[bestClass] || "○",
@@ -466,7 +466,7 @@ function generateFeatures(staff, date, scheduleData, options) {
         const shift = scheduleData[staff.id][pastDateKey];
         features.push(shift === "○" ? 1 : 0); // normal
         features.push(shift === "△" ? 1 : 0); // early
-        features.push(shift === "▽" ? 1 : 0); // late
+        features.push(shift === "◇" ? 1 : 0); // late
         features.push(shift === "×" ? 1 : 0); // off
       } else {
         features.push(0, 0, 0, 0);
@@ -1205,7 +1205,7 @@ function generateFeaturesEnhanced(staff, date, preparedData, dateKey) {
 
       features.push(pastShift === "○" ? 1 : 0);
       features.push(pastShift === "△" ? 1 : 0);
-      features.push(pastShift === "▽" ? 1 : 0);
+      features.push(pastShift === "◇" ? 1 : 0);
       features.push(pastShift === "×" ? 1 : 0);
     }
 
@@ -1239,7 +1239,7 @@ async function makePredictionSafe(features, model) {
         }
       }
 
-      const shiftMap = ["○", "△", "▽", "×"];
+      const shiftMap = ["○", "△", "◇", "×"];
 
       return {
         class: shiftMap[bestClass] || "○",
@@ -1349,7 +1349,7 @@ function calculateQualityScore(newSchedule, originalSchedule) {
         if (
           current === "○" ||
           current === "△" ||
-          current === "▽" ||
+          current === "◇" ||
           current === ""
         ) {
           qualityPoints += 1; // Work shifts

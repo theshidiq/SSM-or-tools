@@ -40,10 +40,10 @@ async function validateBusinessRules(schedule, staffMembers, dateRange, original
         },
       },
       shiftRules: {
-        validShifts: ['○', '△', '▽', '×', ''],
+        validShifts: ['○', '△', '◇', '×', ''],
         earlyShiftCode: '△',
         normalShiftCode: '○',
-        lateShiftCode: '▽',
+        lateShiftCode: '◇',
         offShiftCode: '×',
         emptyShiftCode: '',
       },
@@ -237,7 +237,7 @@ function analyzeStaffSchedule(staff, staffSchedule, dateRange) {
     },
   };
   
-  const validShifts = ['○', '△', '▽', '×', ''];
+  const validShifts = ['○', '△', '◇', '×', ''];
   let currentConsecutive = 0;
   let currentPeriod = [];
   
@@ -294,7 +294,7 @@ function analyzeStaffSchedule(staff, staffSchedule, dateRange) {
         case '○':
           analysis.shiftDistribution.normal++;
           break;
-        case '▽':
+        case '◇':
           analysis.shiftDistribution.late++;
           break;
       }
@@ -482,7 +482,7 @@ async function validateShiftDistribution(schedule, staffMembers, dateRange) {
         case '○':
           shiftCounts.normal++;
           break;
-        case '▽':
+        case '◇':
           shiftCounts.late++;
           break;
         case '×':

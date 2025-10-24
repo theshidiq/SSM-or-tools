@@ -298,7 +298,7 @@ function getHistoricalStats(staff, allHistoricalData) {
         totalDays++;
         if (shift === "△") earlyCount++;
         else if (shift === "○") normalCount++;
-        else if (shift === "▽") lateCount++;
+        else if (shift === "◇") lateCount++;
         else if (shift === "×") offCount++;
       });
     });

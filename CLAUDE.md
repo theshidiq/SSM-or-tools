@@ -120,9 +120,10 @@ The application uses a **Hybrid Go + WebSocket + Supabase Architecture** that el
 
 #### Shift Types
 - `△` (sankaku) - Early shift
-- `○` (maru) - Normal shift  
+- `○` (maru) - Normal shift
+- `◇` (diamond/lozenge) - Late shift
 - `×` (batsu) - Day off
-- Custom text values for special cases
+- Custom text values for special cases (●, ◎, ▣, ★, ⊘)
 
 #### Date Range Management
 - Uses 6 predefined monthly periods (Jan-Feb through Nov-Dec)

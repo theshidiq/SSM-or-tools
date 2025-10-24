@@ -552,9 +552,9 @@ class ServerBusinessValidator {
         fullTimeMinDays: 22,
       },
       shiftPatterns: {
-        validShifts: ['○', '△', '▽', '×', ''],
+        validShifts: ['○', '△', '◇', '×', ''],
         restShift: '×',
-        workShifts: ['○', '△', '▽', ''],
+        workShifts: ['○', '△', '◇', ''],
       },
     };
   }
