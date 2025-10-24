@@ -47,6 +47,12 @@ func (sa *SettingsAggregate) MarshalJSON() ([]byte, error) {
 	reactPriorityRules := make([]map[string]interface{}, len(sa.PriorityRules))
 	for i, rule := range sa.PriorityRules {
 		reactPriorityRules[i] = rule.ToReactFormat()
+
+		// 🔍 DEBUG: Log transformed rule to verify extraction
+		log.Printf("🔍 [MarshalJSON] Rule %d '%s' after ToReactFormat:", i, rule.Name)
+		log.Printf("   staffId in result: %v", reactPriorityRules[i]["staffId"])
+		log.Printf("   shiftType in result: %v", reactPriorityRules[i]["shiftType"])
+		log.Printf("   daysOfWeek in result: %v", reactPriorityRules[i]["daysOfWeek"])
 	}
 
 	// Create response structure with converted data
@@ -254,6 +260,13 @@ func (pr *PriorityRule) ToReactFormat() map[string]interface{} {
 			}
 		}
 	}
+
+	// 🔍 DEBUG: Log final result to see what's being returned
+	log.Printf("🔍 [ToReactFormat] Final result for rule '%s':", pr.Name)
+	log.Printf("   staffId: %v", result["staffId"])
+	log.Printf("   shiftType: %v", result["shiftType"])
+	log.Printf("   daysOfWeek: %v", result["daysOfWeek"])
+	log.Printf("   ruleType: %v", result["ruleType"])
 
 	return result
 }
@@ -517,9 +530,22 @@ func (s *StaffSyncServer) fetchPriorityRules(versionID string) ([]PriorityRule, 
 		return nil, fmt.Errorf("Supabase request failed with status %d: %s", resp.StatusCode, string(body))
 	}
 
+	// 🔍 DEBUG: Log raw response from Supabase
+	log.Printf("🔍 [fetchPriorityRules] Raw response from Supabase: %s", string(body))
+
 	var rules []PriorityRule
 	if err := json.Unmarshal(body, &rules); err != nil {
 		return nil, fmt.Errorf("failed to parse response: %w", err)
+	}
+
+	// 🔍 DEBUG: Log unmarshaled rules to see if RuleDefinition is populated
+	for i, rule := range rules {
+		log.Printf("🔍 [fetchPriorityRules] Rule %d '%s': RuleDefinition length = %d", i, rule.Name, len(rule.RuleDefinition))
+		if len(rule.RuleDefinition) > 0 {
+			log.Printf("   RuleDefinition content: %+v", rule.RuleDefinition)
+		} else {
+			log.Printf("   ⚠️ RuleDefinition is empty/nil!")
+		}
 	}
 
 	return rules, nil
@@ -1338,7 +1364,9 @@ func (s *StaffSyncServer) insertPriorityRule(versionID string, ruleData map[stri
 		insertData["rule_definition"] = ruleDefinitionMap
 		log.Printf("✅ [insertPriorityRule] Final rule_definition (will save to database): %+v", ruleDefinitionMap)
 	} else {
-		log.Printf("⚠️ [insertPriorityRule] No rule_definition data to save!")
+		log.Printf("⚠️ [insertPriorityRule] No rule_definition data to save - SKIPPING INSERT to prevent NULL rules!")
+		log.Printf("⚠️ [insertPriorityRule] Received ruleData was: %+v", ruleData)
+		return fmt.Errorf("cannot insert priority rule without rule_definition data (missing staffId, shiftType, or daysOfWeek)")
 	}
 
 	jsonData, _ := json.Marshal(insertData)
