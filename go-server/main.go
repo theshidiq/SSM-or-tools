@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"os"
 	"strconv"
+	"sync"
 	"time"
 
 	"github.com/google/uuid"
@@ -25,12 +26,13 @@ type Client struct {
 
 // Server for staff synchronization
 type StaffSyncServer struct {
-	clients    map[*Client]bool
-	broadcast  chan []byte
-	register   chan *Client
-	unregister chan *Client
+	clients     map[*Client]bool
+	broadcast   chan []byte
+	register    chan *Client
+	unregister  chan *Client
 	supabaseURL string
 	supabaseKey string
+	tempIDMap   sync.Map // map[string]string - temporary ID -> database UUID for priority rules
 }
 
 // WebSocket upgrader
@@ -59,6 +61,7 @@ const (
 	MESSAGE_SETTINGS_DELETE_STAFF_GROUP    = "SETTINGS_DELETE_STAFF_GROUP"
 	MESSAGE_SETTINGS_UPDATE_DAILY_LIMITS   = "SETTINGS_UPDATE_DAILY_LIMITS"
 	MESSAGE_SETTINGS_UPDATE_MONTHLY_LIMITS = "SETTINGS_UPDATE_MONTHLY_LIMITS"
+	MESSAGE_SETTINGS_CREATE_PRIORITY_RULE  = "SETTINGS_CREATE_PRIORITY_RULE"
 	MESSAGE_SETTINGS_UPDATE_PRIORITY_RULES = "SETTINGS_UPDATE_PRIORITY_RULES"
 	MESSAGE_SETTINGS_DELETE_PRIORITY_RULE  = "SETTINGS_DELETE_PRIORITY_RULE"
 	MESSAGE_SETTINGS_UPDATE_ML_CONFIG      = "SETTINGS_UPDATE_ML_CONFIG"
@@ -285,6 +288,8 @@ func (s *StaffSyncServer) handleStaffSync(w http.ResponseWriter, r *http.Request
 			s.handleDailyLimitsUpdate(client, &msg)
 		case MESSAGE_SETTINGS_UPDATE_MONTHLY_LIMITS:
 			s.handleMonthlyLimitsUpdate(client, &msg)
+		case MESSAGE_SETTINGS_CREATE_PRIORITY_RULE:
+			s.handlePriorityRuleCreate(client, &msg)
 		case MESSAGE_SETTINGS_UPDATE_PRIORITY_RULES:
 			s.handlePriorityRulesUpdate(client, &msg)
 		case MESSAGE_SETTINGS_DELETE_PRIORITY_RULE:

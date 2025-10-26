@@ -28,6 +28,7 @@ const MESSAGE_TYPES = {
   SETTINGS_DELETE_STAFF_GROUP: "SETTINGS_DELETE_STAFF_GROUP",
   SETTINGS_UPDATE_DAILY_LIMITS: "SETTINGS_UPDATE_DAILY_LIMITS",
   SETTINGS_UPDATE_MONTHLY_LIMITS: "SETTINGS_UPDATE_MONTHLY_LIMITS",
+  SETTINGS_CREATE_PRIORITY_RULE: "SETTINGS_CREATE_PRIORITY_RULE",
   SETTINGS_UPDATE_PRIORITY_RULES: "SETTINGS_UPDATE_PRIORITY_RULES",
   SETTINGS_DELETE_PRIORITY_RULE: "SETTINGS_DELETE_PRIORITY_RULE",
   SETTINGS_UPDATE_ML_CONFIG: "SETTINGS_UPDATE_ML_CONFIG",
@@ -650,6 +651,22 @@ export const useWebSocketSettings = (options = {}) => {
    */
   const updatePriorityRules = useCallback(
     (ruleData) => {
+      // 🔍 DEBUG: Log function entry
+      console.log("🔍 [updatePriorityRules] Function called with rule:", {
+        id: ruleData?.id,
+        name: ruleData?.name,
+        staffId: ruleData?.staffId,
+        shiftType: ruleData?.shiftType,
+        enabled,
+        wsReadyState: wsRef.current?.readyState,
+        wsReadyStateNames: {
+          0: "CONNECTING",
+          1: "OPEN",
+          2: "CLOSING",
+          3: "CLOSED"
+        }[wsRef.current?.readyState] || "UNDEFINED"
+      });
+
       if (!enabled) {
         const error = new Error("WebSocket disabled");
         console.log(
@@ -666,6 +683,12 @@ export const useWebSocketSettings = (options = {}) => {
           clientId: clientIdRef.current,
         };
 
+        console.log("🔍 [updatePriorityRules] Sending WebSocket message:", {
+          type: message.type,
+          ruleId: ruleData?.id,
+          ruleName: ruleData?.name
+        });
+
         wsRef.current.send(JSON.stringify(message));
         console.log(
           "📤 Phase 3 Settings: Sent priority rules update:",
@@ -677,6 +700,74 @@ export const useWebSocketSettings = (options = {}) => {
         const error = new Error("WebSocket not connected");
         console.error(
           "❌ Phase 3 Settings: Failed to update priority rules - not connected",
+          {
+            readyState: wsRef.current?.readyState,
+            readyStateName: {
+              0: "CONNECTING",
+              1: "OPEN",
+              2: "CLOSING",
+              3: "CLOSED"
+            }[wsRef.current?.readyState] || "UNDEFINED",
+            wsRefExists: !!wsRef.current
+          }
+        );
+        return Promise.reject(error);
+      }
+    },
+    [enabled],
+  );
+
+  /**
+   * Create a new priority rule (table-specific operation)
+   */
+  const createPriorityRule = useCallback(
+    (ruleData) => {
+      console.log("🔍 [createPriorityRule] Function called with rule:", {
+        id: ruleData?.id,
+        name: ruleData?.name,
+        staffId: ruleData?.staffId,
+        shiftType: ruleData?.shiftType,
+        enabled,
+        wsReadyState: wsRef.current?.readyState,
+      });
+
+      if (!enabled) {
+        const error = new Error("WebSocket disabled");
+        console.log(
+          "🚫 Phase 3 Settings: Priority rule creation blocked - WebSocket disabled",
+        );
+        return Promise.reject(error);
+      }
+
+      if (wsRef.current?.readyState === WebSocket.OPEN) {
+        const message = {
+          type: MESSAGE_TYPES.SETTINGS_CREATE_PRIORITY_RULE,
+          payload: { rule: ruleData },
+          timestamp: new Date().toISOString(),
+          clientId: clientIdRef.current,
+        };
+
+        console.log("🔍 [createPriorityRule] Sending WebSocket message:", {
+          type: message.type,
+          ruleId: ruleData?.id,
+          ruleName: ruleData?.name
+        });
+
+        wsRef.current.send(JSON.stringify(message));
+        console.log(
+          "📤 Phase 3 Settings: Sent priority rule creation:",
+          ruleData,
+        );
+
+        return Promise.resolve();
+      } else {
+        const error = new Error("WebSocket not connected");
+        console.error(
+          "❌ Phase 3 Settings: Failed to create priority rule - not connected",
+          {
+            readyState: wsRef.current?.readyState,
+            wsRefExists: !!wsRef.current
+          }
         );
         return Promise.reject(error);
       }
@@ -934,6 +1025,7 @@ export const useWebSocketSettings = (options = {}) => {
     deleteStaffGroup,
     updateDailyLimits,
     updateMonthlyLimits,
+    createPriorityRule,
     updatePriorityRules,
     deletePriorityRule,
     updateMLConfig,

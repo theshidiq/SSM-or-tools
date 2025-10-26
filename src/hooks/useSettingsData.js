@@ -30,7 +30,9 @@ export const useSettingsData = (autosaveEnabled = true) => {
     deleteStaffGroup: wsDeleteStaffGroup,
     updateDailyLimits: wsUpdateDailyLimits,
     updateMonthlyLimits: wsUpdateMonthlyLimits,
+    createPriorityRule: wsCreatePriorityRule,
     updatePriorityRules: wsUpdatePriorityRules,
+    deletePriorityRule: wsDeletePriorityRule,
     updateMLConfig: wsUpdateMLConfig,
     resetSettings: wsResetSettings,
     migrateSettings: wsMigrateSettings,
@@ -49,7 +51,9 @@ export const useSettingsData = (autosaveEnabled = true) => {
     wsDeleteStaffGroup,
     wsUpdateDailyLimits,
     wsUpdateMonthlyLimits,
+    wsCreatePriorityRule,
     wsUpdatePriorityRules,
+    wsDeletePriorityRule,
     wsUpdateMLConfig,
   });
 
@@ -61,7 +65,9 @@ export const useSettingsData = (autosaveEnabled = true) => {
       wsDeleteStaffGroup,
       wsUpdateDailyLimits,
       wsUpdateMonthlyLimits,
+      wsCreatePriorityRule,
       wsUpdatePriorityRules,
+      wsDeletePriorityRule,
       wsUpdateMLConfig,
     };
   }, [
@@ -70,7 +76,9 @@ export const useSettingsData = (autosaveEnabled = true) => {
     wsDeleteStaffGroup,
     wsUpdateDailyLimits,
     wsUpdateMonthlyLimits,
+    wsCreatePriorityRule,
     wsUpdatePriorityRules,
+    wsDeletePriorityRule,
     wsUpdateMLConfig,
   ]);
 
@@ -116,6 +124,13 @@ export const useSettingsData = (autosaveEnabled = true) => {
       const softDeletedCount = staffGroups.filter(g => g.is_active === false).length;
       if (softDeletedCount > 0) {
         console.log(`🗑️ [SYNC] ${softDeletedCount} soft-deleted groups kept in local state (hidden in UI)`);
+      }
+
+      // 🔍 DEBUG: Log priority rules from WebSocket
+      console.log('🔍 [DEBUG] wsSettings.priorityRules from WebSocket:', wsSettings.priorityRules);
+      console.log('🔍 [DEBUG] priorityRules length:', wsSettings.priorityRules?.length || 0);
+      if (wsSettings.priorityRules && wsSettings.priorityRules.length > 0) {
+        console.log('🔍 [DEBUG] First priority rule:', JSON.stringify(wsSettings.priorityRules[0], null, 2));
       }
 
       // Transform multi-table response to localStorage-compatible format
@@ -222,7 +237,13 @@ export const useSettingsData = (autosaveEnabled = true) => {
    * Detects which table was modified and sends specific WebSocket updates
    */
   const updateSettings = useCallback(
-    (newSettings) => {
+    (newSettingsOrUpdater) => {
+      // ✅ FIX: Support functional updates like React's setState
+      // This allows: updateSettings(prev => ({...prev, priorityRules: newRules}))
+      const newSettings = typeof newSettingsOrUpdater === 'function'
+        ? newSettingsOrUpdater(settingsRef.current || {})
+        : newSettingsOrUpdater;
+
       if (useWebSocket) {
         // 🔧 FIX: CRITICAL - Prevent circular updates when syncing FROM WebSocket
         // If we're currently syncing from WebSocket, DON'T send updates back to WebSocket
@@ -390,15 +411,82 @@ export const useSettingsData = (autosaveEnabled = true) => {
           });
         }
 
-        // Detect and update priority rules
-        if (
-          JSON.stringify(oldSettings.priorityRules) !==
-          JSON.stringify(newSettings.priorityRules)
-        ) {
-          console.log("  - Updating priority_rules table");
-          newSettings.priorityRules?.forEach((rule) => {
-            callbacks.wsUpdatePriorityRules(rule);
+        // Detect and update priority rules (differential update like staff groups)
+        const oldRules = oldSettings.priorityRules || [];
+        const newRules = newSettings.priorityRules || [];
+
+        if (JSON.stringify(oldRules) !== JSON.stringify(newRules)) {
+          console.log("  - Detecting priority_rules table changes...");
+          console.log("🔍 [DIFF DEBUG] oldRules:", oldRules.map(r => ({ id: r.id, name: r.name })));
+          console.log("🔍 [DIFF DEBUG] newRules:", newRules.map(r => ({ id: r.id, name: r.name })));
+
+          const oldRuleIds = new Set(oldRules.map((r) => r.id));
+          const newRuleIds = new Set(newRules.map((r) => r.id));
+
+          console.log("🔍 [DIFF DEBUG] oldRuleIds:", Array.from(oldRuleIds));
+          console.log("🔍 [DIFF DEBUG] newRuleIds:", Array.from(newRuleIds));
+
+          // Detect CREATED rules (exist in new but not in old)
+          const createdRules = newRules.filter((r) => {
+            const isNew = !oldRuleIds.has(r.id);
+            if (isNew) {
+              console.log(`🔍 [DIFF DEBUG] Rule "${r.name}" (${r.id}) is NEW (not in oldRuleIds)`);
+            }
+            return isNew;
           });
+          if (createdRules.length > 0) {
+            console.log(`    - ${createdRules.length} new rule(s) created`);
+            createdRules.forEach((rule) => {
+              console.log(`      - Creating rule "${rule.name}" (${rule.id})`);
+              callbacks.wsCreatePriorityRule(rule);
+            });
+          }
+
+          // Detect DELETED rules (exist in old but not in new)
+          const deletedRuleIds = [...oldRuleIds].filter((id) => !newRuleIds.has(id));
+          if (deletedRuleIds.length > 0) {
+            console.log(`    - ${deletedRuleIds.length} rule(s) deleted`);
+            deletedRuleIds.forEach((ruleId) => {
+              const deletedRule = oldRules.find((r) => r.id === ruleId);
+              console.log(`      - Deleting rule "${deletedRule?.name}" (${ruleId})`);
+              callbacks.wsDeletePriorityRule(ruleId);
+            });
+          }
+
+          // Detect UPDATED rules (exist in both, but content changed)
+          const updatedRules = newRules.filter((newRule) => {
+            if (!oldRuleIds.has(newRule.id)) return false; // Skip newly created
+
+            const oldRule = oldRules.find((r) => r.id === newRule.id);
+            if (!oldRule) return false;
+
+            // Compare rule content (normalize before comparison)
+            const normalizeRule = (r) => ({
+              id: r.id,
+              name: r.name,
+              description: r.description,
+              staffId: r.staffId,
+              shiftType: r.shiftType,
+              daysOfWeek: r.daysOfWeek || [],
+              ruleType: r.ruleType,
+              priorityLevel: r.priorityLevel,
+              isActive: r.isActive,
+            });
+
+            return JSON.stringify(normalizeRule(oldRule)) !== JSON.stringify(normalizeRule(newRule));
+          });
+
+          if (updatedRules.length > 0) {
+            console.log(`    - ${updatedRules.length} rule(s) updated`);
+            updatedRules.forEach((rule) => {
+              console.log(`      - Updating rule "${rule.name}" (${rule.id})`);
+              callbacks.wsUpdatePriorityRules(rule);
+            });
+          }
+
+          console.log(
+            `  - Summary: ${createdRules.length} created, ${updatedRules.length} updated, ${deletedRuleIds.length} deleted`,
+          );
         }
 
         // Detect and update ML parameters

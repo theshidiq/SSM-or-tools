@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo } from "react";
+import React, { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import {
   Plus,
   Trash2,
@@ -10,6 +10,8 @@ import {
   Check,
   XCircle,
 } from "lucide-react";
+import debounce from "lodash/debounce";
+import { toast } from "sonner";
 import { useSettings } from "../../../contexts/SettingsContext";
 import FormField from "../shared/FormField";
 import ConfirmationModal from "../shared/ConfirmationModal";
@@ -69,6 +71,10 @@ const PriorityRulesTab = ({ staffMembers = [], validationErrors = {} }) => {
   const [isDeleting, setIsDeleting] = useState(false);
   const [selectedStaff, setSelectedStaff] = useState("all");
   const [conflictingRules, setConflictingRules] = useState([]);
+
+  // ✅ FIX: Local edit buffer for responsive UI with debounced server sync
+  // Stores temporary edits until they're synced to server after 500ms of inactivity
+  const [editBuffer, setEditBuffer] = useState({}); // { [ruleId]: { name: "...", description: "..." } }
 
   // Fix: Memoize derived arrays to prevent unnecessary re-renders
   // Transform WebSocket multi-table format to localStorage-compatible format
@@ -149,7 +155,7 @@ const PriorityRulesTab = ({ staffMembers = [], validationErrors = {} }) => {
 
   // Wrap updatePriorityRules in useCallback for stable reference (Phase 4.2)
   // ✅ FIX: Use functional update to avoid dependency on settings object
-  const updatePriorityRules = useCallback(
+  const updatePriorityRulesImmediate = useCallback(
     (newRules) => {
       // Check for conflicts when updating rules
       const conflicts = detectRuleConflicts(newRules);
@@ -164,8 +170,97 @@ const PriorityRulesTab = ({ staffMembers = [], validationErrors = {} }) => {
     [updateSettings, detectRuleConflicts],
   );
 
+  // ✅ FIX: Debounced server sync - waits 500ms after last edit before syncing to server
+  const editBufferRef = useRef({});
+  const priorityRulesRef = useRef(priorityRules);
+  const debouncedSyncRef = useRef({});
+
+  // Keep refs in sync
+  useEffect(() => {
+    editBufferRef.current = editBuffer;
+  }, [editBuffer]);
+
+  useEffect(() => {
+    priorityRulesRef.current = priorityRules;
+  }, [priorityRules]);
+
+  // Sync specific rule from buffer to server (stable - no dependencies)
+  const syncRuleToServer = useCallback(
+    (ruleId) => {
+      const bufferedUpdates = editBufferRef.current[ruleId];
+      if (!bufferedUpdates) return;
+
+      console.log(
+        `🔄 [DEBOUNCE] Syncing buffered updates for rule ${ruleId}:`,
+        bufferedUpdates,
+      );
+
+      const updatedRules = priorityRulesRef.current.map((rule) =>
+        rule.id === ruleId ? { ...rule, ...bufferedUpdates } : rule,
+      );
+
+      updatePriorityRulesImmediate(updatedRules);
+
+      // Clear buffer after sync
+      setEditBuffer((prev) => {
+        const next = { ...prev };
+        delete next[ruleId];
+        return next;
+      });
+    },
+    [updatePriorityRulesImmediate],
+  );
+
+  // Create stable debounced functions (only once per rule)
+  const getOrCreateDebouncedSync = useCallback(
+    (ruleId) => {
+      if (!debouncedSyncRef.current[ruleId]) {
+        debouncedSyncRef.current[ruleId] = debounce(
+          () => syncRuleToServer(ruleId),
+          500,
+          {
+            leading: false,
+            trailing: true,
+          },
+        );
+      }
+      return debouncedSyncRef.current[ruleId];
+    },
+    [syncRuleToServer],
+  );
+
+  // Cleanup: cancel all pending debounces on unmount
+  useEffect(() => {
+    return () => {
+      Object.values(debouncedSyncRef.current).forEach((debouncedFn) => {
+        if (debouncedFn) debouncedFn.cancel();
+      });
+    };
+  }, []);
+
+  // Immediate update function for non-text changes (selects, toggles, etc.)
+  const updatePriorityRules = useCallback(
+    (newRules) => {
+      updatePriorityRulesImmediate(newRules);
+    },
+    [updatePriorityRulesImmediate],
+  );
+
   // Cancel changes and restore original data (Phase 4.2: moved before useEffect for dependency)
   const handleCancelEdit = useCallback(() => {
+    // ✅ FIX: Cancel pending debounced sync
+    if (editingRule && debouncedSyncRef.current[editingRule]) {
+      debouncedSyncRef.current[editingRule].cancel();
+      delete debouncedSyncRef.current[editingRule];
+    }
+
+    // ✅ FIX: Clear edit buffer for this rule
+    setEditBuffer((prev) => {
+      const next = { ...prev };
+      delete next[editingRule];
+      return next;
+    });
+
     if (originalRuleData && editingRule) {
       const updatedRules = priorityRules.map((rule) =>
         rule.id === editingRule ? originalRuleData : rule,
@@ -189,6 +284,18 @@ const PriorityRulesTab = ({ staffMembers = [], validationErrors = {} }) => {
   }, [editingRule, handleCancelEdit]);
 
   const createNewRule = () => {
+    // ✅ FIX: Check if staff members are available before creating rule
+    if (!staffMembers || staffMembers.length === 0) {
+      console.error("❌ Cannot create priority rule: No staff members available");
+      toast.error("Cannot create priority rule: No staff members available. Please add staff members first.", {
+        duration: 5000,
+        description: "Go to Settings → Staff Groups to add staff members before creating priority rules.",
+      });
+      return;
+    }
+
+    console.log(`✅ Creating new priority rule with staffId: ${staffMembers[0].id} (${staffMembers[0].name})`);
+
     const newRule = {
       id: `priority-rule-${Date.now()}`,
       name: "New Priority Rule",
@@ -210,12 +317,21 @@ const PriorityRulesTab = ({ staffMembers = [], validationErrors = {} }) => {
     updatePriorityRules([...priorityRules, newRule]);
   };
 
-  const updateRule = (ruleId, updates) => {
-    const updatedRules = priorityRules.map((rule) =>
-      rule.id === ruleId ? { ...rule, ...updates } : rule,
-    );
-    updatePriorityRules(updatedRules);
-  };
+  // ✅ FIX: Update rule with local buffer + debounced server sync
+  const updateRule = useCallback(
+    (ruleId, updates) => {
+      // Update local buffer immediately for responsive UI
+      setEditBuffer((prev) => ({
+        ...prev,
+        [ruleId]: { ...(prev[ruleId] || {}), ...updates },
+      }));
+
+      // Trigger debounced server sync (gets or creates stable debounced function)
+      const debouncedSync = getOrCreateDebouncedSync(ruleId);
+      debouncedSync();
+    },
+    [getOrCreateDebouncedSync],
+  );
 
   const deleteRule = (ruleId) => {
     const rule = priorityRules.find((r) => r.id === ruleId);
@@ -263,6 +379,18 @@ const PriorityRulesTab = ({ staffMembers = [], validationErrors = {} }) => {
 
   // Save changes and exit edit mode
   const handleSaveEdit = () => {
+    // ✅ FIX: Force immediate sync if there's buffered data
+    if (editingRule && editBuffer[editingRule]) {
+      // Cancel pending debounce
+      if (debouncedSyncRef.current[editingRule]) {
+        debouncedSyncRef.current[editingRule].cancel();
+        delete debouncedSyncRef.current[editingRule];
+      }
+
+      // Sync immediately
+      syncRuleToServer(editingRule);
+    }
+
     setEditingRule(null);
     setOriginalRuleData(null);
   };
@@ -371,7 +499,7 @@ const PriorityRulesTab = ({ staffMembers = [], validationErrors = {} }) => {
                 <div>
                   <input
                     type="text"
-                    value={rule.name}
+                    value={editBuffer[rule.id]?.name ?? rule.name}
                     onChange={(e) =>
                       updateRule(rule.id, { name: e.target.value })
                     }
@@ -466,7 +594,7 @@ const PriorityRulesTab = ({ staffMembers = [], validationErrors = {} }) => {
             {/* Description */}
             <FormField label="Description">
               <textarea
-                value={rule.description}
+                value={editBuffer[rule.id]?.description ?? rule.description}
                 onChange={(e) =>
                   updateRule(rule.id, { description: e.target.value })
                 }
@@ -575,11 +703,24 @@ const PriorityRulesTab = ({ staffMembers = [], validationErrors = {} }) => {
             Configure staff preferences and priority rules for intelligent
             scheduling.
           </p>
+          {/* ✅ FIX: Show helper text when no staff members */}
+          {(!staffMembers || staffMembers.length === 0) && (
+            <p className="text-sm text-amber-600 mt-2 flex items-center gap-1">
+              <AlertTriangle size={14} />
+              Add staff members before creating priority rules
+            </p>
+          )}
         </div>
 
         <button
           onClick={createNewRule}
-          className="flex items-center gap-2 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors"
+          disabled={!staffMembers || staffMembers.length === 0}
+          className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-colors ${
+            !staffMembers || staffMembers.length === 0
+              ? "bg-gray-300 text-gray-500 cursor-not-allowed"
+              : "bg-purple-600 text-white hover:bg-purple-700"
+          }`}
+          title={!staffMembers || staffMembers.length === 0 ? "Add staff members first" : "Add new priority rule"}
         >
           <Plus size={16} />
           Add Rule
@@ -667,7 +808,13 @@ const PriorityRulesTab = ({ staffMembers = [], validationErrors = {} }) => {
           </p>
           <button
             onClick={createNewRule}
-            className="inline-flex items-center gap-2 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors"
+            disabled={!staffMembers || staffMembers.length === 0}
+            className={`inline-flex items-center gap-2 px-4 py-2 rounded-lg transition-colors ${
+              !staffMembers || staffMembers.length === 0
+                ? "bg-gray-300 text-gray-500 cursor-not-allowed"
+                : "bg-purple-600 text-white hover:bg-purple-700"
+            }`}
+            title={!staffMembers || staffMembers.length === 0 ? "Add staff members first" : "Create your first priority rule"}
           >
             <Plus size={16} />
             Create First Rule

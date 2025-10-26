@@ -10,6 +10,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/gorilla/websocket"
@@ -224,6 +225,9 @@ func (pr *PriorityRule) ToReactFormat() map[string]interface{} {
 
 	// ✅ FIX: Extract nested fields from rule_definition JSONB to top-level properties
 	// React's useAISettings expects staffId, shiftType, daysOfWeek at top level
+	log.Printf("🔍 [ToReactFormat] Rule '%s': RuleDefinition length = %d", pr.Name, len(pr.RuleDefinition))
+	log.Printf("🔍 [ToReactFormat] RuleDefinition content: %+v", pr.RuleDefinition)
+
 	if len(pr.RuleDefinition) > 0 {
 		defMap := pr.RuleDefinition
 
@@ -231,6 +235,8 @@ func (pr *PriorityRule) ToReactFormat() map[string]interface{} {
 		if staffID, exists := defMap["staff_id"]; exists {
 			result["staffId"] = staffID
 			log.Printf("✅ [ToReactFormat] Extracted staffId: %v", staffID)
+		} else {
+			log.Printf("⚠️ [ToReactFormat] staff_id NOT FOUND in RuleDefinition")
 		}
 
 		// Extract type → ruleType
@@ -505,7 +511,9 @@ func (s *StaffSyncServer) fetchMonthlyLimits(versionID string) ([]MonthlyLimit, 
 
 // fetchPriorityRules retrieves priority rules for a specific version
 func (s *StaffSyncServer) fetchPriorityRules(versionID string) ([]PriorityRule, error) {
-	url := fmt.Sprintf("%s/rest/v1/priority_rules?version_id=eq.%s&is_active=eq.true&select=*",
+	// ✅ FIX: Add ORDER BY created_at DESC to fetch the LATEST rules
+	// This prevents fetching stale/skeleton rules that may be auto-created
+	url := fmt.Sprintf("%s/rest/v1/priority_rules?version_id=eq.%s&is_active=eq.true&select=*&order=created_at.desc",
 		s.supabaseURL, versionID)
 
 	req, err := http.NewRequest("GET", url, nil)
@@ -853,6 +861,22 @@ func (s *StaffSyncServer) updatePriorityRule(versionID string, ruleData map[stri
 	// 🔍 DEBUG: Log what we received from React
 	log.Printf("🔍 [updatePriorityRule] Received ruleData: %+v", ruleData)
 
+	// ✅ FIX: Smart temporary ID handling with mapping
+	// Check if this is a temporary ID we've already seen and mapped
+	if strings.HasPrefix(ruleID, "priority-rule-") {
+		if dbUUID, ok := s.tempIDMap.Load(ruleID); ok {
+			// We've seen this temp ID before - use the database UUID for UPDATE
+			ruleID = dbUUID.(string)
+			log.Printf("🔗 [updatePriorityRule] Translated temp ID to DB UUID: '%s'", ruleID)
+		} else {
+			// First time seeing this temp ID - route to INSERT
+			log.Printf("🔍 [updatePriorityRule] New temp ID '%s', routing to INSERT", ruleID)
+			return s.insertPriorityRule(versionID, ruleData)
+		}
+	}
+
+	log.Printf("🔍 [updatePriorityRule] Updating existing rule with ID '%s'", ruleID)
+
 	url := fmt.Sprintf("%s/rest/v1/priority_rules?id=eq.%s&version_id=eq.%s",
 		s.supabaseURL, ruleID, versionID)
 
@@ -957,6 +981,140 @@ func (s *StaffSyncServer) updatePriorityRule(versionID string, ruleData map[stri
 	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusNoContent {
 		body, _ := io.ReadAll(resp.Body)
 		return fmt.Errorf("update failed with status %d: %s", resp.StatusCode, string(body))
+	}
+
+	return nil
+}
+
+// insertPriorityRule creates a new priority rule in the database
+// Called when React sends a temporary ID (e.g., "priority-rule-1761352355813")
+func (s *StaffSyncServer) insertPriorityRule(versionID string, ruleData map[string]interface{}) error {
+	log.Printf("🔍 [insertPriorityRule] Creating new priority rule: %s", ruleData["name"])
+
+	url := fmt.Sprintf("%s/rest/v1/priority_rules", s.supabaseURL)
+
+	// Build rule_definition JSONB (same logic as UPDATE)
+	ruleDefinition := make(map[string]interface{})
+
+	// Merge top-level fields into rule_definition with proper nested structure
+	// Database expects: { staff_id, conditions: { shift_type, day_of_week } }
+	if staffId, ok := ruleData["staffId"]; ok {
+		ruleDefinition["staff_id"] = staffId
+		log.Printf("🔍 [insertPriorityRule] Adding staffId: %v", staffId)
+	}
+
+	// Create conditions object for shift_type and day_of_week
+	conditions := make(map[string]interface{})
+	if shiftType, ok := ruleData["shiftType"]; ok {
+		conditions["shift_type"] = shiftType
+		log.Printf("🔍 [insertPriorityRule] Adding shiftType: %v", shiftType)
+	}
+	if daysOfWeek, ok := ruleData["daysOfWeek"]; ok {
+		conditions["day_of_week"] = daysOfWeek
+		log.Printf("🔍 [insertPriorityRule] Adding daysOfWeek: %+v", daysOfWeek)
+	}
+
+	// Add conditions to ruleDefinition if we have any
+	if len(conditions) > 0 {
+		ruleDefinition["conditions"] = conditions
+	}
+
+	// Add other optional fields
+	if ruleType, ok := ruleData["ruleType"]; ok {
+		ruleDefinition["type"] = ruleType
+		log.Printf("🔍 [insertPriorityRule] Adding ruleType: %v", ruleType)
+	}
+	if preferenceStrength, ok := ruleData["preferenceStrength"]; ok {
+		ruleDefinition["preference_strength"] = preferenceStrength
+	}
+
+	log.Printf("🔍 [insertPriorityRule] Final rule_definition: %+v", ruleDefinition)
+
+	// Build INSERT payload with all required fields
+	// NOTE: restaurant_id comes from environment variable
+	insertData := map[string]interface{}{
+		"restaurant_id":  "e1661c71-b24f-4ee1-9e8b-7290a43c9575", // Hardcoded from env
+		"version_id":     versionID,
+		"name":           ruleData["name"],
+		"description":    ruleData["description"],
+		"is_active":      true, // Always active for new rules
+	}
+
+	// Add optional fields with safe type assertions and defaults
+	if priorityLevel, ok := ruleData["priorityLevel"].(float64); ok {
+		insertData["priority_level"] = int(priorityLevel)
+	} else {
+		insertData["priority_level"] = 3 // Default priority
+	}
+
+	if penaltyWeight, ok := ruleData["penaltyWeight"].(float64); ok {
+		insertData["penalty_weight"] = penaltyWeight
+	} else {
+		insertData["penalty_weight"] = 50.0 // Default penalty
+	}
+
+	if isHardConstraint, ok := ruleData["isHardConstraint"].(bool); ok {
+		insertData["is_hard_constraint"] = isHardConstraint
+	} else {
+		insertData["is_hard_constraint"] = false // Default to soft constraint
+	}
+
+	// Add rule_definition JSONB
+	if len(ruleDefinition) > 0 {
+		insertData["rule_definition"] = ruleDefinition
+	}
+
+	// Optional: effective dates (can be null)
+	if effectiveFrom, ok := ruleData["effectiveFrom"]; ok && effectiveFrom != nil {
+		insertData["effective_from"] = effectiveFrom
+	}
+	if effectiveUntil, ok := ruleData["effectiveUntil"]; ok && effectiveUntil != nil {
+		insertData["effective_until"] = effectiveUntil
+	}
+
+	log.Printf("🔍 [insertPriorityRule] INSERT payload: %+v", insertData)
+
+	// Send POST request to Supabase
+	jsonData, err := json.Marshal(insertData)
+	if err != nil {
+		return fmt.Errorf("failed to marshal insert data: %w", err)
+	}
+
+	req, err := http.NewRequest("POST", url, bytes.NewBuffer(jsonData))
+	if err != nil {
+		return fmt.Errorf("failed to create request: %w", err)
+	}
+
+	req.Header.Set("Authorization", "Bearer "+s.supabaseKey)
+	req.Header.Set("apikey", s.supabaseKey)
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Prefer", "return=representation") // Return the created row
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return fmt.Errorf("request failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	body, _ := io.ReadAll(resp.Body)
+	if resp.StatusCode >= 400 {
+		return fmt.Errorf("insert failed with status %d: %s", resp.StatusCode, string(body))
+	}
+
+	log.Printf("✅ [insertPriorityRule] Successfully created priority rule: %s", ruleData["name"])
+	log.Printf("🔍 [insertPriorityRule] Supabase response: %s", string(body))
+
+	// ✅ FIX: Store temporary ID → database UUID mapping for future UPDATEs
+	// Extract the database-generated UUID from the INSERT response
+	var createdRules []map[string]interface{}
+	if err := json.Unmarshal(body, &createdRules); err == nil && len(createdRules) > 0 {
+		if dbUUID, ok := createdRules[0]["id"].(string); ok {
+			if tempID, ok := ruleData["id"].(string); ok && strings.HasPrefix(tempID, "priority-rule-") {
+				// Store mapping: temporary ID → database UUID
+				s.tempIDMap.Store(tempID, dbUUID)
+				log.Printf("🔗 [insertPriorityRule] Mapped temp ID '%s' → DB UUID '%s'", tempID, dbUUID)
+			}
+		}
 	}
 
 	return nil
@@ -1254,136 +1412,6 @@ func (s *StaffSyncServer) insertMonthlyLimit(versionID string, limitData map[str
 	resp, err := client.Do(req)
 	if err != nil {
 		return fmt.Errorf("failed to insert monthly limit: %w", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusCreated && resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
-		return fmt.Errorf("insert failed with status %d: %s", resp.StatusCode, string(body))
-	}
-
-	return nil
-}
-
-// insertPriorityRule inserts a new priority rule into the database
-func (s *StaffSyncServer) insertPriorityRule(versionID string, ruleData map[string]interface{}) error {
-	url := fmt.Sprintf("%s/rest/v1/priority_rules", s.supabaseURL)
-
-	// 🔍 DEBUG: Log what we received from React
-	log.Printf("🔍 [insertPriorityRule] Received ruleData: %+v", ruleData)
-
-	insertData := make(map[string]interface{})
-	insertData["version_id"] = versionID
-	insertData["restaurant_id"] = s.getRestaurantID()
-	insertData["is_active"] = true
-	insertData["created_at"] = time.Now().UTC().Format(time.RFC3339)
-	insertData["updated_at"] = time.Now().UTC().Format(time.RFC3339)
-
-	// Copy data (camelCase → snake_case)
-	if id, ok := ruleData["id"]; ok {
-		insertData["id"] = id
-	}
-	if name, ok := ruleData["name"]; ok {
-		insertData["name"] = name
-	}
-	if description, ok := ruleData["description"]; ok {
-		insertData["description"] = description
-	}
-	if priorityLevel, ok := ruleData["priorityLevel"]; ok {
-		insertData["priority_level"] = priorityLevel
-	} else {
-		insertData["priority_level"] = 1
-	}
-	if ruleDefinition, ok := ruleData["ruleDefinition"]; ok {
-		insertData["rule_definition"] = ruleDefinition
-	}
-	if penaltyWeight, ok := ruleData["penaltyWeight"]; ok {
-		insertData["penalty_weight"] = penaltyWeight
-	} else {
-		insertData["penalty_weight"] = 1.0
-	}
-	if isHardConstraint, ok := ruleData["isHardConstraint"]; ok {
-		insertData["is_hard_constraint"] = isHardConstraint
-	} else {
-		insertData["is_hard_constraint"] = false
-	}
-
-	// ✅ FIX: Build rule_definition JSONB with proper nested structure (NOT rule_config!)
-	// Database schema uses rule_definition column with nested conditions object
-	// Structure: { type, staff_id, conditions: { shift_type, day_of_week }, preference_strength }
-	ruleDefinitionMap := make(map[string]interface{})
-
-	// Check if ruleDefinition already exists (from React or migration)
-	if existingDef, ok := ruleData["ruleDefinition"].(map[string]interface{}); ok {
-		// Preserve existing ruleDefinition if present
-		ruleDefinitionMap = existingDef
-		log.Printf("🔍 [insertPriorityRule] Using existing ruleDefinition: %+v", existingDef)
-	}
-
-	// Merge top-level React fields into rule_definition with proper structure
-	// Set type field
-	if ruleType, ok := ruleData["ruleType"]; ok {
-		ruleDefinitionMap["type"] = ruleType
-		log.Printf("🔍 [insertPriorityRule] Setting type: %v", ruleType)
-	}
-
-	// Set staff_id field (snake_case for database)
-	if staffId, ok := ruleData["staffId"]; ok {
-		ruleDefinitionMap["staff_id"] = staffId
-		log.Printf("🔍 [insertPriorityRule] Setting staff_id: %v", staffId)
-	}
-
-	// Build nested conditions object
-	conditions := make(map[string]interface{})
-	if shiftType, ok := ruleData["shiftType"]; ok {
-		conditions["shift_type"] = shiftType
-		log.Printf("🔍 [insertPriorityRule] Setting conditions.shift_type: %v", shiftType)
-	}
-	if daysOfWeek, ok := ruleData["daysOfWeek"]; ok {
-		conditions["day_of_week"] = daysOfWeek
-		log.Printf("🔍 [insertPriorityRule] Setting conditions.day_of_week: %+v", daysOfWeek)
-	}
-
-	// Only add conditions if we have data
-	if len(conditions) > 0 {
-		ruleDefinitionMap["conditions"] = conditions
-	}
-
-	// Set preference_strength field (snake_case for database)
-	if preferenceStrength, ok := ruleData["preferenceStrength"]; ok {
-		ruleDefinitionMap["preference_strength"] = preferenceStrength
-		log.Printf("🔍 [insertPriorityRule] Setting preference_strength: %v", preferenceStrength)
-	} else {
-		// Default to 0.8 if not provided
-		ruleDefinitionMap["preference_strength"] = 0.8
-	}
-
-	// ✅ CRITICAL FIX: Save to rule_definition column (NOT rule_config!)
-	// This matches the database schema and updatePriorityRule logic
-	if len(ruleDefinitionMap) > 0 {
-		insertData["rule_definition"] = ruleDefinitionMap
-		log.Printf("✅ [insertPriorityRule] Final rule_definition (will save to database): %+v", ruleDefinitionMap)
-	} else {
-		log.Printf("⚠️ [insertPriorityRule] No rule_definition data to save - SKIPPING INSERT to prevent NULL rules!")
-		log.Printf("⚠️ [insertPriorityRule] Received ruleData was: %+v", ruleData)
-		return fmt.Errorf("cannot insert priority rule without rule_definition data (missing staffId, shiftType, or daysOfWeek)")
-	}
-
-	jsonData, _ := json.Marshal(insertData)
-	req, err := http.NewRequest("POST", url, bytes.NewBuffer(jsonData))
-	if err != nil {
-		return fmt.Errorf("failed to create request: %w", err)
-	}
-
-	req.Header.Set("Authorization", "Bearer "+s.supabaseKey)
-	req.Header.Set("apikey", s.supabaseKey)
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Prefer", "return=representation")
-
-	client := &http.Client{Timeout: 10 * time.Second}
-	resp, err := client.Do(req)
-	if err != nil {
-		return fmt.Errorf("failed to insert priority rule: %w", err)
 	}
 	defer resp.Body.Close()
 
@@ -2117,6 +2145,83 @@ func (s *StaffSyncServer) handlePriorityRulesUpdate(client *Client, msg *Message
 
 	s.broadcastToAll(&freshMsg)
 	log.Printf("📡 Broadcasted updated priority rules to all clients")
+}
+
+// handlePriorityRuleCreate creates a new priority rule and broadcasts changes
+func (s *StaffSyncServer) handlePriorityRuleCreate(client *Client, msg *Message) {
+	log.Printf("📊 Processing SETTINGS_CREATE_PRIORITY_RULE from client %s", client.clientId)
+
+	payload, ok := msg.Payload.(map[string]interface{})
+	if !ok {
+		log.Printf("❌ Invalid payload format")
+		return
+	}
+
+	log.Printf("🔍 [handlePriorityRuleCreate] Payload: %+v", payload)
+
+	rule, ok := payload["rule"].(map[string]interface{})
+	if !ok {
+		log.Printf("❌ Missing rule data in payload")
+		return
+	}
+
+	log.Printf("🔍 [handlePriorityRuleCreate] Rule data: %+v", rule)
+	log.Printf("🔍 [handlePriorityRuleCreate] Rule name: %v", rule["name"])
+	log.Printf("🔍 [handlePriorityRuleCreate] Rule description: %v", rule["description"])
+	log.Printf("🔍 [handlePriorityRuleCreate] Rule ID: %v", rule["id"])
+
+	// Get active version
+	version, err := s.fetchActiveConfigVersion()
+	if err != nil {
+		log.Printf("❌ [handlePriorityRuleCreate] Failed to fetch active version: %v", err)
+		s.sendErrorResponse(client, "Failed to fetch active version", err)
+		return
+	}
+
+	log.Printf("🔍 [handlePriorityRuleCreate] Active version: %s (locked: %v)", version.ID, version.IsLocked)
+
+	// Check if version is locked
+	if version.IsLocked {
+		log.Printf("⚠️ [handlePriorityRuleCreate] Version is locked, cannot create")
+		s.sendErrorResponse(client, "Cannot modify locked version", nil)
+		return
+	}
+
+	// Create priority rule in database using insertPriorityRule
+	log.Printf("🔍 [handlePriorityRuleCreate] Calling insertPriorityRule with versionID=%s", version.ID)
+	if err := s.insertPriorityRule(version.ID, rule); err != nil {
+		log.Printf("❌ [handlePriorityRuleCreate] insertPriorityRule failed: %v", err)
+		s.sendErrorResponse(client, "Failed to create priority rule", err)
+		return
+	}
+
+	// Log change to audit trail
+	if err := s.logConfigChange(version.ID, "priority_rules", "CREATE", rule); err != nil {
+		log.Printf("⚠️  Failed to log config change: %v", err)
+	}
+
+	log.Printf("✅ Successfully created priority rule")
+
+	// Fetch updated settings from database
+	settings, err := s.fetchAggregatedSettings(version.ID)
+	if err != nil {
+		log.Printf("⚠️ Failed to fetch updated settings: %v", err)
+		return
+	}
+
+	// Broadcast to all clients (including sender)
+	freshMsg := Message{
+		Type: "SETTINGS_SYNC_RESPONSE",
+		Payload: map[string]interface{}{
+			"settings": settings,
+			"updated":  "priority_rules",
+		},
+		Timestamp: time.Now(),
+		ClientID:  msg.ClientID,
+	}
+
+	s.broadcastToAll(&freshMsg)
+	log.Printf("📡 Broadcasted new priority rule to all clients")
 }
 
 // handlePriorityRuleDelete soft-deletes a priority rule and broadcasts changes
