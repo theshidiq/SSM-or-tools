@@ -1163,6 +1163,7 @@ export class BusinessRuleValidator {
     console.log(
       `🔄 [PRIORITY-TRANSFORM] Converting ${rulesArray.length} array rules to object format`,
     );
+    console.log(`🔍 [DEBUG] Input rulesArray:`, JSON.stringify(rulesArray, null, 2));
 
     const rulesObject = {};
     const dayNames = [
@@ -1176,14 +1177,24 @@ export class BusinessRuleValidator {
     ];
 
     rulesArray.forEach((rule, index) => {
-      const staffId = rule.staffId || rule.staff_id;
+      // Extract staffId from multiple possible locations (defensive extraction)
+      const staffId =
+        rule.staffId ||
+        rule.staff_id ||
+        rule.ruleDefinition?.staff_id ||  // ← JSONB nested structure (safety net)
+        rule.ruleDefinition?.staffId ||
+        rule.ruleConfig?.staffId ||
+        rule.preferences?.staffId;  // ← Alternative nested location
 
       if (!staffId) {
         console.log(
-          `⚠️ [PRIORITY-TRANSFORM] Rule ${index}: Missing staffId, skipping`,
+          `⚠️ [PRIORITY-TRANSFORM] Rule ${index}: Missing staffId (checked all locations), skipping`,
         );
+        console.log(`   Raw rule:`, JSON.stringify(rule, null, 2).substring(0, 200));
         return;
       }
+
+      console.log(`🔍 [DEBUG] Rule ${index}: staffId="${staffId}"`);
 
       // Find staff to validate and get both ID and name
       const staff = staffMembers.find(
@@ -1205,9 +1216,28 @@ export class BusinessRuleValidator {
         rulesObject[staffKey] = { preferredShifts: [] };
       }
 
-      // Convert daysOfWeek array to individual preferred shifts
-      const daysOfWeek = rule.daysOfWeek || rule.days_of_week || [];
-      const shiftType = rule.shiftType || rule.shift_type || rule.ruleType;
+      // Convert daysOfWeek array to individual preferred shifts (defensive extraction)
+      const daysOfWeek =
+        rule.daysOfWeek ||
+        rule.days_of_week ||
+        rule.ruleDefinition?.conditions?.day_of_week ||  // ← JSONB nested structure
+        rule.ruleDefinition?.daysOfWeek ||
+        rule.preferences?.daysOfWeek ||
+        [];
+
+      // Extract shiftType (defensive extraction)
+      const shiftType =
+        rule.shiftType ||
+        rule.shift_type ||
+        rule.ruleDefinition?.conditions?.shift_type ||  // ← JSONB nested structure
+        rule.ruleDefinition?.shiftType ||
+        rule.preferences?.shiftType ||
+        rule.ruleType;
+
+      console.log(`🔍 [DEBUG] Rule ${index} for ${staff.name}:`);
+      console.log(`   daysOfWeek:`, daysOfWeek);
+      console.log(`   shiftType:`, shiftType);
+      console.log(`   priorityLevel:`, rule.priorityLevel || rule.priority_level);
 
       if (daysOfWeek.length === 0) {
         console.log(
@@ -1226,7 +1256,7 @@ export class BusinessRuleValidator {
         rulesObject[staffKey].preferredShifts.push(preferredShift);
 
         console.log(
-          `🔄 [PRIORITY-TRANSFORM]   → ${staff.name}: ${dayNames[dayNum]} = ${shiftType}`,
+          `🔄 [PRIORITY-TRANSFORM]   → ${staff.name}: dayNum=${dayNum} → ${dayNames[dayNum]} = ${shiftType}`,
         );
       });
     });
@@ -1235,6 +1265,7 @@ export class BusinessRuleValidator {
     console.log(
       `✅ [PRIORITY-TRANSFORM] Transformed to ${transformedCount} staff with rules`,
     );
+    console.log(`🔍 [DEBUG] Final rulesObject:`, JSON.stringify(rulesObject, null, 2));
 
     return rulesObject;
   }
@@ -1417,7 +1448,14 @@ export class BusinessRuleValidator {
       `📅 [RULE-GEN] Final limits: maxOffPerMonth=${maxOffPerMonth}, maxOffPerDay=${maxOffPerDay}`,
     );
 
-    // Deterministic distribution: assign off days fairly across staff
+    // ✅ PHASE 1: Randomized distribution to prevent clustering
+    // Track global off-day distribution across all staff
+    const globalOffDayCount = {};
+    dateRange.forEach((date) => {
+      const dateKey = date.toISOString().split("T")[0];
+      globalOffDayCount[dateKey] = 0;
+    });
+
     staffMembers.forEach((staff) => {
       if (!schedule[staff.id]) return;
 
@@ -1447,39 +1485,86 @@ export class BusinessRuleValidator {
         }
       });
 
-      // Sort by score (weekends first) then evenly distribute
-      availableDays.sort((a, b) => {
-        if (b.score !== a.score) return b.score - a.score;
-        return a.index - b.index; // Keep date order
-      });
+      // ✅ FIX 1: Shuffle dates within score groups to break deterministic ordering
+      const weekendDays = availableDays.filter(d => d.score === 2);
+      const weekdayDays = availableDays.filter(d => d.score === 1);
 
-      // Distribute off days evenly across the period
-      const interval = Math.floor(availableDays.length / targetOffDays);
-      let nextOffDayIndex = 0;
+      // Fisher-Yates shuffle
+      const shuffle = (array) => {
+        for (let i = array.length - 1; i > 0; i--) {
+          const j = Math.floor(Math.random() * (i + 1));
+          [array[i], array[j]] = [array[j], array[i]];
+        }
+        return array;
+      };
 
-      while (offDaysSet < targetOffDays && nextOffDayIndex < availableDays.length) {
-        const candidate = availableDays[nextOffDayIndex];
+      const shuffledDays = [...shuffle(weekendDays), ...shuffle(weekdayDays)];
 
-        // Check if setting this as off day would violate daily limits
-        let currentOffCount = 0;
-        staffMembers.forEach((otherStaff) => {
-          if (schedule[otherStaff.id]?.[candidate.dateKey] === "×") {
-            currentOffCount++;
+      // ✅ FIX 2: Per-staff random offset to avoid all staff starting at same position
+      const interval = Math.floor(shuffledDays.length / targetOffDays);
+      const randomOffset = Math.floor(Math.random() * Math.min(interval, shuffledDays.length));
+      let nextOffDayIndex = randomOffset;
+
+      console.log(
+        `📅 [RULE-GEN]   Starting at index ${randomOffset} (interval: ${interval})`,
+      );
+
+      while (offDaysSet < targetOffDays && shuffledDays.length > 0) {
+        // ✅ FIX 3: Stochastic selection with probability-based approach
+        // Try to find best candidate considering global distribution
+        let bestCandidate = null;
+        let bestScore = -Infinity;
+
+        // Check next few candidates (lookahead window)
+        const lookAheadWindow = Math.min(5, shuffledDays.length);
+        for (let i = 0; i < lookAheadWindow; i++) {
+          const candIdx = (nextOffDayIndex + i) % shuffledDays.length;
+          const candidate = shuffledDays[candIdx];
+
+          if (!candidate) continue;
+
+          // Count current off days on this date (including already set)
+          let currentOffCount = globalOffDayCount[candidate.dateKey] || 0;
+
+          // ✅ FIX 4: Score based on global distribution to spread off-days
+          // Lower off count = better score (prefer dates with fewer offs)
+          const distributionScore = maxOffPerDay - currentOffCount;
+          const weekendBonus = candidate.score === 2 ? 1.5 : 1.0;
+          const totalScore = distributionScore * weekendBonus;
+
+          if (totalScore > bestScore && currentOffCount < maxOffPerDay) {
+            bestScore = totalScore;
+            bestCandidate = { ...candidate, arrayIndex: candIdx };
           }
-        });
+        }
 
-        if (currentOffCount < maxOffPerDay) {
-          schedule[staff.id][candidate.dateKey] = "×";
+        if (bestCandidate) {
+          // Assign off day
+          schedule[staff.id][bestCandidate.dateKey] = "×";
+          globalOffDayCount[bestCandidate.dateKey]++;
           offDaysSet++;
+
           console.log(
-            `📅 [RULE-GEN]   → ${staff.name}: Set off day on ${candidate.date.toLocaleDateString('ja-JP')} (${['日', '月', '火', '水', '木', '金', '土'][candidate.dayOfWeek]})`,
+            `📅 [RULE-GEN]   → ${staff.name}: Set off day on ${bestCandidate.date.toLocaleDateString('ja-JP')} ` +
+            `(${['日', '月', '火', '水', '木', '金', '土'][bestCandidate.dayOfWeek]}) ` +
+            `[Global: ${globalOffDayCount[bestCandidate.dateKey]}/${maxOffPerDay}]`,
           );
-          nextOffDayIndex += Math.max(interval, 1); // Move to next interval
+
+          // Remove used day and advance with random jitter
+          shuffledDays.splice(bestCandidate.arrayIndex, 1);
+          const jitter = Math.floor(Math.random() * 2); // 0 or 1
+          nextOffDayIndex = (bestCandidate.arrayIndex + interval + jitter) % Math.max(shuffledDays.length, 1);
         } else {
-          console.log(
-            `📅 [RULE-GEN]   ⚠ ${staff.name}: Skipped ${candidate.dateKey} (${currentOffCount}/${maxOffPerDay} staff already off)`,
-          );
-          nextOffDayIndex++; // Try next day
+          // No valid candidate found, try next position
+          nextOffDayIndex = (nextOffDayIndex + 1) % Math.max(shuffledDays.length, 1);
+
+          // Safety: If we've checked all days and still can't find a slot, break
+          if (shuffledDays.every(d => globalOffDayCount[d.dateKey] >= maxOffPerDay)) {
+            console.log(
+              `📅 [RULE-GEN]   ⚠ ${staff.name}: All remaining days at capacity, stopping at ${offDaysSet} off days`,
+            );
+            break;
+          }
         }
       }
 
