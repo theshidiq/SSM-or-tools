@@ -416,6 +416,7 @@ export class GeneticAlgorithm {
     const possibleShifts = ["○", "△", "◇", "×"]; // Normal, Early, Late, Off
 
     // ✅ PHASE 2: Multi-strategy initialization (40% random, 30% constraint, 20% pattern, 10% seeded)
+    console.log("🎯🎯🎯 [PHASE-2/3/4] ========== GENETIC ALGORITHM ACTIVE ========== 🎯🎯🎯");
     const strategies = {
       random: Math.floor(this.parameters.populationSize * 0.4),
       constraint: Math.floor(this.parameters.populationSize * 0.3),

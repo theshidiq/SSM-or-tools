@@ -1374,6 +1374,7 @@ export class BusinessRuleValidator {
    * @param {Array} dateRange - Date range
    */
   async distributeOffDays(schedule, staffMembers, dateRange) {
+    console.log("🎯🎯🎯 [PHASE-1] ========== RANDOMIZATION ACTIVE ========== 🎯🎯🎯");
     console.log("📅 [RULE-GEN] Distributing off days...");
 
     // Use live settings
