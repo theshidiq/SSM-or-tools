@@ -857,11 +857,13 @@ export class GeneticAlgorithm {
   }
 
   /**
-   * Calculate generation statistics
+   * ✅ PHASE 4: Calculate generation statistics with active similarity monitoring
    * @param {Array} population - Current population
-   * @returns {Object} Generation statistics
+   * @param {Array} staffMembers - Staff members
+   * @param {Array} dateRange - Date range
+   * @returns {Object} Generation statistics with similarity metrics
    */
-  calculateGenerationStats(population) {
+  calculateGenerationStats(population, staffMembers = null, dateRange = null) {
     const fitnesses = population.map((ind) => ind.fitness);
     const bestFitness = Math.max(...fitnesses);
     const averageFitness =
@@ -873,12 +875,52 @@ export class GeneticAlgorithm {
       fitnesses.length;
     const diversity = Math.sqrt(variance);
 
-    return {
+    const stats = {
       bestFitness,
       averageFitness,
       diversity,
       worstFitness: Math.min(...fitnesses),
     };
+
+    // ✅ PHASE 4: Active similarity monitoring
+    if (staffMembers && dateRange && population.length > 1) {
+      // Calculate average pairwise similarity (Hamming distance)
+      let totalSimilarity = 0;
+      let comparisons = 0;
+
+      for (let i = 0; i < Math.min(population.length, 20); i++) {
+        for (let j = i + 1; j < Math.min(population.length, 20); j++) {
+          let differences = 0;
+          let totalCells = 0;
+
+          staffMembers.forEach(staff => {
+            dateRange.forEach(date => {
+              const dateKey = date.toISOString().split('T')[0];
+              const shift1 = population[i].chromosome[staff.id]?.[dateKey];
+              const shift2 = population[j].chromosome[staff.id]?.[dateKey];
+              if (shift1 && shift2) {
+                totalCells++;
+                if (shift1 !== shift2) differences++;
+              }
+            });
+          });
+
+          if (totalCells > 0) {
+            // Similarity = 1 - (differences / totalCells)
+            const similarity = 1 - (differences / totalCells);
+            totalSimilarity += similarity;
+            comparisons++;
+          }
+        }
+      }
+
+      if (comparisons > 0) {
+        stats.averageSimilarity = totalSimilarity / comparisons;
+        stats.uniquenessScore = 1 - stats.averageSimilarity; // Higher is better
+      }
+    }
+
+    return stats;
   }
 
   /**
@@ -915,12 +957,23 @@ export class GeneticAlgorithm {
       })),
     );
 
-    // Add diversity if population becomes too similar
-    if (stats.diversity < this.parameters.diversityThreshold) {
+    // ✅ PHASE 4: Enhanced diversity injection (15-20% vs previous 5-10%)
+    // Inject diverse individuals when population converges OR periodically
+    const shouldInjectDiversity =
+      stats.diversity < this.parameters.diversityThreshold ||
+      (stats.generation && stats.generation % 10 === 0); // Periodic injection every 10 generations
+
+    if (shouldInjectDiversity) {
+      // Increase from 5-10% to 15-20% of population
+      const diversityRate = stats.diversity < this.parameters.diversityThreshold * 0.5
+        ? 0.20  // Aggressive injection when very low diversity
+        : 0.15; // Regular injection
+
+      const numDiverse = Math.floor(this.parameters.populationSize * diversityRate);
       const diverseIndividuals = this.generateDiverseIndividuals(
         staffMembers,
         dateRange,
-        Math.min(5, Math.floor(this.parameters.populationSize * 0.1)),
+        numDiverse,
       );
       nextGeneration.push(...diverseIndividuals);
     }
@@ -931,14 +984,12 @@ export class GeneticAlgorithm {
       const parent1 = this.tournamentSelection(population);
       const parent2 = this.tournamentSelection(population);
 
-      // Enhanced crossover with multiple strategies
+      // ✅ PHASE 4: Enhanced crossover with multiple strategies
       let offspring1, offspring2;
       if (Math.random() < this.parameters.crossoverRate) {
-        // Use different crossover strategies based on generation
-        const crossoverStrategy = this.selectCrossoverStrategy(
-          stats.generation,
-        );
-        [offspring1, offspring2] = this.enhancedCrossover(
+        // Use different crossover strategies dynamically
+        const crossoverStrategy = this.selectCrossoverStrategy(stats.generation);
+        [offspring1, offspring2] = this.crossover(
           parent1,
           parent2,
           staffMembers,
@@ -976,7 +1027,73 @@ export class GeneticAlgorithm {
   }
 
   /**
-   * Tournament selection
+   * ✅ PHASE 4: Apply fitness sharing to promote diversity (niching)
+   * Reduces fitness of similar individuals to maintain population diversity
+   * @param {Array} population - Population
+   * @param {Array} staffMembers - Staff members
+   * @param {Array} dateRange - Date range
+   * @param {number} sharingRadius - Similarity threshold (0-1)
+   * @returns {Array} Population with shared fitness values
+   */
+  applyFitnessSharing(population, staffMembers, dateRange, sharingRadius = 0.3) {
+    if (!staffMembers || !dateRange || population.length < 2) {
+      return population;
+    }
+
+    const sharedPopulation = population.map((individual, idx) => {
+      let nichingCount = 0;
+
+      // Calculate similarity with all other individuals
+      for (let j = 0; j < population.length; j++) {
+        if (idx === j) continue;
+
+        // Calculate Hamming distance
+        let differences = 0;
+        let totalCells = 0;
+
+        staffMembers.forEach(staff => {
+          dateRange.forEach(date => {
+            const dateKey = date.toISOString().split('T')[0];
+            const shift1 = individual.chromosome[staff.id]?.[dateKey];
+            const shift2 = population[j].chromosome[staff.id]?.[dateKey];
+            if (shift1 && shift2) {
+              totalCells++;
+              if (shift1 !== shift2) differences++;
+            }
+          });
+        });
+
+        if (totalCells > 0) {
+          const distance = differences / totalCells; // 0 = identical, 1 = completely different
+          const similarity = 1 - distance;
+
+          // Sharing function: if similarity > radius, penalize
+          if (similarity > (1 - sharingRadius)) {
+            // Linear sharing function
+            nichingCount += 1 - (distance / sharingRadius);
+          }
+        }
+      }
+
+      // Shared fitness = original fitness / niche count
+      const sharedFitness = nichingCount > 0
+        ? individual.fitness / (1 + nichingCount)
+        : individual.fitness;
+
+      return {
+        ...individual,
+        originalFitness: individual.fitness,
+        sharedFitness: sharedFitness,
+        fitness: sharedFitness, // Use shared fitness for selection
+        nichingCount: nichingCount,
+      };
+    });
+
+    return sharedPopulation;
+  }
+
+  /**
+   * Tournament selection (now uses shared fitness when available)
    * @param {Array} population - Population to select from
    * @returns {Object} Selected individual
    */
@@ -994,40 +1111,133 @@ export class GeneticAlgorithm {
   }
 
   /**
-   * Crossover operation
+   * ✅ PHASE 4: Select crossover strategy dynamically
+   * @param {number} generation - Current generation number
+   * @returns {string} Selected crossover strategy
+   */
+  selectCrossoverStrategy(generation = 0) {
+    // Use different strategies at different stages of evolution
+    const random = Math.random();
+
+    // Early generations (0-20): favor staff-level for building blocks
+    if (generation < 20) {
+      if (random < 0.5) return 'staff-level';
+      else if (random < 0.8) return 'multi-point';
+      else return 'uniform';
+    }
+    // Mid generations (20-50): balanced mix
+    else if (generation < 50) {
+      if (random < 0.35) return 'staff-level';
+      else if (random < 0.7) return 'multi-point';
+      else return 'uniform';
+    }
+    // Late generations (50+): favor fine-grained exploration
+    else {
+      if (random < 0.25) return 'staff-level';
+      else if (random < 0.5) return 'multi-point';
+      else if (random < 0.85) return 'uniform';
+      else return 'single-point';
+    }
+  }
+
+  /**
+   * ✅ PHASE 4: Enhanced crossover with multiple strategies
    * @param {Object} parent1 - First parent
    * @param {Object} parent2 - Second parent
    * @param {Array} staffMembers - Staff members
    * @param {Array} dateRange - Date range
+   * @param {string} strategy - Crossover strategy: 'staff-level', 'multi-point', 'uniform', 'single-point'
    * @returns {Array} Two offspring
    */
-  crossover(parent1, parent2, staffMembers, dateRange) {
+  crossover(parent1, parent2, staffMembers, dateRange, strategy = 'staff-level') {
     const offspring1 = { schedule: {}, fitness: 0, age: 0 };
     const offspring2 = { schedule: {}, fitness: 0, age: 0 };
 
-    // Single-point crossover for each staff member
-    staffMembers.forEach((staff) => {
+    // Initialize schedules
+    staffMembers.forEach(staff => {
       offspring1.schedule[staff.id] = {};
       offspring2.schedule[staff.id] = {};
-
-      const crossoverPoint = Math.floor(Math.random() * dateRange.length);
-
-      dateRange.forEach((date, index) => {
-        const dateKey = date.toISOString().split("T")[0];
-
-        if (index < crossoverPoint) {
-          offspring1.schedule[staff.id][dateKey] =
-            parent1.schedule[staff.id][dateKey];
-          offspring2.schedule[staff.id][dateKey] =
-            parent2.schedule[staff.id][dateKey];
-        } else {
-          offspring1.schedule[staff.id][dateKey] =
-            parent2.schedule[staff.id][dateKey];
-          offspring2.schedule[staff.id][dateKey] =
-            parent1.schedule[staff.id][dateKey];
-        }
-      });
     });
+
+    switch (strategy) {
+      case 'staff-level':
+        // ✅ PHASE 4: Staff-level crossover - swap entire staff schedules
+        staffMembers.forEach((staff) => {
+          const useParent1 = Math.random() < 0.5;
+          if (useParent1) {
+            offspring1.schedule[staff.id] = { ...parent1.schedule[staff.id] };
+            offspring2.schedule[staff.id] = { ...parent2.schedule[staff.id] };
+          } else {
+            offspring1.schedule[staff.id] = { ...parent2.schedule[staff.id] };
+            offspring2.schedule[staff.id] = { ...parent1.schedule[staff.id] };
+          }
+        });
+        break;
+
+      case 'multi-point':
+        // ✅ PHASE 4: Multi-point crossover - use 2-3 crossover points
+        const numPoints = 2 + Math.floor(Math.random() * 2); // 2 or 3 points
+        const points = [];
+        for (let i = 0; i < numPoints; i++) {
+          points.push(Math.floor(Math.random() * dateRange.length));
+        }
+        points.sort((a, b) => a - b);
+
+        staffMembers.forEach((staff) => {
+          dateRange.forEach((date, index) => {
+            const dateKey = date.toISOString().split("T")[0];
+            // Count how many points we've passed
+            const pointsPassed = points.filter(p => index >= p).length;
+            const useParent1 = pointsPassed % 2 === 0;
+
+            offspring1.schedule[staff.id][dateKey] = useParent1
+              ? parent1.schedule[staff.id][dateKey]
+              : parent2.schedule[staff.id][dateKey];
+            offspring2.schedule[staff.id][dateKey] = useParent1
+              ? parent2.schedule[staff.id][dateKey]
+              : parent1.schedule[staff.id][dateKey];
+          });
+        });
+        break;
+
+      case 'uniform':
+        // Uniform crossover - each gene has 50% chance from either parent
+        staffMembers.forEach((staff) => {
+          dateRange.forEach((date) => {
+            const dateKey = date.toISOString().split("T")[0];
+            const useParent1 = Math.random() < 0.5;
+
+            offspring1.schedule[staff.id][dateKey] = useParent1
+              ? parent1.schedule[staff.id][dateKey]
+              : parent2.schedule[staff.id][dateKey];
+            offspring2.schedule[staff.id][dateKey] = useParent1
+              ? parent2.schedule[staff.id][dateKey]
+              : parent1.schedule[staff.id][dateKey];
+          });
+        });
+        break;
+
+      default: // 'single-point' (original behavior)
+        staffMembers.forEach((staff) => {
+          const crossoverPoint = Math.floor(Math.random() * dateRange.length);
+
+          dateRange.forEach((date, index) => {
+            const dateKey = date.toISOString().split("T")[0];
+
+            if (index < crossoverPoint) {
+              offspring1.schedule[staff.id][dateKey] =
+                parent1.schedule[staff.id][dateKey];
+              offspring2.schedule[staff.id][dateKey] =
+                parent2.schedule[staff.id][dateKey];
+            } else {
+              offspring1.schedule[staff.id][dateKey] =
+                parent2.schedule[staff.id][dateKey];
+              offspring2.schedule[staff.id][dateKey] =
+                parent1.schedule[staff.id][dateKey];
+            }
+          });
+        });
+    }
 
     return [offspring1, offspring2];
   }
