@@ -41,19 +41,19 @@ export class GeneticAlgorithm {
     console.log("🧬 Initializing Enhanced Genetic Algorithm...");
 
     try {
-      // Update parameters with ML-optimized defaults
+      // ✅ PHASE 2: Updated ML-optimized defaults for better diversity
       const mlOptimizedDefaults = {
-        populationSize: options.populationSize || 100,
+        populationSize: options.populationSize || 150, // Increased from 100
         maxGenerations: options.generations || 300,
-        crossoverRate: options.crossoverRate || 0.8,
-        mutationRate: options.mutationRate || 0.1,
-        elitismRate: options.elitismRate || 0.1,
+        crossoverRate: options.crossoverRate || 0.7, // Reduced from 0.8 to allow more mutation
+        mutationRate: options.mutationRate || 0.2, // Increased from 0.1 for more exploration
+        elitismRate: options.elitismRate || 0.05, // Reduced from 0.1 to reduce convergence pressure
         tournamentSize: 3,
         convergenceThreshold: options.convergenceThreshold || 0.01,
         maxStagnantGenerations: 50,
         enableAdaptiveMutation: options.enableAdaptiveMutation || true,
         parallelProcessing: options.parallelProcessing || true,
-        diversityThreshold: 0.1,
+        diversityThreshold: 0.3, // Increased from 0.1 for earlier intervention
         nichingEnabled: true,
       };
 
@@ -399,6 +399,7 @@ export class GeneticAlgorithm {
 
   /**
    * Initialize population with random individuals
+   * ✅ PHASE 2: Multi-strategy initialization for diversity
    * @param {Array} staffMembers - Staff members
    * @param {Array} dateRange - Date range
    * @param {Object} initialSchedule - Initial schedule (if any)
@@ -412,22 +413,53 @@ export class GeneticAlgorithm {
     preserveFixed,
   ) {
     const population = [];
-    const __possibleShifts = ["", "△", "◇", "×"];
+    const possibleShifts = ["○", "△", "◇", "×"]; // Normal, Early, Late, Off
+
+    // ✅ PHASE 2: Multi-strategy initialization (40% random, 30% constraint, 20% pattern, 10% seeded)
+    const strategies = {
+      random: Math.floor(this.parameters.populationSize * 0.4),
+      constraint: Math.floor(this.parameters.populationSize * 0.3),
+      pattern: Math.floor(this.parameters.populationSize * 0.2),
+      seeded: Math.floor(this.parameters.populationSize * 0.1),
+    };
+
+    console.log(`🧬 [INIT] Multi-strategy initialization: Random=${strategies.random}, Constraint=${strategies.constraint}, Pattern=${strategies.pattern}, Seeded=${strategies.seeded}`);
 
     for (let i = 0; i < this.parameters.populationSize; i++) {
+      // Unique seed per individual for true randomness
+      const individualSeed = i * 1000 + Date.now();
+      const seededRandom = () => {
+        const x = Math.sin(individualSeed + population.length) * 10000;
+        return x - Math.floor(x);
+      };
+
+      // Determine strategy for this individual
+      let strategy;
+      if (i < strategies.random) {
+        strategy = 'random';
+      } else if (i < strategies.random + strategies.constraint) {
+        strategy = 'constraint';
+      } else if (i < strategies.random + strategies.constraint + strategies.pattern) {
+        strategy = 'pattern';
+      } else {
+        strategy = 'seeded';
+      }
+
       const individual = {
         schedule: {},
         fitness: 0,
         age: 0,
         id: `gen0_ind${i}`,
+        strategy: strategy, // Track strategy for debugging
       };
 
       // Initialize schedule for each staff member
       staffMembers.forEach((staff) => {
         individual.schedule[staff.id] = {};
 
-        dateRange.forEach((date) => {
+        dateRange.forEach((date, dateIdx) => {
           const dateKey = date.toISOString().split("T")[0];
+          const dayOfWeek = date.getDay();
 
           // Preserve fixed assignments if specified
           if (
@@ -439,23 +471,85 @@ export class GeneticAlgorithm {
             individual.schedule[staff.id][dateKey] =
               initialSchedule[staff.id][dateKey];
           } else {
-            // Random assignment with bias toward normal shifts
-            const random = Math.random();
-            if (random < 0.5) {
-              individual.schedule[staff.id][dateKey] = ""; // Normal shift
-            } else if (random < 0.7) {
-              individual.schedule[staff.id][dateKey] = "×"; // Off day
-            } else if (random < 0.85) {
-              individual.schedule[staff.id][dateKey] = "△"; // Early shift
-            } else {
-              individual.schedule[staff.id][dateKey] = "◇"; // Late shift
+            let shift;
+
+            switch (strategy) {
+              case 'random':
+                // ✅ FIX: Equal probabilities (25% each) instead of 50% normal bias
+                const randomValue = seededRandom();
+                if (randomValue < 0.25) {
+                  shift = "○"; // Normal
+                } else if (randomValue < 0.5) {
+                  shift = "×"; // Off
+                } else if (randomValue < 0.75) {
+                  shift = "△"; // Early
+                } else {
+                  shift = "◇"; // Late
+                }
+                break;
+
+              case 'constraint':
+                // Constraint-focused: Respect typical patterns
+                // Weekends more likely off, weekdays more likely working
+                if (dayOfWeek === 0 || dayOfWeek === 6) {
+                  shift = seededRandom() < 0.4 ? "×" : (seededRandom() < 0.5 ? "△" : "○");
+                } else {
+                  shift = seededRandom() < 0.6 ? "○" : (seededRandom() < 0.8 ? "△" : "◇");
+                }
+                break;
+
+              case 'pattern':
+                // Pattern-based: Common shift patterns
+                // Rotating pattern: Early week → Normal mid-week → Late end
+                const weekPhase = dateIdx % 7;
+                if (weekPhase < 2) {
+                  shift = "△"; // Early in week
+                } else if (weekPhase < 5) {
+                  shift = "○"; // Normal mid-week
+                } else if (weekPhase === 5) {
+                  shift = "◇"; // Late Friday
+                } else {
+                  shift = "×"; // Off weekend
+                }
+                break;
+
+              case 'seeded':
+                // Seeded from initial schedule (if available) or balanced distribution
+                if (initialSchedule && initialSchedule[staff.id] && initialSchedule[staff.id][dateKey]) {
+                  shift = initialSchedule[staff.id][dateKey] || "○";
+                } else {
+                  // Balanced: ~20% off, ~30% early, ~30% late, ~20% normal
+                  const seedValue = seededRandom();
+                  if (seedValue < 0.2) {
+                    shift = "×";
+                  } else if (seedValue < 0.5) {
+                    shift = "△";
+                  } else if (seedValue < 0.8) {
+                    shift = "◇";
+                  } else {
+                    shift = "○";
+                  }
+                }
+                break;
+
+              default:
+                shift = "○";
             }
+
+            individual.schedule[staff.id][dateKey] = shift;
           }
         });
       });
 
       population.push(individual);
     }
+
+    // Log strategy distribution
+    const strategyCounts = population.reduce((acc, ind) => {
+      acc[ind.strategy] = (acc[ind.strategy] || 0) + 1;
+      return acc;
+    }, {});
+    console.log(`🧬 [INIT] Strategy distribution:`, strategyCounts);
 
     return population;
   }
