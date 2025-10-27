@@ -64,6 +64,46 @@ export class ScheduleFeatureEngineer {
       "staff_availability",
       "cost_factor",
       "constraint_violations",
+
+      // === ENHANCED FEATURES (30 additional) ===
+
+      // Enhanced Staff Relationship Features (10)
+      "team_chemistry_score",
+      "collaboration_frequency",
+      "shift_overlap_preference",
+      "peer_work_balance",
+      "social_connection_strength",
+      "team_seniority_balance",
+      "cross_training_score",
+      "mentorship_involvement",
+      "communication_frequency",
+      "conflict_avoidance_score",
+
+      // Enhanced Seasonal Features (8)
+      "month_specific_pattern",
+      "holiday_season_indicator",
+      "weather_impact_factor",
+      "seasonal_business_trend",
+      "year_end_effect",
+      "new_year_effect",
+      "summer_vacation_factor",
+      "cultural_event_impact",
+
+      // Enhanced Workload Features (7)
+      "cumulative_hours_this_week",
+      "cumulative_hours_this_month",
+      "fatigue_indicator",
+      "recovery_time_needed",
+      "overtime_frequency",
+      "workload_balance_score",
+      "burnout_risk_factor",
+
+      // Enhanced Time Series Features (5)
+      "recent_shift_momentum",
+      "workload_trend_direction",
+      "pattern_consistency_score",
+      "schedule_predictability",
+      "shift_change_velocity",
     ];
 
     console.log(
@@ -210,7 +250,7 @@ export class ScheduleFeatureEngineer {
     // Validate feature consistency
     if (features.length > 0) {
       const featureLength = features[0].length;
-      const expectedLength = MODEL_CONFIG.INPUT_FEATURES.TOTAL;
+      const expectedLength = MODEL_CONFIG.INPUT_FEATURES.ENHANCED_TOTAL;
       console.log(
         `🔍 Feature validation: ${featureLength} features per sample (expected: ${expectedLength})`,
       );
@@ -247,13 +287,13 @@ export class ScheduleFeatureEngineer {
     allHistoricalData,
     staffMembers,
   }) {
-    const expectedFeatures = MODEL_CONFIG.INPUT_FEATURES.TOTAL;
+    const expectedFeatures = MODEL_CONFIG.INPUT_FEATURES.ENHANCED_TOTAL;
     const features = new Array(expectedFeatures).fill(0);
     let idx = 0;
 
     try {
       console.log(
-        `🔧 Generating ${expectedFeatures} features for staff ${staff.name} on ${date.toISOString().split("T")[0]}`,
+        `🔧 Generating ${expectedFeatures} enhanced features for staff ${staff.name} on ${date.toISOString().split("T")[0]}`,
       );
 
       // Staff features (10)
@@ -330,6 +370,70 @@ export class ScheduleFeatureEngineer {
         periodData,
         date,
       );
+
+      // === ENHANCED FEATURES (30 additional) ===
+
+      // Enhanced Staff Relationship Features (10)
+      try {
+        features[idx++] = this.calculateTeamChemistry(staff, staffMembers, periodData);
+        features[idx++] = this.calculateCollaborationFrequency(staff, staffMembers, allHistoricalData);
+        features[idx++] = this.calculateShiftOverlapPreference(staff, staffMembers, allHistoricalData);
+        features[idx++] = this.calculatePeerWorkBalance(staff, staffMembers, periodData);
+        features[idx++] = this.calculateSocialConnectionStrength(staff, staffMembers);
+        features[idx++] = this.calculateTeamSeniorityBalance(staff, staffMembers, allHistoricalData);
+        features[idx++] = this.calculateCrossTrainingScore(staff);
+        features[idx++] = this.calculateMentorshipInvolvement(staff, staffMembers);
+        features[idx++] = this.calculateCommunicationFrequency(staff);
+        features[idx++] = this.calculateConflictAvoidance(staff, staffMembers);
+      } catch (error) {
+        console.error("❌ Enhanced Staff Relationship features failed:", error.message);
+        // Fill remaining relationship features with defaults
+        while (idx < 45) features[idx++] = 0.5;
+      }
+
+      // Enhanced Seasonal Features (8)
+      try {
+        features[idx++] = this.calculateMonthSpecificPattern(staff, date, allHistoricalData);
+        features[idx++] = this.calculateHolidaySeasonIndicator(date);
+        features[idx++] = this.calculateWeatherImpact(date);
+        features[idx++] = this.calculateSeasonalBusinessTrend(date, periodData);
+        features[idx++] = this.calculateYearEndEffect(date);
+        features[idx++] = this.calculateNewYearEffect(date);
+        features[idx++] = this.calculateSummerVacationFactor(date);
+        features[idx++] = this.calculateCulturalEventImpact(date);
+      } catch (error) {
+        console.error("❌ Enhanced Seasonal features failed:", error.message);
+        // Fill remaining seasonal features with defaults
+        while (idx < 53) features[idx++] = 0.5;
+      }
+
+      // Enhanced Workload Features (7)
+      try {
+        features[idx++] = this.calculateCumulativeHoursThisWeek(staff, periodData, date);
+        features[idx++] = this.calculateCumulativeHoursThisMonth(staff, periodData, date);
+        features[idx++] = this.calculateFatigueIndicator(staff, periodData, date);
+        features[idx++] = this.calculateRecoveryTimeNeeded(staff, periodData, date);
+        features[idx++] = this.calculateOvertimeFrequency(staff, allHistoricalData);
+        features[idx++] = this.calculateWorkloadBalanceScore(staff, periodData, date);
+        features[idx++] = this.calculateBurnoutRiskFactor(staff, periodData, date);
+      } catch (error) {
+        console.error("❌ Enhanced Workload features failed:", error.message);
+        // Fill remaining workload features with defaults
+        while (idx < 60) features[idx++] = 0.5;
+      }
+
+      // Enhanced Time Series Features (5)
+      try {
+        features[idx++] = this.calculateRecentShiftMomentum(staff, periodData, date);
+        features[idx++] = this.calculateWorkloadTrendDirection(staff, periodData, date);
+        features[idx++] = this.calculatePatternConsistencyScore(staff, allHistoricalData);
+        features[idx++] = this.calculateSchedulePredictability(staff, allHistoricalData);
+        features[idx++] = this.calculateShiftChangeVelocity(staff, periodData, date);
+      } catch (error) {
+        console.error("❌ Enhanced Time Series features failed:", error.message);
+        // Fill remaining time series features with defaults
+        while (idx < 65) features[idx++] = 0.5;
+      }
 
       // Validate feature count matches expected
       if (idx !== expectedFeatures) {
@@ -764,6 +868,609 @@ export class ScheduleFeatureEngineer {
     const maxDays = staff.status === "パート" ? 4 : 6;
 
     return consecutiveDays >= maxDays ? 1 : 0;
+  }
+
+  // ============================================================================
+  // ENHANCED FEATURE CALCULATION METHODS (30 new methods)
+  // ============================================================================
+
+  // === Enhanced Staff Relationship Features (10) ===
+
+  calculateTeamChemistry(staff, staffMembers, periodData) {
+    // Calculate how well this staff works with the team based on overlapping shifts
+    if (!periodData?.schedule) return 0.7; // Default neutral chemistry
+
+    const schedule = periodData.schedule;
+    let sharedShifts = 0;
+    let totalShifts = 0;
+
+    Object.keys(schedule[staff.id] || {}).forEach(dateKey => {
+      const staffShift = schedule[staff.id][dateKey];
+      if (staffShift && staffShift !== '×') {
+        totalShifts++;
+        // Count how many other staff work on same day
+        const othersWorking = staffMembers.filter(other =>
+          other.id !== staff.id &&
+          schedule[other.id]?.[dateKey] &&
+          schedule[other.id][dateKey] !== '×'
+        ).length;
+        sharedShifts += othersWorking;
+      }
+    });
+
+    return totalShifts > 0 ? Math.min(1, sharedShifts / (totalShifts * staffMembers.length * 0.5)) : 0.7;
+  }
+
+  calculateCollaborationFrequency(staff, staffMembers, allHistoricalData) {
+    // How often this staff collaborates with others historically
+    let collaborationDays = 0;
+    let totalWorkDays = 0;
+
+    Object.values(allHistoricalData).forEach(periodData => {
+      if (!periodData?.schedule?.[staff.id]) return;
+
+      Object.entries(periodData.schedule[staff.id]).forEach(([dateKey, shift]) => {
+        if (shift && shift !== '×') {
+          totalWorkDays++;
+          const hasCollaborators = staffMembers.some(other =>
+            other.id !== staff.id &&
+            periodData.schedule[other.id]?.[dateKey] &&
+            periodData.schedule[other.id][dateKey] !== '×'
+          );
+          if (hasCollaborators) collaborationDays++;
+        }
+      });
+    });
+
+    return totalWorkDays > 0 ? collaborationDays / totalWorkDays : 0.8;
+  }
+
+  calculateShiftOverlapPreference(staff, staffMembers, allHistoricalData) {
+    // Preference for working when specific team members work
+    return 0.5; // Neutral - requires more complex relationship tracking
+  }
+
+  calculatePeerWorkBalance(staff, staffMembers, periodData) {
+    // Balance of workload compared to peers of same type
+    if (!periodData?.schedule) return 0.5;
+
+    const staffType = staff.status;
+    const peers = staffMembers.filter(s => s.status === staffType && s.id !== staff.id);
+    if (peers.length === 0) return 0.5;
+
+    const staffWorkDays = Object.values(periodData.schedule[staff.id] || {})
+      .filter(shift => shift && shift !== '×').length;
+
+    const peerAvgWorkDays = peers.reduce((sum, peer) => {
+      const peerWorkDays = Object.values(periodData.schedule[peer.id] || {})
+        .filter(shift => shift && shift !== '×').length;
+      return sum + peerWorkDays;
+    }, 0) / peers.length;
+
+    return peerAvgWorkDays > 0 ? Math.min(1, staffWorkDays / peerAvgWorkDays) : 0.5;
+  }
+
+  calculateSocialConnectionStrength(staff, staffMembers) {
+    // Social network strength within team (simplified)
+    const teamSize = staffMembers.length;
+    return teamSize > 3 ? 0.7 : 0.5;
+  }
+
+  calculateTeamSeniorityBalance(staff, staffMembers, allHistoricalData) {
+    // Balance of experience levels in team
+    const tenure = this.calculateTenure(staff, allHistoricalData);
+    const avgTenure = staffMembers.reduce((sum, s) =>
+      sum + this.calculateTenure(s, allHistoricalData), 0
+    ) / staffMembers.length;
+
+    return avgTenure > 0 ? Math.min(1, tenure / avgTenure) : 0.5;
+  }
+
+  calculateCrossTrainingScore(staff) {
+    // Ability to cover multiple positions (simplified)
+    return staff.status === '社員' ? 0.8 : 0.5;
+  }
+
+  calculateMentorshipInvolvement(staff, staffMembers) {
+    // Involvement in mentoring junior staff
+    return staff.status === '社員' ? 0.6 : 0.3;
+  }
+
+  calculateCommunicationFrequency(staff) {
+    // Communication frequency with management (simplified)
+    return staff.status === '社員' ? 0.7 : 0.5;
+  }
+
+  calculateConflictAvoidance(staff, staffMembers) {
+    // Tendency to avoid scheduling conflicts
+    return 0.7; // Default moderate conflict avoidance
+  }
+
+  // === Enhanced Seasonal Features (8) ===
+
+  calculateMonthSpecificPattern(staff, date, allHistoricalData) {
+    // Specific patterns for this month historically
+    const targetMonth = date.getMonth();
+    let sameMonthWorkDays = 0;
+    let sameMonthTotalDays = 0;
+
+    Object.values(allHistoricalData).forEach(periodData => {
+      if (!periodData?.schedule?.[staff.id]) return;
+
+      Object.entries(periodData.schedule[staff.id]).forEach(([dateKey, shift]) => {
+        const histDate = new Date(dateKey);
+        if (histDate.getMonth() === targetMonth) {
+          sameMonthTotalDays++;
+          if (shift && shift !== '×') sameMonthWorkDays++;
+        }
+      });
+    });
+
+    return sameMonthTotalDays > 0 ? sameMonthWorkDays / sameMonthTotalDays : 0.7;
+  }
+
+  calculateHolidaySeasonIndicator(date) {
+    const month = date.getMonth() + 1;
+    const day = date.getDate();
+
+    // Major holiday seasons in Japan
+    if (month === 12 && day >= 25) return 0.9; // Year-end
+    if (month === 1 && day <= 7) return 0.9; // New Year
+    if (month === 8 && day >= 10 && day <= 16) return 0.7; // Obon
+    if (month === 5 && day <= 5) return 0.7; // Golden Week
+
+    return 0.1;
+  }
+
+  calculateWeatherImpact(date) {
+    // Seasonal weather impact on business
+    const month = date.getMonth() + 1;
+
+    if (month >= 6 && month <= 9) return 0.7; // Summer - tourism season
+    if (month === 12 || month === 1) return 0.6; // Winter - holiday season
+
+    return 0.5;
+  }
+
+  calculateSeasonalBusinessTrend(date, periodData) {
+    // Business trend for current season
+    const season = this.getSeason(date);
+    return season === 1 ? 0.8 : season === 3 ? 0.7 : 0.6; // Summer/Winter busier
+  }
+
+  calculateYearEndEffect(date) {
+    const month = date.getMonth() + 1;
+    const day = date.getDate();
+
+    return month === 12 && day >= 20 ? 1 : 0;
+  }
+
+  calculateNewYearEffect(date) {
+    const month = date.getMonth() + 1;
+    const day = date.getDate();
+
+    return month === 1 && day <= 10 ? 1 : 0;
+  }
+
+  calculateSummerVacationFactor(date) {
+    const month = date.getMonth() + 1;
+
+    return month >= 7 && month <= 8 ? 0.8 : 0;
+  }
+
+  calculateCulturalEventImpact(date) {
+    // Impact of cultural events (festivals, etc.)
+    const month = date.getMonth() + 1;
+    const dayOfWeek = date.getDay();
+
+    // Weekends in spring/fall (festival seasons)
+    if ((month >= 3 && month <= 5) || (month >= 9 && month <= 11)) {
+      return (dayOfWeek === 0 || dayOfWeek === 6) ? 0.6 : 0.2;
+    }
+
+    return 0.1;
+  }
+
+  // === Enhanced Workload Features (7) ===
+
+  calculateCumulativeHoursThisWeek(staff, periodData, date) {
+    if (!periodData?.schedule?.[staff.id]) return 0.5;
+
+    let hoursThisWeek = 0;
+    const schedule = periodData.schedule[staff.id];
+    const startOfWeek = new Date(date);
+    startOfWeek.setDate(date.getDate() - date.getDay());
+
+    for (let i = 0; i < 7; i++) {
+      const checkDate = new Date(startOfWeek);
+      checkDate.setDate(startOfWeek.getDate() + i);
+      if (checkDate > date) break; // Don't count future days
+
+      const dateKey = checkDate.toISOString().split('T')[0];
+      const shift = schedule[dateKey];
+
+      if (shift && shift !== '×') {
+        hoursThisWeek += staff.status === 'パート' ? 6 : 8; // Estimated hours per shift
+      }
+    }
+
+    const maxWeeklyHours = staff.status === 'パート' ? 30 : 50;
+    return Math.min(1, hoursThisWeek / maxWeeklyHours);
+  }
+
+  calculateCumulativeHoursThisMonth(staff, periodData, date) {
+    if (!periodData?.schedule?.[staff.id]) return 0.5;
+
+    let hoursThisMonth = 0;
+    const schedule = periodData.schedule[staff.id];
+    const currentMonth = date.getMonth();
+
+    Object.entries(schedule).forEach(([dateKey, shift]) => {
+      const checkDate = new Date(dateKey);
+      if (checkDate.getMonth() === currentMonth && checkDate <= date) {
+        if (shift && shift !== '×') {
+          hoursThisMonth += staff.status === 'パート' ? 6 : 8;
+        }
+      }
+    });
+
+    const maxMonthlyHours = staff.status === 'パート' ? 120 : 180;
+    return Math.min(1, hoursThisMonth / maxMonthlyHours);
+  }
+
+  calculateFatigueIndicator(staff, periodData, date) {
+    // Fatigue based on consecutive work days and total hours
+    const consecutiveDays = this.calculateConsecutiveDays(staff, periodData, date);
+    const cumulativeHours = this.calculateCumulativeHoursThisWeek(staff, periodData, date);
+
+    return Math.min(1, (consecutiveDays / 7 * 0.6) + (cumulativeHours * 0.4));
+  }
+
+  calculateRecoveryTimeNeeded(staff, periodData, date) {
+    // Recovery time needed based on recent workload
+    const fatigue = this.calculateFatigueIndicator(staff, periodData, date);
+    return fatigue; // Higher fatigue = more recovery needed
+  }
+
+  calculateOvertimeFrequency(staff, allHistoricalData) {
+    // Frequency of overtime work historically
+    if (staff.status === 'パート') return 0.1; // Part-time rarely has overtime
+
+    let overtimeDays = 0;
+    let totalWorkDays = 0;
+
+    Object.values(allHistoricalData).forEach(periodData => {
+      if (!periodData?.schedule?.[staff.id]) return;
+
+      Object.values(periodData.schedule[staff.id]).forEach(shift => {
+        if (shift && shift !== '×') {
+          totalWorkDays++;
+          // Late shift suggests possible overtime
+          if (shift === '▽') overtimeDays++;
+        }
+      });
+    });
+
+    return totalWorkDays > 0 ? overtimeDays / totalWorkDays : 0.2;
+  }
+
+  calculateWorkloadBalanceScore(staff, periodData, date) {
+    // Balance between work and rest
+    const workFreq = this.calculateRecentWorkload(staff, periodData, date);
+    return 1 - Math.abs(workFreq - 0.7); // Optimal is 70% work, 30% rest
+  }
+
+  calculateBurnoutRiskFactor(staff, periodData, date) {
+    // Risk of burnout based on sustained high workload
+    const fatigue = this.calculateFatigueIndicator(staff, periodData, date);
+    const consecutiveDays = this.calculateConsecutiveDays(staff, periodData, date);
+    const maxConsecutive = staff.status === 'パート' ? 4 : 6;
+
+    return Math.min(1, (fatigue * 0.6) + (consecutiveDays / maxConsecutive * 0.4));
+  }
+
+  // === Enhanced Time Series Features (5) ===
+
+  calculateRecentShiftMomentum(staff, periodData, date) {
+    // Momentum of shift pattern (increasing/decreasing work)
+    if (!periodData?.schedule?.[staff.id]) return 0.5;
+
+    let recentWorkDays = 0;
+    let previousWorkDays = 0;
+    const schedule = periodData.schedule[staff.id];
+
+    // Count last 7 days
+    for (let i = 1; i <= 7; i++) {
+      const pastDate = new Date(date);
+      pastDate.setDate(date.getDate() - i);
+      const dateKey = pastDate.toISOString().split('T')[0];
+
+      if (schedule[dateKey] && schedule[dateKey] !== '×') {
+        recentWorkDays++;
+      }
+    }
+
+    // Count previous 7 days (8-14 days ago)
+    for (let i = 8; i <= 14; i++) {
+      const pastDate = new Date(date);
+      pastDate.setDate(date.getDate() - i);
+      const dateKey = pastDate.toISOString().split('T')[0];
+
+      if (schedule[dateKey] && schedule[dateKey] !== '×') {
+        previousWorkDays++;
+      }
+    }
+
+    // Momentum: positive if increasing, negative if decreasing
+    const momentum = (recentWorkDays - previousWorkDays) / 7;
+    return (momentum + 1) / 2; // Normalize to 0-1 range
+  }
+
+  calculateWorkloadTrendDirection(staff, periodData, date) {
+    // Direction of workload trend
+    const momentum = this.calculateRecentShiftMomentum(staff, periodData, date);
+    return momentum; // Already normalized 0-1
+  }
+
+  calculatePatternConsistencyScore(staff, allHistoricalData) {
+    // How consistent are shift patterns over time
+    return this.calculateConsistency(staff, allHistoricalData);
+  }
+
+  calculateSchedulePredictability(staff, allHistoricalData) {
+    // How predictable is this staff's schedule
+    const consistency = this.calculateConsistency(staff, allHistoricalData);
+    const patterns = this.analyzeHistoricalPatterns(staff, allHistoricalData);
+
+    return (consistency + patterns.stability) / 2;
+  }
+
+  calculateShiftChangeVelocity(staff, periodData, date) {
+    // Rate of shift type changes (early/late/normal)
+    if (!periodData?.schedule?.[staff.id]) return 0.3;
+
+    let changes = 0;
+    let comparisons = 0;
+    const schedule = periodData.schedule[staff.id];
+    let lastShift = null;
+
+    for (let i = 7; i >= 1; i--) {
+      const pastDate = new Date(date);
+      pastDate.setDate(date.getDate() - i);
+      const dateKey = pastDate.toISOString().split('T')[0];
+      const shift = schedule[dateKey];
+
+      if (shift && shift !== '×') {
+        if (lastShift && lastShift !== shift) {
+          changes++;
+        }
+        lastShift = shift;
+        comparisons++;
+      }
+    }
+
+    return comparisons > 0 ? changes / comparisons : 0.3;
+  }
+
+  /**
+   * ✅ PHASE 3: Calculate pattern diversity score
+   * Measures how many unique shift patterns exist across staff members
+   * @param {Object} scheduleData - Schedule data for all staff
+   * @param {Array} staffMembers - Staff member objects
+   * @param {Array} dateRange - Date range
+   * @returns {number} Diversity score (0-100)
+   */
+  calculatePatternDiversity(scheduleData, staffMembers, dateRange) {
+    if (!scheduleData || !staffMembers || staffMembers.length === 0) {
+      return 0;
+    }
+
+    // Extract weekly patterns for each staff member
+    const patterns = [];
+    staffMembers.forEach(staff => {
+      if (!scheduleData[staff.id]) return;
+
+      // Get shift sequence as pattern string
+      const patternStr = dateRange
+        .map(date => {
+          const dateKey = date.toISOString().split('T')[0];
+          return scheduleData[staff.id][dateKey] || '○';
+        })
+        .join('');
+
+      patterns.push(patternStr);
+    });
+
+    // Count unique patterns
+    const uniquePatterns = new Set(patterns);
+    const diversityRatio = uniquePatterns.size / patterns.length;
+
+    // Convert to 0-100 score
+    return diversityRatio * 100;
+  }
+
+  /**
+   * ✅ PHASE 3: Calculate Hamming distance between two schedules
+   * Measures how many shifts differ between two staff members
+   * @param {Object} schedule1 - First staff schedule
+   * @param {Object} schedule2 - Second staff schedule
+   * @param {Array} dateRange - Date range
+   * @returns {number} Hamming distance (0-1, where 1 = completely different)
+   */
+  calculateHammingDistance(schedule1, schedule2, dateRange) {
+    if (!schedule1 || !schedule2 || !dateRange) {
+      return 0;
+    }
+
+    let differences = 0;
+    let totalDays = 0;
+
+    dateRange.forEach(date => {
+      const dateKey = date.toISOString().split('T')[0];
+      const shift1 = schedule1[dateKey] || '○';
+      const shift2 = schedule2[dateKey] || '○';
+
+      if (shift1 !== shift2) {
+        differences++;
+      }
+      totalDays++;
+    });
+
+    return totalDays > 0 ? differences / totalDays : 0;
+  }
+
+  /**
+   * ✅ PHASE 3: Calculate average Hamming distance across all staff pairs
+   * @param {Object} scheduleData - Schedule data for all staff
+   * @param {Array} staffMembers - Staff member objects
+   * @param {Array} dateRange - Date range
+   * @returns {number} Average Hamming distance (0-1)
+   */
+  calculateAverageHammingDistance(scheduleData, staffMembers, dateRange) {
+    if (!scheduleData || !staffMembers || staffMembers.length < 2) {
+      return 0;
+    }
+
+    let totalDistance = 0;
+    let comparisons = 0;
+
+    // Compare each pair of staff members
+    for (let i = 0; i < staffMembers.length; i++) {
+      for (let j = i + 1; j < staffMembers.length; j++) {
+        const staff1 = staffMembers[i];
+        const staff2 = staffMembers[j];
+
+        if (scheduleData[staff1.id] && scheduleData[staff2.id]) {
+          const distance = this.calculateHammingDistance(
+            scheduleData[staff1.id],
+            scheduleData[staff2.id],
+            dateRange
+          );
+          totalDistance += distance;
+          comparisons++;
+        }
+      }
+    }
+
+    return comparisons > 0 ? totalDistance / comparisons : 0;
+  }
+
+  /**
+   * ✅ PHASE 3: Calculate fairness score based on variance
+   * Measures how fairly shifts are distributed across staff
+   * @param {Object} scheduleData - Schedule data for all staff
+   * @param {Array} staffMembers - Staff member objects
+   * @param {Array} dateRange - Date range
+   * @returns {Object} Fairness metrics
+   */
+  calculateFairnessScore(scheduleData, staffMembers, dateRange) {
+    if (!scheduleData || !staffMembers || staffMembers.length === 0) {
+      return {
+        workloadVariance: 0,
+        offDayVariance: 0,
+        shiftTypeVariance: 0,
+        overall: 0
+      };
+    }
+
+    // Calculate workload (total working days) per staff
+    const workloads = staffMembers.map(staff => {
+      if (!scheduleData[staff.id]) return 0;
+      return Object.values(scheduleData[staff.id])
+        .filter(shift => shift && shift !== '×').length;
+    });
+
+    // Calculate off days per staff
+    const offDays = staffMembers.map(staff => {
+      if (!scheduleData[staff.id]) return 0;
+      return Object.values(scheduleData[staff.id])
+        .filter(shift => shift === '×').length;
+    });
+
+    // Calculate shift type distribution (early, late, normal)
+    const earlyShifts = staffMembers.map(staff => {
+      if (!scheduleData[staff.id]) return 0;
+      return Object.values(scheduleData[staff.id])
+        .filter(shift => shift === '△').length;
+    });
+
+    const lateShifts = staffMembers.map(staff => {
+      if (!scheduleData[staff.id]) return 0;
+      return Object.values(scheduleData[staff.id])
+        .filter(shift => shift === '◇').length;
+    });
+
+    // Calculate variances
+    const workloadVariance = this.calculateVariance(workloads);
+    const offDayVariance = this.calculateVariance(offDays);
+    const earlyVariance = this.calculateVariance(earlyShifts);
+    const lateVariance = this.calculateVariance(lateShifts);
+    const shiftTypeVariance = (earlyVariance + lateVariance) / 2;
+
+    // Convert to 0-100 scores (lower variance = higher fairness)
+    const maxReasonableVariance = 10; // Days squared
+    const workloadFairness = Math.max(0, 100 - (workloadVariance / maxReasonableVariance) * 100);
+    const offDayFairness = Math.max(0, 100 - (offDayVariance / maxReasonableVariance) * 100);
+    const shiftTypeFairness = Math.max(0, 100 - (shiftTypeVariance / maxReasonableVariance) * 100);
+
+    // Weighted overall fairness
+    const overall = (
+      workloadFairness * 0.4 +  // 40% weight on workload fairness
+      offDayFairness * 0.3 +     // 30% weight on off day fairness
+      shiftTypeFairness * 0.3    // 30% weight on shift type fairness
+    );
+
+    return {
+      workloadVariance,
+      offDayVariance,
+      shiftTypeVariance,
+      workloadFairness,
+      offDayFairness,
+      shiftTypeFairness,
+      overall
+    };
+  }
+
+  /**
+   * Helper: Calculate variance of an array
+   * @param {Array} values - Numeric values
+   * @returns {number} Variance
+   */
+  calculateVariance(values) {
+    if (!values || values.length === 0) return 0;
+
+    const mean = values.reduce((sum, val) => sum + val, 0) / values.length;
+    const squaredDiffs = values.map(val => Math.pow(val - mean, 2));
+    return squaredDiffs.reduce((sum, val) => sum + val, 0) / values.length;
+  }
+
+  /**
+   * ✅ PHASE 3: Calculate diversity score
+   * Combines pattern diversity and Hamming distance
+   * @param {Object} scheduleData - Schedule data for all staff
+   * @param {Array} staffMembers - Staff member objects
+   * @param {Array} dateRange - Date range
+   * @returns {Object} Diversity metrics
+   */
+  calculateDiversityScore(scheduleData, staffMembers, dateRange) {
+    const patternDiversity = this.calculatePatternDiversity(scheduleData, staffMembers, dateRange);
+    const hammingDistance = this.calculateAverageHammingDistance(scheduleData, staffMembers, dateRange);
+
+    // Convert Hamming distance (0-1) to 0-100 score
+    const hammingScore = hammingDistance * 100;
+
+    // Weighted overall diversity
+    const overall = (
+      patternDiversity * 0.6 +  // 60% weight on unique patterns
+      hammingScore * 0.4         // 40% weight on average difference
+    );
+
+    return {
+      patternDiversity,
+      hammingDistance,
+      hammingScore,
+      overall
+    };
   }
 }
 

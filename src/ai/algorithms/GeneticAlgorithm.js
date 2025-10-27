@@ -574,6 +574,7 @@ export class GeneticAlgorithm {
 
   /**
    * Default fitness function
+   * ✅ PHASE 3: Enhanced with diversity and fairness metrics
    * @param {Object} schedule - Schedule to evaluate
    * @param {Array} staffMembers - Staff members
    * @param {Array} dateRange - Date range
@@ -581,7 +582,7 @@ export class GeneticAlgorithm {
    */
   async defaultFitnessFunction(schedule, staffMembers, dateRange) {
     try {
-      // Constraint validation (70% of fitness)
+      // Constraint validation (50% of fitness - reduced from 70%)
       const validation = validateAllConstraints(
         schedule,
         staffMembers,
@@ -597,23 +598,42 @@ export class GeneticAlgorithm {
         constraintScore = Math.max(0, 100 - violationPenalty);
       }
 
-      // Workload balance (20% of fitness)
+      // Workload balance (15% of fitness - reduced from 20%)
       const balanceScore = this.calculateWorkloadBalance(
         schedule,
         staffMembers,
         dateRange,
       );
 
-      // Shift distribution (10% of fitness)
+      // Shift distribution (10% of fitness - unchanged)
       const distributionScore = this.calculateShiftDistribution(
         schedule,
         staffMembers,
         dateRange,
       );
 
-      // Weighted fitness
+      // ✅ NEW: Fairness score (15% of fitness)
+      const fairnessScore = this.calculateFairnessScore(
+        schedule,
+        staffMembers,
+        dateRange,
+      );
+
+      // ✅ NEW: Diversity score (10% of fitness)
+      const diversityScore = this.calculateDiversityScore(
+        schedule,
+        staffMembers,
+        dateRange,
+      );
+
+      // ✅ PHASE 3: Updated weighted fitness
+      // 50% constraint + 15% balance + 10% distribution + 15% fairness + 10% diversity = 100%
       const fitness =
-        constraintScore * 0.7 + balanceScore * 0.2 + distributionScore * 0.1;
+        constraintScore * 0.5 +
+        balanceScore * 0.15 +
+        distributionScore * 0.1 +
+        fairnessScore * 0.15 +
+        diversityScore * 0.1;
 
       return Math.min(100, Math.max(0, fitness));
     } catch (error) {
@@ -694,6 +714,146 @@ export class GeneticAlgorithm {
     score += Math.min(offRatio, 0.25) * 80; // Up to 25% off is reasonable
 
     return Math.min(100, score);
+  }
+
+  /**
+   * ✅ PHASE 3: Calculate fairness score
+   * Measures how fairly shifts are distributed across staff
+   * @param {Object} schedule - Schedule
+   * @param {Array} staffMembers - Staff members
+   * @param {Array} dateRange - Date range
+   * @returns {number} Fairness score (0-100)
+   */
+  calculateFairnessScore(schedule, staffMembers, dateRange) {
+    if (!schedule || !staffMembers || staffMembers.length === 0) {
+      return 0;
+    }
+
+    // Calculate workload (working days) variance
+    const workloads = staffMembers.map(staff => {
+      let workingDays = 0;
+      dateRange.forEach(date => {
+        const dateKey = date.toISOString().split('T')[0];
+        const shift = schedule[staff.id]?.[dateKey];
+        if (shift && shift !== '×') workingDays++;
+      });
+      return workingDays;
+    });
+
+    // Calculate off days variance
+    const offDays = staffMembers.map(staff => {
+      let offs = 0;
+      dateRange.forEach(date => {
+        const dateKey = date.toISOString().split('T')[0];
+        const shift = schedule[staff.id]?.[dateKey];
+        if (shift === '×') offs++;
+      });
+      return offs;
+    });
+
+    // Calculate early/late shift variance
+    const earlyShifts = staffMembers.map(staff => {
+      let count = 0;
+      dateRange.forEach(date => {
+        const dateKey = date.toISOString().split('T')[0];
+        if (schedule[staff.id]?.[dateKey] === '△') count++;
+      });
+      return count;
+    });
+
+    const lateShifts = staffMembers.map(staff => {
+      let count = 0;
+      dateRange.forEach(date => {
+        const dateKey = date.toISOString().split('T')[0];
+        if (schedule[staff.id]?.[dateKey] === '◇') count++;
+      });
+      return count;
+    });
+
+    // Calculate variances
+    const workloadVar = this.variance(workloads);
+    const offDayVar = this.variance(offDays);
+    const earlyVar = this.variance(earlyShifts);
+    const lateVar = this.variance(lateShifts);
+    const shiftTypeVar = (earlyVar + lateVar) / 2;
+
+    // Convert to fairness scores (lower variance = higher fairness)
+    const maxReasonableVar = 10; // days squared
+    const workloadFairness = Math.max(0, 100 - (workloadVar / maxReasonableVar) * 100);
+    const offDayFairness = Math.max(0, 100 - (offDayVar / maxReasonableVar) * 100);
+    const shiftTypeFairness = Math.max(0, 100 - (shiftTypeVar / maxReasonableVar) * 100);
+
+    // Weighted overall fairness
+    return (
+      workloadFairness * 0.4 +
+      offDayFairness * 0.3 +
+      shiftTypeFairness * 0.3
+    );
+  }
+
+  /**
+   * ✅ PHASE 3: Calculate diversity score
+   * Measures pattern uniqueness and schedule differences
+   * @param {Object} schedule - Schedule
+   * @param {Array} staffMembers - Staff members
+   * @param {Array} dateRange - Date range
+   * @returns {number} Diversity score (0-100)
+   */
+  calculateDiversityScore(schedule, staffMembers, dateRange) {
+    if (!schedule || !staffMembers || staffMembers.length < 2) {
+      return 0;
+    }
+
+    // Extract patterns for each staff
+    const patterns = staffMembers.map(staff => {
+      if (!schedule[staff.id]) return '';
+      return dateRange.map(date => {
+        const dateKey = date.toISOString().split('T')[0];
+        return schedule[staff.id][dateKey] || '○';
+      }).join('');
+    }).filter(p => p.length > 0);
+
+    if (patterns.length === 0) return 0;
+
+    // Count unique patterns
+    const uniquePatterns = new Set(patterns);
+    const patternDiversity = (uniquePatterns.size / patterns.length) * 100;
+
+    // Calculate average Hamming distance
+    let totalDistance = 0;
+    let comparisons = 0;
+
+    for (let i = 0; i < patterns.length; i++) {
+      for (let j = i + 1; j < patterns.length; j++) {
+        let differences = 0;
+        const len = Math.min(patterns[i].length, patterns[j].length);
+        for (let k = 0; k < len; k++) {
+          if (patterns[i][k] !== patterns[j][k]) differences++;
+        }
+        totalDistance += (differences / len);
+        comparisons++;
+      }
+    }
+
+    const hammingDistance = comparisons > 0 ? (totalDistance / comparisons) * 100 : 0;
+
+    // Weighted diversity score
+    return (
+      patternDiversity * 0.6 +  // 60% unique patterns
+      hammingDistance * 0.4      // 40% average difference
+    );
+  }
+
+  /**
+   * Helper: Calculate variance
+   * @param {Array} values - Numeric values
+   * @returns {number} Variance
+   */
+  variance(values) {
+    if (!values || values.length === 0) return 0;
+    const mean = values.reduce((sum, v) => sum + v, 0) / values.length;
+    const squaredDiffs = values.map(v => Math.pow(v - mean, 2));
+    return squaredDiffs.reduce((sum, v) => sum + v, 0) / values.length;
   }
 
   /**
