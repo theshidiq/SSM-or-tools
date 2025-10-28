@@ -363,15 +363,29 @@ export class TensorFlowScheduler {
    * @param {Array} staffMembers - Staff member data
    * @param {Array} dateRange - Date range for predictions
    * @param {Function} onProgress - Optional progress callback
+   * @param {Object} constraints - Optional constraints including priority rules
    */
-  async predictSchedule(currentSchedule, staffMembers, dateRange, onProgress = null) {
+  async predictSchedule(currentSchedule, staffMembers, dateRange, onProgress = null, constraints = null) {
+    // Extract priority rules and constraints
+    const priorityRules = constraints?.priorityRules || [];
+    const dailyLimits = constraints?.dailyLimits || [];
+    const monthlyLimits = constraints?.monthlyLimits || [];
+    const staffGroups = constraints?.staffGroups || [];
+
     console.log("🎯 [DEBUG] predictSchedule() CALLED", {
       hasModel: !!this.model,
       isInitialized: this.isInitialized,
       cacheWarmedUp: this.cacheWarmedUp,
       staffCount: staffMembers?.length,
-      dateCount: dateRange?.length
+      dateCount: dateRange?.length,
+      hasOnProgress: !!onProgress,
+      onProgressType: typeof onProgress,
+      priorityRulesCount: priorityRules.length,
     });
+
+    if (priorityRules.length > 0) {
+      console.log(`🎯 [ML] Received ${priorityRules.length} priority rule(s) for prediction`);
+    }
 
     if (!this.isInitialized || !this.model) {
       // Model not initialized, initializing
@@ -523,8 +537,10 @@ export class TensorFlowScheduler {
 
       // Add progress callback for UI updates
       const updateProgress = (progress) => {
+        console.log(`📊 [PROGRESS] updateProgress called: ${progress}% (${processedCount}/${totalPredictions})`);
         // Call onProgress callback directly if provided
         if (onProgress) {
+          console.log(`✅ [PROGRESS] Calling onProgress with ${progress}%`);
           onProgress({
             stage: "predicting",
             progress,
@@ -532,6 +548,8 @@ export class TensorFlowScheduler {
             processed: processedCount,
             total: totalPredictions,
           });
+        } else {
+          console.warn(`⚠️ [PROGRESS] onProgress is null/undefined, cannot update UI`);
         }
       };
 
@@ -618,6 +636,8 @@ export class TensorFlowScheduler {
           startIndex < dateRange.length;
           startIndex += CHUNK_SIZE
         ) {
+          console.log(`📦 [CHUNK-START] Starting chunk ${startIndex}-${Math.min(startIndex + CHUNK_SIZE, dateRange.length)} for ${staff.name}`);
+
           // Check timeout
           if (Date.now() - startTime > PREDICTION_TIMEOUT) {
             console.warn(`⏱️ Prediction timeout reached, stopping processing`);
@@ -630,6 +650,7 @@ export class TensorFlowScheduler {
           // Process chunk with timeout protection
           for (const date of dateChunk) {
             const dateKey = date.toISOString().split("T")[0];
+            console.log(`🔵 [LOOP-START] Starting prediction iteration for ${staff.name} on ${dateKey}, processedCount=${processedCount}`);
 
             // Skip if cell is already filled
             if (
@@ -740,51 +761,27 @@ export class TensorFlowScheduler {
               const predictionProgress = (processedCount / totalPredictions) * 65; // 0-65%
               const progress = Math.min(95, Math.round(30 + predictionProgress)); // 30-95%
 
+              console.log(`🔢 [PROGRESS-CALC] processedCount=${processedCount}, total=${totalPredictions}, progress=${progress}%`);
               updateProgress(progress);
             }
 
             // Yield to event loop every YIELD_INTERVAL (every 3 predictions) to keep UI responsive
             if (yieldCounter >= YIELD_INTERVAL) {
-              // **ENHANCED: Use requestIdleCallback for intelligent yielding**
-              await new Promise((resolve) => {
-                const yieldOperation = (deadline) => {
-                  // Check if we have enough idle time to continue
-                  const hasIdleTime = deadline
-                    ? deadline.timeRemaining() > IDLE_YIELD_TIME
-                    : false;
-
-                  if (hasIdleTime || !deadline) {
-                    resolve();
-                  } else {
-                    // Reschedule if system is busy
-                    if (typeof requestIdleCallback !== "undefined") {
-                      requestIdleCallback(yieldOperation, {
-                        timeout: IDLE_YIELD_TIME,
-                      });
-                    } else {
-                      setTimeout(resolve, 1);
-                    }
-                  }
-                };
-
-                // Use requestIdleCallback for intelligent scheduling
-                if (typeof requestIdleCallback !== "undefined") {
-                  requestIdleCallback(yieldOperation, {
-                    timeout: IDLE_YIELD_TIME,
-                  });
-                } else if (typeof requestAnimationFrame !== "undefined") {
-                  requestAnimationFrame(() => setTimeout(resolve, 1));
-                } else {
-                  setTimeout(resolve, 1);
-                }
-              });
-
+              console.log(`⏸️ [YIELD] Yielding to event loop at processedCount=${processedCount}`);
+              // **FIX: Use simple setTimeout instead of complex requestIdleCallback to prevent infinite rescheduling**
+              await new Promise(resolve => setTimeout(resolve, 0));
               yieldCounter = 0; // Reset yield counter
+              console.log(`⏭️ [YIELD] Resumed after yield, continuing predictions at processedCount=${processedCount}`);
             }
+
+            console.log(`✅ [LOOP] Completed prediction for ${staff.name} on ${dateKey}`);
           }
+
+          console.log(`📊 [LOOP] Finished date chunk ${startIndex}-${endIndex} for ${staff.name}`);
 
           // **ENHANCED: Intelligent yielding after each date chunk**
           if (startIndex + CHUNK_SIZE < dateRange.length) {
+            console.log(`⏸️ [YIELD-CHUNK] Yielding after chunk, will resume next chunk...`);
             await new Promise((resolve) => {
               // Use requestIdleCallback for better timing
               if (typeof requestIdleCallback !== "undefined") {
@@ -793,8 +790,11 @@ export class TensorFlowScheduler {
                 setTimeout(resolve, 2);
               }
             });
+            console.log(`⏭️ [YIELD-CHUNK] Resumed after chunk yield`);
           }
         }
+
+        console.log(`🎯 [LOOP] Completed ALL chunks for ${staff.name}, moving to next staff member...`);
 
         // Smart yielding after each staff member
         const progress = Math.round(
@@ -832,6 +832,51 @@ export class TensorFlowScheduler {
 
       const modelAccuracy = this.getModelAccuracy();
       const cacheStats = featureCacheManager.getStats();
+
+      // ✅ PHASE 3: Apply priority rules as post-processing
+      if (priorityRules && priorityRules.length > 0) {
+        console.log(`🎯 [ML] Applying ${priorityRules.length} priority rule(s) to ML predictions...`);
+
+        let rulesAppliedCount = 0;
+        priorityRules.forEach(rule => {
+          if (!rule.staffId || !rule.preferences?.daysOfWeek) {
+            console.warn(`⚠️ [ML-PRIORITY] Skipping invalid rule:`, rule);
+            return;
+          }
+
+          const staff = staffMembers.find(s => s.id === rule.staffId || s.name === rule.staffId);
+          if (!staff) {
+            console.warn(`⚠️ [ML-PRIORITY] Staff not found for rule:`, rule.staffId);
+            return;
+          }
+
+          if (!predictions[staff.id]) {
+            console.warn(`⚠️ [ML-PRIORITY] No predictions for staff:`, staff.name);
+            return;
+          }
+
+          const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+
+          dateRange.forEach(date => {
+            const dateKey = date.toISOString().split('T')[0];
+            const dayOfWeek = date.getDay();
+
+            // Check if this day is in the rule's daysOfWeek array
+            if (rule.preferences.daysOfWeek.includes(dayOfWeek)) {
+              const shiftValue = this.convertShiftTypeToSymbol(rule.preferences.shiftType);
+
+              // Override ML prediction with user's priority preference
+              predictions[staff.id][dateKey] = shiftValue;
+              predictionConfidence[staff.id][dateKey] = 1.0; // Maximum confidence for user preferences
+              rulesAppliedCount++;
+
+              console.log(`  ✅ [ML-PRIORITY] ${staff.name}: Set "${shiftValue}" on ${date.toLocaleDateString('ja-JP')} (${dayNames[dayOfWeek]})`);
+            }
+          });
+        });
+
+        console.log(`✅ [ML] Applied ${rulesAppliedCount} priority rule override(s) to ML predictions`);
+      }
 
       return {
         predictions,
@@ -2865,6 +2910,26 @@ export class TensorFlowScheduler {
     }
 
     return { features: [], labels: [] };
+  }
+
+  /**
+   * Convert shift type string to shift symbol
+   * @param {string} shiftType - Shift type (early, late, normal, off, etc.)
+   * @returns {string} Shift symbol (△, ◇, ○, ×, etc.)
+   */
+  convertShiftTypeToSymbol(shiftType) {
+    const shiftMap = {
+      'early': '△',
+      'late': '◇',
+      'normal': '○',
+      'off': '×',
+      '○': '○',  // Pass-through if already symbol
+      '△': '△',
+      '◇': '◇',
+      '×': '×',
+    };
+
+    return shiftMap[shiftType] || shiftType;
   }
 }
 

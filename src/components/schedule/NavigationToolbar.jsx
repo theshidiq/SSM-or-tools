@@ -1,6 +1,7 @@
 import React, { useEffect, useState, useRef, useMemo, Suspense } from "react";
 import {
   Download,
+  Upload,
   Calendar,
   Users,
   Table,
@@ -42,6 +43,7 @@ import { AISettingsProvider } from "../../contexts/AISettingsProvider";
 import ErrorBoundary from "../ui/ErrorBoundary";
 import { AILoadingSpinner } from "../ui/LoadingStates";
 import { LazyAIAssistantModal } from "../lazy/LazyAIComponents";
+import { ScheduleImportModal } from "../import";
 
 const NavigationToolbar = ({
   currentMonthIndex,
@@ -76,6 +78,7 @@ const NavigationToolbar = ({
   prefetchStats = null,
 }) => {
   const [showAIModal, setShowAIModal] = useState(false);
+  const [showImportModal, setShowImportModal] = useState(false);
   const monthPickerRef = useRef(null);
 
   // Use real-time periods hook
@@ -172,6 +175,7 @@ const NavigationToolbar = ({
     initializeAI,
     autoFillSchedule,
     generateAIPredictions,
+    generateSchedule, // Bridge to HybridPredictor
     getSystemStatus,
     systemType,
     systemHealth,
@@ -639,6 +643,22 @@ const NavigationToolbar = ({
                 </TooltipContent>
               </Tooltip>
 
+              {/* Import HTML */}
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setShowImportModal(true)}
+                  >
+                    <Upload size={16} className="text-blue-600" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p>Import HTML Schedule</p>
+                </TooltipContent>
+              </Tooltip>
+
               {/* Export CSV */}
               <Tooltip>
                 <TooltipTrigger asChild>
@@ -688,12 +708,30 @@ const NavigationToolbar = ({
                 isOpen={showAIModal}
                 onClose={() => setShowAIModal(false)}
                 onAutoFillSchedule={generateAIPredictions || autoFillSchedule}
+                scheduleData={scheduleData} // AI generation data
+                staffMembers={staffMembers} // Staff array
+                currentMonthIndex={currentMonthIndex} // Current month
+                saveSchedule={updateSchedule} // Save function
                 isProcessing={isProcessing}
                 systemStatus={getSystemStatus && getSystemStatus()}
               />
             </Suspense>
           </ErrorBoundary>
         </AISettingsProvider>
+      )}
+
+      {/* Schedule Import Modal */}
+      {showImportModal && (
+        <ScheduleImportModal
+          isOpen={showImportModal}
+          onClose={() => setShowImportModal(false)}
+          targetPeriodIndex={currentMonthIndex}
+          targetPeriod={monthPeriods?.[currentMonthIndex]}
+          onImportSuccess={() => {
+            console.log('✅ Schedule imported successfully!');
+            // Optionally refetch or refresh data here
+          }}
+        />
       )}
     </TooltipProvider>
   );

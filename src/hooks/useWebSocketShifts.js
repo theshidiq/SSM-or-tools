@@ -38,6 +38,8 @@ const MESSAGE_TYPES = {
 
   // Connection
   CONNECTION_ACK: "CONNECTION_ACK",
+  PING: "PING",
+  PONG: "PONG",
   ERROR: "ERROR",
 };
 
@@ -240,6 +242,11 @@ export const useWebSocketShifts = (
             });
             break;
 
+          case MESSAGE_TYPES.PONG:
+            // Heartbeat response - connection is healthy
+            console.log(`💓 [WEBSOCKET-SHIFTS] Heartbeat received (latency: ${Date.now() - (message.payload?.timestamp || 0)}ms)`);
+            break;
+
           case MESSAGE_TYPES.ERROR:
             console.error(
               `❌ [WEBSOCKET-SHIFTS] Server error:`,
@@ -263,6 +270,7 @@ export const useWebSocketShifts = (
 
   /**
    * Start heartbeat to keep connection alive
+   * Uses lightweight PING/PONG instead of full schedule sync
    */
   const startHeartbeat = useCallback(() => {
     if (heartbeatTimerRef.current) {
@@ -271,17 +279,14 @@ export const useWebSocketShifts = (
 
     heartbeatTimerRef.current = setInterval(() => {
       if (wsRef.current?.readyState === WebSocket.OPEN) {
-        // Send heartbeat (sync request acts as heartbeat)
-        // Only send if scheduleId is available
-        if (scheduleId) {
-          sendMessage(MESSAGE_TYPES.SHIFT_SYNC_REQUEST, {
-            scheduleId,
-            periodIndex: currentPeriod,
-          });
-        }
+        // Send lightweight PING to check connection health
+        // No schedule data sync - only connection verification
+        sendMessage(MESSAGE_TYPES.PING, {
+          timestamp: Date.now(),
+        });
       }
     }, HEARTBEAT_INTERVAL);
-  }, [scheduleId, currentPeriod, sendMessage]);
+  }, [sendMessage]);
 
   /**
    * Connect to WebSocket server

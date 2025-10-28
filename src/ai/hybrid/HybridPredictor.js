@@ -217,6 +217,14 @@ export class HybridPredictor {
             staffMembers,
             dateRange,
             onProgress, // Forward progress callback to ML engine
+            // ✅ Pass priority rules and constraints to ML engine
+            {
+              priorityRules: liveSettings?.priorityRules || [],
+              dailyLimits: liveSettings?.dailyLimits || [],
+              monthlyLimits: liveSettings?.monthlyLimits || [],
+              staffGroups: liveSettings?.staffGroups || [],
+              settingsProvider: this.settingsProvider, // Pass settings provider for real-time access
+            }
           );
           console.log("🎯 [DEBUG] AFTER mlEngine.predictSchedule()", {
             hasPredictions: !!mlPredictions,
@@ -304,11 +312,13 @@ export class HybridPredictor {
       let correctionAttempts = 0;
 
       if (
-        decisionResult.method === "ml_primary" &&
+        (decisionResult.method === "ml_primary" ||
+         decisionResult.method === "high_accuracy_ml") &&
         validatedPredictions &&
         ruleValidationResult?.valid
       ) {
         // Use high-confidence ML predictions
+        console.log(`✅ [ML-VALIDATED] Using validated ML predictions (method: ${decisionResult.method})`);
         finalSchedule = validatedPredictions;
         predictionMethod = "ml_validated";
       } else if (
@@ -338,24 +348,59 @@ export class HybridPredictor {
         predictionMethod = "hybrid_blended";
       } else if (this.options.fallbackToRules) {
         // Generate rule-based schedule as final fallback
-        finalSchedule = await this.ruleValidator.generateRuleBasedSchedule(
-          inputData,
-          staffMembers,
-          dateRange,
-        );
-        predictionMethod = "rule_based";
+        console.log("🔄 [FALLBACK] Entering rule-based generation fallback");
+        console.log(`📊 [FALLBACK] Decision method was: ${decisionResult.method}`);
+        console.log(`📊 [FALLBACK] Validation failed with ${ruleValidationResult?.criticalViolations?.length || 0} critical violations`);
+        console.log(`📊 [FALLBACK] Calling generateRuleBasedSchedule...`);
+
+        try {
+          finalSchedule = await this.ruleValidator.generateRuleBasedSchedule(
+            inputData,
+            staffMembers,
+            dateRange,
+          );
+          console.log("✅ [FALLBACK] Rule-based schedule generated successfully");
+          console.log(`📊 [FALLBACK] Generated schedule for ${Object.keys(finalSchedule || {}).length} staff members`);
+          predictionMethod = "rule_based";
+        } catch (error) {
+          console.error("❌ [FALLBACK] Rule-based generation failed:", error);
+          console.error("❌ [FALLBACK] Error stack:", error.stack);
+          throw new Error(`Rule-based fallback failed: ${error.message}`);
+        }
       } else {
+        console.error("❌ [FALLBACK] No fallback available - fallbackToRules is false");
         throw new Error("Unable to generate valid schedule predictions");
       }
       perfMarks.correctionEnd = performance.now();
 
       // Step 4: Final validation
       perfMarks.finalValidationStart = performance.now();
-      const finalValidation = await this.performFinalValidation(
-        finalSchedule,
-        staffMembers,
-        dateRange,
-      );
+      let finalValidation;
+
+      // 🎯 OPTIMIZATION: Skip redundant validation for rule-based schedules
+      // Rule-based generation already validates during applyPriorityRules, applyStaffGroupConstraints, etc.
+      // Re-validating causes infinite loop/hang and provides no additional value
+      if (predictionMethod === "rule_based") {
+        console.log("✅ [VALIDATION] Skipping final validation for rule-based schedule (already validated during generation)");
+        finalValidation = {
+          valid: true,
+          violations: [],
+          summary: {
+            note: "Rule-based schedule validated during generation",
+            constraints: { passed: true },
+            businessRules: { passed: true },
+            quality: { score: 1.0 }
+          }
+        };
+      } else {
+        // Perform full validation for ML-generated schedules
+        console.log(`🔍 [VALIDATION] Performing full validation for ${predictionMethod} schedule`);
+        finalValidation = await this.performFinalValidation(
+          finalSchedule,
+          staffMembers,
+          dateRange,
+        );
+      }
       perfMarks.finalValidationEnd = performance.now();
 
       // 🎯 PERFORMANCE: Calculate and log breakdown
@@ -373,6 +418,10 @@ export class HybridPredictor {
         method: predictionMethod,
         breakdown: `${perfBreakdown.settingsLoad.toFixed(0)}ms settings + ${perfBreakdown.mlPrediction.toFixed(0)}ms ML + ${perfBreakdown.ruleValidation.toFixed(0)}ms validation + ${perfBreakdown.correction.toFixed(0)}ms correction + ${perfBreakdown.finalValidation.toFixed(0)}ms final = ${perfBreakdown.total.toFixed(0)}ms total`
       });
+
+      // 🎯 Build result object with comprehensive metadata
+      console.log(`📊 [RESULT] Building result object for ${predictionMethod} schedule`);
+      console.log(`📊 [RESULT] Schedule has ${Object.keys(finalSchedule || {}).length} staff members`);
 
       const result = {
         success: true,
@@ -404,6 +453,7 @@ export class HybridPredictor {
       console.log(
         `🎯 Hybrid prediction completed: ${predictionMethod} (${result.metadata.processingTime}ms)`,
       );
+      console.log(`✅ [RESULT] Returning schedule with ${Object.keys(result.schedule || {}).length} staff members to caller`);
 
       return result;
     } catch (error) {

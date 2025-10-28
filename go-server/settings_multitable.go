@@ -559,6 +559,47 @@ func (s *StaffSyncServer) fetchPriorityRules(versionID string) ([]PriorityRule, 
 	return rules, nil
 }
 
+// fetchSinglePriorityRule retrieves a single priority rule by ID
+func (s *StaffSyncServer) fetchSinglePriorityRule(ruleID string, versionID string) (*PriorityRule, error) {
+	url := fmt.Sprintf("%s/rest/v1/priority_rules?id=eq.%s&version_id=eq.%s&select=*",
+		s.supabaseURL, ruleID, versionID)
+
+	req, err := http.NewRequest("GET", url, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %w", err)
+	}
+
+	req.Header.Set("Authorization", "Bearer "+s.supabaseKey)
+	req.Header.Set("apikey", s.supabaseKey)
+	req.Header.Set("Content-Type", "application/json")
+
+	client := &http.Client{Timeout: 10 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch from Supabase: %w", err)
+	}
+	defer resp.Body.Close()
+
+	body, _ := io.ReadAll(resp.Body)
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("Supabase request failed with status %d: %s", resp.StatusCode, string(body))
+	}
+
+	var rules []PriorityRule
+	if err := json.Unmarshal(body, &rules); err != nil {
+		return nil, fmt.Errorf("failed to parse response: %w", err)
+	}
+
+	if len(rules) == 0 {
+		return nil, fmt.Errorf("priority rule not found: %s", ruleID)
+	}
+
+	log.Printf("🔍 [fetchSinglePriorityRule] Fetched rule '%s': RuleDefinition length = %d", rules[0].Name, len(rules[0].RuleDefinition))
+
+	return &rules[0], nil
+}
+
 // fetchMLModelConfigs retrieves ML model configurations for a specific version
 func (s *StaffSyncServer) fetchMLModelConfigs(versionID string) ([]MLModelConfig, error) {
 	url := fmt.Sprintf("%s/rest/v1/ml_model_configs?version_id=eq.%s&is_active=eq.true&select=*",
@@ -908,16 +949,28 @@ func (s *StaffSyncServer) updatePriorityRule(versionID string, ruleData map[stri
 		updateData["effective_until"] = effectiveUntil
 	}
 
-	// ✅ FIX: Merge top-level React fields into rule_definition JSONB (NOT rule_config!)
-	// React sends fields at top level: { id, daysOfWeek: [...], shiftType: "early", staffId: "...", ruleType: "..." }
-	// We need to merge them into rule_definition before storing in database
-	// DATABASE SCHEMA: priority_rules table has rule_definition column (JSONB)
+	// ✅ FIX: Fetch existing rule_definition from database to preserve data on incremental updates
+	// React may send only partial updates (e.g., just { name: "new name" })
+	// We need to preserve existing staffId, shiftType, daysOfWeek, etc.
 	ruleDefinition := make(map[string]interface{})
 
-	// Check if ruleDefinition already exists in the payload
+	// Fetch current rule from database to get existing rule_definition
+	currentRule, err := s.fetchSinglePriorityRule(ruleID, versionID)
+	if err != nil {
+		log.Printf("⚠️ [updatePriorityRule] Failed to fetch existing rule (will create new rule_definition): %v", err)
+	} else if currentRule != nil && len(currentRule.RuleDefinition) > 0 {
+		// Start with existing rule_definition from database
+		ruleDefinition = currentRule.RuleDefinition
+		log.Printf("🔍 [updatePriorityRule] Preserving existing rule_definition: %+v", ruleDefinition)
+	}
+
+	// Override with ruleDefinition from payload if present
 	if existingDef, ok := ruleData["ruleDefinition"].(map[string]interface{}); ok {
-		// Preserve existing ruleDefinition if present
-		ruleDefinition = existingDef
+		// Merge payload ruleDefinition (don't completely replace)
+		for k, v := range existingDef {
+			ruleDefinition[k] = v
+		}
+		log.Printf("🔍 [updatePriorityRule] Merged payload ruleDefinition")
 	}
 
 	// Merge top-level fields into rule_definition with proper nested structure
@@ -927,8 +980,15 @@ func (s *StaffSyncServer) updatePriorityRule(versionID string, ruleData map[stri
 		log.Printf("🔍 [updatePriorityRule] Merging staffId: %v", staffId)
 	}
 
-	// Create conditions object for shift_type and day_of_week
+	// Preserve existing conditions object, then merge new fields
 	conditions := make(map[string]interface{})
+	if existingConditions, ok := ruleDefinition["conditions"].(map[string]interface{}); ok {
+		// Start with existing conditions from database
+		conditions = existingConditions
+		log.Printf("🔍 [updatePriorityRule] Preserving existing conditions: %+v", conditions)
+	}
+
+	// Merge new shift_type and day_of_week fields (if provided)
 	if shiftType, ok := ruleData["shiftType"]; ok {
 		conditions["shift_type"] = shiftType
 		log.Printf("🔍 [updatePriorityRule] Merging shiftType: %v", shiftType)
@@ -938,7 +998,7 @@ func (s *StaffSyncServer) updatePriorityRule(versionID string, ruleData map[stri
 		log.Printf("🔍 [updatePriorityRule] Merging daysOfWeek: %+v", daysOfWeek)
 	}
 
-	// Add conditions to ruleDefinition if we have any
+	// Update conditions in ruleDefinition if we have any
 	if len(conditions) > 0 {
 		ruleDefinition["conditions"] = conditions
 	}
@@ -990,6 +1050,41 @@ func (s *StaffSyncServer) updatePriorityRule(versionID string, ruleData map[stri
 // Called when React sends a temporary ID (e.g., "priority-rule-1761352355813")
 func (s *StaffSyncServer) insertPriorityRule(versionID string, ruleData map[string]interface{}) error {
 	log.Printf("🔍 [insertPriorityRule] Creating new priority rule: %s", ruleData["name"])
+
+	// ✅ VALIDATION: Reject INSERT if critical fields are missing
+	// This prevents NULL rule_definition in database
+	staffId, hasStaffId := ruleData["staffId"]
+	shiftType, hasShiftType := ruleData["shiftType"]
+	daysOfWeek, hasDaysOfWeek := ruleData["daysOfWeek"]
+
+	if !hasStaffId || staffId == nil || staffId == "" {
+		log.Printf("❌ [insertPriorityRule] REJECTED: Missing staffId for rule '%s'", ruleData["name"])
+		return fmt.Errorf("priority rule must have staffId (staff member selection required)")
+	}
+
+	if !hasShiftType || shiftType == nil || shiftType == "" {
+		log.Printf("❌ [insertPriorityRule] REJECTED: Missing shiftType for rule '%s'", ruleData["name"])
+		return fmt.Errorf("priority rule must have shiftType (shift preference required)")
+	}
+
+	if !hasDaysOfWeek {
+		log.Printf("❌ [insertPriorityRule] REJECTED: Missing daysOfWeek for rule '%s'", ruleData["name"])
+		return fmt.Errorf("priority rule must have daysOfWeek (day selection required)")
+	}
+
+	// Validate daysOfWeek is an array
+	daysArray, ok := daysOfWeek.([]interface{})
+	if !ok {
+		log.Printf("❌ [insertPriorityRule] REJECTED: daysOfWeek is not an array for rule '%s'", ruleData["name"])
+		return fmt.Errorf("priority rule daysOfWeek must be an array")
+	}
+
+	if len(daysArray) == 0 {
+		log.Printf("❌ [insertPriorityRule] REJECTED: daysOfWeek is empty for rule '%s'", ruleData["name"])
+		return fmt.Errorf("priority rule must have at least one day selected")
+	}
+
+	log.Printf("✅ [insertPriorityRule] Validation passed: staffId=%v, shiftType=%v, daysOfWeek=%v", staffId, shiftType, daysOfWeek)
 
 	url := fmt.Sprintf("%s/rest/v1/priority_rules", s.supabaseURL)
 

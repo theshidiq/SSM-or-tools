@@ -42,6 +42,9 @@ export const generateStatistics = (schedule, staffMembers, dateRange) => {
     return stats;
   }
 
+  // Pre-compute date keys to avoid repeated format() calls (200ms savings)
+  const dateKeys = dateRange.map((date) => format(date, "yyyy-MM-dd"));
+
   // Only calculate stats for active staff members
   const activeStaff = staffMembers.filter(
     (staff) => staff && isStaffActiveInCurrentPeriod(staff, dateRange),
@@ -63,10 +66,10 @@ export const generateStatistics = (schedule, staffMembers, dateRange) => {
       vacationDays: 0,
     };
 
-    dateRange.forEach((date) => {
+    dateRange.forEach((date, index) => {
       if (!date) return;
 
-      const dateKey = format(date, "yyyy-MM-dd");
+      const dateKey = dateKeys[index]; // Use pre-computed date key
       // Safe access to schedule data
       const staffSchedule = schedule[staff.id];
       const shift =

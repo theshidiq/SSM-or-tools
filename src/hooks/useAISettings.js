@@ -127,34 +127,83 @@ export const useAISettings = () => {
 
   /**
    * Transform priority rules from database format to AI format
-   * Database: [{ id, name, priority, conditions: {...} }] or flat format
+   * Database: [{ id, name, priority, ruleDefinition: { staff_id, conditions: {...} } }] or flat format
    * AI: [{ id, name, ruleType, staffId, preferences: {...} }]
    */
   const priorityRules = useMemo(() => {
     if (!settings?.priorityRules) return [];
 
-    return settings.priorityRules.map((rule) => ({
-      id: rule.id,
-      name: rule.name,
-      description: rule.description || "",
-      ruleType: rule.ruleType || rule.rule_type || "preferred_shift",
-      staffId: rule.staffId || rule.staff_id,
-      preferences: {
-        shiftType: rule.shiftType || rule.shift_type,
-        daysOfWeek: rule.daysOfWeek || rule.days_of_week || [],
-        priorityLevel: rule.priorityLevel ?? rule.priority_level ?? 3,
-        preferenceStrength: rule.preferenceStrength ?? rule.preference_strength ?? 0.8,
-      },
-      constraints: {
-        isHardConstraint: rule.isHardConstraint ?? rule.is_hard_constraint ?? false,
-        penaltyWeight: rule.penaltyWeight ?? rule.penalty_weight ?? 50,
-      },
-      validity: {
-        effectiveFrom: rule.effectiveFrom || rule.effective_from,
-        effectiveUntil: rule.effectiveUntil || rule.effective_until,
-        isActive: rule.isActive ?? rule.is_active ?? true,
-      },
-    }));
+    // Debug: Log raw priority rules to see what we're receiving
+    console.log('🔍 [useAISettings] Raw priority rules from settings:',
+      JSON.stringify(settings.priorityRules, null, 2).substring(0, 500));
+
+    return settings.priorityRules.map((rule) => {
+      // Extract staffId - prioritize TOP LEVEL properties first (UI format), then nested (DB seed format)
+      const staffId =
+        rule.staffId ||              // ← TOP LEVEL (UI creates this)
+        rule.staff_id ||             // ← TOP LEVEL (snake_case variant)
+        rule.ruleDefinition?.staff_id ||  // ← Nested JSONB (database seed format)
+        rule.ruleDefinition?.staffId ||
+        rule.ruleConfig?.staffId ||
+        rule.preferences?.staffId;   // ← After transformation fallback
+
+      // Extract shiftType - prioritize TOP LEVEL properties first
+      const shiftType =
+        rule.shiftType ||            // ← TOP LEVEL (UI creates this)
+        rule.shift_type ||           // ← TOP LEVEL (snake_case variant)
+        rule.ruleDefinition?.conditions?.shift_type ||  // ← Nested JSONB
+        rule.ruleDefinition?.shiftType ||
+        rule.preferences?.shiftType;
+
+      // Extract daysOfWeek - prioritize TOP LEVEL properties first
+      const daysOfWeek =
+        rule.daysOfWeek ||           // ← TOP LEVEL (UI creates this)
+        rule.days_of_week ||         // ← TOP LEVEL (snake_case variant)
+        rule.ruleDefinition?.conditions?.day_of_week ||  // ← Nested JSONB
+        rule.ruleDefinition?.daysOfWeek ||
+        rule.preferences?.daysOfWeek ||
+        [];
+
+      // Debug: Log extraction results for first 2 rules
+      if (settings.priorityRules.indexOf(rule) < 2) {
+        console.log(`🔍 [useAISettings] Rule "${rule.name}" extraction:`, {
+          staffId,
+          shiftType,
+          daysOfWeek,
+          sources: {
+            topLevel_staffId: rule.staffId,
+            topLevel_shiftType: rule.shiftType,
+            topLevel_daysOfWeek: rule.daysOfWeek,
+            nested_staffId: rule.ruleDefinition?.staff_id,
+            nested_shiftType: rule.ruleDefinition?.conditions?.shift_type,
+            nested_daysOfWeek: rule.ruleDefinition?.conditions?.day_of_week
+          }
+        });
+      }
+
+      return {
+        id: rule.id,
+        name: rule.name,
+        description: rule.description || "",
+        ruleType: rule.ruleType || rule.rule_type || "preferred_shift",
+        staffId: staffId,
+        preferences: {
+          shiftType: shiftType,
+          daysOfWeek: daysOfWeek,
+          priorityLevel: rule.priorityLevel ?? rule.priority_level ?? 3,
+          preferenceStrength: rule.preferenceStrength ?? rule.preference_strength ?? 0.8,
+        },
+        constraints: {
+          isHardConstraint: rule.isHardConstraint ?? rule.is_hard_constraint ?? false,
+          penaltyWeight: rule.penaltyWeight ?? rule.penalty_weight ?? 50,
+        },
+        validity: {
+          effectiveFrom: rule.effectiveFrom || rule.effective_from,
+          effectiveUntil: rule.effectiveUntil || rule.effective_until,
+          isActive: rule.isActive ?? rule.is_active ?? true,
+        },
+      };
+    });
   }, [settings?.priorityRules]);
 
   /**

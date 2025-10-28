@@ -161,10 +161,21 @@ const PriorityRulesTab = ({ staffMembers = [], validationErrors = {} }) => {
       const conflicts = detectRuleConflicts(newRules);
       setConflictingRules(conflicts);
 
+      // ✅ NEW FIX: Filter out incomplete rules before syncing to server
+      // Rules must have at least one day selected to be valid
+      const completeRules = newRules.filter((rule) => {
+        const isComplete = rule.daysOfWeek && rule.daysOfWeek.length > 0;
+        if (!isComplete && rule._isLocalOnly) {
+          console.log(`⏸️ Skipping incomplete rule "${rule.name}" (no days selected) - keeping in UI only`);
+        }
+        return isComplete;
+      });
+
       // ✅ Use functional update to get latest settings without adding to dependencies
+      // Only sync complete rules to server/database
       updateSettings((prevSettings) => ({
         ...prevSettings,
-        priorityRules: newRules,
+        priorityRules: completeRules,
       }));
     },
     [updateSettings, detectRuleConflicts],
@@ -294,7 +305,7 @@ const PriorityRulesTab = ({ staffMembers = [], validationErrors = {} }) => {
       return;
     }
 
-    console.log(`✅ Creating new priority rule with staffId: ${staffMembers[0].id} (${staffMembers[0].name})`);
+    console.log(`✅ Creating new priority rule skeleton (local UI only, not synced to server yet)`);
 
     const newRule = {
       id: `priority-rule-${Date.now()}`,
@@ -303,7 +314,7 @@ const PriorityRulesTab = ({ staffMembers = [], validationErrors = {} }) => {
       ruleType: "preferred_shift",
       staffId: staffMembers[0]?.id || "",
       shiftType: "early",
-      daysOfWeek: [],
+      daysOfWeek: [], // ⚠️ Empty - rule is incomplete, will NOT be synced to server
       // Set high priority defaults (hidden from UI)
       priorityLevel: 4, // High Priority
       preferenceStrength: 1.0, // Strong
@@ -312,8 +323,11 @@ const PriorityRulesTab = ({ staffMembers = [], validationErrors = {} }) => {
       effectiveFrom: null, // Always active
       effectiveUntil: null, // Always active
       isActive: true,
+      _isLocalOnly: true, // ✅ NEW: Flag to prevent server sync until completed
     };
     startEditingRule(newRule.id, newRule);
+    // ✅ FIX: Do NOT sync to server yet - keep in UI local state only
+    // Server sync will happen when user completes the rule (adds at least one day)
     updatePriorityRules([...priorityRules, newRule]);
   };
 
@@ -405,7 +419,15 @@ const PriorityRulesTab = ({ staffMembers = [], validationErrors = {} }) => {
       ? currentDays.filter((d) => d !== dayId)
       : [...currentDays, dayId];
 
-    updateRule(ruleId, { daysOfWeek: updatedDays });
+    // ✅ NEW FIX: Remove _isLocalOnly flag when user completes the rule
+    // Once at least one day is selected, the rule becomes complete and should sync to server
+    const updates = { daysOfWeek: updatedDays };
+    if (updatedDays.length > 0 && rule._isLocalOnly) {
+      console.log(`✅ Rule "${rule.name}" is now complete (has days selected) - will sync to server`);
+      updates._isLocalOnly = undefined; // Remove the flag to allow server sync
+    }
+
+    updateRule(ruleId, updates);
   };
 
   const renderRuleTypeSelector = (rule) => {

@@ -253,15 +253,10 @@ const STATIC_STAFF_CONFLICT_GROUPS = [
 
 /**
  * Static priority rules for specific staff members
+ * ✅ CLEANED: Removed hardcoded test data (料理長, 与儀)
+ * Priority rules should come from database/ConfigurationService only
  */
-const STATIC_PRIORITY_RULES = {
-  料理長: {
-    preferredShifts: [{ day: "sunday", shift: "early", priority: "high" }],
-  },
-  与儀: {
-    preferredShifts: [{ day: "sunday", shift: "off", priority: "high" }],
-  },
-};
+const STATIC_PRIORITY_RULES = [];
 
 /**
  * Static daily limits for different shift types
@@ -712,6 +707,9 @@ export const validatePriorityRules = async (
   const dayOfWeek = getDayOfWeek(dateKey);
   const priorityRules = await getPriorityRules();
 
+  console.log(`🔍 [VALIDATION-DEBUG] Checking violations for date ${dateKey} (${dayOfWeek})`);
+  console.log(`🔍 [VALIDATION-DEBUG] Priority rules object:`, JSON.stringify(priorityRules, null, 2));
+
   // Handle both database format (by staff ID) and static format (by staff name)
   const processRules = (staffIdentifier, rules) => {
     // Find staff by name or ID
@@ -729,8 +727,12 @@ export const validatePriorityRules = async (
     const currentShift = scheduleData[staff.id][dateKey];
     const preferredShifts = rules.preferredShifts || [];
 
+    console.log(`🔍 [VALIDATION-DEBUG] ${staff.name}: preferredShifts =`, preferredShifts);
+
     preferredShifts.forEach((rule) => {
+      console.log(`🔍 [VALIDATION-DEBUG] ${staff.name}: Checking rule day="${rule.day}" vs dayOfWeek="${dayOfWeek}"`);
       if (rule.day === dayOfWeek) {
+        console.log(`🔍 [VALIDATION-DEBUG] ${staff.name}: MATCH! Checking shift="${rule.shift}" vs currentShift="${currentShift}"`);
         let ruleViolated = false;
         let expectedShift = "";
 

@@ -21,7 +21,7 @@
  * - Total memory: 47.1 KB (17 periods × 2.77 KB)
  */
 
-import { useState, useEffect, useCallback, useRef, useMemo } from "react";
+import { useState, useEffect, useCallback, useRef, useMemo, startTransition } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "../utils/supabase";
 import { generateDateRange } from "../utils/dateUtils";
@@ -365,29 +365,32 @@ export const useScheduleDataPrefetch = (
         );
 
         // 🎯 SMART MERGE: Preserve locally-modified cells during sync
-        if (localModificationsRef.current.size > 0) {
-          console.log(
-            `🔀 [WEBSOCKET-PREFETCH] Smart merge: preserving ${localModificationsRef.current.size} locally-modified cells`,
-          );
+        // Wrapped in startTransition for non-blocking UI updates
+        startTransition(() => {
+          if (localModificationsRef.current.size > 0) {
+            console.log(
+              `🔀 [WEBSOCKET-PREFETCH] Smart merge: preserving ${localModificationsRef.current.size} locally-modified cells`,
+            );
 
-          setSchedule(prev => {
-            const merged = { ...webSocketShifts.scheduleData };
+            setSchedule(prev => {
+              const merged = { ...webSocketShifts.scheduleData };
 
-            // Preserve AI-modified cells
-            localModificationsRef.current.forEach(cellKey => {
-              const [staffId, dateKey] = cellKey.split('::');
-              if (prev[staffId]?.[dateKey] !== undefined) {
-                if (!merged[staffId]) merged[staffId] = {};
-                merged[staffId][dateKey] = prev[staffId][dateKey];
-              }
+              // Preserve AI-modified cells
+              localModificationsRef.current.forEach(cellKey => {
+                const [staffId, dateKey] = cellKey.split('::');
+                if (prev[staffId]?.[dateKey] !== undefined) {
+                  if (!merged[staffId]) merged[staffId] = {};
+                  merged[staffId][dateKey] = prev[staffId][dateKey];
+                }
+              });
+
+              return merged;
             });
-
-            return merged;
-          });
-        } else {
-          // No local modifications - safe to replace
-          setSchedule(webSocketShifts.scheduleData);
-        }
+          } else {
+            // No local modifications - safe to replace
+            setSchedule(webSocketShifts.scheduleData);
+          }
+        });
       } else {
         console.warn(
           `⚠️ [WEBSOCKET-PREFETCH] Ignoring WebSocket data for period ${syncedPeriod} (currently viewing period ${currentMonthIndex})`,

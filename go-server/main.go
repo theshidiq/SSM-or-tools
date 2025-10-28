@@ -78,8 +78,10 @@ const (
 	MESSAGE_SHIFT_BULK_UPDATE    = "SHIFT_BULK_UPDATE"
 
 	// Common messages
-	MESSAGE_CONNECTION_ACK            = "CONNECTION_ACK"
-	MESSAGE_ERROR                     = "ERROR"
+	MESSAGE_CONNECTION_ACK = "CONNECTION_ACK"
+	MESSAGE_PING           = "PING"
+	MESSAGE_PONG           = "PONG"
+	MESSAGE_ERROR          = "ERROR"
 )
 
 // Message structure matching React app format
@@ -313,6 +315,10 @@ func (s *StaffSyncServer) handleStaffSync(w http.ResponseWriter, r *http.Request
 			s.handleShiftSyncRequest(client, &msg)
 		case MESSAGE_SHIFT_BULK_UPDATE:
 			s.handleShiftBulkUpdate(client, &msg)
+
+		// Heartbeat/Connection health
+		case MESSAGE_PING:
+			s.handlePing(client, &msg)
 
 		default:
 			log.Printf("Unknown message type: %s", msg.Type)
@@ -1269,6 +1275,44 @@ func (s *StaffSyncServer) deleteStaffInSupabase(staffId string) error {
 
 	log.Printf("✅ Deleted (soft) staff %s in Supabase database", staffId)
 	return nil
+}
+
+// handlePing handles lightweight ping messages for connection health check
+func (s *StaffSyncServer) handlePing(client *Client, msg *Message) {
+	// Extract timestamp from payload if available
+	payload, ok := msg.Payload.(map[string]interface{})
+	var timestamp int64
+	if ok {
+		if ts, exists := payload["timestamp"]; exists {
+			switch v := ts.(type) {
+			case float64:
+				timestamp = int64(v)
+			case int64:
+				timestamp = v
+			}
+		}
+	}
+
+	// Send PONG response with original timestamp
+	response := Message{
+		Type: MESSAGE_PONG,
+		Payload: map[string]interface{}{
+			"timestamp": timestamp,
+		},
+		Timestamp: time.Now(),
+		ClientID:  client.clientId,
+	}
+
+	responseData, err := json.Marshal(response)
+	if err != nil {
+		log.Printf("Error marshaling PONG response: %v", err)
+		return
+	}
+
+	err = client.conn.WriteMessage(websocket.TextMessage, responseData)
+	if err != nil {
+		log.Printf("Error sending PONG: %v", err)
+	}
 }
 
 func (s *StaffSyncServer) handleHealth(w http.ResponseWriter, r *http.Request) {

@@ -367,9 +367,17 @@ export const useAIAssistantLazy = (
             onProgress, // Pass progress callback through
           });
 
+          console.log("🔍 [AI-LAZY] generateSchedule returned result:", {
+            success: result?.success,
+            hasSchedule: !!result?.schedule,
+            scheduleKeys: result?.schedule ? Object.keys(result.schedule).length : 0,
+            method: result?.metadata?.method
+          });
+
           // Apply the generated schedule to backend (WebSocket → Go Server → Database)
           if (result.success && result.schedule) {
             console.log("💾 [AI] Saving AI-generated schedule to backend...");
+            console.log(`📊 [AI] Schedule to save has ${Object.keys(result.schedule).length} staff members`);
 
             if (onProgress) {
               onProgress({
@@ -380,12 +388,20 @@ export const useAIAssistantLazy = (
             }
 
             // Save to backend via WebSocket (this persists to database)
+            console.log("📤 [AI] Calling saveSchedule function...");
             await saveSchedule(result.schedule);
 
             console.log("✅ [AI] AI-generated schedule saved to backend successfully");
 
             // Save to localStorage as backup cache
+            console.log("💾 [AI] Saving to localStorage as backup...");
             optimizedStorage.saveScheduleData(result.schedule);
+          } else {
+            console.error("❌ [AI-LAZY] Schedule save skipped - conditions not met:", {
+              success: result?.success,
+              hasSchedule: !!result?.schedule,
+              scheduleType: typeof result?.schedule
+            });
           }
 
           // Report completion
@@ -397,6 +413,7 @@ export const useAIAssistantLazy = (
             });
           }
 
+          console.log("✅ [AI-LAZY] Returning result to caller");
           return result;
         } else {
           // Fallback for systems without generateSchedule

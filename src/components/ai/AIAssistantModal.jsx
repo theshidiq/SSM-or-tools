@@ -37,7 +37,11 @@ import { Card, CardContent, CardHeader, CardTitle } from "../ui/card";
 const AIAssistantModal = ({
   isOpen,
   onClose,
-  onAutoFillSchedule,
+  onAutoFillSchedule, // generateAIPredictions with save logic
+  scheduleData, // Schedule data for AI generation
+  staffMembers, // Staff members array
+  currentMonthIndex, // Current month index
+  saveSchedule, // Save schedule function
   isProcessing,
   systemStatus, // New prop for system status
 }) => {
@@ -48,28 +52,56 @@ const AIAssistantModal = ({
   // Get AI settings for live status
   const aiSettings = useAISettings();
 
+  // Debug: Monitor trainingProgress state changes
   useEffect(() => {
+    console.log(`🔄 [REACT-STATE] trainingProgress changed:`, trainingProgress);
+  }, [trainingProgress]);
+
+  // Debug: Monitor isOpen changes
+  useEffect(() => {
+    console.log(`🚪 [MODAL] isOpen changed: ${isOpen}`);
     if (!isOpen) {
+      console.log(`🧹 [MODAL] Cleaning up state (modal closed)`);
       setResults(null);
       setTrainingProgress(null);
       setProgressStage("idle");
     }
   }, [isOpen]);
 
+  const [isProcessingInternal, setIsProcessingInternal] = useState(false);
+
   const handleAutoFillSchedule = async () => {
-    console.log("🎯 [DEBUG] AI Button clicked - calling onAutoFillSchedule");
+    console.log("🎯 [DEBUG] AI Button clicked");
+    console.log(`🔍 [DEBUG] Props received - onAutoFillSchedule: ${typeof onAutoFillSchedule}`);
+    console.log(`🔍 [DEBUG] isProcessing prop: ${isProcessing}, isProcessingInternal: ${isProcessingInternal}`);
+    setIsProcessingInternal(true);
     setProgressStage("starting");
+    console.log(`📝 [SET-STATE] Setting trainingProgress to 0% (initialization)`);
     setTrainingProgress({ progress: 0, message: "AIシステム初期化中..." });
 
-    console.log("🎯 [DEBUG] Calling onAutoFillSchedule callback...");
-    const result = await onAutoFillSchedule((progress) => {
-      setProgressStage(progress.stage);
-      setTrainingProgress(progress);
-    });
+    try {
+      let result;
 
-    console.log("🎯 [DEBUG] onAutoFillSchedule completed with result:", result);
-    setResults(result);
-    setProgressStage("completed");
+      // ✅ Always use onAutoFillSchedule (which is generateAIPredictions with save logic)
+      console.log("✅ Using generateAIPredictions path (with save logic)");
+      result = await onAutoFillSchedule((progress) => {
+        console.log(`🎨 [UI-PROGRESS] AIAssistantModal received:`, progress);
+        console.log(`📝 [SET-STATE] Setting trainingProgress to ${progress.progress}%`);
+        setProgressStage(progress.stage || "processing");
+        setTrainingProgress(progress);
+        console.log(`✅ [SET-STATE] setTrainingProgress called`);
+      });
+
+      console.log("🎯 [DEBUG] AI generation completed with result:", result);
+      setResults(result);
+      setProgressStage("completed");
+    } catch (error) {
+      console.error("❌ AI generation failed:", error);
+      setResults({ success: false, error: error.message });
+      setProgressStage("error");
+    } finally {
+      setIsProcessingInternal(false);
+    }
   };
 
   if (!isOpen) return null;
@@ -164,7 +196,7 @@ const AIAssistantModal = ({
           )}
 
           {/* Training Progress */}
-          {isProcessing && trainingProgress && (
+          {(isProcessing || isProcessingInternal) && trainingProgress && (
             <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 mb-4">
               <div className="flex items-center gap-2 mb-2">
                 <Zap size={16} className="text-yellow-600 animate-pulse" />
@@ -194,14 +226,14 @@ const AIAssistantModal = ({
             </p>
             <button
               onClick={handleAutoFillSchedule}
-              disabled={isProcessing}
+              disabled={isProcessing || isProcessingInternal}
               className="bg-violet-600 text-white px-6 py-2 rounded-lg hover:bg-violet-700 disabled:opacity-50 transition-colors flex items-center gap-2 mx-auto"
             >
               <Sparkles
                 size={16}
-                className={isProcessing ? "animate-spin" : ""}
+                className={isProcessing || isProcessingInternal ? "animate-spin" : ""}
               />
-              {isProcessing ? "AI処理中..." : "AI 自動入力を実行"}
+              {isProcessing || isProcessingInternal ? "AI処理中..." : "AI 自動入力を実行"}
             </button>
           </div>
 

@@ -1018,6 +1018,16 @@ export class BusinessRuleValidator {
       await this.applyFinalAdjustments(schedule, staffMembers, dateRange);
 
       console.log("✅ Rule-based schedule generated");
+
+      // 🎯 DEBUG: Log final schedule to verify randomization
+      console.log("🔍 [DEBUG] Final schedule being returned:");
+      staffMembers.slice(0, 3).forEach(staff => {
+        const offDays = dateRange
+          .filter(date => schedule[staff.id]?.[date.toISOString().split("T")[0]] === "×")
+          .map(date => date.toISOString().split("T")[0]);
+        console.log(`🔍 [DEBUG] ${staff.name}: ${offDays.length} off-days on: ${offDays.join(", ")}`);
+      });
+
       return schedule;
     } catch (error) {
       console.error("❌ Rule-based schedule generation failed:", error);
