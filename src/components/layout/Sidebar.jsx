@@ -1,4 +1,5 @@
 import React from "react";
+import { useNavigate, useLocation } from "react-router-dom";
 import {
   Calendar,
   Settings,
@@ -8,6 +9,7 @@ import {
   Menu,
   AlertTriangle,
   ChevronDown,
+  BarChart3,
 } from "lucide-react";
 import { Badge } from "../ui/badge";
 import { Button } from "../ui/button";
@@ -22,6 +24,8 @@ const Sidebar = ({
   isSaving = false,
   prefetchStats = null,
 }) => {
+  const navigate = useNavigate();
+
   // Calculate realtime status
   const hasAllPeriodsData = prefetchStats?.memoryUsage?.periodCount > 0;
   const isInstantNavEnabled = hasAllPeriodsData;
@@ -49,6 +53,7 @@ const Sidebar = ({
     { id: "calendar", label: "Calendar", icon: CalendarDays, type: "nav" },
     { id: "menu", label: "Menu", icon: Menu, type: "nav" },
     { id: "alergi", label: "Alergi", icon: AlertTriangle, type: "nav" },
+    { id: "research", label: "Research", icon: BarChart3, type: "link", path: "/research" }, // New research link
     { id: "settings", label: "Settings", icon: Settings, type: "modal" }, // Changed to modal type
   ];
 
@@ -80,11 +85,16 @@ const Sidebar = ({
               const Icon = item.icon;
               const isActive = currentView === item.id;
 
+              // Render as button for all items
               return (
                 <button
                   key={item.id}
                   onClick={() => {
-                    if (item.type === "modal" && item.id === "settings") {
+                    if (item.type === "link" && item.path) {
+                      // Navigate to external route using window.location for full page navigation
+                      console.log('Navigating to:', item.path);
+                      window.location.href = item.path;
+                    } else if (item.type === "modal" && item.id === "settings") {
                       // Open Settings modal instead of navigating
                       onShowSettings?.();
                     } else {

@@ -1,0 +1,335 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Clear ML Model Cache - Debug Tool</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            max-width: 1200px;
+            margin: 40px auto;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 30px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #2c3e50;
+            margin-bottom: 10px;
+        }
+        .subtitle {
+            color: #7f8c8d;
+            margin-bottom: 30px;
+        }
+        button {
+            background: #e74c3c;
+            color: white;
+            border: none;
+            padding: 15px 30px;
+            font-size: 16px;
+            border-radius: 5px;
+            cursor: pointer;
+            margin-right: 10px;
+            margin-bottom: 10px;
+        }
+        button:hover {
+            background: #c0392b;
+        }
+        button.success {
+            background: #27ae60;
+        }
+        button.success:hover {
+            background: #229954;
+        }
+        button.info {
+            background: #3498db;
+        }
+        button.info:hover {
+            background: #2980b9;
+        }
+        #console {
+            background: #1e1e1e;
+            color: #d4d4d4;
+            padding: 20px;
+            border-radius: 5px;
+            margin-top: 20px;
+            min-height: 300px;
+            max-height: 600px;
+            overflow-y: auto;
+            font-family: 'Courier New', monospace;
+            font-size: 13px;
+            line-height: 1.5;
+        }
+        .log-entry {
+            margin: 5px 0;
+            white-space: pre-wrap;
+            word-break: break-word;
+        }
+        .log-success { color: #4ec9b0; }
+        .log-error { color: #f48771; }
+        .log-warn { color: #dcdcaa; }
+        .log-info { color: #569cd6; }
+        .log-debug { color: #9cdcfe; }
+        .status {
+            padding: 10px 15px;
+            border-radius: 5px;
+            margin: 10px 0;
+            display: none;
+        }
+        .status.success {
+            background: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+            display: block;
+        }
+        .status.error {
+            background: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+            display: block;
+        }
+        .status.info {
+            background: #d1ecf1;
+            color: #0c5460;
+            border: 1px solid #bee5eb;
+            display: block;
+        }
+        .instructions {
+            background: #fff3cd;
+            border: 1px solid #ffeaa7;
+            padding: 15px;
+            border-radius: 5px;
+            margin: 20px 0;
+        }
+        .instructions h3 {
+            margin-top: 0;
+            color: #856404;
+        }
+        .instructions ol {
+            margin: 10px 0;
+            padding-left: 20px;
+        }
+        .instructions li {
+            margin: 8px 0;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🧹 ML Model Cache Cleaner</h1>
+        <p class="subtitle">Debug tool for clearing TensorFlow.js model cache and localStorage metadata</p>
+
+        <div class="instructions">
+            <h3>📋 Instructions:</h3>
+            <ol>
+                <li><strong>Clear Cache:</strong> Click the "Clear ML Cache" button below</li>
+                <li><strong>Open Main App:</strong> Navigate to <a href="http://localhost:3001" target="_blank">http://localhost:3001</a> in a new tab</li>
+                <li><strong>Start Training:</strong> Click the training button (❌ トレーニング必要 or 🔄 再トレーニング開始)</li>
+                <li><strong>Monitor Console:</strong> Watch the browser console and this debug panel for output</li>
+                <li><strong>Check for MSE:</strong> Look for "🔧 Using Mean Squared Error loss for improved numerical stability"</li>
+                <li><strong>Verify Loss:</strong> Confirm that loss values are valid numbers (not NaN)</li>
+            </ol>
+        </div>
+
+        <div>
+            <button onclick="clearMLCache()">🧹 Clear ML Cache</button>
+            <button class="info" onclick="inspectCache()">🔍 Inspect Current Cache</button>
+            <button class="success" onclick="window.open('http://localhost:3001', '_blank')">🚀 Open Main App</button>
+            <button class="info" onclick="clearConsole()">🗑️ Clear Console</button>
+        </div>
+
+        <div id="status"></div>
+
+        <div id="console"></div>
+    </div>
+
+    <script>
+        const consoleDiv = document.getElementById('console');
+        const statusDiv = document.getElementById('status');
+
+        function log(message, type = 'info') {
+            const entry = document.createElement('div');
+            entry.className = `log-entry log-${type}`;
+
+            const timestamp = new Date().toLocaleTimeString('en-US', {
+                hour12: false,
+                hour: '2-digit',
+                minute: '2-digit',
+                second: '2-digit',
+                fractionalSecondDigits: 3
+            });
+
+            entry.textContent = `[${timestamp}] ${message}`;
+            consoleDiv.appendChild(entry);
+            consoleDiv.scrollTop = consoleDiv.scrollHeight;
+
+            // Also log to browser console
+            console.log(message);
+        }
+
+        function showStatus(message, type = 'info') {
+            statusDiv.className = `status ${type}`;
+            statusDiv.textContent = message;
+        }
+
+        function clearConsole() {
+            consoleDiv.innerHTML = '';
+            statusDiv.className = 'status';
+            log('Console cleared', 'info');
+        }
+
+        async function clearMLCache() {
+            log('🚀 Starting ML cache clearing process...', 'info');
+            let totalCleared = 0;
+
+            try {
+                // Clear IndexedDB for TensorFlow.js
+                log('🗄️ Attempting to delete tensorflowjs IndexedDB...', 'info');
+
+                const dbDeleted = await new Promise((resolve) => {
+                    const deleteRequest = indexedDB.deleteDatabase('tensorflowjs');
+
+                    deleteRequest.onsuccess = () => {
+                        log('✅ Successfully deleted tensorflowjs IndexedDB', 'success');
+                        totalCleared++;
+                        resolve(true);
+                    };
+
+                    deleteRequest.onerror = (event) => {
+                        log(`⚠️ Could not delete IndexedDB: ${event.target.error}`, 'warn');
+                        resolve(false);
+                    };
+
+                    deleteRequest.onblocked = () => {
+                        log('⚠️ IndexedDB deletion blocked (close all tabs using the database)', 'warn');
+                        resolve(false);
+                    };
+                });
+
+                // Clear localStorage metadata
+                log('🗃️ Clearing localStorage metadata...', 'info');
+                const keysToRemove = [
+                    'ml_model_metadata',
+                    'ml_last_training_check',
+                    'ml_training_history',
+                    'ml_model_version',
+                    'ml_last_training_date',
+                    'tensorflow_model_info',
+                    'model_config'
+                ];
+
+                let clearedKeys = [];
+                keysToRemove.forEach(key => {
+                    if (localStorage.getItem(key) !== null) {
+                        localStorage.removeItem(key);
+                        clearedKeys.push(key);
+                        totalCleared++;
+                    }
+                });
+
+                if (clearedKeys.length > 0) {
+                    log(`✅ Cleared localStorage keys: ${clearedKeys.join(', ')}`, 'success');
+                } else {
+                    log('ℹ️ No localStorage keys found to clear', 'info');
+                }
+
+                // Check for any other IndexedDB databases
+                log('🔍 Checking for other IndexedDB databases...', 'info');
+                if (window.indexedDB.databases) {
+                    const databases = await indexedDB.databases();
+                    log(`📊 Found ${databases.length} IndexedDB database(s):`, 'info');
+                    databases.forEach(db => {
+                        log(`   - ${db.name} (version: ${db.version})`, 'debug');
+                    });
+                } else {
+                    log('ℹ️ indexedDB.databases() not supported in this browser', 'info');
+                }
+
+                // Summary
+                log('', 'info');
+                log('═══════════════════════════════════════════════════', 'success');
+                log(`🎉 Cache clearing complete! Cleared ${totalCleared} item(s)`, 'success');
+                log('═══════════════════════════════════════════════════', 'success');
+                log('', 'info');
+                log('📝 Next steps:', 'info');
+                log('   1. Navigate to http://localhost:3001 (or refresh if already open)', 'info');
+                log('   2. Click the training button (❌ トレーニング必要)', 'info');
+                log('   3. Watch for "🔧 Using Mean Squared Error loss" message', 'info');
+                log('   4. Verify that loss values are valid numbers (not NaN)', 'info');
+                log('', 'info');
+
+                showStatus('✅ ML cache cleared successfully! Ready for fresh model training.', 'success');
+
+            } catch (error) {
+                log(`❌ Error during cache clearing: ${error.message}`, 'error');
+                log(`Stack trace: ${error.stack}`, 'error');
+                showStatus(`❌ Error: ${error.message}`, 'error');
+            }
+        }
+
+        async function inspectCache() {
+            log('🔍 Inspecting current cache state...', 'info');
+            log('', 'info');
+
+            try {
+                // Check IndexedDB
+                log('📊 IndexedDB Status:', 'info');
+                if (window.indexedDB.databases) {
+                    const databases = await indexedDB.databases();
+                    if (databases.length === 0) {
+                        log('   ✓ No IndexedDB databases found (clean)', 'success');
+                    } else {
+                        log(`   ⚠️ Found ${databases.length} database(s):`, 'warn');
+                        databases.forEach(db => {
+                            log(`      - ${db.name} (version: ${db.version})`, 'debug');
+                        });
+                    }
+                } else {
+                    log('   ℹ️ indexedDB.databases() not supported', 'info');
+                }
+
+                // Check localStorage
+                log('', 'info');
+                log('🗃️ localStorage Status:', 'info');
+                const mlKeys = Object.keys(localStorage).filter(key =>
+                    key.toLowerCase().includes('ml') ||
+                    key.toLowerCase().includes('tensor') ||
+                    key.toLowerCase().includes('model')
+                );
+
+                if (mlKeys.length === 0) {
+                    log('   ✓ No ML-related localStorage keys found (clean)', 'success');
+                } else {
+                    log(`   ⚠️ Found ${mlKeys.length} ML-related key(s):`, 'warn');
+                    mlKeys.forEach(key => {
+                        const value = localStorage.getItem(key);
+                        const preview = value.length > 100 ? value.substring(0, 100) + '...' : value;
+                        log(`      - ${key}: ${preview}`, 'debug');
+                    });
+                }
+
+                log('', 'info');
+                log('✅ Cache inspection complete', 'success');
+                showStatus('Cache inspection complete - see console for details', 'info');
+
+            } catch (error) {
+                log(`❌ Error during inspection: ${error.message}`, 'error');
+                showStatus(`❌ Error: ${error.message}`, 'error');
+            }
+        }
+
+        // Initial inspection on load
+        window.addEventListener('load', () => {
+            log('🔧 ML Cache Cleaner Tool Loaded', 'info');
+            log('Ready to clear TensorFlow.js model cache and localStorage metadata', 'info');
+            log('', 'info');
+            inspectCache();
+        });
+    </script>
+</body>
+</html>

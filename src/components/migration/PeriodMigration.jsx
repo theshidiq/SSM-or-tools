@@ -173,7 +173,8 @@ export const PeriodMigration = ({ onMigrationComplete }) => {
     };
 
     performMigration();
-  }, [onMigrationComplete]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // Empty dependency array - only run once on mount
 
   // Silent migration - don't show any UI during migration
   // This eliminates the first loading message the user sees

@@ -10,6 +10,7 @@ import { TensorFlowScheduler } from "../ml/TensorFlowScheduler";
 import { validateAllConstraints } from "../constraints/ConstraintEngine";
 import { extractAllDataForAI } from "../utils/DataExtractor";
 import { BusinessRuleValidator } from "./BusinessRuleValidator";
+import { calculatePatternStability } from "../core/PatternRecognizer";
 
 export class HybridPredictor {
   constructor() {
@@ -94,7 +95,7 @@ export class HybridPredictor {
         ...options,
       };
 
-      // Initialize intelligent decision engine
+      // Initialize intelligent decision engine with Phase 3 adaptive thresholds
       this.decisionEngine = {
         totalDecisions: 0,
         mlSuccessRate: 0,
@@ -104,6 +105,23 @@ export class HybridPredictor {
           high: this.options.mlConfidenceThreshold,
           medium: this.options.mlMediumConfidenceThreshold,
           low: this.options.mlLowConfidenceThreshold,
+        },
+        // PHASE 3: Pattern-based threshold adaptation
+        patternBasedAdjustments: {
+          enabled: true,
+          stabilityBonus: 0.05, // Bonus for high stability patterns
+          instabilityPenalty: 0.03, // Penalty for unstable patterns
+          minThreshold: 0.5, // Never go below 50% confidence
+          maxThreshold: 0.95, // Never require more than 95% confidence
+          adjustmentHistory: [],
+        },
+        // PHASE 3: Learning from corrections
+        correctionLearning: {
+          enabled: true,
+          recentCorrections: [],
+          maxHistory: 100,
+          successPatterns: new Map(),
+          failurePatterns: new Map(),
         },
       };
 
@@ -1006,12 +1024,100 @@ export class HybridPredictor {
   // ============================================================================
 
   /**
-   * Assess ML confidence based on accuracy and prediction quality
+   * PHASE 3: Calculate adaptive confidence thresholds based on pattern stability
+   * @param {Object} staffProfiles - Staff profiles with pattern memory
+   * @returns {Object} Adjusted thresholds
+   */
+  calculateAdaptiveThresholds(staffProfiles) {
+    if (!this.decisionEngine.patternBasedAdjustments.enabled) {
+      return this.decisionEngine.adaptiveThresholds;
+    }
+
+    let totalStability = 0;
+    let staffCount = 0;
+
+    // Calculate average pattern stability across all staff
+    if (staffProfiles) {
+      Object.values(staffProfiles).forEach((profile) => {
+        if (profile?.hasPatternMemory && profile?.patternMemory?.stability) {
+          totalStability += profile.patternMemory.stability.stabilityScore;
+          staffCount++;
+        }
+      });
+    }
+
+    if (staffCount === 0) {
+      return this.decisionEngine.adaptiveThresholds;
+    }
+
+    const avgStability = totalStability / staffCount;
+    const { stabilityBonus, instabilityPenalty, minThreshold, maxThreshold } =
+      this.decisionEngine.patternBasedAdjustments;
+
+    // Adjust thresholds based on pattern stability
+    let adjustment = 0;
+    if (avgStability >= 80) {
+      // High stability: lower thresholds (more confident in predictions)
+      adjustment = -stabilityBonus;
+    } else if (avgStability < 60) {
+      // Low stability: raise thresholds (require higher confidence)
+      adjustment = instabilityPenalty;
+    }
+
+    const adjustedThresholds = {
+      high: Math.max(
+        minThreshold,
+        Math.min(
+          maxThreshold,
+          this.options.mlConfidenceThreshold + adjustment,
+        ),
+      ),
+      medium: Math.max(
+        minThreshold,
+        Math.min(
+          maxThreshold,
+          this.options.mlMediumConfidenceThreshold + adjustment,
+        ),
+      ),
+      low: Math.max(
+        minThreshold,
+        Math.min(
+          maxThreshold,
+          this.options.mlLowConfidenceThreshold + adjustment,
+        ),
+      ),
+    };
+
+    // Log adjustment if significant
+    if (Math.abs(adjustment) > 0.01) {
+      console.log(`🎯 [PHASE-3] Adaptive thresholds: avgStability=${avgStability.toFixed(1)}, adjustment=${(adjustment * 100).toFixed(1)}%`);
+      console.log(`   High: ${this.options.mlConfidenceThreshold.toFixed(2)} → ${adjustedThresholds.high.toFixed(2)}`);
+    }
+
+    // Store adjustment in history
+    this.decisionEngine.patternBasedAdjustments.adjustmentHistory.push({
+      timestamp: Date.now(),
+      avgStability,
+      adjustment,
+      thresholds: adjustedThresholds,
+    });
+
+    // Keep only last 50 adjustments
+    if (this.decisionEngine.patternBasedAdjustments.adjustmentHistory.length > 50) {
+      this.decisionEngine.patternBasedAdjustments.adjustmentHistory.shift();
+    }
+
+    return adjustedThresholds;
+  }
+
+  /**
+   * PHASE 2/3: Assess ML confidence based on accuracy, prediction quality, and pattern stability
    * @param {number} accuracy - Model accuracy score
    * @param {Object} predictions - ML predictions result
+   * @param {Object} staffProfiles - Optional staff profiles with pattern memory (Phase 2)
    * @returns {string} Confidence level: 'high', 'medium', 'low', or 'none'
    */
-  assessMLConfidence(accuracy, predictions) {
+  assessMLConfidence(accuracy, predictions, staffProfiles = null) {
     if (!predictions || !predictions.predictions || accuracy <= 0) {
       return "none";
     }
@@ -1034,14 +1140,46 @@ export class HybridPredictor {
     const avgPredictionConfidence =
       confidenceCount > 0 ? totalConfidence / confidenceCount : 0;
 
-    // Assess overall confidence level
-    const combinedScore = accuracy * 0.7 + avgPredictionConfidence * 0.3;
+    // PHASE 2: Calculate pattern stability boost
+    let patternStabilityBoost = 0;
+    if (staffProfiles) {
+      let totalStabilityScore = 0;
+      let staffWithStability = 0;
 
-    if (combinedScore >= this.options.mlConfidenceThreshold) {
+      Object.keys(predictions.predictions).forEach((staffId) => {
+        const profile = staffProfiles[staffId];
+        if (profile?.hasPatternMemory && profile?.patternMemory?.stability) {
+          totalStabilityScore += profile.patternMemory.stability.stabilityScore;
+          staffWithStability++;
+        }
+      });
+
+      if (staffWithStability > 0) {
+        const avgStability = totalStabilityScore / staffWithStability;
+        // Convert 0-100 stability score to 0-0.1 boost
+        patternStabilityBoost = (avgStability / 100) * 0.1;
+
+        if (patternStabilityBoost > 0.05) {
+          console.log(`🧠 [PHASE-2] Pattern stability boost: +${(patternStabilityBoost * 100).toFixed(1)}% (${staffWithStability} staff with stable patterns)`);
+        }
+      }
+    }
+
+    // PHASE 2: Enhanced combined score with pattern stability
+    // Base: 70% model accuracy, 25% prediction confidence, 5% pattern stability
+    const combinedScore =
+      accuracy * 0.7 +
+      avgPredictionConfidence * 0.25 +
+      patternStabilityBoost;
+
+    // PHASE 3: Use adaptive thresholds instead of static ones
+    const adaptiveThresholds = this.calculateAdaptiveThresholds(staffProfiles);
+
+    if (combinedScore >= adaptiveThresholds.high) {
       return "high";
-    } else if (combinedScore >= this.options.mlMediumConfidenceThreshold) {
+    } else if (combinedScore >= adaptiveThresholds.medium) {
       return "medium";
-    } else if (combinedScore >= this.options.mlLowConfidenceThreshold) {
+    } else if (combinedScore >= adaptiveThresholds.low) {
       return "low";
     }
 
@@ -1327,6 +1465,104 @@ export class HybridPredictor {
         staffMembers,
         dateRange,
       );
+    }
+  }
+
+  /**
+   * PHASE 3: Pattern-aware fallback prediction for individual staff/date
+   * @param {Object} staffProfile - Staff profile with pattern memory
+   * @param {string} dateKey - Date key for prediction
+   * @returns {string} Fallback shift prediction
+   */
+  getPatternAwareFallback(staffProfile, dateKey) {
+    if (!staffProfile?.hasPatternMemory) {
+      // No pattern memory - return neutral default
+      return staffProfile?.status === "社員" ? "" : "○";
+    }
+
+    const { patternMemory } = staffProfile;
+    const targetDate = new Date(dateKey);
+
+    // Try weekly position prediction first (most reliable)
+    const weeklyPosition = targetDate.getDay();
+    const weeklyPrediction =
+      patternMemory.weeklyPositionPatterns.predictions[weeklyPosition];
+
+    if (weeklyPrediction && weeklyPrediction.confidence > 0.6) {
+      console.log(
+        `🎯 [PHASE-3] Using weekly pattern fallback for ${staffProfile.name}: ${weeklyPrediction.shift} (confidence: ${weeklyPrediction.confidence.toFixed(2)})`,
+      );
+      return weeklyPrediction.shift;
+    }
+
+    // Try transition matrix prediction
+    if (patternMemory.transitionMatrix?.matrix) {
+      const recentShifts = [];
+      Object.keys(staffProfile.shiftHistory)
+        .sort()
+        .reverse()
+        .forEach((monthIndex) => {
+          const monthSchedule = staffProfile.shiftHistory[monthIndex];
+          Object.keys(monthSchedule)
+            .sort()
+            .reverse()
+            .forEach((date) => {
+              if (date < dateKey && recentShifts.length < 3) {
+                recentShifts.push(monthSchedule[date]);
+              }
+            });
+        });
+
+      if (recentShifts.length > 0) {
+        const lastShift = recentShifts[0];
+        const lastShiftIndex = this.shiftToIndex(lastShift, staffProfile);
+        const transitionProbs = patternMemory.transitionMatrix.matrix[lastShiftIndex];
+
+        if (transitionProbs) {
+          const maxProb = Math.max(...transitionProbs);
+          const predictedIndex = transitionProbs.indexOf(maxProb);
+
+          if (maxProb > 0.4) {
+            const predictedShift = this.indexToShift(predictedIndex, staffProfile);
+            console.log(
+              `🎯 [PHASE-3] Using transition matrix fallback for ${staffProfile.name}: ${predictedShift} (prob: ${maxProb.toFixed(2)})`,
+            );
+            return predictedShift;
+          }
+        }
+      }
+    }
+
+    // Default fallback based on staff type
+    return staffProfile.status === "社員" ? "" : "○";
+  }
+
+  /**
+   * PHASE 3: Helper to convert shift to numeric index
+   */
+  shiftToIndex(shift, staffProfile) {
+    if (!shift || shift === "" || shift === "×") return 0; // Off
+    if (shift === "○" || (shift === "" && staffProfile.status === "社員")) return 1; // Normal
+    if (shift === "△") return 2; // Early
+    if (shift === "▽" || shift === "◇") return 3; // Late
+    return 1; // Default to normal
+  }
+
+  /**
+   * PHASE 3: Helper to convert numeric index to shift
+   */
+  indexToShift(index, staffProfile) {
+    switch (index) {
+      case 0:
+        return "×"; // Off
+      case 1:
+        return staffProfile.status === "社員" ? "" : "○"; // Normal
+      case 2:
+        return "△"; // Early
+      case 3:
+        return "▽"; // Late
+      default:
+        return staffProfile.status === "社員" ? "" : "○"; // Default normal
     }
   }
 

@@ -188,6 +188,7 @@ type PriorityRule struct {
 	ID               string                 `json:"id"`
 	RestaurantID     string                 `json:"restaurant_id"`     // Fixed: Match Supabase snake_case
 	VersionID        string                 `json:"version_id"`        // Fixed: Match Supabase snake_case
+	StaffID          *string                `json:"staff_id"`          // ✅ FIX: Added to read from database column
 	Name             string                 `json:"name"`
 	Description      string                 `json:"description"`
 	PriorityLevel    int                    `json:"priority_level"`    // Fixed: Match Supabase snake_case
@@ -228,40 +229,94 @@ func (pr *PriorityRule) ToReactFormat() map[string]interface{} {
 	log.Printf("🔍 [ToReactFormat] Rule '%s': RuleDefinition length = %d", pr.Name, len(pr.RuleDefinition))
 	log.Printf("🔍 [ToReactFormat] RuleDefinition content: %+v", pr.RuleDefinition)
 
+	// ✅ FIX: Extract staffId from direct StaffID field FIRST (database column takes priority)
+	if pr.StaffID != nil {
+		result["staffId"] = *pr.StaffID
+		log.Printf("✅ [ToReactFormat] Extracted staffId from direct StaffID field: %v", *pr.StaffID)
+	}
+
 	if len(pr.RuleDefinition) > 0 {
 		defMap := pr.RuleDefinition
 
-		// Extract staff_id → staffId
-		if staffID, exists := defMap["staff_id"]; exists {
-			result["staffId"] = staffID
-			log.Printf("✅ [ToReactFormat] Extracted staffId: %v", staffID)
-		} else {
-			log.Printf("⚠️ [ToReactFormat] staff_id NOT FOUND in RuleDefinition")
+		// Fallback: Extract staffId from JSONB only if not already set from direct field
+		if _, exists := result["staffId"]; !exists {
+			if staffID, exists := defMap["staff_id"]; exists {
+				result["staffId"] = staffID
+				log.Printf("✅ [ToReactFormat] Extracted staffId from JSONB staff_id: %v", staffID)
+			} else if staffID, exists := defMap["staffId"]; exists {
+				result["staffId"] = staffID
+				log.Printf("✅ [ToReactFormat] Extracted staffId from JSONB staffId: %v", staffID)
+			} else {
+				log.Printf("⚠️ [ToReactFormat] staffId NOT FOUND in RuleDefinition (checked both staff_id and staffId)")
+			}
 		}
 
-		// Extract type → ruleType
+		// ✅ NEW: Extract staffIds ARRAY from JSONB (multiple staff member support)
+		// This is the PRIMARY field - React expects staffIds array for multiple staff members
+		if staffIDs, exists := defMap["staff_ids"]; exists {
+			result["staffIds"] = staffIDs
+			log.Printf("✅ [ToReactFormat] Extracted staffIds array from JSONB staff_ids: %v", staffIDs)
+		} else if staffIDs, exists := defMap["staffIds"]; exists {
+			result["staffIds"] = staffIDs
+			log.Printf("✅ [ToReactFormat] Extracted staffIds array from JSONB staffIds: %v", staffIDs)
+		} else if staffID, exists := result["staffId"]; exists && staffID != nil {
+			// Fallback: Convert single staffId to array for consistency
+			result["staffIds"] = []interface{}{staffID}
+			log.Printf("✅ [ToReactFormat] Converted single staffId to array: %v", []interface{}{staffID})
+		} else {
+			log.Printf("⚠️ [ToReactFormat] staffIds array NOT FOUND in RuleDefinition - rule will have no staff members")
+		}
+
+		// Extract type or ruleType → ruleType
 		if ruleType, exists := defMap["type"]; exists {
 			result["ruleType"] = ruleType
+			log.Printf("✅ [ToReactFormat] Extracted ruleType from type: %v", ruleType)
+		} else if ruleType, exists := defMap["ruleType"]; exists {
+			result["ruleType"] = ruleType
+			log.Printf("✅ [ToReactFormat] Extracted ruleType from ruleType: %v", ruleType)
 		}
 
-		// Extract preference_strength → preferenceStrength
+		// Extract preference_strength or preferenceStrength → preferenceStrength
 		if prefStrength, exists := defMap["preference_strength"]; exists {
+			result["preferenceStrength"] = prefStrength
+		} else if prefStrength, exists := defMap["preferenceStrength"]; exists {
 			result["preferenceStrength"] = prefStrength
 		}
 
-		// Extract nested conditions object
+		// ✅ FIX: Handle both flat structure (from React) and nested conditions object (from old data)
+		// Try flat structure first (current format from React)
+		if shiftType, exists := defMap["shiftType"]; exists {
+			result["shiftType"] = shiftType
+			log.Printf("✅ [ToReactFormat] Extracted shiftType from flat structure: %v", shiftType)
+		} else if shiftType, exists := defMap["shift_type"]; exists {
+			result["shiftType"] = shiftType
+			log.Printf("✅ [ToReactFormat] Extracted shiftType from flat snake_case: %v", shiftType)
+		}
+
+		if daysOfWeek, exists := defMap["daysOfWeek"]; exists {
+			result["daysOfWeek"] = daysOfWeek
+			log.Printf("✅ [ToReactFormat] Extracted daysOfWeek from flat structure: %v", daysOfWeek)
+		} else if daysOfWeek, exists := defMap["day_of_week"]; exists {
+			result["daysOfWeek"] = daysOfWeek
+			log.Printf("✅ [ToReactFormat] Extracted daysOfWeek from flat snake_case: %v", daysOfWeek)
+		}
+
+		// Also try nested conditions object (for backward compatibility with old data format)
 		if conditions, exists := defMap["conditions"]; exists {
 			if condMap, condOk := conditions.(map[string]interface{}); condOk {
-				// Extract shift_type → shiftType
-				if shiftType, shiftExists := condMap["shift_type"]; shiftExists {
-					result["shiftType"] = shiftType
-					log.Printf("✅ [ToReactFormat] Extracted shiftType: %v", shiftType)
+				// Only override if not already set from flat structure
+				if result["shiftType"] == nil {
+					if shiftType, shiftExists := condMap["shift_type"]; shiftExists {
+						result["shiftType"] = shiftType
+						log.Printf("✅ [ToReactFormat] Extracted shiftType from nested conditions: %v", shiftType)
+					}
 				}
 
-				// Extract day_of_week → daysOfWeek
-				if dayOfWeek, dayExists := condMap["day_of_week"]; dayExists {
-					result["daysOfWeek"] = dayOfWeek
-					log.Printf("✅ [ToReactFormat] Extracted daysOfWeek: %v", dayOfWeek)
+				if result["daysOfWeek"] == nil {
+					if dayOfWeek, dayExists := condMap["day_of_week"]; dayExists {
+						result["daysOfWeek"] = dayOfWeek
+						log.Printf("✅ [ToReactFormat] Extracted daysOfWeek from nested conditions: %v", dayOfWeek)
+					}
 				}
 			}
 		}
@@ -394,8 +449,9 @@ func (s *StaffSyncServer) fetchActiveConfigVersion() (*ConfigVersion, error) {
 }
 
 // fetchStaffGroups retrieves staff groups for a specific version
+// 🔧 FIX: Removed is_active filter to include soft-deleted groups in client state
 func (s *StaffSyncServer) fetchStaffGroups(versionID string) ([]StaffGroup, error) {
-	url := fmt.Sprintf("%s/rest/v1/staff_groups?version_id=eq.%s&is_active=eq.true&select=*",
+	url := fmt.Sprintf("%s/rest/v1/staff_groups?version_id=eq.%s&select=*",
 		s.supabaseURL, versionID)
 
 	req, err := http.NewRequest("GET", url, nil)
@@ -440,8 +496,9 @@ func (s *StaffSyncServer) fetchStaffGroups(versionID string) ([]StaffGroup, erro
 }
 
 // fetchDailyLimits retrieves daily limits for a specific version
+// 🔧 FIX: Removed is_active filter to include soft-deleted limits in client state
 func (s *StaffSyncServer) fetchDailyLimits(versionID string) ([]DailyLimit, error) {
-	url := fmt.Sprintf("%s/rest/v1/daily_limits?version_id=eq.%s&is_active=eq.true&select=*",
+	url := fmt.Sprintf("%s/rest/v1/daily_limits?version_id=eq.%s&select=*",
 		s.supabaseURL, versionID)
 
 	req, err := http.NewRequest("GET", url, nil)
@@ -476,7 +533,8 @@ func (s *StaffSyncServer) fetchDailyLimits(versionID string) ([]DailyLimit, erro
 
 // fetchMonthlyLimits retrieves monthly limits for a specific version
 func (s *StaffSyncServer) fetchMonthlyLimits(versionID string) ([]MonthlyLimit, error) {
-	url := fmt.Sprintf("%s/rest/v1/monthly_limits?version_id=eq.%s&is_active=eq.true&select=*",
+	// 🔧 FIX: Removed is_active filter to include soft-deleted items in client state
+	url := fmt.Sprintf("%s/rest/v1/monthly_limits?version_id=eq.%s&select=*",
 		s.supabaseURL, versionID)
 
 	req, err := http.NewRequest("GET", url, nil)
@@ -511,9 +569,9 @@ func (s *StaffSyncServer) fetchMonthlyLimits(versionID string) ([]MonthlyLimit, 
 
 // fetchPriorityRules retrieves priority rules for a specific version
 func (s *StaffSyncServer) fetchPriorityRules(versionID string) ([]PriorityRule, error) {
-	// ✅ FIX: Add ORDER BY created_at DESC to fetch the LATEST rules
-	// This prevents fetching stale/skeleton rules that may be auto-created
-	url := fmt.Sprintf("%s/rest/v1/priority_rules?version_id=eq.%s&is_active=eq.true&select=*&order=created_at.desc",
+	// 🔧 FIX: Removed is_active filter to include soft-deleted items in client state
+	// ORDER BY created_at DESC to fetch the LATEST rules (prevents fetching stale/skeleton rules)
+	url := fmt.Sprintf("%s/rest/v1/priority_rules?version_id=eq.%s&select=*&order=created_at.desc",
 		s.supabaseURL, versionID)
 
 	req, err := http.NewRequest("GET", url, nil)
@@ -602,7 +660,8 @@ func (s *StaffSyncServer) fetchSinglePriorityRule(ruleID string, versionID strin
 
 // fetchMLModelConfigs retrieves ML model configurations for a specific version
 func (s *StaffSyncServer) fetchMLModelConfigs(versionID string) ([]MLModelConfig, error) {
-	url := fmt.Sprintf("%s/rest/v1/ml_model_configs?version_id=eq.%s&is_active=eq.true&select=*",
+	// 🔧 FIX: Removed is_active filter to include soft-deleted items in client state
+	url := fmt.Sprintf("%s/rest/v1/ml_model_configs?version_id=eq.%s&select=*",
 		s.supabaseURL, versionID)
 
 	req, err := http.NewRequest("GET", url, nil)
@@ -974,10 +1033,29 @@ func (s *StaffSyncServer) updatePriorityRule(versionID string, ruleData map[stri
 	}
 
 	// Merge top-level fields into rule_definition with proper nested structure
-	// Database expects: { staff_id, conditions: { shift_type, day_of_week } }
-	if staffId, ok := ruleData["staffId"]; ok {
-		ruleDefinition["staff_id"] = staffId
-		log.Printf("🔍 [updatePriorityRule] Merging staffId: %v", staffId)
+	// ✅ NEW: Support multiple staff members via staffIds array
+	// Staff IDs stored in rule_definition.staff_ids JSONB (database has no top-level staff_id column)
+	if staffIds, ok := ruleData["staffIds"].([]interface{}); ok {
+		// New format: staffIds array
+		ruleDefinition["staff_ids"] = staffIds
+		log.Printf("🔍 [updatePriorityRule] Merging staffIds array: %v", staffIds)
+	} else if staffId, ok := ruleData["staffId"]; ok {
+		// Legacy format: single staffId
+		// ✅ FIX: Convert empty string to nil for UUID column validation
+		var staffIdValue interface{}
+		if staffIdStr, isString := staffId.(string); isString && staffIdStr == "" {
+			staffIdValue = nil
+			log.Printf("🔍 [updatePriorityRule] Empty staffId string, setting to nil")
+		} else {
+			staffIdValue = staffId
+		}
+
+		ruleDefinition["staff_id"] = staffIdValue
+		// Also convert single staffId to staff_ids array for new format
+		if staffIdValue != nil {
+			ruleDefinition["staff_ids"] = []interface{}{staffIdValue}
+		}
+		log.Printf("🔍 [updatePriorityRule] Merging legacy staffId to rule_definition: %v", staffIdValue)
 	}
 
 	// Preserve existing conditions object, then merge new fields
@@ -1053,13 +1131,26 @@ func (s *StaffSyncServer) insertPriorityRule(versionID string, ruleData map[stri
 
 	// ✅ VALIDATION: Reject INSERT if critical fields are missing
 	// This prevents NULL rule_definition in database
+
+	// ✅ NEW: Check for BOTH staffIds (array) and staffId (legacy single)
+	staffIds, hasStaffIds := ruleData["staffIds"].([]interface{})
 	staffId, hasStaffId := ruleData["staffId"]
 	shiftType, hasShiftType := ruleData["shiftType"]
 	daysOfWeek, hasDaysOfWeek := ruleData["daysOfWeek"]
 
-	if !hasStaffId || staffId == nil || staffId == "" {
-		log.Printf("❌ [insertPriorityRule] REJECTED: Missing staffId for rule '%s'", ruleData["name"])
-		return fmt.Errorf("priority rule must have staffId (staff member selection required)")
+	// Validate: must have EITHER staffIds array OR legacy staffId
+	hasValidStaff := false
+	if hasStaffIds && len(staffIds) > 0 {
+		hasValidStaff = true
+		log.Printf("✅ [insertPriorityRule] Found staffIds array with %d members", len(staffIds))
+	} else if hasStaffId && staffId != nil && staffId != "" {
+		hasValidStaff = true
+		log.Printf("✅ [insertPriorityRule] Found legacy staffId: %v", staffId)
+	}
+
+	if !hasValidStaff {
+		log.Printf("❌ [insertPriorityRule] REJECTED: Missing staff selection for rule '%s'", ruleData["name"])
+		return fmt.Errorf("priority rule must have staffIds array or staffId (staff member selection required)")
 	}
 
 	if !hasShiftType || shiftType == nil || shiftType == "" {
@@ -1093,9 +1184,39 @@ func (s *StaffSyncServer) insertPriorityRule(versionID string, ruleData map[stri
 
 	// Merge top-level fields into rule_definition with proper nested structure
 	// Database expects: { staff_id, conditions: { shift_type, day_of_week } }
-	if staffId, ok := ruleData["staffId"]; ok {
-		ruleDefinition["staff_id"] = staffId
-		log.Printf("🔍 [insertPriorityRule] Adding staffId: %v", staffId)
+	// ✅ NEW: Support multiple staff members via staffIds array
+	var staffIdForDB interface{}
+	if staffIds, ok := ruleData["staffIds"].([]interface{}); ok {
+		// New format: staffIds array
+		ruleDefinition["staff_ids"] = staffIds
+
+		// For backward compatibility: set top-level staff_id to first member if single staff
+		if len(staffIds) == 1 {
+			staffIdForDB = staffIds[0]
+			log.Printf("🔍 [insertPriorityRule] Adding staffIds array (single): %v", staffIds)
+		} else if len(staffIds) > 1 {
+			staffIdForDB = nil // Multiple staff = no single staff_id
+			log.Printf("🔍 [insertPriorityRule] Adding staffIds array (multiple): %v", staffIds)
+		} else {
+			staffIdForDB = nil // Empty array
+			log.Printf("🔍 [insertPriorityRule] Empty staffIds array")
+		}
+	} else if staffId, ok := ruleData["staffId"]; ok {
+		// Legacy format: single staffId
+		// ✅ FIX: Convert empty string to nil for UUID column validation
+		if staffIdStr, isString := staffId.(string); isString && staffIdStr == "" {
+			staffIdForDB = nil
+			log.Printf("🔍 [insertPriorityRule] Empty staffId string, setting to nil")
+		} else {
+			staffIdForDB = staffId
+		}
+
+		ruleDefinition["staff_id"] = staffIdForDB
+		// Also convert single staffId to staff_ids array for new format
+		if staffIdForDB != nil {
+			ruleDefinition["staff_ids"] = []interface{}{staffIdForDB}
+		}
+		log.Printf("🔍 [insertPriorityRule] Adding legacy staffId: %v", staffIdForDB)
 	}
 
 	// Create conditions object for shift_type and day_of_week
@@ -1127,6 +1248,8 @@ func (s *StaffSyncServer) insertPriorityRule(versionID string, ruleData map[stri
 
 	// Build INSERT payload with all required fields
 	// NOTE: restaurant_id comes from environment variable
+	// ✅ FIX: Removed staff_id - database schema doesn't have this column
+	// Staff IDs are stored in rule_definition.staff_ids JSONB array
 	insertData := map[string]interface{}{
 		"restaurant_id":  "e1661c71-b24f-4ee1-9e8b-7290a43c9575", // Hardcoded from env
 		"version_id":     versionID,
@@ -1402,6 +1525,91 @@ func (s *StaffSyncServer) deleteStaffGroup(versionID string, groupID string) err
 	return nil
 }
 
+// hardDeleteStaffGroup permanently deletes a staff group from the database
+func (s *StaffSyncServer) hardDeleteStaffGroup(versionID string, groupID string) error {
+	// 🔧 FIX #3: Verify item is soft-deleted (is_active=false) before allowing hard delete
+	// This prevents accidental permanent deletion of active items
+	log.Printf("🗑️ [hardDeleteStaffGroup] Starting PERMANENT delete for group: %s", groupID)
+	log.Printf("🗑️ [hardDeleteStaffGroup] Version ID: %s", versionID)
+
+	// Step 1: Fetch the group to verify it's soft-deleted
+	fetchURL := fmt.Sprintf("%s/rest/v1/staff_groups?id=eq.%s&version_id=eq.%s&select=*",
+		s.supabaseURL, groupID, versionID)
+
+	fetchReq, err := http.NewRequest("GET", fetchURL, nil)
+	if err != nil {
+		return fmt.Errorf("failed to create fetch request: %w", err)
+	}
+	fetchReq.Header.Set("Authorization", "Bearer "+s.supabaseKey)
+	fetchReq.Header.Set("apikey", s.supabaseKey)
+
+	client := &http.Client{Timeout: 10 * time.Second}
+	fetchResp, err := client.Do(fetchReq)
+	if err != nil {
+		return fmt.Errorf("failed to fetch group for validation: %w", err)
+	}
+	defer fetchResp.Body.Close()
+
+	fetchBody, _ := io.ReadAll(fetchResp.Body)
+	if fetchResp.StatusCode != http.StatusOK {
+		return fmt.Errorf("failed to fetch group (status %d): %s", fetchResp.StatusCode, string(fetchBody))
+	}
+
+	var groups []StaffGroup
+	if err := json.Unmarshal(fetchBody, &groups); err != nil {
+		return fmt.Errorf("failed to parse group data: %w", err)
+	}
+
+	if len(groups) == 0 {
+		return fmt.Errorf("group not found: %s", groupID)
+	}
+
+	group := groups[0]
+	log.Printf("🔍 [hardDeleteStaffGroup] Group status: is_active=%v", group.IsActive)
+
+	// ✅ FIX #3: Only allow hard delete if group is soft-deleted (is_active=false)
+	if group.IsActive {
+		log.Printf("❌ [hardDeleteStaffGroup] REJECTED: Cannot hard delete active group (is_active=true)")
+		return fmt.Errorf("cannot hard delete active group: must be soft-deleted first (is_active=false)")
+	}
+
+	log.Printf("✅ [hardDeleteStaffGroup] Validation passed: group is soft-deleted, proceeding with permanent delete")
+
+	// Step 2: Proceed with hard delete
+	url := fmt.Sprintf("%s/rest/v1/staff_groups?id=eq.%s&version_id=eq.%s",
+		s.supabaseURL, groupID, versionID)
+	log.Printf("🗑️ [hardDeleteStaffGroup] URL: %s", url)
+
+	req, err := http.NewRequest("DELETE", url, nil)
+	if err != nil {
+		log.Printf("❌ [hardDeleteStaffGroup] Failed to create request: %v", err)
+		return fmt.Errorf("failed to create request: %w", err)
+	}
+
+	req.Header.Set("Authorization", "Bearer "+s.supabaseKey)
+	req.Header.Set("apikey", s.supabaseKey)
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := client.Do(req)
+	if err != nil {
+		log.Printf("❌ [hardDeleteStaffGroup] HTTP request failed: %v", err)
+		return fmt.Errorf("failed to hard delete staff group: %w", err)
+	}
+	defer resp.Body.Close()
+
+	body, _ := io.ReadAll(resp.Body)
+	log.Printf("🗑️ [hardDeleteStaffGroup] Response status: %d", resp.StatusCode)
+	log.Printf("🗑️ [hardDeleteStaffGroup] Response body: %s", string(body))
+
+	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusNoContent {
+		log.Printf("❌ [hardDeleteStaffGroup] Hard delete failed with status %d: %s", resp.StatusCode, string(body))
+		return fmt.Errorf("hard delete failed with status %d: %s", resp.StatusCode, string(body))
+	}
+
+	log.Printf("✅ [hardDeleteStaffGroup] Successfully PERMANENTLY deleted group: %s", groupID)
+	return nil
+}
+
 // insertDailyLimit inserts a new daily limit into the database
 func (s *StaffSyncServer) insertDailyLimit(versionID string, limitData map[string]interface{}) error {
 	url := fmt.Sprintf("%s/rest/v1/daily_limits", s.supabaseURL)
@@ -1523,20 +1731,13 @@ func (s *StaffSyncServer) deletePriorityRule(versionID string, ruleID string) er
 	url := fmt.Sprintf("%s/rest/v1/priority_rules?id=eq.%s&version_id=eq.%s",
 		s.supabaseURL, ruleID, versionID)
 
-	log.Printf("🗑️ [deletePriorityRule] Starting soft-delete for rule: %s", ruleID)
+	log.Printf("🗑️ [deletePriorityRule] Starting HARD DELETE for rule: %s", ruleID)
 	log.Printf("🗑️ [deletePriorityRule] Version ID: %s", versionID)
 	log.Printf("🗑️ [deletePriorityRule] URL: %s", url)
 
-	// Soft delete by setting is_active to false
-	updateData := map[string]interface{}{
-		"is_active":  false,
-		"updated_at": time.Now().UTC().Format(time.RFC3339),
-	}
-
-	jsonData, _ := json.Marshal(updateData)
-	log.Printf("🗑️ [deletePriorityRule] PATCH data: %s", string(jsonData))
-
-	req, err := http.NewRequest("PATCH", url, bytes.NewBuffer(jsonData))
+	// ✅ FIX: Changed from PATCH (soft-delete) to DELETE (hard-delete)
+	// This permanently removes rules from database to prevent NULL staff_id issues
+	req, err := http.NewRequest("DELETE", url, nil)
 	if err != nil {
 		log.Printf("❌ [deletePriorityRule] Failed to create request: %v", err)
 		return fmt.Errorf("failed to create request: %w", err)
@@ -1566,7 +1767,7 @@ func (s *StaffSyncServer) deletePriorityRule(versionID string, ruleID string) er
 		return fmt.Errorf("delete failed with status %d: %s", resp.StatusCode, string(body))
 	}
 
-	log.Printf("✅ [deletePriorityRule] Successfully soft-deleted rule: %s", ruleID)
+	log.Printf("✅ [deletePriorityRule] Successfully HARD-DELETED rule from database: %s", ruleID)
 	return nil
 }
 
@@ -1864,16 +2065,19 @@ func (s *StaffSyncServer) handleSettingsSyncRequest(client *Client, msg *Message
 // handleStaffGroupsUpdate updates a staff group and broadcasts changes
 func (s *StaffSyncServer) handleStaffGroupsUpdate(client *Client, msg *Message) {
 	log.Printf("📊 Processing SETTINGS_UPDATE_STAFF_GROUPS from client %s", client.clientId)
+	log.Printf("🔍 [DEBUG] Payload type: %T", msg.Payload)
 
 	payload, ok := msg.Payload.(map[string]interface{})
 	if !ok {
-		log.Printf("❌ Invalid payload format")
+		log.Printf("❌ Invalid payload format - got type %T", msg.Payload)
 		return
 	}
+	log.Printf("🔍 [DEBUG] Payload keys: %v", getKeys(payload))
 
 	groupData, ok := payload["group"].(map[string]interface{})
 	if !ok {
-		log.Printf("❌ Missing group data")
+		log.Printf("❌ Missing group data - available keys: %v", getKeys(payload))
+		log.Printf("🔍 [DEBUG] Full payload: %+v", payload)
 		return
 	}
 
@@ -2045,11 +2249,35 @@ func (s *StaffSyncServer) handleStaffGroupDelete(client *Client, msg *Message) {
 
 	log.Printf("✅ Successfully deleted staff group: %s", groupID)
 
+	// 🔍 VERIFICATION: Query database to confirm is_active=false BEFORE fetching aggregated settings
+	verifyURL := fmt.Sprintf("%s/rest/v1/staff_groups?id=eq.%s&select=id,name,is_active",
+		s.supabaseURL, groupID)
+	verifyReq, _ := http.NewRequest("GET", verifyURL, nil)
+	verifyReq.Header.Set("Authorization", "Bearer "+s.supabaseKey)
+	verifyReq.Header.Set("apikey", s.supabaseKey)
+	verifyReq.Header.Set("Content-Type", "application/json")
+
+	verifyClient := &http.Client{Timeout: 5 * time.Second}
+	verifyResp, err := verifyClient.Do(verifyReq)
+	if err == nil {
+		defer verifyResp.Body.Close()
+		verifyBody, _ := io.ReadAll(verifyResp.Body)
+		log.Printf("🔍 [VERIFY DELETE] Database state after delete: %s", string(verifyBody))
+	} else {
+		log.Printf("⚠️ [VERIFY DELETE] Failed to verify deletion: %v", err)
+	}
+
 	// Fetch fresh aggregated settings
 	settings, err := s.fetchAggregatedSettings(version.ID)
 	if err != nil {
 		log.Printf("⚠️ Failed to fetch updated settings: %v", err)
 		return
+	}
+
+	// 🔍 LOG: Show how many groups are in the fetched settings
+	log.Printf("🔍 [handleStaffGroupDelete] Fetched %d staff groups after deletion", len(settings.StaffGroups))
+	for i, group := range settings.StaffGroups {
+		log.Printf("🔍 [handleStaffGroupDelete] Group %d: %s (ID: %s, is_active: %v)", i+1, group.Name, group.ID, group.IsActive)
 	}
 
 	// Broadcast updated settings to all clients
@@ -2065,7 +2293,77 @@ func (s *StaffSyncServer) handleStaffGroupDelete(client *Client, msg *Message) {
 	}
 
 	s.broadcastToAll(&freshMsg)
-	log.Printf("📡 Broadcasted group deletion to all clients")
+	log.Printf("📡 Broadcasted group deletion to all clients (containing %d groups)", len(settings.StaffGroups))
+}
+
+// handleStaffGroupHardDelete permanently deletes a staff group and broadcasts changes
+func (s *StaffSyncServer) handleStaffGroupHardDelete(client *Client, msg *Message) {
+	log.Printf("📊 Processing SETTINGS_HARD_DELETE_STAFF_GROUP from client %s", client.clientId)
+
+	payload, ok := msg.Payload.(map[string]interface{})
+	if !ok {
+		log.Printf("❌ Invalid payload format - got type %T", msg.Payload)
+		return
+	}
+
+	groupID, ok := payload["groupId"].(string)
+	if !ok {
+		log.Printf("❌ Missing group ID")
+		return
+	}
+
+	log.Printf("🗑️ [handleStaffGroupHardDelete] Group ID to PERMANENTLY delete: %s", groupID)
+
+	// Get active version
+	version, err := s.fetchActiveConfigVersion()
+	if err != nil {
+		log.Printf("❌ Failed to fetch active version: %v", err)
+		s.sendErrorResponse(client, "Failed to fetch active version", err)
+		return
+	}
+
+	// Check if version is locked
+	if version.IsLocked {
+		log.Printf("⚠️ Version is locked, cannot delete")
+		s.sendErrorResponse(client, "Cannot modify locked version", nil)
+		return
+	}
+
+	// Hard delete staff group from database
+	if err := s.hardDeleteStaffGroup(version.ID, groupID); err != nil {
+		log.Printf("❌ hardDeleteStaffGroup failed: %v", err)
+		s.sendErrorResponse(client, "Failed to permanently delete staff group", err)
+		return
+	}
+
+	// Log change to audit trail
+	if err := s.logConfigChange(version.ID, "staff_groups", "HARD_DELETE", map[string]interface{}{"id": groupID}); err != nil {
+		log.Printf("⚠️ Failed to log config change: %v", err)
+	}
+
+	log.Printf("✅ Successfully PERMANENTLY deleted staff group: %s", groupID)
+
+	// Fetch fresh aggregated settings
+	settings, err := s.fetchAggregatedSettings(version.ID)
+	if err != nil {
+		log.Printf("⚠️ Failed to fetch updated settings: %v", err)
+		return
+	}
+
+	// Broadcast updated settings to all clients
+	freshMsg := Message{
+		Type: "SETTINGS_SYNC_RESPONSE",
+		Payload: map[string]interface{}{
+			"settings": settings,
+			"updated":  "staff_groups",
+			"action":   "hard_deleted",
+		},
+		Timestamp: time.Now(),
+		ClientID:  msg.ClientID,
+	}
+
+	s.broadcastToAll(&freshMsg)
+	log.Printf("📡 Broadcasted hard group deletion to all clients (containing %d groups)", len(settings.StaffGroups))
 }
 
 // handleDailyLimitsUpdate updates a daily limit and broadcasts changes
@@ -2595,8 +2893,13 @@ func (s *StaffSyncServer) handleSettingsReset(client *Client, msg *Message) {
 		return
 	}
 
-	// 4. Insert default settings (placeholder - should be replaced with actual defaults)
-	log.Printf("📝 Note: Using placeholder defaults - implement getDefaultSettings() for production")
+	// 4. Insert default settings
+	log.Printf("📝 Inserting default settings (staff groups, daily limits, monthly limits)...")
+	if err := s.insertDefaultSettings(defaultVersion.ID); err != nil {
+		s.sendErrorResponse(client, "Failed to insert default settings", err)
+		return
+	}
+	log.Printf("✅ Default settings inserted successfully")
 
 	// 5. Activate default version
 	if err := s.activateConfigVersion(defaultVersion.ID); err != nil {
@@ -2632,6 +2935,231 @@ func (s *StaffSyncServer) handleSettingsReset(client *Client, msg *Message) {
 // HELPER FUNCTIONS
 // ============================================================================
 
+// insertDefaultSettings inserts default configuration into a new version
+// This matches the default settings from ConfigurationService.js in the React app
+func (s *StaffSyncServer) insertDefaultSettings(versionID string) error {
+	log.Printf("📝 Inserting default settings for version %s", versionID)
+
+	// Insert 8 default staff groups (matching ConfigurationService.js)
+	defaultGroups := []map[string]interface{}{
+		{
+			"id":          "group1",
+			"name":        "Group 1",
+			"description": "",
+			"color":       "#3B82F6",
+			"members":     []string{"料理長", "井関"},
+		},
+		{
+			"id":          "group2",
+			"name":        "Group 2",
+			"description": "",
+			"color":       "#10B981",
+			"members":     []string{"井岡", "与儀"},
+		},
+		{
+			"id":          "group3",
+			"name":        "Group 3",
+			"description": "",
+			"color":       "#F59E0B",
+			"members":     []string{"田辺", "古館"},
+		},
+		{
+			"id":          "group4",
+			"name":        "Group 4",
+			"description": "",
+			"color":       "#EF4444",
+			"members":     []string{"小池", "岸"},
+		},
+		{
+			"id":          "group5",
+			"name":        "Group 5",
+			"description": "",
+			"color":       "#8B5CF6",
+			"members":     []string{"カマル", "安井"},
+		},
+		{
+			"id":          "group6",
+			"name":        "Group 6",
+			"description": "",
+			"color":       "#EC4899",
+			"members":     []string{"中田"},
+		},
+		{
+			"id":          "group7",
+			"name":        "Group 7",
+			"description": "",
+			"color":       "#14B8A6",
+			"members":     []string{},
+		},
+		{
+			"id":          "group8",
+			"name":        "Group 8",
+			"description": "",
+			"color":       "#F97316",
+			"members":     []string{},
+		},
+	}
+
+	// Insert staff groups using Supabase REST API
+	for i, group := range defaultGroups {
+		// Prepare insert data for staff_groups table
+		insertData := map[string]interface{}{
+			"version_id":  versionID,
+			"group_id":    group["id"],
+			"group_name":  group["name"],
+			"description": group["description"],
+			"color":       group["color"],
+			"members":     group["members"],
+			"is_active":   true,
+		}
+
+		// Convert to JSON
+		jsonData, err := json.Marshal(insertData)
+		if err != nil {
+			return fmt.Errorf("failed to marshal group %d: %w", i, err)
+		}
+
+		// POST to Supabase REST API
+		url := fmt.Sprintf("%s/rest/v1/staff_groups", s.supabaseURL)
+		req, err := http.NewRequest("POST", url, bytes.NewBuffer(jsonData))
+		if err != nil {
+			return fmt.Errorf("failed to create request for group %s: %w", group["id"], err)
+		}
+
+		req.Header.Set("Authorization", "Bearer "+s.supabaseKey)
+		req.Header.Set("apikey", s.supabaseKey)
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Prefer", "return=minimal")
+
+		client := &http.Client{Timeout: 10 * time.Second}
+		resp, err := client.Do(req)
+		if err != nil {
+			return fmt.Errorf("failed to insert group %s: %w", group["id"], err)
+		}
+		defer resp.Body.Close()
+
+		// Check response status
+		if resp.StatusCode != http.StatusCreated && resp.StatusCode != http.StatusOK {
+			body, _ := io.ReadAll(resp.Body)
+			return fmt.Errorf("failed to insert group %s (status %d): %s", group["id"], resp.StatusCode, string(body))
+		}
+
+		log.Printf("  ✅ Inserted staff group: %s", group["name"])
+	}
+
+	// Insert default daily limits (matching ConfigurationService.js)
+	defaultDailyLimits := []map[string]interface{}{
+		{
+			"id":                    "default-daily-limits",
+			"minWorkingStaffPerDay": 3,
+			"maxOffPerDay":          4,
+			"enforceGroupBalance":   true,
+		},
+	}
+
+	for i, limit := range defaultDailyLimits {
+		// Prepare insert data for daily_limits table
+		insertData := map[string]interface{}{
+			"version_id":            versionID,
+			"limit_id":              limit["id"],
+			"min_working_staff":     limit["minWorkingStaffPerDay"],
+			"max_off_per_day":       limit["maxOffPerDay"],
+			"enforce_group_balance": limit["enforceGroupBalance"],
+			"is_active":             true,
+		}
+
+		// Convert to JSON
+		jsonData, err := json.Marshal(insertData)
+		if err != nil {
+			return fmt.Errorf("failed to marshal daily limit %d: %w", i, err)
+		}
+
+		// POST to Supabase REST API
+		url := fmt.Sprintf("%s/rest/v1/daily_limits", s.supabaseURL)
+		req, err := http.NewRequest("POST", url, bytes.NewBuffer(jsonData))
+		if err != nil {
+			return fmt.Errorf("failed to create request for daily limit: %w", err)
+		}
+
+		req.Header.Set("Authorization", "Bearer "+s.supabaseKey)
+		req.Header.Set("apikey", s.supabaseKey)
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Prefer", "return=minimal")
+
+		httpClient := &http.Client{Timeout: 10 * time.Second}
+		resp, err := httpClient.Do(req)
+		if err != nil {
+			return fmt.Errorf("failed to insert daily limit: %w", err)
+		}
+		defer resp.Body.Close()
+
+		// Check response status
+		if resp.StatusCode != http.StatusCreated && resp.StatusCode != http.StatusOK {
+			body, _ := io.ReadAll(resp.Body)
+			return fmt.Errorf("failed to insert daily limit (status %d): %s", resp.StatusCode, string(body))
+		}
+
+		log.Printf("  ✅ Inserted daily limits: min=%d, max_off=%d", limit["minWorkingStaffPerDay"], limit["maxOffPerDay"])
+	}
+
+	// Insert default monthly limit (matching ConfigurationService.js)
+	defaultMonthlyLimits := []map[string]interface{}{
+		{
+			"id":             "default-monthly-limits",
+			"maxOffPerMonth": 8,
+		},
+	}
+
+	for i, limit := range defaultMonthlyLimits {
+		// Prepare insert data for monthly_limits table
+		insertData := map[string]interface{}{
+			"version_id":        versionID,
+			"limit_id":          limit["id"],
+			"max_off_per_month": limit["maxOffPerMonth"],
+			"is_active":         true,
+		}
+
+		// Convert to JSON
+		jsonData, err := json.Marshal(insertData)
+		if err != nil {
+			return fmt.Errorf("failed to marshal monthly limit %d: %w", i, err)
+		}
+
+		// POST to Supabase REST API
+		url := fmt.Sprintf("%s/rest/v1/monthly_limits", s.supabaseURL)
+		req, err := http.NewRequest("POST", url, bytes.NewBuffer(jsonData))
+		if err != nil {
+			return fmt.Errorf("failed to create request for monthly limit: %w", err)
+		}
+
+		req.Header.Set("Authorization", "Bearer "+s.supabaseKey)
+		req.Header.Set("apikey", s.supabaseKey)
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Prefer", "return=minimal")
+
+		httpClient := &http.Client{Timeout: 10 * time.Second}
+		resp, err := httpClient.Do(req)
+		if err != nil {
+			return fmt.Errorf("failed to insert monthly limit: %w", err)
+		}
+		defer resp.Body.Close()
+
+		// Check response status
+		if resp.StatusCode != http.StatusCreated && resp.StatusCode != http.StatusOK {
+			body, _ := io.ReadAll(resp.Body)
+			return fmt.Errorf("failed to insert monthly limit (status %d): %s", resp.StatusCode, string(body))
+		}
+
+		log.Printf("  ✅ Inserted monthly limits: max_off=%d", limit["maxOffPerMonth"])
+	}
+
+	// NO default priority rules - these are user-created only
+	log.Printf("  ℹ️  No priority rules inserted (user-created only)")
+
+	log.Printf("✅ Successfully inserted all default settings")
+	return nil
+}
+
 // sendErrorResponse sends an error message to a specific client
 func (s *StaffSyncServer) sendErrorResponse(client *Client, message string, err error) {
 	errorMsg := Message{
@@ -2651,4 +3179,13 @@ func (s *StaffSyncServer) sendErrorResponse(client *Client, message string, err 
 	if errorBytes, marshalErr := json.Marshal(errorMsg); marshalErr == nil {
 		client.conn.WriteMessage(websocket.TextMessage, errorBytes)
 	}
+}
+
+// Helper function to get keys from a map
+func getKeys(m map[string]interface{}) []string {
+	keys := make([]string, 0, len(m))
+	for k := range m {
+		keys = append(keys, k)
+	}
+	return keys
 }

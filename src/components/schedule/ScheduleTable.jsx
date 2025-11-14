@@ -617,34 +617,44 @@ const ScheduleTable = ({
   // Quick action handlers
   const handleQuickAction = useCallback(
     (action) => {
+      console.log(`🔘 [BULK-TOOLBAR] handleQuickAction called with action: ${action}, selectedCells: ${selectedCells.size}`);
       switch (action) {
         case "copy":
           copySelected();
+          console.log(`📋 [BULK-TOOLBAR] Copy executed`);
           break;
         case "paste":
           pasteToSelected();
+          console.log(`📌 [BULK-TOOLBAR] Paste executed`);
           break;
         case "clear":
           clearSelected();
+          console.log(`🗑️ [BULK-TOOLBAR] Clear executed`);
           break;
         case "early":
+          console.log(`🔵 [BULK-TOOLBAR] Applying early shift (△) to ${selectedCells.size} cells`);
           applyToSelected("△");
+          console.log(`✅ [BULK-TOOLBAR] Early shift applied`);
           break;
         case "normal":
           applyToSelected("○");
+          console.log(`⚪ [BULK-TOOLBAR] Normal shift applied`);
           break;
         case "late":
           applyToSelected("▽");
+          console.log(`🔻 [BULK-TOOLBAR] Late shift applied`);
           break;
         case "off":
+          console.log(`🔴 [BULK-TOOLBAR] Applying day off (×) to ${selectedCells.size} cells`);
           applyToSelected("×");
+          console.log(`✅ [BULK-TOOLBAR] Day off applied`);
           break;
         default:
           break;
       }
       setContextMenu(null);
     },
-    [copySelected, pasteToSelected, clearSelected, applyToSelected],
+    [copySelected, pasteToSelected, clearSelected, applyToSelected, selectedCells.size],
   );
 
   // Handle drag-to-fill events (placeholder for future implementation)
@@ -697,15 +707,21 @@ const ScheduleTable = ({
             {selectedCells.size} cells selected
           </span>
           <button
-            onClick={() => handleQuickAction("copy")}
-            className="p-1 hover:bg-gray-100 rounded"
+            onMouseDown={(e) => {
+              e.preventDefault();
+              handleQuickAction("copy");
+            }}
+            className="p-1 hover:bg-gray-100 rounded focus:outline-none active:bg-gray-200"
             title="Copy (Ctrl+C)"
           >
             <Copy size={16} />
           </button>
           <button
-            onClick={() => handleQuickAction("paste")}
-            className="p-1 hover:bg-gray-100 rounded"
+            onMouseDown={(e) => {
+              e.preventDefault();
+              handleQuickAction("paste");
+            }}
+            className="p-1 hover:bg-gray-100 rounded focus:outline-none active:bg-gray-200"
             title="Paste (Ctrl+V)"
             disabled={!getSelectionStats().hasClipboard}
           >
@@ -720,8 +736,12 @@ const ScheduleTable = ({
           </button>
           <div className="w-px h-6 bg-gray-300 mx-1"></div>
           <button
-            onClick={() => handleQuickAction("off")}
-            className="px-2 py-1 hover:bg-gray-100 rounded font-bold text-red-600"
+            onMouseDown={(e) => {
+              console.log(`🖱️ [BULK-TOOLBAR-BTN] Day Off button mousedown`);
+              e.preventDefault();
+              handleQuickAction("off");
+            }}
+            className="px-2 py-1 hover:bg-gray-100 rounded font-bold text-red-600 focus:outline-none active:bg-gray-200"
             title="Day Off (Press 4)"
             style={{
               fontSize: '1.5rem',
@@ -731,8 +751,12 @@ const ScheduleTable = ({
             ×
           </button>
           <button
-            onClick={() => handleQuickAction("early")}
-            className="px-2 py-1 text-sm hover:bg-gray-100 rounded font-black text-blue-600"
+            onMouseDown={(e) => {
+              console.log(`🖱️ [BULK-TOOLBAR-BTN] Early shift button mousedown`);
+              e.preventDefault();
+              handleQuickAction("early");
+            }}
+            className="px-2 py-1 text-sm hover:bg-gray-100 rounded font-black text-blue-600 focus:outline-none active:bg-gray-200"
             title="Early Shift (Press 1)"
             style={{
               textShadow: '0 0 1px currentColor, 0 0 1px currentColor, 0 0 1px currentColor, 0 0 1px currentColor, 0.5px 0.5px 0 currentColor, -0.5px -0.5px 0 currentColor, 0.5px -0.5px 0 currentColor, -0.5px 0.5px 0 currentColor',
@@ -746,15 +770,21 @@ const ScheduleTable = ({
           </button>
           <div className="w-px h-6 bg-gray-300 mx-1"></div>
           <button
-            onClick={() => handleQuickAction("clear")}
-            className="px-2 py-1 text-sm hover:bg-red-100 rounded text-red-600"
+            onMouseDown={(e) => {
+              e.preventDefault();
+              handleQuickAction("clear");
+            }}
+            className="px-2 py-1 text-sm hover:bg-red-100 rounded text-red-600 focus:outline-none active:bg-red-200"
             title="Clear (Delete)"
           >
             Clear
           </button>
           <button
-            onClick={clearSelection}
-            className="p-1 hover:bg-gray-100 rounded"
+            onMouseDown={(e) => {
+              e.preventDefault();
+              clearSelection();
+            }}
+            className="p-1 hover:bg-gray-100 rounded focus:outline-none active:bg-gray-200"
             title="Close"
           >
             <X size={16} />

@@ -16,6 +16,9 @@ import FormField from "../shared/FormField";
 import Slider from "../shared/Slider";
 import NumberInput from "../shared/NumberInput";
 import ToggleSwitch from "../shared/ToggleSwitch";
+import { ModelTrainingModal } from "../../ai/ModelTrainingModal";
+import { useModelTraining } from "../../../hooks/useModelTraining";
+import { formatPeriodList } from "../../../utils/periodDetection";
 
 // Quality presets with optimized parameters
 const QUALITY_PRESETS = [
@@ -116,6 +119,11 @@ const MLParametersTab = ({ validationErrors = {} }) => {
   const { settings, updateSettings } = useSettings();
 
   const [showAdvanced, setShowAdvanced] = useState(false);
+  const [showTrainingModal, setShowTrainingModal] = useState(false);
+
+  // Model training hook
+  const { modelStatus, periodComparison, getModelInfo } = useModelTraining();
+  const modelInfo = getModelInfo();
 
   const mlConfig = settings?.mlParameters || QUALITY_PRESETS[1].config;
 
@@ -608,6 +616,97 @@ const MLParametersTab = ({ validationErrors = {} }) => {
       {/* Advanced Options */}
       {renderAdvancedOptions()}
 
+      {/* Model Training Section - NEW */}
+      <div className="border-t border-gray-200 pt-6 mt-6">
+        <div className="flex items-center gap-2 mb-4">
+          <Brain size={20} className="text-purple-600" />
+          <h3 className="text-lg font-semibold">🧠 モデルトレーニング</h3>
+        </div>
+
+        <div className="bg-gradient-to-br from-purple-50 to-blue-50 rounded-lg p-6 space-y-4">
+          {/* Model Status */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="bg-white rounded-lg p-4 border border-gray-200">
+              <div className="text-sm text-gray-600 mb-1">モデル状態</div>
+              <div className={`text-lg font-semibold ${
+                modelInfo.status === 'ready' ? 'text-green-600' :
+                modelInfo.status === 'needs_retraining' ? 'text-yellow-600' :
+                'text-red-600'
+              }`}>
+                {modelInfo.message}
+              </div>
+            </div>
+
+            {modelStatus.metadata && (
+              <>
+                <div className="bg-white rounded-lg p-4 border border-gray-200">
+                  <div className="text-sm text-gray-600 mb-1">精度</div>
+                  <div className="text-lg font-semibold text-blue-600">
+                    {(modelStatus.metadata.accuracy * 100).toFixed(1)}%
+                  </div>
+                </div>
+
+                <div className="bg-white rounded-lg p-4 border border-gray-200">
+                  <div className="text-sm text-gray-600 mb-1">使用期間</div>
+                  <div className="text-sm font-medium text-gray-900">
+                    {formatPeriodList(modelStatus.metadata.periodsUsed)}
+                  </div>
+                </div>
+
+                <div className="bg-white rounded-lg p-4 border border-gray-200">
+                  <div className="text-sm text-gray-600 mb-1">トレーニングサンプル</div>
+                  <div className="text-lg font-semibold text-gray-900">
+                    {modelStatus.metadata.trainingSamples?.toLocaleString()}
+                  </div>
+                </div>
+              </>
+            )}
+          </div>
+
+          {/* Period Comparison */}
+          {periodComparison && periodComparison.newPeriods.length > 0 && (
+            <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+              <div className="flex items-center gap-2 mb-2">
+                <AlertCircle size={16} className="text-yellow-600" />
+                <span className="font-medium text-yellow-800">
+                  新しい期間が検出されました
+                </span>
+              </div>
+              <p className="text-sm text-yellow-700">
+                新しい期間: {formatPeriodList(periodComparison.newPeriods)}
+              </p>
+              <p className="text-sm text-yellow-700 mt-1">
+                精度を向上させるために再トレーニングをお勧めします。
+              </p>
+            </div>
+          )}
+
+          {/* Training Info */}
+          <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+            <div className="text-sm text-gray-700 space-y-2">
+              <p>
+                <strong>✅ Phase 2:</strong> パターン記憶 (スタッフごとの傾向を学習)
+              </p>
+              <p>
+                <strong>✅ Phase 3:</strong> 適応AI (動的な信頼度調整)
+              </p>
+              <p className="text-xs text-gray-600 mt-3">
+                トレーニングは一度だけ必要です。モデルは自動的に保存され、新しい期間が追加されるまで再利用されます。
+              </p>
+            </div>
+          </div>
+
+          {/* Training Button */}
+          <button
+            onClick={() => setShowTrainingModal(true)}
+            className="w-full px-6 py-3 bg-gradient-to-r from-purple-600 to-blue-600 text-white rounded-lg hover:from-purple-700 hover:to-blue-700 transition font-medium flex items-center justify-center gap-2"
+          >
+            <Brain size={18} />
+            {modelStatus.needsRetraining ? '🔄 モデルを再トレーニング' : '🚀 モデルトレーニングを開始'}
+          </button>
+        </div>
+      </div>
+
       {/* Error Messages */}
       {Object.keys(validationErrors).length > 0 && (
         <div className="bg-red-50 border border-red-200 rounded-lg p-4 mt-6">
@@ -624,6 +723,12 @@ const MLParametersTab = ({ validationErrors = {} }) => {
           </ul>
         </div>
       )}
+
+      {/* Model Training Modal */}
+      <ModelTrainingModal
+        isOpen={showTrainingModal}
+        onClose={() => setShowTrainingModal(false)}
+      />
     </div>
   );
 };

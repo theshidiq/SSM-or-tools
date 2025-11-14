@@ -76,6 +76,10 @@ const PriorityRulesTab = ({ staffMembers = [], validationErrors = {} }) => {
   // Stores temporary edits until they're synced to server after 500ms of inactivity
   const [editBuffer, setEditBuffer] = useState({}); // { [ruleId]: { name: "...", description: "..." } }
 
+  // ✅ FIX: Local state to store incomplete rules that haven't been synced yet
+  // MUST be declared BEFORE priorityRules memo that uses it
+  const [localIncompleteRules, setLocalIncompleteRules] = useState([]);
+
   // Fix: Memoize derived arrays to prevent unnecessary re-renders
   // Transform WebSocket multi-table format to localStorage-compatible format
   const priorityRules = useMemo(() => {
@@ -84,15 +88,19 @@ const PriorityRulesTab = ({ staffMembers = [], validationErrors = {} }) => {
     // Handle legacy object format - convert to array if needed
     const rulesArray = Array.isArray(rules) ? rules : [];
 
-    return rulesArray.map((rule) => ({
+    const mappedRules = rulesArray.map((rule) => ({
       ...rule,
       // Extract properties from ruleConfig if stored there (multi-table backend)
+      // ✅ FIX: Also check ruleDefinition.conditions for database seed format
       // Otherwise use properties directly, or default to safe values
-      daysOfWeek: rule.daysOfWeek || rule.ruleConfig?.daysOfWeek || [],
+      daysOfWeek: rule.daysOfWeek || rule.ruleDefinition?.conditions?.day_of_week || rule.ruleDefinition?.daysOfWeek || rule.ruleConfig?.daysOfWeek || [],
       targetIds: rule.targetIds || rule.ruleConfig?.targetIds || [],
-      shiftType: rule.shiftType || rule.ruleConfig?.shiftType || "early",
-      ruleType: rule.ruleType || rule.ruleConfig?.ruleType || "preferred_shift",
-      staffId: rule.staffId || rule.ruleConfig?.staffId || "",
+      shiftType: rule.shiftType || rule.ruleDefinition?.conditions?.shift_type || rule.ruleDefinition?.shiftType || rule.ruleConfig?.shiftType || "early",
+      ruleType: rule.ruleType || rule.ruleDefinition?.type || rule.ruleDefinition?.ruleType || rule.ruleConfig?.ruleType || "preferred_shift",
+      // ✅ Support both single staffId (legacy) and staffIds array (new)
+      staffIds: rule.staffIds || rule.ruleDefinition?.staff_ids || (rule.staffId || rule.ruleDefinition?.staff_id ? [rule.staffId || rule.ruleDefinition?.staff_id] : []),
+      // Keep legacy staffId for backward compatibility (will be undefined if using staffIds)
+      staffId: rule.staffIds ? undefined : (rule.staffId || rule.ruleDefinition?.staff_id || ""),
       priorityLevel: rule.priorityLevel ?? rule.ruleConfig?.priorityLevel ?? 4,
       preferenceStrength:
         rule.preferenceStrength ?? rule.ruleConfig?.preferenceStrength ?? 1.0,
@@ -107,7 +115,14 @@ const PriorityRulesTab = ({ staffMembers = [], validationErrors = {} }) => {
       isActive: rule.isActive ?? rule.ruleConfig?.isActive ?? true,
       description: rule.description || rule.ruleConfig?.description || "",
     }));
-  }, [settings?.priorityRules]);
+
+    // ✅ FIX: Filter out soft-deleted rules for display (UI layer filtering)
+    // Keep soft-deleted in settings state but hide from UI
+    const activeRules = mappedRules.filter(rule => rule.isActive !== false && rule.is_active !== false);
+
+    // ✅ FIX: Merge complete rules from server with incomplete local-only rules
+    return [...activeRules, ...localIncompleteRules];
+  }, [settings?.priorityRules, localIncompleteRules]);
 
   // Memoize conflict detection to prevent recalculation (Phase 4.2)
   const detectRuleConflicts = useCallback(
@@ -120,7 +135,12 @@ const PriorityRulesTab = ({ staffMembers = [], validationErrors = {} }) => {
           const rule2 = rules[j];
 
           // Check if rules apply to same staff and have conflicting requirements
-          if (rule1.staffId === rule2.staffId) {
+          // ✅ Support both single staffId and staffIds array
+          const staff1 = rule1.staffIds || (rule1.staffId ? [rule1.staffId] : []);
+          const staff2 = rule2.staffIds || (rule2.staffId ? [rule2.staffId] : []);
+          const hasCommonStaff = staff1.some(id => staff2.includes(id));
+
+          if (hasCommonStaff) {
             // Defensive: Ensure daysOfWeek is an array
             const days1 = Array.isArray(rule1.daysOfWeek)
               ? rule1.daysOfWeek
@@ -161,15 +181,30 @@ const PriorityRulesTab = ({ staffMembers = [], validationErrors = {} }) => {
       const conflicts = detectRuleConflicts(newRules);
       setConflictingRules(conflicts);
 
-      // ✅ NEW FIX: Filter out incomplete rules before syncing to server
-      // Rules must have at least one day selected to be valid
-      const completeRules = newRules.filter((rule) => {
-        const isComplete = rule.daysOfWeek && rule.daysOfWeek.length > 0;
+      // ✅ NEW FIX: Separate incomplete and complete rules
+      const incompleteRules = [];
+      const completeRules = [];
+
+      newRules.forEach((rule) => {
+        // ✅ FIX: A rule is complete only if it has both days AND staff members selected
+        const hasDays = rule.daysOfWeek && rule.daysOfWeek.length > 0;
+        const staffIds = rule.staffIds || (rule.staffId ? [rule.staffId] : []);
+        const hasStaff = staffIds.length > 0;
+        const isComplete = hasDays && hasStaff;
+
         if (!isComplete && rule._isLocalOnly) {
-          console.log(`⏸️ Skipping incomplete rule "${rule.name}" (no days selected) - keeping in UI only`);
+          const missingParts = [];
+          if (!hasDays) missingParts.push('days');
+          if (!hasStaff) missingParts.push('staff members');
+          console.log(`⏸️ Skipping incomplete rule "${rule.name}" (missing: ${missingParts.join(', ')}) - keeping in UI only`);
+          incompleteRules.push(rule);
+        } else {
+          completeRules.push(rule);
         }
-        return isComplete;
       });
+
+      // Store incomplete rules in local state (UI only)
+      setLocalIncompleteRules(incompleteRules);
 
       // ✅ Use functional update to get latest settings without adding to dependencies
       // Only sync complete rules to server/database
@@ -199,16 +234,25 @@ const PriorityRulesTab = ({ staffMembers = [], validationErrors = {} }) => {
   const syncRuleToServer = useCallback(
     (ruleId) => {
       const bufferedUpdates = editBufferRef.current[ruleId];
-      if (!bufferedUpdates) return;
+      if (!bufferedUpdates) {
+        console.log(`⚠️ [syncRuleToServer] No buffered updates for rule ${ruleId}`);
+        return;
+      }
 
       console.log(
         `🔄 [DEBOUNCE] Syncing buffered updates for rule ${ruleId}:`,
         bufferedUpdates,
       );
 
-      const updatedRules = priorityRulesRef.current.map((rule) =>
-        rule.id === ruleId ? { ...rule, ...bufferedUpdates } : rule,
-      );
+      const updatedRules = priorityRulesRef.current.map((rule) => {
+        if (rule.id === ruleId) {
+          const merged = { ...rule, ...bufferedUpdates };
+          console.log(`🔍 [syncRuleToServer] Merged rule:`, merged);
+          console.log(`🔍 [syncRuleToServer] staffIds in merged:`, merged.staffIds);
+          return merged;
+        }
+        return rule;
+      });
 
       updatePriorityRulesImmediate(updatedRules);
 
@@ -273,10 +317,18 @@ const PriorityRulesTab = ({ staffMembers = [], validationErrors = {} }) => {
     });
 
     if (originalRuleData && editingRule) {
-      const updatedRules = priorityRules.map((rule) =>
-        rule.id === editingRule ? originalRuleData : rule,
-      );
-      updatePriorityRules(updatedRules);
+      // ✅ FIX: If canceling an incomplete rule, remove it entirely
+      if (originalRuleData._isLocalOnly && (!originalRuleData.daysOfWeek || originalRuleData.daysOfWeek.length === 0)) {
+        const updatedRules = priorityRules.filter((rule) => rule.id !== editingRule);
+        updatePriorityRules(updatedRules);
+        setLocalIncompleteRules(prev => prev.filter(r => r.id !== editingRule));
+      } else {
+        // Otherwise, restore original data
+        const updatedRules = priorityRules.map((rule) =>
+          rule.id === editingRule ? originalRuleData : rule,
+        );
+        updatePriorityRules(updatedRules);
+      }
     }
     setEditingRule(null);
     setOriginalRuleData(null);
@@ -308,11 +360,11 @@ const PriorityRulesTab = ({ staffMembers = [], validationErrors = {} }) => {
     console.log(`✅ Creating new priority rule skeleton (local UI only, not synced to server yet)`);
 
     const newRule = {
-      id: `priority-rule-${Date.now()}`,
-      name: "New Priority Rule",
+      id: crypto.randomUUID(),
+      name: "",
       description: "",
       ruleType: "preferred_shift",
-      staffId: staffMembers[0]?.id || "",
+      staffIds: [], // Empty array for multiple staff members
       shiftType: "early",
       daysOfWeek: [], // ⚠️ Empty - rule is incomplete, will NOT be synced to server
       // Set high priority defaults (hidden from UI)
@@ -325,7 +377,11 @@ const PriorityRulesTab = ({ staffMembers = [], validationErrors = {} }) => {
       isActive: true,
       _isLocalOnly: true, // ✅ NEW: Flag to prevent server sync until completed
     };
-    startEditingRule(newRule.id, newRule);
+
+    // ✅ FIX: Set editing state FIRST to ensure it's not lost during re-render
+    setOriginalRuleData({ ...newRule });
+    setEditingRule(newRule.id);
+
     // ✅ FIX: Do NOT sync to server yet - keep in UI local state only
     // Server sync will happen when user completes the rule (adds at least one day)
     updatePriorityRules([...priorityRules, newRule]);
@@ -363,6 +419,9 @@ const PriorityRulesTab = ({ staffMembers = [], validationErrors = {} }) => {
       const updatedRules = priorityRules.filter((rule) => rule.id !== id);
       updatePriorityRules(updatedRules);
 
+      // ✅ FIX: Also remove from local incomplete rules if it exists there
+      setLocalIncompleteRules(prev => prev.filter(r => r.id !== id));
+
       setDeleteConfirmation(null);
     } catch (error) {
       console.error("Error deleting priority rule:", error);
@@ -388,6 +447,14 @@ const PriorityRulesTab = ({ staffMembers = [], validationErrors = {} }) => {
     if (rule) {
       setOriginalRuleData({ ...rule });
       setEditingRule(ruleId);
+      // ✅ FIX: Initialize edit buffer with current rule data to prevent input lag
+      setEditBuffer((prev) => ({
+        ...prev,
+        [ruleId]: {
+          name: rule.name,
+          description: rule.description || "",
+        },
+      }));
     }
   };
 
@@ -419,16 +486,73 @@ const PriorityRulesTab = ({ staffMembers = [], validationErrors = {} }) => {
       ? currentDays.filter((d) => d !== dayId)
       : [...currentDays, dayId];
 
-    // ✅ NEW FIX: Remove _isLocalOnly flag when user completes the rule
-    // Once at least one day is selected, the rule becomes complete and should sync to server
-    const updates = { daysOfWeek: updatedDays };
+    // ✅ FIX: Update rule immediately (no debouncing for day selection)
+    // Day selection needs to be immediate to keep edit mode stable
+    const updates = { ...rule, daysOfWeek: updatedDays };
+
     if (updatedDays.length > 0 && rule._isLocalOnly) {
       console.log(`✅ Rule "${rule.name}" is now complete (has days selected) - will sync to server`);
       updates._isLocalOnly = undefined; // Remove the flag to allow server sync
     }
 
-    updateRule(ruleId, updates);
+    // Update immediately using updatePriorityRules (not debounced updateRule)
+    const updatedRules = priorityRules.map((r) =>
+      r.id === ruleId ? updates : r
+    );
+    updatePriorityRules(updatedRules);
   };
+
+  // Helper functions for multiple staff members
+  const addStaffMember = useCallback((ruleId, staffId) => {
+    const rule = priorityRules.find(r => r.id === ruleId);
+    if (!rule) return;
+
+    // Get current staff IDs (support both single staffId and staffIds array)
+    const currentStaffIds = rule.staffIds || (rule.staffId ? [rule.staffId] : []);
+
+    // Don't add if already in the list
+    if (currentStaffIds.includes(staffId)) return;
+
+    const updatedStaffIds = [...currentStaffIds, staffId];
+
+    // ✅ FIX: Update edit buffer so changes are included in save
+    // This ensures staffIds changes are captured when user clicks "Save"
+    setEditBuffer((prev) => ({
+      ...prev,
+      [ruleId]: { ...(prev[ruleId] || {}), staffIds: updatedStaffIds },
+    }));
+
+    // Update rule with new staff member
+    const updatedRules = priorityRules.map(r =>
+      r.id === ruleId ? { ...r, staffIds: updatedStaffIds, staffId: undefined } : r
+    );
+    updatePriorityRules(updatedRules);
+
+    console.log(`✅ Added staff member to rule "${rule.name}": ${staffId}`);
+    console.log(`🔍 [addStaffMember] Updated staffIds:`, updatedStaffIds);
+    console.log(`🔍 [addStaffMember] Edit buffer now:`, { [ruleId]: { staffIds: updatedStaffIds } });
+  }, [priorityRules, updatePriorityRules]);
+
+  const removeStaffMember = useCallback((ruleId, staffId) => {
+    const rule = priorityRules.find(r => r.id === ruleId);
+    if (!rule) return;
+
+    const currentStaffIds = rule.staffIds || (rule.staffId ? [rule.staffId] : []);
+    const updatedStaffIds = currentStaffIds.filter(id => id !== staffId);
+
+    // ✅ FIX: Update edit buffer so changes are included in save
+    setEditBuffer((prev) => ({
+      ...prev,
+      [ruleId]: { ...(prev[ruleId] || {}), staffIds: updatedStaffIds },
+    }));
+
+    const updatedRules = priorityRules.map(r =>
+      r.id === ruleId ? { ...r, staffIds: updatedStaffIds, staffId: undefined } : r
+    );
+    updatePriorityRules(updatedRules);
+
+    console.log(`✅ Removed staff member from rule "${rule.name}": ${staffId}`);
+  }, [priorityRules, updatePriorityRules]);
 
   const renderRuleTypeSelector = (rule) => {
     return (
@@ -492,7 +616,9 @@ const PriorityRulesTab = ({ staffMembers = [], validationErrors = {} }) => {
 
   const renderRuleCard = (rule) => {
     const isEditing = editingRule === rule.id;
-    const staff = getStaffById(rule.staffId);
+    // ✅ FIX: Get ALL staff members for this rule (not just first one)
+    const ruleStaffIds = rule.staffIds || (rule.staffId ? [rule.staffId] : []);
+    const ruleStaff = ruleStaffIds.map(id => getStaffById(id)).filter(Boolean);
     const ruleType = RULE_TYPES.find((rt) => rt.id === rule.ruleType);
     const priority = PRIORITY_LEVELS.find(
       (p) => p.value === rule.priorityLevel,
@@ -525,11 +651,12 @@ const PriorityRulesTab = ({ staffMembers = [], validationErrors = {} }) => {
                     onChange={(e) =>
                       updateRule(rule.id, { name: e.target.value })
                     }
-                    className="text-lg font-semibold bg-transparent border-b-2 border-purple-500 focus:outline-none w-full"
+                    placeholder="e.g., Weekend Early Shifts for Chef Team"
+                    className="text-lg font-semibold bg-transparent border-b-2 border-purple-500 focus:outline-none w-full placeholder:text-gray-400 placeholder:font-normal"
                     autoFocus
                   />
                   <p className="text-xs text-gray-500 mt-1">
-                    Press Escape to finish editing
+                    Give this rule a descriptive name (e.g., "Monday Off Days", "Weekend Late Shifts")
                   </p>
                 </div>
               ) : (
@@ -543,7 +670,16 @@ const PriorityRulesTab = ({ staffMembers = [], validationErrors = {} }) => {
                 </div>
               )}
               <p className="text-sm text-gray-600">
-                {staff?.name} • {ruleType?.label}
+                {/* ✅ FIX: Show ALL staff members, not just first one */}
+                {ruleStaff.length > 0 ? (
+                  ruleStaff.length === 1 ? (
+                    ruleStaff[0].name
+                  ) : (
+                    `${ruleStaff.length} staff members`
+                  )
+                ) : (
+                  <span className="text-red-600">No staff assigned</span>
+                )} • {ruleType?.label}
                 {/* Defensive: Ensure daysOfWeek is an array */}
                 {Array.isArray(rule.daysOfWeek) &&
                   rule.daysOfWeek.length > 0 &&
@@ -627,20 +763,88 @@ const PriorityRulesTab = ({ staffMembers = [], validationErrors = {} }) => {
             </FormField>
 
             {/* Staff Selection */}
-            <FormField label="Staff Member">
-              <select
-                value={rule.staffId}
-                onChange={(e) =>
-                  updateRule(rule.id, { staffId: e.target.value })
-                }
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
-              >
-                {staffMembers.map((staff) => (
-                  <option key={staff.id} value={staff.id}>
-                    {staff.name}
-                  </option>
-                ))}
-              </select>
+            <FormField label="Staff Members">
+              <div className="space-y-3">
+                {/* List of selected staff members */}
+                {(() => {
+                  const currentStaffIds = rule.staffIds || (rule.staffId ? [rule.staffId] : []);
+                  return currentStaffIds.length > 0 && (
+                    <div className="flex flex-wrap gap-2 mb-3">
+                      {currentStaffIds.map((staffId) => {
+                        const staff = staffMembers.find(s => s.id === staffId);
+                        if (!staff) return null;
+                        return (
+                          <div
+                            key={staffId}
+                            className="flex items-center gap-2 px-3 py-1 bg-blue-100 text-blue-800 rounded-lg"
+                          >
+                            <User size={14} />
+                            <span className="text-sm font-medium">{staff.name}</span>
+                            <button
+                              onClick={() => removeStaffMember(rule.id, staffId)}
+                              className="text-red-600 hover:text-red-800 transition-colors"
+                              title="Remove staff member"
+                            >
+                              <XCircle size={14} />
+                            </button>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  );
+                })()}
+
+                {/* Add staff member dropdown */}
+                <div className="flex gap-2">
+                  <select
+                    value=""
+                    onChange={(e) => {
+                      if (e.target.value) {
+                        addStaffMember(rule.id, e.target.value);
+                        e.target.value = "";
+                      }
+                    }}
+                    className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  >
+                    <option value="">Select staff member...</option>
+                    {(() => {
+                      const currentStaffIds = rule.staffIds || (rule.staffId ? [rule.staffId] : []);
+                      return staffMembers
+                        .filter(staff => !currentStaffIds.includes(staff.id))
+                        .map((staff) => (
+                          <option key={staff.id} value={staff.id}>
+                            {staff.name}
+                          </option>
+                        ));
+                    })()}
+                  </select>
+                  <button
+                    onClick={() => {
+                      // Focus the select element
+                      const selectElement = document.querySelector(`select[value=""]`);
+                      if (selectElement) selectElement.focus();
+                    }}
+                    className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+                    title="Add staff member"
+                  >
+                    <Plus size={16} />
+                    Add Staff
+                  </button>
+                </div>
+                {(() => {
+                  const currentStaffIds = rule.staffIds || (rule.staffId ? [rule.staffId] : []);
+                  return currentStaffIds.length === 0 ? (
+                    <p className="text-xs text-red-600 flex items-center gap-1">
+                      <AlertTriangle size={12} />
+                      At least one staff member must be selected (rule will not be saved until staff is added)
+                    </p>
+                  ) : (
+                    <p className="text-xs text-gray-500">
+                      Add multiple staff members to apply this rule to all of them
+                    </p>
+                  );
+                })()}
+              </div>
             </FormField>
 
             {/* Rule Type */}

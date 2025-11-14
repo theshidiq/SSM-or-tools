@@ -5,7 +5,12 @@
  * Uses evolutionary computation to find optimal scheduling solutions.
  */
 
-import { validateAllConstraints } from "../constraints/ConstraintEngine";
+import {
+  validateAllConstraints,
+  isOffDay,
+  isEarlyShift,
+} from "../constraints/ConstraintEngine";
+import { formatISO } from "date-fns";
 
 /**
  * Genetic Algorithm for schedule optimization
@@ -476,16 +481,17 @@ export class GeneticAlgorithm {
 
             switch (strategy) {
               case 'random':
-                // ✅ FIX: Equal probabilities (25% each) instead of 50% normal bias
+                // ⚠️ ENHANCED: Reduced off-day probability to prevent consecutive patterns
+                // Normal: 30%, Off: 20%, Early: 25%, Late: 25%
                 const randomValue = seededRandom();
-                if (randomValue < 0.25) {
-                  shift = "○"; // Normal
-                } else if (randomValue < 0.5) {
-                  shift = "×"; // Off
+                if (randomValue < 0.30) {
+                  shift = "○"; // Normal - 30% (increased from 25%)
+                } else if (randomValue < 0.50) {
+                  shift = "×"; // Off - 20% (decreased from 25%)
                 } else if (randomValue < 0.75) {
-                  shift = "△"; // Early
+                  shift = "△"; // Early - 25%
                 } else {
-                  shift = "◇"; // Late
+                  shift = "◇"; // Late - 25%
                 }
                 break;
 
@@ -552,7 +558,72 @@ export class GeneticAlgorithm {
     }, {});
     console.log(`🧬 [INIT] Strategy distribution:`, strategyCounts);
 
+    // ⚠️ PHASE 3: Repair consecutive patterns in initial population
+    console.log(`🔧 [REPAIR] Repairing consecutive patterns in initial population...`);
+    population.forEach(individual => {
+      this.repairConsecutivePatterns(individual.schedule, staffMembers, dateRange);
+    });
+    console.log(`✅ [REPAIR] Consecutive pattern repair complete`);
+
     return population;
+  }
+
+  /**
+   * Repair consecutive off-days and early shifts in a schedule
+   * ⚠️ PHASE 3: Prevents consecutive pattern violations
+   * @param {Object} schedule - Schedule to repair
+   * @param {Array} staffMembers - Staff members
+   * @param {Array} dateRange - Date range
+   */
+  repairConsecutivePatterns(schedule, staffMembers, dateRange) {
+    staffMembers.forEach(staff => {
+      const staffId = staff.id;
+      let consecutiveOff = [];
+      let consecutiveEarly = [];
+
+      dateRange.forEach((date, index) => {
+        const dateKey = formatISO(date, { representation: 'date' });
+        const shift = schedule[staffId]?.[dateKey] || '';
+
+        // Track consecutive off-days
+        if (isOffDay(shift)) {
+          consecutiveOff.push(index);
+        } else {
+          // If we found 2+ consecutive off-days, repair by changing middle day to normal
+          if (consecutiveOff.length >= 2) {
+            const middleIndex = consecutiveOff[Math.floor(consecutiveOff.length / 2)];
+            const middleDate = formatISO(dateRange[middleIndex], { representation: 'date' });
+            schedule[staffId][middleDate] = "○"; // Change to normal shift
+          }
+          consecutiveOff = [];
+        }
+
+        // Track consecutive early shifts
+        if (isEarlyShift(shift)) {
+          consecutiveEarly.push(index);
+        } else {
+          // If we found 2+ consecutive early shifts, repair by changing middle day to normal
+          if (consecutiveEarly.length >= 2) {
+            const middleIndex = consecutiveEarly[Math.floor(consecutiveEarly.length / 2)];
+            const middleDate = formatISO(dateRange[middleIndex], { representation: 'date' });
+            schedule[staffId][middleDate] = "○"; // Change to normal shift
+          }
+          consecutiveEarly = [];
+        }
+      });
+
+      // Handle end-of-period consecutive patterns
+      if (consecutiveOff.length >= 2) {
+        const middleIndex = consecutiveOff[Math.floor(consecutiveOff.length / 2)];
+        const middleDate = formatISO(dateRange[middleIndex], { representation: 'date' });
+        schedule[staffId][middleDate] = "○";
+      }
+      if (consecutiveEarly.length >= 2) {
+        const middleIndex = consecutiveEarly[Math.floor(consecutiveEarly.length / 2)];
+        const middleDate = formatISO(dateRange[middleIndex], { representation: 'date' });
+        schedule[staffId][middleDate] = "○";
+      }
+    });
   }
 
   /**
@@ -592,11 +663,31 @@ export class GeneticAlgorithm {
       let constraintScore = validation.valid ? 100 : 0;
 
       if (!validation.valid) {
+        // 🔧 ULTRA-STRONG PENALTIES: Make consecutive patterns completely unacceptable
+        // Critical (3+ consecutive) = 500 points (instant rejection)
+        // High (2 consecutive) = 200 points (nearly instant rejection)
+        // Medium = 25 points
         const violationPenalty =
-          validation.summary.criticalViolations * 20 +
-          validation.summary.highViolations * 10 +
-          validation.summary.mediumViolations * 5;
+          validation.summary.criticalViolations * 500 +
+          validation.summary.highViolations * 200 +
+          validation.summary.mediumViolations * 25;
         constraintScore = Math.max(0, 100 - violationPenalty);
+
+        // 🔍 DEBUG: Log validation details
+        console.log("🔍 [FITNESS DEBUG] Schedule has violations:", {
+          valid: validation.valid,
+          criticalViolations: validation.summary.criticalViolations,
+          highViolations: validation.summary.highViolations,
+          mediumViolations: validation.summary.mediumViolations,
+          violationPenalty,
+          constraintScore,
+          violations: validation.violations.map(v => ({
+            type: v.type,
+            subType: v.subType,
+            severity: v.severity,
+            message: v.message
+          }))
+        });
       }
 
       // Workload balance (15% of fitness - reduced from 20%)
@@ -635,6 +726,19 @@ export class GeneticAlgorithm {
         distributionScore * 0.1 +
         fairnessScore * 0.15 +
         diversityScore * 0.1;
+
+      // 🔍 DEBUG: Log final fitness calculation
+      if (!validation.valid && constraintScore === 0) {
+        console.log("🔍 [FITNESS DEBUG] Final score for schedule with violations:", {
+          constraintScore: constraintScore.toFixed(2),
+          balanceScore: balanceScore.toFixed(2),
+          distributionScore: distributionScore.toFixed(2),
+          fairnessScore: fairnessScore.toFixed(2),
+          diversityScore: diversityScore.toFixed(2),
+          finalFitness: fitness.toFixed(2),
+          message: "⚠️ This schedule should be REJECTED (fitness = " + fitness.toFixed(2) + ")"
+        });
+      }
 
       return Math.min(100, Math.max(0, fitness));
     } catch (error) {

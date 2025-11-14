@@ -19,7 +19,7 @@ import { MODEL_CONFIG } from "./TensorFlowConfig";
 export class EnhancedFeatureEngineering extends ScheduleFeatureEngineer {
   constructor() {
     super();
-    this.enhancedFeatureCount = 65; // Total enhanced features
+    this.enhancedFeatureCount = 80; // Total enhanced features (65 + 15 Phase 1 sequence features)
     this.initializeEnhancedFeatures();
 
     // Caches for expensive computations
@@ -78,10 +78,32 @@ export class EnhancedFeatureEngineering extends ScheduleFeatureEngineer {
       "momentum_indicator",
       "trend_acceleration",
       "pattern_stability_score",
+
+      // === PHASE 1: SEQUENCE-BASED FEATURES (15 additional) ===
+      // Rolling Window Features (5)
+      "rolling_3day_pattern_hash",
+      "rolling_5day_pattern_hash",
+      "rolling_7day_shift_distribution",
+      "rolling_work_rest_ratio",
+      "recent_shift_momentum_score",
+
+      // Position-Based Features (5)
+      "position_in_weekly_cycle",
+      "days_since_last_off",
+      "days_until_usual_off",
+      "position_in_monthly_cycle",
+      "predicted_next_by_position",
+
+      // Transition Probability Features (5)
+      "shift_transition_probability",
+      "consecutive_work_likelihood",
+      "off_day_clustering_tendency",
+      "shift_type_switching_rate",
+      "pattern_stability_index",
     ];
 
     console.log(
-      `🚀 Enhanced Feature Engineering: ${this.enhancedFeatureNames.length} total features`,
+      `🚀 Enhanced Feature Engineering: ${this.enhancedFeatureNames.length} total features (65 base + 15 Phase 1 sequence)`,
     );
   }
 
@@ -254,6 +276,50 @@ export class EnhancedFeatureEngineering extends ScheduleFeatureEngineer {
       for (let i = 0; i < 5; i++) {
         features[idx++] = timeSeriesFeatures[i] || 0;
       }
+
+      // ========================================
+      // PHASE 1: SEQUENCE-BASED FEATURES (15)
+      // ========================================
+      // Call parent class methods for Phase 1 sequence features
+
+      // Rolling Window Features (5)
+      const rolling3Day = this.calculateRolling3DayPattern?.(staff, periodData, date) || 0.5;
+      const rolling5Day = this.calculateRolling5DayPattern?.(staff, periodData, date) || 0.5;
+      const rolling7DayDist = this.calculateRolling7DayShiftDistribution?.(staff, periodData, date) || 0.5;
+      const workRestRatio = this.calculateRollingWorkRestRatio?.(staff, periodData, date) || 0.5;
+      const shiftMomentum = this.calculateRecentShiftMomentum?.(staff, periodData, date) || 0.5;
+
+      features[idx++] = rolling3Day;
+      features[idx++] = rolling5Day;
+      features[idx++] = rolling7DayDist;
+      features[idx++] = workRestRatio;
+      features[idx++] = shiftMomentum;
+
+      // Position-Based Features (5)
+      const weeklyPosition = this.calculatePositionInWeeklyCycle?.(date) || 0.5;
+      const daysSinceOff = this.calculateDaysSinceLastOff?.(staff, periodData, date) || 0.5;
+      const daysUntilOff = this.calculateDaysUntilUsualOff?.(staff, periodData, date) || 0.5;
+      const monthlyPosition = this.calculatePositionInMonthlyCycle?.(date) || 0.5;
+      const predictedNext = this.calculatePredictedNextByPosition?.(staff, periodData, date) || 0.5;
+
+      features[idx++] = weeklyPosition;
+      features[idx++] = daysSinceOff;
+      features[idx++] = daysUntilOff;
+      features[idx++] = monthlyPosition;
+      features[idx++] = predictedNext;
+
+      // Transition Probability Features (5)
+      const transitionProb = this.calculateShiftTransitionProbability?.(staff, periodData, date) || 0.5;
+      const consecutiveLikelihood = this.calculateConsecutiveWorkLikelihood?.(staff, periodData, date) || 0.5;
+      const offDayClustering = this.calculateOffDayClusteringTendency?.(staff, periodData, date) || 0.5;
+      const shiftSwitching = this.calculateShiftTypeSwitchingRate?.(staff, periodData, date) || 0.5;
+      const patternStability = this.calculatePatternStabilityIndex?.(staff, periodData, date) || 0.5;
+
+      features[idx++] = transitionProb;
+      features[idx++] = consecutiveLikelihood;
+      features[idx++] = offDayClustering;
+      features[idx++] = shiftSwitching;
+      features[idx++] = patternStability;
 
       // ========================================
       // VALIDATION AND CLEANUP
@@ -944,6 +1010,15 @@ export class EnhancedFeatureEngineering extends ScheduleFeatureEngineer {
 
       // Process each staff member
       staffMembers.forEach((staff) => {
+        // 🔒 VALIDATION: Skip if staff member doesn't exist in current schedule anymore
+        // This prevents training on data from deleted/inactive staff
+        if (!staff || !staff.id || !staff.name) {
+          console.warn(
+            `⚠️ Skipping invalid staff member in period ${periodIndex}: ${JSON.stringify(staff)}`,
+          );
+          return;
+        }
+
         if (!schedule[staff.id]) {
           console.log(
             `ℹ️ No schedule data for staff ${staff.name} (${staff.id}) in period ${periodIndex}`,
@@ -1103,6 +1178,15 @@ export class EnhancedFeatureEngineering extends ScheduleFeatureEngineer {
 
       // Process each staff member
       staffMembers.forEach((staff) => {
+        // 🔒 VALIDATION: Skip if staff member doesn't exist in current schedule anymore
+        // This prevents training on data from deleted/inactive staff
+        if (!staff || !staff.id || !staff.name) {
+          console.warn(
+            `⚠️ Skipping invalid staff member in period ${periodIndex}: ${JSON.stringify(staff)}`,
+          );
+          return;
+        }
+
         if (!schedule[staff.id]) {
           console.log(
             `ℹ️ No schedule data for staff ${staff.name} (${staff.id}) in period ${periodIndex}`,

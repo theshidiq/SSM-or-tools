@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import { configService } from "../services/ConfigurationService";
 import { useAutosave } from "./useAutosave";
 import { useWebSocketSettings } from "./useWebSocketSettings";
+import startupLogger from "../utils/startupLogger";
 
 // Feature flag for WebSocket settings (multi-table backend)
 const WEBSOCKET_SETTINGS_ENABLED =
@@ -18,8 +19,11 @@ export const useSettingsData = (autosaveEnabled = true) => {
   // Ref to hold current settings to prevent infinite loops
   const settingsRef = useRef(settings);
 
-  // 🔧 FIX: Prevent localStorage save from triggering infinite sync loop
+  // 🔧 FIX #4: Prevent localStorage save from triggering infinite sync loop
+  // Use counter instead of boolean to track concurrent syncs
   const isSyncingFromWebSocketRef = useRef(false);
+  const syncCounterRef = useRef(0);
+  const hasCompletedInitialLoadRef = useRef(false); // ✅ FIX #5 CORRECTION: Track if initial load completed
 
   // WebSocket multi-table integration
   const {
@@ -28,6 +32,7 @@ export const useSettingsData = (autosaveEnabled = true) => {
     updateStaffGroups: wsUpdateStaffGroups,
     createStaffGroup: wsCreateStaffGroup,
     deleteStaffGroup: wsDeleteStaffGroup,
+    hardDeleteStaffGroup: wsHardDeleteStaffGroup,
     updateDailyLimits: wsUpdateDailyLimits,
     updateMonthlyLimits: wsUpdateMonthlyLimits,
     createPriorityRule: wsCreatePriorityRule,
@@ -49,6 +54,7 @@ export const useSettingsData = (autosaveEnabled = true) => {
     wsUpdateStaffGroups,
     wsCreateStaffGroup,
     wsDeleteStaffGroup,
+    wsHardDeleteStaffGroup,
     wsUpdateDailyLimits,
     wsUpdateMonthlyLimits,
     wsCreatePriorityRule,
@@ -63,6 +69,7 @@ export const useSettingsData = (autosaveEnabled = true) => {
       wsUpdateStaffGroups,
       wsCreateStaffGroup,
       wsDeleteStaffGroup,
+      wsHardDeleteStaffGroup,
       wsUpdateDailyLimits,
       wsUpdateMonthlyLimits,
       wsCreatePriorityRule,
@@ -74,6 +81,7 @@ export const useSettingsData = (autosaveEnabled = true) => {
     wsUpdateStaffGroups,
     wsCreateStaffGroup,
     wsDeleteStaffGroup,
+    wsHardDeleteStaffGroup,
     wsUpdateDailyLimits,
     wsUpdateMonthlyLimits,
     wsCreatePriorityRule,
@@ -109,19 +117,44 @@ export const useSettingsData = (autosaveEnabled = true) => {
   // Sync WebSocket settings to local state (aggregate multi-table data)
   useEffect(() => {
     if (useWebSocket && wsSettings) {
-      // 🔧 FIX: Set flag BEFORE any state updates to prevent circular sync
+      // ✅ FIX #4: Use sync counter for proper tracking
+      const syncId = ++syncCounterRef.current;
       isSyncingFromWebSocketRef.current = true;
 
-      console.log("🔄 Syncing WebSocket multi-table settings to local state");
+      console.log(`🔄 Syncing WebSocket multi-table settings to local state (sync #${syncId})`);
 
       // ✅ CRITICAL FIX: Keep soft-deleted groups in local state (DON'T filter them out here)
       // The UI layer (StaffGroupsTab.jsx) will filter them for display
       // This maintains state consistency between client and server
       // Otherwise, client state != server state, causing deleted groups to reappear
-      const staffGroups = wsSettings.staffGroups || [];
 
-      console.log(`🗑️ [SYNC] Received ${staffGroups.length} total groups from server (including soft-deleted)`);
-      const softDeletedCount = staffGroups.filter(g => g.is_active === false).length;
+      // ✅ FIX #2: Use nullish coalescing (??) instead of logical OR (||) to prevent falsy value coercion
+      // || converts null/undefined/false/0/'' to [], triggering false-positive deletions
+      // ?? only converts null/undefined to [], preserving intentional empty arrays
+      const staffGroups = wsSettings?.staffGroups ??
+        (wsSettings !== null ? [] : settingsRef.current?.staffGroups ?? []);
+
+      // Validate data integrity before processing
+      if (!Array.isArray(staffGroups)) {
+        console.error('❌ [SYNC] Invalid staffGroups from WebSocket:', typeof staffGroups, staffGroups);
+        return; // Don't process invalid data
+      }
+
+      // ✅ FIX #3: Normalize field names (is_active vs isActive) to prevent filter bypass
+      // Database uses snake_case (is_active), React uses camelCase (isActive)
+      // ✅ FIX #1: Use destructuring to completely remove is_active field (not set to undefined)
+      const normalizeFieldNames = (group) => {
+        const { is_active, ...rest } = group;  // Remove is_active via destructuring
+        return {
+          ...rest,
+          isActive: is_active ?? rest.isActive ?? true,
+        };
+      };
+
+      const normalizedStaffGroups = staffGroups.map(normalizeFieldNames);
+
+      console.log(`🗑️ [SYNC] Received ${normalizedStaffGroups.length} total groups from server (including soft-deleted)`);
+      const softDeletedCount = normalizedStaffGroups.filter(g => g.isActive === false).length;
       if (softDeletedCount > 0) {
         console.log(`🗑️ [SYNC] ${softDeletedCount} soft-deleted groups kept in local state (hidden in UI)`);
       }
@@ -134,24 +167,40 @@ export const useSettingsData = (autosaveEnabled = true) => {
       }
 
       // Transform multi-table response to localStorage-compatible format
+      // ✅ FIX #2: Use ?? for all arrays to prevent connection drop mass deletions
       const aggregatedSettings = {
-        staffGroups: staffGroups, // Include all groups, including soft-deleted
-        dailyLimits: wsSettings.dailyLimits || [],
-        monthlyLimits: wsSettings.monthlyLimits || [],
-        priorityRules: wsSettings.priorityRules || [],
-        mlParameters: wsSettings.mlModelConfigs?.[0] || {},
+        staffGroups: normalizedStaffGroups, // ✅ FIX #3: Use normalized groups with consistent field names
+        dailyLimits: wsSettings?.dailyLimits ?? [],
+        monthlyLimits: wsSettings?.monthlyLimits ?? [],
+        priorityRules: wsSettings?.priorityRules ?? [],
+        mlParameters: wsSettings?.mlModelConfigs?.[0] ?? {},
         version: wsVersion,
       };
 
       setSettings(aggregatedSettings);
+      startupLogger.logSettingsChange(
+        'useSettingsData.WebSocketSync',
+        'Settings aggregated from WebSocket',
+        aggregatedSettings
+      );
       setIsLoading(false);
       setHasUnsavedChanges(false);
       setError(null);
 
-      // 🔧 FIX: Clear flag AFTER all state updates complete (use timeout to ensure render cycle finishes)
-      setTimeout(() => {
-        isSyncingFromWebSocketRef.current = false;
-      }, 100);
+      // ✅ FIX #4: Clear flag with immediate logging and delayed actual clear
+      // First, log that state updates are complete
+      console.log(`📥 Sync #${syncId} state updates applied, scheduling flag clear`);
+
+      // Use requestAnimationFrame to clear after next paint (ensures all React updates complete)
+      requestAnimationFrame(() => {
+        if (syncId === syncCounterRef.current) {
+          console.log(`✅ Sync #${syncId} complete - clearing isSyncingFromWebSocketRef (flag was: ${isSyncingFromWebSocketRef.current})`);
+          isSyncingFromWebSocketRef.current = false;
+          console.log(`🔓 isSyncingFromWebSocketRef now cleared - user operations allowed`);
+        } else {
+          console.log(`⚠️ Sync #${syncId} skipped clearing - newer sync #${syncCounterRef.current} exists`);
+        }
+      });
     }
   }, [useWebSocket, wsSettings, wsVersion]);
 
@@ -159,6 +208,68 @@ export const useSettingsData = (autosaveEnabled = true) => {
   useEffect(() => {
     settingsRef.current = settings;
   }, [settings]);
+
+  // 🔧 BRIDGE: Sync settings to ConfigurationService for AI system
+  // This ensures AI generation uses the latest priority rules from WebSocket/database
+  useEffect(() => {
+    if (settings && useWebSocket) {
+      // Only sync when using WebSocket mode (database-backed settings)
+      configService.syncExternalSettings(settings);
+    }
+  }, [settings, useWebSocket]);
+
+  // 🚨 MONITORING: Detect settings wipe (when populated arrays become empty)
+  // This provides early warning if settings are mysteriously reset
+  const previousSettingsRef = useRef(null);
+  useEffect(() => {
+    if (!settings || !useWebSocket) return;
+
+    const prev = previousSettingsRef.current;
+    if (!prev) {
+      // First load - store initial state
+      previousSettingsRef.current = {
+        staffGroupsCount: settings.staffGroups?.length || 0,
+        priorityRulesCount: settings.priorityRules?.length || 0,
+        dailyLimitsCount: settings.dailyLimits?.length || 0,
+        monthlyLimitsCount: settings.monthlyLimits?.length || 0,
+      };
+      return;
+    }
+
+    const current = {
+      staffGroupsCount: settings.staffGroups?.length || 0,
+      priorityRulesCount: settings.priorityRules?.length || 0,
+      dailyLimitsCount: settings.dailyLimits?.length || 0,
+      monthlyLimitsCount: settings.monthlyLimits?.length || 0,
+    };
+
+    // Detect wipe: populated → empty (N > 0 → 0)
+    const wipeDetected = [];
+
+    if (prev.staffGroupsCount > 0 && current.staffGroupsCount === 0) {
+      wipeDetected.push(`staffGroups (${prev.staffGroupsCount} → 0)`);
+    }
+    if (prev.priorityRulesCount > 0 && current.priorityRulesCount === 0) {
+      wipeDetected.push(`priorityRules (${prev.priorityRulesCount} → 0)`);
+    }
+    if (prev.dailyLimitsCount > 0 && current.dailyLimitsCount === 0) {
+      wipeDetected.push(`dailyLimits (${prev.dailyLimitsCount} → 0)`);
+    }
+    if (prev.monthlyLimitsCount > 0 && current.monthlyLimitsCount === 0) {
+      wipeDetected.push(`monthlyLimits (${prev.monthlyLimitsCount} → 0)`);
+    }
+
+    if (wipeDetected.length > 0) {
+      console.error("🚨 SETTINGS WIPE DETECTED:", wipeDetected.join(", "));
+      console.error("  - This may indicate a settings reset or configuration issue");
+      console.error("  - Check for SETTINGS_RESET messages or default data insertion failures");
+      console.error("  - Previous counts:", prev);
+      console.error("  - Current counts:", current);
+    }
+
+    // Update previous state for next comparison
+    previousSettingsRef.current = current;
+  }, [settings, useWebSocket]);
 
   // Load settings from localStorage via configService (localStorage mode only)
   const loadSettings = useCallback(() => {
@@ -175,6 +286,11 @@ export const useSettingsData = (autosaveEnabled = true) => {
 
       const loadedSettings = configService.getSettings();
       setSettings(loadedSettings);
+      startupLogger.logSettingsChange(
+        'useSettingsData.loadSettings',
+        'Settings loaded from localStorage',
+        loadedSettings
+      );
       setHasUnsavedChanges(false);
       setValidationErrors({});
     } catch (err) {
@@ -244,18 +360,32 @@ export const useSettingsData = (autosaveEnabled = true) => {
         ? newSettingsOrUpdater(settingsRef.current || {})
         : newSettingsOrUpdater;
 
+      console.log("🔍 [UPDATE SETTINGS] updateSettings called with:", {
+        oldGroupsCount: settingsRef.current?.staffGroups?.length,
+        newGroupsCount: newSettings?.staffGroups?.length,
+        useWebSocket
+      });
+
       if (useWebSocket) {
         // 🔧 FIX: CRITICAL - Prevent circular updates when syncing FROM WebSocket
         // If we're currently syncing from WebSocket, DON'T send updates back to WebSocket
+        console.log(`🔍 [UPDATE CHECK] isSyncingFromWebSocketRef.current = ${isSyncingFromWebSocketRef.current}`);
         if (isSyncingFromWebSocketRef.current) {
           console.log(
             "⏭️ Skipping WebSocket update - currently syncing FROM server (prevents infinite loop)",
           );
+          console.log("⚠️ WARNING: User data will NOT be saved to database!");
           // Still update local state for UI consistency
           setSettings(newSettings);
+          startupLogger.logSettingsChange(
+            'useSettingsData.updateSettings',
+            'SKIPPED WebSocket update (syncing FROM server)',
+            newSettings
+          );
           setValidationErrors({});
           return;
         }
+        console.log("✅ isSyncingFromWebSocketRef is false - proceeding with database save");
 
         console.log("🔄 Updating settings via WebSocket multi-table backend");
 
@@ -272,26 +402,42 @@ export const useSettingsData = (autosaveEnabled = true) => {
         // Detect and update staff groups (CREATE, UPDATE, DELETE operations)
         // ✅ FIX: Normalize groups before comparison to exclude auto-generated fields
         // This prevents infinite loops from server-side timestamp updates
-        // ⚠️ IMPORTANT: Include is_active to detect soft-delete changes!
+        // ⚠️ IMPORTANT: Include isActive to detect soft-delete changes!
         const normalizeGroup = (group) => ({
           id: group.id,
           name: group.name,
           description: group.description,
           color: group.color,
-          members: group.members || [],
-          is_active: group.is_active, // ✅ Include to detect soft-deletes
+          members: group.members ?? [], // ✅ FIX #2: Use ?? instead of ||
+          isActive: group.isActive ?? group.is_active ?? true, // ✅ FIX #3: Use normalized field name
         });
 
-        const oldGroups = oldSettings.staffGroups || [];
-        const newGroups = newSettings.staffGroups || [];
-        const oldGroupsNormalized = oldGroups.map(normalizeGroup);
-        const newGroupsNormalized = newGroups.map(normalizeGroup);
+        // ✅ FIX #2: Use ?? instead of || to prevent false-positive mass deletions
+        const oldGroups = oldSettings?.staffGroups ?? [];
+        const newGroups = newSettings?.staffGroups ?? [];
+
+        // ✅ FIX #5 CORRECTION: Guard against initial WebSocket sync ONLY
+        // Only skip if this is during initial WebSocket sync (not user-initiated changes)
+        const isInitialLoad = !hasCompletedInitialLoadRef.current && oldGroups.length === 0;
+
+        if (isInitialLoad && newGroups.length > 0) {
+          console.log(`🔒 [FIX #5] Skipping change detection - initial WebSocket sync (0 → ${newGroups.length} groups)`);
+          hasCompletedInitialLoadRef.current = true; // Mark initial load as complete
+          // Don't process change detection during initial WebSocket sync
+        } else {
+          // Normal operation - process all changes (CREATE, UPDATE, DELETE)
+          const oldGroupsNormalized = oldGroups.map(normalizeGroup);
+          const newGroupsNormalized = newGroups.map(normalizeGroup);
 
         if (
           JSON.stringify(oldGroupsNormalized) !==
           JSON.stringify(newGroupsNormalized)
         ) {
           console.log("  - Detecting staff_groups table changes...");
+          console.log("🔍 [DELETE DEBUG] oldGroups count:", oldGroups.length);
+          console.log("🔍 [DELETE DEBUG] newGroups count:", newGroups.length);
+          console.log("🔍 [DELETE DEBUG] oldGroups:", oldGroups.map(g => ({ id: g.id, name: g.name, is_active: g.is_active })));
+          console.log("🔍 [DELETE DEBUG] newGroups:", newGroups.map(g => ({ id: g.id, name: g.name, is_active: g.is_active })));
           const oldGroupIds = new Set(oldGroups.map((g) => g.id));
           const newGroupIds = new Set(newGroups.map((g) => g.id));
 
@@ -311,11 +457,22 @@ export const useSettingsData = (autosaveEnabled = true) => {
           // Detect DELETED groups (exist in old but not in new, OR soft-deleted via is_active=false)
           // ✅ RACE CONDITION FIX: Only send DELETE for ACTIVE groups
           // Already-inactive groups (is_active=false) don't need DELETE messages
+          // 🔧 FIX #2: Additional safeguard - skip items that exist in new state but are soft-deleted
+          // This prevents false-positive hard deletes when server state includes soft-deleted items
           const deletedGroupIds = [
             // Hard-deleted: removed from array (but only if was active)
             ...[...oldGroupIds].filter((id) => {
               if (!newGroupIds.has(id)) {
                 const oldGroup = oldGroups.find((g) => g.id === id);
+                const newGroup = newGroups.find((g) => g.id === id);
+
+                // ✅ FIX #2: Skip if item exists in new state but is soft-deleted
+                // This catches cases where server now includes soft-deleted items
+                if (newGroup && newGroup.is_active === false) {
+                  console.log(`🔧 [FIX #2] Skipping hard delete for soft-deleted group: ${id} (${newGroup.name})`);
+                  return false;
+                }
+
                 // Only delete if group was active (skip already soft-deleted groups)
                 return oldGroup && oldGroup.is_active !== false;
               }
@@ -326,15 +483,24 @@ export const useSettingsData = (autosaveEnabled = true) => {
               .filter((newGroup) => {
                 const oldGroup = oldGroups.find((g) => g.id === newGroup.id);
                 // Detect soft-delete: was active (or undefined), now inactive
-                return (
+                const isSoftDeleted = (
                   oldGroup &&
                   oldGroup.is_active !== false &&
                   newGroup.is_active === false
                 );
+                console.log("🔍 [SOFT DELETE CHECK]", {
+                  groupId: newGroup.id,
+                  groupName: newGroup.name,
+                  oldIsActive: oldGroup?.is_active,
+                  newIsActive: newGroup.is_active,
+                  isSoftDeleted
+                });
+                return isSoftDeleted;
               })
               .map((g) => g.id),
           ];
           deletedGroupsCount = deletedGroupIds.length;
+          console.log("🔍 [DELETE DEBUG] deletedGroupIds:", deletedGroupIds);
           if (deletedGroupIds.length > 0) {
             console.log(`    - ${deletedGroupIds.length} group(s) deleted (hard or soft-delete)`);
             deletedGroupIds.forEach((groupId) => {
@@ -344,7 +510,9 @@ export const useSettingsData = (autosaveEnabled = true) => {
               console.log(
                 `      - Deleting group "${deletedGroup?.name}" (${groupId}) - ${deleteType}`,
               );
+              console.log("🔍 [DELETE DEBUG] About to call callbacks.wsDeleteStaffGroup for:", groupId);
               callbacks.wsDeleteStaffGroup(groupId);
+              console.log("🔍 [DELETE DEBUG] Called callbacks.wsDeleteStaffGroup for:", groupId);
             });
           }
 
@@ -388,6 +556,7 @@ export const useSettingsData = (autosaveEnabled = true) => {
             `  - Summary: ${createdGroupsCount} created, ${changedGroupsCount} updated, ${deletedGroupsCount} deleted`,
           );
         }
+        } // ✅ FIX #5: Close the else block for initial load guard
 
         // Detect and update daily limits
         if (
@@ -443,7 +612,23 @@ export const useSettingsData = (autosaveEnabled = true) => {
           }
 
           // Detect DELETED rules (exist in old but not in new)
-          const deletedRuleIds = [...oldRuleIds].filter((id) => !newRuleIds.has(id));
+          // 🔧 FIX #2: Skip items that exist in new state but are soft-deleted
+          const deletedRuleIds = [...oldRuleIds].filter((id) => {
+            if (!newRuleIds.has(id)) {
+              const oldRule = oldRules.find((r) => r.id === id);
+              const newRule = newRules.find((r) => r.id === id);
+
+              // ✅ FIX #2: Skip if item exists in new state but is soft-deleted
+              if (newRule && newRule.is_active === false) {
+                console.log(`🔧 [FIX #2] Skipping hard delete for soft-deleted rule: ${id} (${newRule.name})`);
+                return false;
+              }
+
+              // Only delete if rule was active
+              return oldRule && oldRule.is_active !== false;
+            }
+            return false;
+          });
           if (deletedRuleIds.length > 0) {
             console.log(`    - ${deletedRuleIds.length} rule(s) deleted`);
             deletedRuleIds.forEach((ruleId) => {
@@ -465,7 +650,8 @@ export const useSettingsData = (autosaveEnabled = true) => {
               id: r.id,
               name: r.name,
               description: r.description,
-              staffId: r.staffId,
+              staffId: r.staffId, // Legacy single staff
+              staffIds: r.staffIds || [], // ✅ FIX: Include staffIds array for comparison!
               shiftType: r.shiftType,
               daysOfWeek: r.daysOfWeek || [],
               ruleType: r.ruleType,
@@ -519,30 +705,52 @@ export const useSettingsData = (autosaveEnabled = true) => {
    * Reset settings to defaults (multi-table aware)
    */
   const resetToDefaults = useCallback(async () => {
+    // 🔍 DEBUG: Log reset trigger with stack trace for debugging
+    console.log("🔄 RESET TRIGGERED - Settings reset initiated");
+    console.log("  - Mode:", useWebSocket ? "WebSocket multi-table" : "localStorage");
+    console.log("  - Current settings counts:", {
+      staffGroups: settings?.staffGroups?.length || 0,
+      priorityRules: settings?.priorityRules?.length || 0,
+      dailyLimits: settings?.dailyLimits?.length || 0,
+      monthlyLimits: settings?.monthlyLimits?.length || 0,
+    });
+    console.log("  - Stack trace:", new Error().stack);
+
     try {
       setIsLoading(true);
 
       if (useWebSocket) {
         console.log("🔄 Resetting settings via WebSocket multi-table backend");
+        console.log("  - Sending SETTINGS_RESET message to Go server");
         // WebSocket mode: send multi-table reset to Go server
         await wsResetSettings();
         console.log("✅ Multi-table reset complete");
+        console.log("  - Go server should insert default settings (8 staff groups, 4 daily limits, 1 monthly limit)");
       } else {
+        console.log("🔄 Resetting settings via localStorage mode");
         // localStorage mode: use configService
         await configService.resetToDefaults();
         const defaultSettings = configService.getSettings();
+        console.log("  - Default settings loaded:", {
+          staffGroups: defaultSettings?.staffGroups?.length || 0,
+          priorityRules: defaultSettings?.priorityRules?.length || 0,
+          dailyLimits: defaultSettings?.dailyLimits?.length || 0,
+          monthlyLimits: defaultSettings?.monthlyLimits?.length || 0,
+        });
         setSettings(defaultSettings);
       }
 
       setHasUnsavedChanges(false);
       setValidationErrors({});
     } catch (err) {
-      console.error("Failed to reset to defaults:", err);
+      console.error("❌ Failed to reset to defaults:", err);
+      console.error("  - Error message:", err.message);
+      console.error("  - Error stack:", err.stack);
       setError(err.message);
     } finally {
       setIsLoading(false);
     }
-  }, [useWebSocket, wsResetSettings]);
+  }, [useWebSocket, wsResetSettings, settings]);
 
   // Export configuration
   const exportConfiguration = useCallback(() => {

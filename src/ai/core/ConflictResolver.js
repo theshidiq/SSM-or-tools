@@ -16,7 +16,6 @@ import {
   isWorkingShift,
   getDayOfWeek,
   isWeekday,
-  STAFF_CONFLICT_GROUPS,
 } from "../constraints/ConstraintEngine";
 
 /**

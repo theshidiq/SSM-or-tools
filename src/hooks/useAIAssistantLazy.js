@@ -187,11 +187,11 @@ export const useAIAssistantLazy = (
             // Initialize HybridPredictor with settings provider
             const predictor = new enhancedSystem.HybridPredictor();
 
-            // Configure predictor with AI settings if connected
-            if (aiSettings.isConnected && !aiSettings.isLoading) {
-              predictor.setSettingsProvider(aiSettings);
-              await predictor.initialize();
-            }
+            // ✅ FIX: Always configure and initialize predictor
+            // Don't skip initialization based on settings connection status
+            // The predictor can handle settings being loaded asynchronously
+            predictor.setSettingsProvider(aiSettings);
+            await predictor.initialize();
 
             const system = {
               type: "enhanced",
@@ -247,11 +247,24 @@ export const useAIAssistantLazy = (
               },
             };
 
-            aiSystemRef.current = system;
-            setSystemType("enhanced");
-            setIsInitialized(true);
-            setIsAvailable(true);
-            return system;
+            // ✅ FIX: Validate predictor is properly initialized before marking ready
+            if (predictor.initialized && predictor.isReady()) {
+              aiSystemRef.current = system;
+              setSystemType("enhanced");
+              setIsInitialized(true);
+              setIsAvailable(true);
+              console.log("✅ Enhanced AI system initialized successfully with predictor");
+              return system;
+            } else {
+              console.warn("⚠️ Predictor not ready, will retry or use fallback");
+              // Don't mark as initialized - allow retry
+              if (fallbackMode) {
+                console.log("🔄 Falling back to basic system due to predictor initialization failure");
+                // Continue to fallback section below
+              } else {
+                return null;
+              }
+            }
           }
         }
 
@@ -316,6 +329,7 @@ export const useAIAssistantLazy = (
     staffMembers,      // Fix stale closure
     currentMonthIndex, // Fix stale closure
     saveSchedule,      // Fix stale closure
+    aiSettings,        // ✅ FIX: Add aiSettings to prevent stale closure
   ]);
 
   // Auto-initialize if requested
@@ -344,7 +358,24 @@ export const useAIAssistantLazy = (
         // Ensure AI is initialized
         const system = aiSystemRef.current || (await initializeAI());
         if (!system) {
-          throw new Error("AI system not available");
+          // ✅ FIX: Provide better error handling with explicit fallback
+          if (fallbackMode && fallbackSystem) {
+            console.warn("⚠️ Enhanced system not available, using fallback system");
+            aiSystemRef.current = fallbackSystem;
+            setSystemType("fallback");
+            setIsInitialized(true);
+            setIsAvailable(true);
+            // Use fallback system
+            const fallbackResult = await fallbackSystem.generateSchedule({
+              scheduleData,
+              staffMembers,
+              currentMonthIndex,
+              saveSchedule,
+              onProgress,
+            });
+            return fallbackResult;
+          }
+          throw new Error("AI system not available and fallback is disabled");
         }
 
         // Report AI system ready

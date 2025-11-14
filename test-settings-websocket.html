@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Test Settings WebSocket</title>
+  <style>
+    body { font-family: monospace; padding: 20px; background: #1e1e1e; color: #d4d4d4; }
+    .log { background: #252526; padding: 10px; margin: 10px 0; border-radius: 4px; border-left: 3px solid #007acc; }
+    .error { border-left-color: #f48771; }
+    .success { border-left-color: #89d185; }
+    button { background: #0e639c; color: white; border: none; padding: 10px 20px; margin: 5px; cursor: pointer; border-radius: 3px; }
+    button:hover { background: #1177bb; }
+    pre { background: #1e1e1e; padding: 10px; overflow-x: auto; }
+  </style>
+</head>
+<body>
+  <h1>Settings WebSocket Test</h1>
+  <button onclick="connect()">Connect to WebSocket</button>
+  <button onclick="requestSettings()">Request Settings</button>
+  <button onclick="clearLogs()">Clear</button>
+
+  <div id="logs"></div>
+
+  <script>
+    let ws = null;
+    const logsDiv = document.getElementById('logs');
+
+    function log(message, type = 'log') {
+      const div = document.createElement('div');
+      div.className = `log ${type}`;
+      div.innerHTML = `<strong>${new Date().toLocaleTimeString()}</strong> ${message}`;
+      logsDiv.appendChild(div);
+      logsDiv.scrollTop = logsDiv.scrollHeight;
+    }
+
+    function clearLogs() {
+      logsDiv.innerHTML = '';
+    }
+
+    function connect() {
+      if (ws && ws.readyState === WebSocket.OPEN) {
+        log('Already connected!', 'error');
+        return;
+      }
+
+      const wsUrl = 'ws://localhost:8080/staff-sync';
+      log(`Connecting to ${wsUrl}...`);
+
+      ws = new WebSocket(wsUrl);
+
+      ws.onopen = () => {
+        log('✅ Connected!', 'success');
+      };
+
+      ws.onmessage = (event) => {
+        const msg = JSON.parse(event.data);
+        log(`📨 Received: <strong>${msg.type}</strong>`);
+
+        if (msg.type === 'SETTINGS_SYNC_RESPONSE') {
+          const settings = msg.payload?.settings || {};
+          const groups = settings.staffGroups || [];
+
+          log(`<pre>Settings received:\n${JSON.stringify(settings, null, 2)}</pre>`);
+
+          if (groups.length > 0) {
+            log(`<strong>Staff Groups (${groups.length}):</strong>`, 'success');
+            groups.forEach((g, i) => {
+              const members = Array.isArray(g.members) ? g.members : [];
+              log(`  ${i + 1}. ${g.name}: ${members.length} members - ${members.join(', ') || 'EMPTY'}`);
+            });
+          } else {
+            log('⚠️ No staff groups in response!', 'error');
+          }
+        }
+      };
+
+      ws.onerror = (error) => {
+        log(`❌ Error: ${error.message}`, 'error');
+      };
+
+      ws.onclose = () => {
+        log('🔌 Disconnected');
+        ws = null;
+      };
+    }
+
+    function requestSettings() {
+      if (!ws || ws.readyState !== WebSocket.OPEN) {
+        log('❌ Not connected! Click Connect first.', 'error');
+        return;
+      }
+
+      const msg = {
+        type: 'SETTINGS_SYNC_REQUEST',
+        clientId: crypto.randomUUID(),
+        timestamp: new Date().toISOString()
+      };
+
+      log(`📤 Sending SETTINGS_SYNC_REQUEST...`);
+      ws.send(JSON.stringify(msg));
+    }
+
+    // Auto-connect on load
+    setTimeout(() => connect(), 500);
+  </script>
+</body>
+</html>

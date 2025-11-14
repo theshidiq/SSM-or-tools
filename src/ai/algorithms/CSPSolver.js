@@ -10,10 +10,10 @@ import {
   isEarlyShift,
   isWorkingShift,
   getDayOfWeek,
-  STAFF_CONFLICT_GROUPS,
   PRIORITY_RULES,
   DAILY_LIMITS,
   getMonthlyLimits,
+  getStaffConflictGroups,
 } from "../constraints/ConstraintEngine";
 
 /**
@@ -24,6 +24,7 @@ export class CSPSolver {
     this.initialized = false;
     this.domain = ["", "△", "◇", "×"]; // Possible shift values
     this.constraints = [];
+    this.staffGroups = []; // ✅ Database-only staff groups
     this.heuristics = {
       variableOrdering: "most_constrained_first",
       valueOrdering: "least_constraining_first",
@@ -123,6 +124,9 @@ export class CSPSolver {
 
     try {
       const startTime = Date.now();
+
+      // ✅ Load staff groups from database
+      this.staffGroups = await getStaffConflictGroups();
 
       // Initialize problem
       const problem = this.initializeProblem(
@@ -640,8 +644,8 @@ export class CSPSolver {
     const staffName = variable.staffName;
     const dateKey = variable.dateKey;
 
-    // Check each staff group
-    for (const group of STAFF_CONFLICT_GROUPS) {
+    // Check each staff group (from database)
+    for (const group of this.staffGroups) {
       if (!group.members.includes(staffName)) continue;
 
       let conflictCount = 0;
@@ -675,8 +679,8 @@ export class CSPSolver {
     const dateKey = variable.dateKey;
     const staffName = variable.staffName;
 
-    // Find Group 2 (料理長, 古藤)
-    const group2 = STAFF_CONFLICT_GROUPS.find((g) => g.name === "Group 2");
+    // Find Group 2 (料理長, 古藤) from database
+    const group2 = this.staffGroups.find((g) => g.name === "Group 2");
     if (!group2 || !group2.coverageRule) return true;
 
     const backupStaff = group2.coverageRule.backupStaff;
@@ -839,7 +843,7 @@ export class CSPSolver {
   }
 
   shareStaffGroup(staffName1, staffName2) {
-    return STAFF_CONFLICT_GROUPS.some(
+    return this.staffGroups.some(
       (group) =>
         group.members.includes(staffName1) &&
         group.members.includes(staffName2),

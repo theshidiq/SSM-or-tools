@@ -7,7 +7,10 @@
 
 import * as tf from "@tensorflow/tfjs";
 // Removed circular dependency - HighAccuracyMLScheduler imports TensorFlowScheduler
-import { extractAllDataForAI } from "../utils/DataExtractor.js";
+import {
+  extractAllDataForAI,
+  getStaffPredictionContext,
+} from "../utils/DataExtractor.js";
 import { isStaffActiveInCurrentPeriod } from "../../utils/staffUtils.js";
 import { mlWorkerManager } from "../../workers/MLWorkerManager.js";
 import { optimizedFeatureManager } from "../../workers/OptimizedFeatureManager.js";
@@ -40,6 +43,15 @@ export class TensorFlowScheduler {
     this.modelVersion = "2.0.0"; // Updated to high-accuracy version
     this.lastTrainingData = null;
     this.cacheWarmedUp = false; // 🔥 Track if cache has been warmed up
+
+    // ✅ FIX: Track database state for smart cache invalidation
+    this.lastDatabaseState = {
+      priorityRulesChecksum: null,
+      dailyLimitsChecksum: null,
+      staffChecksum: null,
+      lastChecked: null
+    };
+
     this.modelPerformanceMetrics = {
       accuracy: 0.9, // Target 90%+ accuracy
       loss: 0,
@@ -193,6 +205,21 @@ export class TensorFlowScheduler {
       currentStaffMembers,
       options,
     );
+
+    // ✅ FIX: Clear model cache if database changes detected
+    if (retrainingNeeded) {
+      const priorityRules = options.priorityRules || [];
+      const dailyLimits = options.dailyLimits || [];
+      const databaseChanged = this.haveDatabaseChanges(priorityRules, dailyLimits, currentStaffMembers);
+
+      if (databaseChanged) {
+        console.log("🔄 [Model Cache] Database changes detected - clearing cached model");
+        MODEL_STORAGE.clearCache();
+        // Also clear feature cache for complete fresh start
+        featureCacheManager.clearCache();
+      }
+    }
+
     if (!retrainingNeeded && !options.forceRetrain) {
       // Using existing trained model (no retraining needed)
       return {
@@ -208,13 +235,23 @@ export class TensorFlowScheduler {
       const trainingStartTime = Date.now();
       // Starting enhanced ML model training
 
+      // 🔥 NEW: Report initial progress
+      if (options.onProgress) {
+        options.onProgress({
+          stage: 'データ抽出中...',
+          percentage: 5,
+          currentEpoch: 0,
+          totalEpochs: 0,
+        });
+      }
+
       // Create model backup before training
       await this.createModelBackup("pre-training");
 
       MEMORY_UTILS.logMemoryUsage("Before enhanced training");
 
-      // Extract and validate training data
-      const dataExtractionResult = await this.extractAndValidateTrainingData();
+      // Extract and validate training data (with optional period filtering)
+      const dataExtractionResult = await this.extractAndValidateTrainingData(options.periodsToUse);
 
       if (!dataExtractionResult.success) {
         throw new Error(
@@ -222,7 +259,7 @@ export class TensorFlowScheduler {
         );
       }
 
-      const { allHistoricalData, allStaffMembers, dataQuality } =
+      const { allHistoricalData, allStaffMembers, dataQuality, periodsUsed, totalPeriods } =
         dataExtractionResult;
 
       // Training data quality and staff information logged internally
@@ -282,12 +319,24 @@ export class TensorFlowScheduler {
         features.length,
         options,
       );
+
+      // 🔥 NEW: Report progress for data preparation complete
+      if (options.onProgress) {
+        options.onProgress({
+          stage: 'モデルトレーニング開始...',
+          percentage: 20,
+          currentEpoch: 0,
+          totalEpochs: trainingConfig.epochs,
+        });
+      }
+
       const trainingResult = await this.performEnhancedTraining(
         features,
         labels,
         validationFeatures,
         validationLabels,
         trainingConfig,
+        options.onProgress, // 🔥 NEW: Pass progress callback
       );
 
       if (!trainingResult.success) {
@@ -302,12 +351,26 @@ export class TensorFlowScheduler {
         trainingTime: Date.now() - trainingStartTime,
         accuracy: finalMetrics.accuracy,
         loss: finalMetrics.loss,
+        periodsUsed, // 🔥 NEW: Track which periods were used
+        totalPeriods, // 🔥 NEW: Total available periods
         trainingData: {
           samples: features.length,
           staffCount: staffMembers.length,
           dataQuality: dataQuality.completeness,
+          periodsUsed, // Also include in nested object for backward compat
+          totalPeriods,
         },
       });
+
+      // 🔥 NEW: Report model saving progress
+      if (options.onProgress) {
+        options.onProgress({
+          stage: 'モデル保存中...',
+          percentage: 95,
+          currentEpoch: trainingConfig.epochs,
+          totalEpochs: trainingConfig.epochs,
+        });
+      }
 
       // Save enhanced model with metadata
       await this.saveEnhancedModel();
@@ -326,6 +389,18 @@ export class TensorFlowScheduler {
 
       MEMORY_UTILS.logMemoryUsage("After enhanced training");
 
+      // 🔥 NEW: Report completion
+      if (options.onProgress) {
+        options.onProgress({
+          stage: '完了',
+          percentage: 100,
+          currentEpoch: trainingConfig.epochs,
+          totalEpochs: trainingConfig.epochs,
+          loss: finalMetrics.loss,
+          accuracy: finalMetrics.accuracy,
+        });
+      }
+
       return {
         success: true,
         finalAccuracy: finalMetrics.accuracy,
@@ -338,6 +413,8 @@ export class TensorFlowScheduler {
         trainingTime,
         modelVersion: this.modelVersion,
         performanceMetrics: this.modelPerformanceMetrics,
+        periodsUsed, // 🔥 NEW: Include in training result
+        totalPeriods, // 🔥 NEW: Include in training result
       };
     } catch (error) {
       console.error("❌ Enhanced model training failed:", error);
@@ -414,8 +491,11 @@ export class TensorFlowScheduler {
       console.log("🎯 [DEBUG] Starting model training...");
       const trainingStartTime = Date.now();
       try {
+        // ✅ FIX: Pass priority rules and daily limits for database change detection
         const trainingResult = await this.trainModel(staffMembers, {
           forceRetrain: false,
+          priorityRules: priorityRules,
+          dailyLimits: dailyLimits,
         });
         const trainingTime = Date.now() - trainingStartTime;
         console.log(`🎯 [DEBUG] Model training completed in ${trainingTime}ms`, {
@@ -442,10 +522,17 @@ export class TensorFlowScheduler {
       console.log("🎯 [DEBUG] Entering prediction try block");
 
       // **PHASE 2 ENHANCEMENT: Initialize cache with current configuration**
+      // ✅ FIX: Include database state in cache key for smart invalidation
       const cacheInvalidated = featureCacheManager.invalidateOnConfigChange(
         staffMembers,
         currentSchedule,
-        { dateRange: dateRange.map((d) => d.toISOString()) },
+        {
+          dateRange: dateRange.map((d) => d.toISOString()),
+          // Database state for cache invalidation
+          priorityRules: priorityRules || [],
+          dailyLimits: dailyLimits || [],
+          monthlyLimits: monthlyLimits || []
+        },
       );
 
       // Cache invalidated if configuration changed
@@ -1299,6 +1386,19 @@ export class TensorFlowScheduler {
               console.log(`🔧 [FEATURE-GEN] Starting for ${staff.name} on ${dateKey}`);
               const genStartTime = Date.now();
 
+              // PHASE 2: Get staff-specific prediction context
+              let staffPredictionContext = null;
+              if (staff.hasPatternMemory) {
+                try {
+                  staffPredictionContext = getStaffPredictionContext(staff, dateKey);
+                  if (staffPredictionContext.hasContext) {
+                    console.log(`🧠 [PHASE-2] Pattern memory context for ${staff.name}: confidence=${staffPredictionContext.confidence.overall.toFixed(2)}, stability=${staffPredictionContext.stability.level}`);
+                  }
+                } catch (contextError) {
+                  console.warn(`⚠️ [PHASE-2] Failed to get prediction context for ${staff.name}:`, contextError.message);
+                }
+              }
+
               const features = this.featureEngineer.generateFeatures({
                 staff,
                 date,
@@ -1306,6 +1406,8 @@ export class TensorFlowScheduler {
                 periodData,
                 allHistoricalData,
                 staffMembers,
+                // PHASE 2: Pass staff-specific context to feature engineer
+                staffPredictionContext,
               });
 
               const genTime = Date.now() - genStartTime;
@@ -1901,6 +2003,17 @@ export class TensorFlowScheduler {
       this.model = modelResult.model;
       this.modelVersion = modelResult.metadata?.version || "1.0.0";
 
+      // 🔧 FIX: Recompile loaded model (TensorFlow doesn't save compilation config)
+      if (this.model && !this.model.optimizer) {
+        console.log("🔧 Recompiling loaded model...");
+        const optimizer = tf.train.adam(MODEL_CONFIG.TRAINING.LEARNING_RATE);
+        this.model.compile({
+          optimizer,
+          loss: MODEL_CONFIG.TRAINING.LOSS,
+          metrics: MODEL_CONFIG.TRAINING.METRICS,
+        });
+      }
+
       if (modelResult.fromCache) {
         console.log(`⚡ Model loaded from memory cache (v${this.modelVersion})`);
       } else {
@@ -2019,6 +2132,99 @@ export class TensorFlowScheduler {
   }
 
   /**
+   * ✅ FIX: Check if database state has changed (priority rules, daily limits, staff)
+   * Returns true if database changes detected that require model retraining
+   */
+  haveDatabaseChanges(priorityRules = [], dailyLimits = [], currentStaffMembers = []) {
+    try {
+      // Simple hash function for checksums
+      const simpleHash = (obj) => {
+        const str = JSON.stringify(obj, Object.keys(obj).sort());
+        let hash = 0;
+        for (let i = 0; i < str.length; i++) {
+          const char = str.charCodeAt(i);
+          hash = (hash << 5) - hash + char;
+          hash = hash & hash;
+        }
+        return hash.toString(36);
+      };
+
+      // Calculate current checksums
+      const currentPriorityRulesChecksum = simpleHash(
+        priorityRules.map(r => ({
+          id: r.id,
+          staffId: r.staffId,
+          ruleType: r.ruleType,
+          priorityLevel: r.priorityLevel,
+          isActive: r.isActive
+        }))
+      );
+
+      const currentDailyLimitsChecksum = simpleHash(dailyLimits);
+
+      const currentStaffChecksum = simpleHash(
+        currentStaffMembers.map(s => ({
+          id: s.id,
+          name: s.name,
+          status: s.status,
+          department: s.department
+        }))
+      );
+
+      // Check if this is first check (no previous state)
+      if (this.lastDatabaseState.lastChecked === null) {
+        // Store initial state
+        this.lastDatabaseState = {
+          priorityRulesChecksum: currentPriorityRulesChecksum,
+          dailyLimitsChecksum: currentDailyLimitsChecksum,
+          staffChecksum: currentStaffChecksum,
+          lastChecked: Date.now()
+        };
+        console.log("📊 [Database State] Initial state recorded", {
+          priorityRulesCount: priorityRules.length,
+          dailyLimitsCount: dailyLimits.length,
+          staffCount: currentStaffMembers.length
+        });
+        return false; // No change on first check
+      }
+
+      // Compare checksums
+      const priorityRulesChanged = currentPriorityRulesChecksum !== this.lastDatabaseState.priorityRulesChecksum;
+      const dailyLimitsChanged = currentDailyLimitsChecksum !== this.lastDatabaseState.dailyLimitsChecksum;
+      const staffChanged = currentStaffChecksum !== this.lastDatabaseState.staffChecksum;
+
+      const hasChanges = priorityRulesChanged || dailyLimitsChanged || staffChanged;
+
+      if (hasChanges) {
+        console.log("🔄 [Database State] Changes detected - retraining required", {
+          priorityRulesChanged,
+          dailyLimitsChanged,
+          staffChanged,
+          previousPriorityRulesChecksum: this.lastDatabaseState.priorityRulesChecksum,
+          currentPriorityRulesChecksum,
+          previousDailyLimitsChecksum: this.lastDatabaseState.dailyLimitsChecksum,
+          currentDailyLimitsChecksum,
+          previousStaffChecksum: this.lastDatabaseState.staffChecksum,
+          currentStaffChecksum
+        });
+
+        // Update stored state
+        this.lastDatabaseState = {
+          priorityRulesChecksum: currentPriorityRulesChecksum,
+          dailyLimitsChecksum: currentDailyLimitsChecksum,
+          staffChecksum: currentStaffChecksum,
+          lastChecked: Date.now()
+        };
+      }
+
+      return hasChanges;
+    } catch (error) {
+      console.warn("⚠️ [Database State] Error checking database changes:", error);
+      return false; // Don't force retrain on error
+    }
+  }
+
+  /**
    * Check if model retraining is needed
    */
   async shouldRetrain(currentStaffMembers, options) {
@@ -2028,10 +2234,18 @@ export class TensorFlowScheduler {
     // Check if model exists and is trained
     if (!this.model || this.getModelAccuracy() === 0) return true;
 
+    // ✅ FIX: Check database changes (priority rules, daily limits, staff)
+    const priorityRules = options.priorityRules || [];
+    const dailyLimits = options.dailyLimits || [];
+    if (this.haveDatabaseChanges(priorityRules, dailyLimits, currentStaffMembers)) {
+      console.log("🔄 [shouldRetrain] Database changes detected - retraining required");
+      return true;
+    }
+
     // Check feedback queue size
     if (this.feedbackData.length >= 20) return true;
 
-    // Check staff changes
+    // Check staff changes (legacy check - now handled by haveDatabaseChanges)
     if (currentStaffMembers && this.lastTrainingData) {
       const staffChanged = this.hasStaffCompositionChanged(currentStaffMembers);
       if (staffChanged) return true;
@@ -2047,12 +2261,16 @@ export class TensorFlowScheduler {
 
   /**
    * Extract and validate training data with comprehensive quality checks
+   * @param {Array<number>} periodsToUse - Optional array of period indices to use (e.g., [0,1,2,3,4])
    */
-  async extractAndValidateTrainingData() {
+  async extractAndValidateTrainingData(periodsToUse = null) {
     try {
       // Extracting and validating training data
+      if (periodsToUse && periodsToUse.length > 0) {
+        console.log(`📅 Using filtered periods for training: ${periodsToUse.join(', ')}`);
+      }
 
-      const extractedData = extractAllDataForAI();
+      const extractedData = extractAllDataForAI(true, periodsToUse);
 
       if (!extractedData.success || !extractedData.data) {
         return {
@@ -2063,6 +2281,9 @@ export class TensorFlowScheduler {
       }
 
       const { rawPeriodData, staffProfiles, summary } = extractedData.data;
+      // 🔥 NEW: Capture periods used for model metadata
+      const periodsUsed = extractedData.periodsUsed || [];
+      const totalPeriods = extractedData.totalPeriods || rawPeriodData.length;
 
       // Enhanced validation checks
       const validationResults = await this.performDataQualityValidation({
@@ -2124,13 +2345,15 @@ export class TensorFlowScheduler {
       const dataQuality = {
         completeness: summary.dataCompleteness,
         periods: rawPeriodData.length,
+        periodsUsed, // 🔥 NEW: Track which periods were used
+        totalPeriods, // 🔥 NEW: Total detected periods
         staffCount: allStaffMembers.length,
         activeStaffCount: allStaffMembers.filter((s) => s.hasScheduleData)
           .length,
         totalDataPoints: totalShiftsProcessed,
         averageDataPointsPerStaff:
           totalShiftsProcessed / Math.max(1, allStaffMembers.length),
-        periodCoverage: rawPeriodData.length / 6, // Out of 6 possible periods
+        periodCoverage: rawPeriodData.length / Math.max(1, totalPeriods), // Dynamic calculation
         validation: validationResults,
       };
 
@@ -2141,6 +2364,8 @@ export class TensorFlowScheduler {
         allHistoricalData,
         allStaffMembers,
         dataQuality,
+        periodsUsed, // 🔥 NEW: Return periods for metadata
+        totalPeriods, // 🔥 NEW: Return total periods
       };
     } catch (error) {
       console.error("❌ Training data extraction failed:", error);
@@ -2252,46 +2477,325 @@ export class TensorFlowScheduler {
     validationFeatures,
     validationLabels,
     config,
+    onProgress = null,
   ) {
     try {
+      // 🔧 CRITICAL FIX: Always create fresh model to avoid cached NaN weights
+      // Previous models with different activation/architecture may have incompatible weights
+      if (this.model) {
+        console.log("🗑️ Disposing old model to prevent NaN from cached weights...");
+        this.model.dispose();
+        this.model = null;
+      }
+
+      console.log("🔧 Creating fresh model with current architecture (ELU activation)...");
+      this.model = createScheduleModel();
+
+      // 🔧 FIX: Validate features for NaN/Infinity before training
+      let invalidCount = 0;
+      const hasInvalidValues = features.some(row =>
+        row.some(val => {
+          if (!isFinite(val)) {
+            invalidCount++;
+            return true;
+          }
+          return false;
+        })
+      );
+
+      if (hasInvalidValues) {
+        console.warn(`⚠️ Detected ${invalidCount} NaN/Infinity values in training data, cleaning...`);
+        // Replace invalid values with 0
+        features = features.map(row =>
+          row.map(val => isFinite(val) ? val : 0)
+        );
+
+        // Verify cleaning worked
+        const stillHasInvalid = features.some(row => row.some(val => !isFinite(val)));
+        if (stillHasInvalid) {
+          throw new Error('❌ Failed to clean NaN/Infinity values from features');
+        } else {
+          console.log(`✅ Successfully cleaned ${invalidCount} invalid feature values`);
+        }
+      }
+
+      // 🔧 CRITICAL FIX: Normalize all features to [0, 1] range to prevent gradient explosion
+      // Calculate min/max for each feature dimension
+      const numFeatures = features[0].length;
+      const featureMins = new Array(numFeatures).fill(Infinity);
+      const featureMaxs = new Array(numFeatures).fill(-Infinity);
+
+      // Find min/max for each feature
+      features.forEach(row => {
+        row.forEach((val, idx) => {
+          if (val < featureMins[idx]) featureMins[idx] = val;
+          if (val > featureMaxs[idx]) featureMaxs[idx] = val;
+        });
+      });
+
+      // Normalize features to [0, 1] range
+      let normalizedCount = 0;
+      features = features.map(row =>
+        row.map((val, idx) => {
+          const min = featureMins[idx];
+          const max = featureMaxs[idx];
+
+          // If all values are the same, return 0.5
+          if (max === min) return 0.5;
+
+          // Normalize to [0, 1]
+          const normalized = (val - min) / (max - min);
+          if (normalized !== val) normalizedCount++;
+
+          return normalized;
+        })
+      );
+
+      console.log(`✅ Normalized ${normalizedCount} feature values to [0, 1] range`);
+
+      // Apply same normalization to validation data
+      if (validationFeatures && validationFeatures.length > 0) {
+        validationFeatures = validationFeatures.map(row =>
+          row.map((val, idx) => {
+            const min = featureMins[idx];
+            const max = featureMaxs[idx];
+            if (max === min) return 0.5;
+            return (val - min) / (max - min);
+          })
+        );
+        console.log(`✅ Normalized validation features using same scale`);
+      }
+
+      // 🔧 FIX: Filter out samples with null/undefined labels AND validate label values
+      const validIndices = labels
+        .map((label, index) => {
+          // Check for null/undefined
+          if (label === null || label === undefined) return -1;
+
+          // Check if label is a valid integer
+          if (!Number.isInteger(label)) {
+            console.warn(`⚠️ Non-integer label at index ${index}: ${label}`);
+            return -1;
+          }
+
+          // Check if label is in valid range (0-4 for 5 shift types)
+          if (label < 0 || label >= MODEL_CONFIG.ARCHITECTURE.OUTPUT_SIZE) {
+            console.warn(`⚠️ Label out of range at index ${index}: ${label} (expected 0-${MODEL_CONFIG.ARCHITECTURE.OUTPUT_SIZE - 1})`);
+            return -1;
+          }
+
+          return index;
+        })
+        .filter(index => index !== -1);
+
+      if (validIndices.length < labels.length) {
+        const filteredCount = labels.length - validIndices.length;
+        console.warn(`⚠️ Filtering out ${filteredCount} samples with invalid labels`);
+        features = validIndices.map(i => features[i]);
+        labels = validIndices.map(i => labels[i]);
+
+        // Also filter validation data if present
+        if (validationFeatures && validationLabels) {
+          const validValidationIndices = validationLabels
+            .map((label, index) => {
+              if (label === null || label === undefined) return -1;
+              if (!Number.isInteger(label)) return -1;
+              if (label < 0 || label >= MODEL_CONFIG.ARCHITECTURE.OUTPUT_SIZE) return -1;
+              return index;
+            })
+            .filter(index => index !== -1);
+
+          if (validValidationIndices.length < validationLabels.length) {
+            console.warn(`⚠️ Filtering out ${validationLabels.length - validValidationIndices.length} validation samples with invalid labels`);
+            validationFeatures = validValidationIndices.map(i => validationFeatures[i]);
+            validationLabels = validValidationIndices.map(i => validationLabels[i]);
+          }
+        }
+      }
+
+      // Verify we have enough training data after filtering
+      if (features.length === 0 || labels.length === 0) {
+        throw new Error('No valid training data after filtering invalid labels');
+      }
+
+      console.log(`✅ Training with ${features.length} valid samples (${labels.length} labels)`);
+
+      // 🔧 CRITICAL FIX: Use one-hot encoding for categorical crossentropy
+      // Sparse categorical crossentropy has bugs in TensorFlow.js
+      // Solution: Use proven categorical crossentropy with one-hot encoding
+      // NO label smoothing - rely on other stability fixes instead
+
       // Convert to tensors
       const xs = tf.tensor2d(features);
-      const ys = tf.oneHot(
-        tf.tensor1d(labels, "int32"),
-        MODEL_CONFIG.ARCHITECTURE.OUTPUT_SIZE,
-      );
+
+      // One-hot encode labels WITHOUT smoothing (smoothing caused NaN before)
+      const numClasses = MODEL_CONFIG.ARCHITECTURE.OUTPUT_SIZE;
+      const ys = tf.oneHot(tf.tensor1d(labels, 'int32'), numClasses);
 
       let validationData = null;
       if (validationFeatures && validationLabels) {
         const valXs = tf.tensor2d(validationFeatures);
-        const valYs = tf.oneHot(
-          tf.tensor1d(validationLabels, "int32"),
-          MODEL_CONFIG.ARCHITECTURE.OUTPUT_SIZE,
-        );
+        const valYs = tf.oneHot(tf.tensor1d(validationLabels, 'int32'), numClasses);
         validationData = [valXs, valYs];
       }
 
+      console.log(`✅ Using one-hot encoded labels (no smoothing) for categorical crossentropy`);
+
+      // 🔧 DEBUG: Check for NaN in tensors before training
+      const xsData = await xs.array();
+      const ysData = await ys.array();
+
+      // Features are 2D: [[f1, f2, ...], [f1, f2, ...], ...]
+      const hasNaNX = xsData.some(row => row.some(val => !isFinite(val)));
+
+      // Labels are 2D one-hot: [[1,0,0,0,0], [0,1,0,0,0], ...]
+      const hasNaNY = ysData.some(row => row.some(val => !isFinite(val)));
+
+      if (hasNaNX) {
+        throw new Error('❌ NaN detected in input features tensor!');
+      }
+      if (hasNaNY) {
+        throw new Error('❌ NaN detected in labels tensor!');
+      }
+
+      console.log(`✅ Tensors verified: no NaN in inputs or labels`);
+
+      // 🔧 FIX #23: Check model weights BEFORE training
+      console.log("🔍 Checking initial model weights for NaN...");
+      let hasNaNWeights = false;
+      this.model.layers.forEach((layer, idx) => {
+        const weights = layer.getWeights();
+        weights.forEach((weight, wIdx) => {
+          const weightData = weight.dataSync();
+          const hasNaN = Array.from(weightData).some(val => !isFinite(val));
+          if (hasNaN) {
+            console.error(`❌ Layer ${idx} (${layer.name}) weight ${wIdx} contains NaN!`);
+            hasNaNWeights = true;
+          }
+        });
+      });
+
+      if (hasNaNWeights) {
+        throw new Error("❌ Model weights contain NaN BEFORE training! Initialization is broken!");
+      }
+      console.log("✅ All model weights are finite (no NaN)");
+
+      // 🔧 FIX #23: Test forward pass with sample data
+      console.log("🔍 Testing forward pass with first sample...");
+      const testInput = tf.tensor2d([features[0]]);
+      const testPrediction = this.model.predict(testInput);
+      const testPredData = await testPrediction.data();
+      const hasNaNPred = Array.from(testPredData).some(val => !isFinite(val));
+      testInput.dispose();
+      testPrediction.dispose();
+
+      if (hasNaNPred) {
+        console.error("❌ Model prediction contains NaN BEFORE training!");
+        console.error("❌ This means the forward pass itself produces NaN!");
+        throw new Error("❌ Forward pass produces NaN - model architecture is broken!");
+      }
+      console.log("✅ Forward pass produces finite predictions");
+
       // Starting enhanced neural network training
+
+      // 🔥 NEW: Calculate estimated time
+      const batchesPerEpoch = Math.ceil(features.length / config.batchSize);
+      const estimatedSecondsPerEpoch = batchesPerEpoch * 0.15; // ~150ms per batch
+      const trainingStartTime = Date.now();
 
       // Enhanced training with callbacks
       const history = await this.model.fit(xs, ys, {
         epochs: config.epochs,
         batchSize: config.batchSize,
         validationData: validationData,
-        shuffle: true,
+        shuffle: false, // 🔧 FIX: Disabled - data already shuffled manually above
         callbacks: {
-          onEpochEnd: (epoch, logs) => {
-            const progress = (((epoch + 1) / config.epochs) * 100).toFixed(1);
-            // Training progress tracking
+          onBatchEnd: (batch, logs) => {
+            // 🔧 FIX #25: Check weights after batch 0 completes
+            if (batch === 0) {
+              // Check if weights became NaN after first gradient update
+              let weightsAreNaN = false;
+              this.model.layers.forEach((layer, idx) => {
+                const weights = layer.getWeights();
+                weights.forEach((weight, wIdx) => {
+                  const weightData = weight.dataSync();
+                  const hasNaN = Array.from(weightData).some(val => !isFinite(val));
+                  if (hasNaN) {
+                    console.error(`❌ WEIGHTS BECAME NaN after batch 0! Layer ${idx} (${layer.name}) weight ${wIdx}`);
+                    weightsAreNaN = true;
+                  }
+                });
+              });
+              if (weightsAreNaN) {
+                console.error("❌ GRADIENT UPDATE caused NaN in weights!");
+                this.model.stopTraining = true;
+                return;
+              } else {
+                console.log("✅ Weights still finite after batch 0");
+              }
+            }
 
-            // Early stopping if loss increases significantly
-            if (epoch > 10 && logs.loss > 2.0) {
-              console.warn("⚠️ Early stopping due to loss explosion");
+            // 🔧 FIX #23: Check loss after EVERY batch (not just first)
+            if (!isFinite(logs.loss)) {
+              console.error(`❌ NaN appeared in BATCH ${batch}!`);
+              console.error(`❌ Previous batches were fine, NaN started here!`);
+              this.model.stopTraining = true;
+            }
+
+            // Log first 3 batches and any with suspicious loss
+            if (batch < 3 || logs.loss > 5.0) {
+              console.log(`🔍 Batch ${batch} - Loss: ${logs.loss}, Acc: ${logs.acc || 0}`);
+            }
+          },
+          onEpochEnd: (epoch, logs) => {
+            const currentEpoch = epoch + 1;
+            const percentage = (currentEpoch / config.epochs) * 100;
+
+            // Calculate estimated time remaining
+            const elapsedTime = (Date.now() - trainingStartTime) / 1000; // seconds
+            const avgTimePerEpoch = elapsedTime / currentEpoch;
+            const remainingEpochs = config.epochs - currentEpoch;
+            const estimatedTimeRemaining = avgTimePerEpoch * remainingEpochs;
+
+            // 🔥 NEW: Report progress to callback
+            if (onProgress) {
+              onProgress({
+                stage: `トレーニング中 (Epoch ${currentEpoch}/${config.epochs})`,
+                percentage: 20 + (percentage * 0.7), // 20-90% range for training
+                currentEpoch,
+                totalEpochs: config.epochs,
+                loss: logs.loss,
+                accuracy: logs.acc || 0,
+                estimatedTimeRemaining,
+              });
+            }
+
+            // 🔧 FIX: Handle NaN loss
+            const lossStr = isFinite(logs.loss) ? logs.loss.toFixed(4) : 'NaN';
+            console.log(
+              `⏱️ Epoch ${currentEpoch}/${config.epochs} - Loss: ${lossStr}, Acc: ${((logs.acc || 0) * 100).toFixed(1)}%, ETA: ${estimatedTimeRemaining.toFixed(0)}s`
+            );
+
+            // Early stopping if loss is NaN or explodes
+            if (!isFinite(logs.loss) || (epoch > 10 && logs.loss > 2.0)) {
+              if (!isFinite(logs.loss)) {
+                console.warn("⚠️ Early stopping due to NaN loss - reducing learning rate recommended");
+              } else {
+                console.warn("⚠️ Early stopping due to loss explosion");
+              }
               this.model.stopTraining = true;
             }
           },
           onTrainEnd: () => {
             // Enhanced training completed
+            if (onProgress) {
+              onProgress({
+                stage: 'トレーニング完了',
+                percentage: 90,
+                currentEpoch: config.epochs,
+                totalEpochs: config.epochs,
+              });
+            }
           },
         },
       });
@@ -2529,18 +3033,24 @@ export class TensorFlowScheduler {
   async performPostTrainingCleanup() {
     try {
       // Clean up old performance monitoring data
-      if (this.performanceMonitor.memorySnapshots.length > 50) {
-        this.performanceMonitor.memorySnapshots =
-          this.performanceMonitor.memorySnapshots.slice(-50);
+      if (this.performanceMonitor && this.performanceMonitor.memorySnapshots) {
+        if (this.performanceMonitor.memorySnapshots.length > 50) {
+          this.performanceMonitor.memorySnapshots =
+            this.performanceMonitor.memorySnapshots.slice(-50);
+        }
       }
 
-      if (this.performanceMonitor.predictionTimes.length > 100) {
-        this.performanceMonitor.predictionTimes =
-          this.performanceMonitor.predictionTimes.slice(-100);
+      if (this.performanceMonitor && this.performanceMonitor.predictionTimes) {
+        if (this.performanceMonitor.predictionTimes.length > 100) {
+          this.performanceMonitor.predictionTimes =
+            this.performanceMonitor.predictionTimes.slice(-100);
+        }
       }
 
       // Perform memory cleanup
-      MEMORY_UTILS.cleanup();
+      if (MEMORY_UTILS && typeof MEMORY_UTILS.cleanup === 'function') {
+        MEMORY_UTILS.cleanup();
+      }
 
       // Post-training cleanup completed
     } catch (error) {
@@ -2831,7 +3341,7 @@ export class TensorFlowScheduler {
 
       model.compile({
         optimizer: "adam",
-        loss: "categoricalCrossentropy",
+        loss: "categoricalCrossentropy", // 🔧 FIX: Use categorical crossentropy (matches main model)
         metrics: ["accuracy"],
       });
 

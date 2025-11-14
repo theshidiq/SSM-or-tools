@@ -220,36 +220,11 @@ const getStaticConfiguration = (configType) => {
 };
 
 /**
- * Staff groups that cannot have simultaneous off/early shifts
- * Static fallback configuration - Updated to match new group structure
+ * ✅ CLEANED: Removed hardcoded staff groups
+ * Staff groups should ONLY come from database via ConfigurationService
+ * NO static fallback to prevent using deleted/outdated groups
  */
-const STATIC_STAFF_CONFLICT_GROUPS = [
-  { name: "Group 1", members: ["料理長", "井関"] },
-  {
-    name: "Group 2",
-    members: ["料理長", "古藤"],
-    coverageRule: {
-      backupStaff: "中田",
-      requiredShift: "normal",
-      description:
-        "When Group 2 member has day off, 中田 must work normal shift",
-    },
-    proximityPattern: {
-      trigger: "料理長",
-      condition: "weekday_off",
-      target: "古藤",
-      proximity: 2,
-      description:
-        "When 料理長 has weekday day off, 古藤's day off should be within ±2 days",
-    },
-  },
-  { name: "Group 3", members: ["井関", "小池"] },
-  { name: "Group 4", members: ["田辺", "小池"] },
-  { name: "Group 5", members: ["古藤", "岸"] },
-  { name: "Group 6", members: ["与儀", "カマル"] },
-  { name: "Group 7", members: ["カマル", "高野"] },
-  { name: "Group 8", members: ["高野", "派遣スタッフ"] },
-];
+const STATIC_STAFF_CONFLICT_GROUPS = [];
 
 /**
  * Static priority rules for specific staff members
@@ -364,6 +339,7 @@ export const VIOLATION_TYPES = {
   CONSECUTIVE_DAYS_OFF: "consecutive_days_off",
   COVERAGE_COMPENSATION_VIOLATION: "coverage_compensation_violation",
   PROXIMITY_PATTERN_VIOLATION: "proximity_pattern_violation",
+  CONSECUTIVE_SAME_PATTERN: "consecutive_same_pattern", // ✅ NEW: Consecutive same shift patterns (× or △)
 };
 
 /**
@@ -642,44 +618,66 @@ export const validateStaffGroupConflicts = async (
 
   staffGroups.forEach((group) => {
     const groupMembers = [];
-    let offOrEarlyCount = 0;
 
     const members = group.members || [];
-    members.forEach((memberName) => {
-      const staff = staffMembers.find((s) => s.name === memberName);
+    members.forEach((memberId) => {
+      // ✅ FIX: group.members contains staff IDs, not names
+      const staff = staffMembers.find((s) => s.id === memberId);
       if (
         staff &&
         scheduleData[staff.id] &&
         scheduleData[staff.id][dateKey] !== undefined
       ) {
         const shift = scheduleData[staff.id][dateKey];
-        groupMembers.push({ name: memberName, shift });
-
-        if (isOffDay(shift) || isEarlyShift(shift)) {
-          offOrEarlyCount++;
-        }
+        groupMembers.push({ name: staff.name, shift });
       }
     });
 
-    // Check if more than one member in the group is off or on early shift
-    if (offOrEarlyCount > 1) {
-      const conflictingMembers = groupMembers
-        .filter(
-          (member) => isOffDay(member.shift) || isEarlyShift(member.shift),
-        )
-        .map((member) => `${member.name} (${member.shift})`);
-
+    // ✅ ENHANCED: Separate checks for × (off) and △ (early) same-day conflicts
+    // Check if multiple members have SAME off day (×)
+    const offMembers = groupMembers.filter((member) =>
+      isOffDay(member.shift),
+    );
+    if (offMembers.length > 1) {
       violations.push({
         type: VIOLATION_TYPES.STAFF_GROUP_CONFLICT,
+        subType: "same_day_off", // NEW: Specific sub-type
         date: dateKey,
         group: group.name,
-        message: `${group.name} conflict on ${dateKey}: multiple members off/early - ${conflictingMembers.join(", ")}`,
+        message: `${group.name} conflict on ${dateKey}: multiple members have same day off (×) - ${offMembers.map((m) => m.name).join(", ")}`,
         severity: "high",
         details: {
           groupName: group.name,
           groupMembers: members,
-          conflictingMembers,
-          conflictCount: offOrEarlyCount,
+          conflictingMembers: offMembers.map(
+            (m) => `${m.name} (${m.shift})`,
+          ),
+          conflictCount: offMembers.length,
+          conflictType: "same_off_day",
+        },
+      });
+    }
+
+    // ✅ ENHANCED: Check if multiple members have SAME early shift (△)
+    const earlyMembers = groupMembers.filter((member) =>
+      isEarlyShift(member.shift),
+    );
+    if (earlyMembers.length > 1) {
+      violations.push({
+        type: VIOLATION_TYPES.STAFF_GROUP_CONFLICT,
+        subType: "same_early_shift", // NEW: Specific sub-type
+        date: dateKey,
+        group: group.name,
+        message: `${group.name} conflict on ${dateKey}: multiple members have same early shift (△) - ${earlyMembers.map((m) => m.name).join(", ")}`,
+        severity: "high",
+        details: {
+          groupName: group.name,
+          groupMembers: members,
+          conflictingMembers: earlyMembers.map(
+            (m) => `${m.name} (${m.shift})`,
+          ),
+          conflictCount: earlyMembers.length,
+          conflictType: "same_early_shift",
         },
       });
     }
@@ -828,6 +826,134 @@ export const validateConsecutiveOffDays = (
       },
     });
   });
+
+  return {
+    valid: violations.length === 0,
+    violations,
+  };
+};
+
+/**
+ * ✅ NEW: Validate consecutive same shift patterns (× or △)
+ * Prevents staff from having 2+ consecutive days of the same shift type
+ * @param {Object} staffSchedule - Staff member's schedule { dateKey: shift }
+ * @param {string} staffName - Staff member's name
+ * @param {Array} dateRange - Array of Date objects representing the date range
+ * @returns {Object} Validation result with violations array
+ */
+export const validateConsecutiveSameShiftPatterns = (
+  staffSchedule,
+  staffName,
+  dateRange
+) => {
+  const violations = [];
+
+  // Track consecutive × (off day) streaks
+  let consecutiveOff = [];
+  // Track consecutive △ (early shift) streaks
+  let consecutiveEarly = [];
+
+  dateRange.forEach((date) => {
+    const dateKey = date.toISOString().split("T")[0];
+    const shift = staffSchedule[dateKey];
+
+    // Check for consecutive off days (×)
+    if (isOffDay(shift)) {
+      consecutiveOff.push(dateKey);
+    } else {
+      // If streak ended and was 2+ days, record violation
+      // ⚠️ ENHANCED: Graduated severity - high for 2, critical for 3+
+      if (consecutiveOff.length >= 2) {
+        // 🔍 DEBUG: Log consecutive pattern detection
+        console.log("🔍 [VALIDATION DEBUG] Detected consecutive off-days:", {
+          staffName,
+          streakLength: consecutiveOff.length,
+          severity: consecutiveOff.length >= 3 ? "critical" : "high",
+          dates: consecutiveOff.join(", ")
+        });
+
+        violations.push({
+          type: VIOLATION_TYPES.CONSECUTIVE_SAME_PATTERN,
+          subType: "consecutive_off",
+          staffName,
+          message: `${staffName} has ${consecutiveOff.length} consecutive days off (×): ${consecutiveOff.join(", ")}`,
+          severity: consecutiveOff.length >= 3 ? "critical" : "high",
+          details: {
+            pattern: "off_days",
+            shiftType: "×",
+            consecutiveDays: [...consecutiveOff],
+            streakLength: consecutiveOff.length,
+            startDate: consecutiveOff[0],
+            endDate: consecutiveOff[consecutiveOff.length - 1],
+          },
+        });
+      }
+      consecutiveOff = [];
+    }
+
+    // Check for consecutive early shifts (△)
+    if (isEarlyShift(shift)) {
+      consecutiveEarly.push(dateKey);
+    } else {
+      // If streak ended and was 2+ days, record violation
+      // ⚠️ ENHANCED: Graduated severity - high for 2, critical for 3+
+      if (consecutiveEarly.length >= 2) {
+        violations.push({
+          type: VIOLATION_TYPES.CONSECUTIVE_SAME_PATTERN,
+          subType: "consecutive_early",
+          staffName,
+          message: `${staffName} has ${consecutiveEarly.length} consecutive early shifts (△): ${consecutiveEarly.join(", ")}`,
+          severity: consecutiveEarly.length >= 3 ? "critical" : "high",
+          details: {
+            pattern: "early_shifts",
+            shiftType: "△",
+            consecutiveDays: [...consecutiveEarly],
+            streakLength: consecutiveEarly.length,
+            startDate: consecutiveEarly[0],
+            endDate: consecutiveEarly[consecutiveEarly.length - 1],
+          },
+        });
+      }
+      consecutiveEarly = [];
+    }
+  });
+
+  // Check final streaks at end of range
+  if (consecutiveOff.length >= 2) {
+    violations.push({
+      type: VIOLATION_TYPES.CONSECUTIVE_SAME_PATTERN,
+      subType: "consecutive_off",
+      staffName,
+      message: `${staffName} has ${consecutiveOff.length} consecutive days off (×): ${consecutiveOff.join(", ")}`,
+      severity: "medium",
+      details: {
+        pattern: "off_days",
+        shiftType: "×",
+        consecutiveDays: [...consecutiveOff],
+        streakLength: consecutiveOff.length,
+        startDate: consecutiveOff[0],
+        endDate: consecutiveOff[consecutiveOff.length - 1],
+      },
+    });
+  }
+
+  if (consecutiveEarly.length >= 2) {
+    violations.push({
+      type: VIOLATION_TYPES.CONSECUTIVE_SAME_PATTERN,
+      subType: "consecutive_early",
+      staffName,
+      message: `${staffName} has ${consecutiveEarly.length} consecutive early shifts (△): ${consecutiveEarly.join(", ")}`,
+      severity: "medium",
+      details: {
+        pattern: "early_shifts",
+        shiftType: "△",
+        consecutiveDays: [...consecutiveEarly],
+        streakLength: consecutiveEarly.length,
+        startDate: consecutiveEarly[0],
+        endDate: consecutiveEarly[consecutiveEarly.length - 1],
+      },
+    });
+  }
 
   return {
     valid: violations.length === 0,
@@ -1202,6 +1328,16 @@ export const validateAllConstraints = async (
       );
       if (!consecutiveResult.valid) {
         allViolations.push(...consecutiveResult.violations);
+      }
+
+      // ✅ NEW: Validate consecutive same shift patterns (× or △)
+      const consecutivePatternsResult = validateConsecutiveSameShiftPatterns(
+        scheduleData[staff.id],
+        staff.name,
+        dateRange,
+      );
+      if (!consecutivePatternsResult.valid) {
+        allViolations.push(...consecutivePatternsResult.violations);
       }
     }
   }

@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Force Settings Refresh</title>
+  <style>
+    body { font-family: Arial, sans-serif; padding: 20px; background: #f5f5f5; }
+    .container { max-width: 800px; margin: 0 auto; background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+    h1 { color: #333; }
+    button { background: #4CAF50; color: white; border: none; padding: 12px 24px; border-radius: 4px; cursor: pointer; font-size: 16px; margin: 10px 5px; }
+    button:hover { background: #45a049; }
+    #log { background: #f9f9f9; padding: 15px; border-radius: 4px; font-family: monospace; font-size: 12px; max-height: 400px; overflow-y: auto; white-space: pre-wrap; margin-top: 20px; border: 1px solid #ddd; }
+    .success { color: #4CAF50; }
+    .error { color: #f44336; }
+    .info { color: #2196F3; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>🔄 Force Staff Groups Refresh</h1>
+    <p>This tool connects to your Go WebSocket server and forces a fresh sync of staff groups from the database.</p>
+
+    <button onclick="connectAndSync()">Connect & Sync Settings</button>
+    <button onclick="clearLog()">Clear Log</button>
+
+    <div id="log"></div>
+  </div>
+
+  <script>
+    let ws = null;
+    const logDiv = document.getElementById('log');
+
+    function log(message, type = 'info') {
+      const timestamp = new Date().toLocaleTimeString();
+      const className = type === 'error' ? 'error' : type === 'success' ? 'success' : 'info';
+      logDiv.innerHTML += `<div class="${className}">[${timestamp}] ${message}</div>`;
+      logDiv.scrollTop = logDiv.scrollHeight;
+    }
+
+    function clearLog() {
+      logDiv.innerHTML = '';
+    }
+
+    function connectAndSync() {
+      if (ws && ws.readyState === WebSocket.OPEN) {
+        log('❌ Already connected! Close connection first.', 'error');
+        return;
+      }
+
+      log('📡 Connecting to WebSocket server at ws://localhost:8080...');
+
+      ws = new WebSocket('ws://localhost:8080/settings-sync');
+
+      ws.onopen = () => {
+        log('✅ Connected to WebSocket server!', 'success');
+
+        // Send settings sync request
+        const syncRequest = {
+          type: 'SETTINGS_SYNC_REQUEST',
+          clientId: crypto.randomUUID(),
+          timestamp: new Date().toISOString()
+        };
+
+        log('📤 Sending SETTINGS_SYNC_REQUEST...');
+        ws.send(JSON.stringify(syncRequest));
+      };
+
+      ws.onmessage = (event) => {
+        try {
+          const message = JSON.parse(event.data);
+          log(`📨 Received: ${message.type}`, 'success');
+
+          if (message.type === 'SETTINGS_SYNC_RESPONSE') {
+            const settings = message.payload?.settings || {};
+            const staffGroups = settings.staffGroups || [];
+
+            log(`\n📊 Settings received:`);
+            log(`   Staff Groups: ${staffGroups.length}`);
+            log(`   Daily Limits: ${settings.dailyLimits?.length || 0}`);
+            log(`   Monthly Limits: ${settings.monthlyLimits?.length || 0}`);
+            log(`   Priority Rules: ${settings.priorityRules?.length || 0}`);
+
+            if (staffGroups.length > 0) {
+              log(`\n👥 Staff Groups Detail:`);
+              staffGroups.forEach((group, index) => {
+                const memberCount = Array.isArray(group.members) ? group.members.length : 0;
+                const memberNames = Array.isArray(group.members) ? group.members.join(', ') : 'none';
+                log(`   ${index + 1}. ${group.name}: ${memberNames} (${memberCount} members)`);
+              });
+
+              log('\n✅ SUCCESS! Staff groups loaded with members.', 'success');
+              log('🔄 Now refresh your main application to see the groups.', 'success');
+            } else {
+              log('\n⚠️  WARNING: No staff groups in response', 'error');
+            }
+
+            // Log full response for debugging
+            log(`\n📋 Full response:\n${JSON.stringify(message, null, 2)}`);
+          }
+
+          if (message.type === 'ERROR') {
+            log(`❌ Error from server: ${message.payload?.message || 'Unknown error'}`, 'error');
+          }
+
+          if (message.type === 'CONNECTION_ACK') {
+            log(`✅ Connection acknowledged by server`, 'success');
+          }
+
+        } catch (error) {
+          log(`❌ Failed to parse message: ${error.message}`, 'error');
+          log(`Raw message: ${event.data}`);
+        }
+      };
+
+      ws.onerror = (error) => {
+        log(`❌ WebSocket error: ${error.message || 'Connection failed'}`, 'error');
+        log('💡 Make sure the Go WebSocket server is running on port 8080', 'info');
+      };
+
+      ws.onclose = () => {
+        log('🔌 Disconnected from WebSocket server');
+        ws = null;
+      };
+    }
+
+    log('Ready! Click "Connect & Sync Settings" to start.');
+  </script>
+</body>
+</html>

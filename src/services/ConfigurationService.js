@@ -324,14 +324,25 @@ export class ConfigurationService {
         await this.checkSupabaseConnection();
       }
 
-      // Auto-sync to database if enabled
-      if (this.isSupabaseEnabled) {
+      // ✅ CRITICAL FIX: Disable database sync in WebSocket mode to prevent data deletion
+      // ConfigurationService uses a DANGEROUS delete-then-insert pattern that wipes ALL data
+      // if called with empty/stale settings. This caused complete database wipe on 2025-11-13.
+      // In WebSocket mode, Go server + dedicated hooks handle database operations.
+      // See: FINAL-FIX-RACE-CONDITION-SUPABASE-HOOKS.md, CONFIGURATION-SERVICE-DELETION-FIX.md
+      const WEBSOCKET_SETTINGS_ENABLED = process.env.REACT_APP_WEBSOCKET_SETTINGS === 'true';
+
+      // ✅ CRITICAL: Only sync when WebSocket is DISABLED
+      // When enabled, Go server manages database - ConfigurationService must NOT interfere
+      if (this.isSupabaseEnabled && !WEBSOCKET_SETTINGS_ENABLED) {
         const syncResult = await this.syncToDatabase();
         if (syncResult.success) {
-          console.log("✅ Settings auto-synced to database");
+          console.log("✅ Settings auto-synced to database (localStorage mode)");
         } else {
           console.warn("⚠️ Auto-sync failed:", syncResult.error);
         }
+      } else if (WEBSOCKET_SETTINGS_ENABLED) {
+        console.log("⏭️ ConfigurationService sync DISABLED - WebSocket mode handles database operations");
+        console.log("   ⚠️  SAFETY: Prevents delete-then-insert from wiping database with stale cache");
       } else {
         console.log("📱 Supabase not available, using localStorage only");
       }
@@ -653,6 +664,33 @@ export class ConfigurationService {
    */
   async updateBackupAssignments(backupAssignments) {
     return await this.saveSettings({ backupAssignments });
+  }
+
+  /**
+   * 🔧 BRIDGE: Sync external settings into ConfigurationService cache
+   * This allows WebSocket-based settings to update the AI system's cached config
+   * Called by useSettingsData when settings change via WebSocket
+   */
+  syncExternalSettings(externalSettings) {
+    if (!externalSettings) {
+      console.warn("⚠️ [syncExternalSettings] No settings provided");
+      return;
+    }
+
+    console.log("🔄 [ConfigurationService] Syncing external settings to cache");
+
+    // Merge external settings into our cache
+    this.settings = {
+      ...this.settings,
+      ...externalSettings,
+    };
+
+    console.log("✅ [ConfigurationService] Settings cache updated", {
+      priorityRules: this.settings.priorityRules?.length || 0,
+      staffGroups: this.settings.staffGroups?.length || 0,
+      dailyLimits: this.settings.dailyLimits?.length || 0,
+      monthlyLimits: this.settings.monthlyLimits?.length || 0,
+    });
   }
 
   /**
@@ -1059,7 +1097,7 @@ export class ConfigurationService {
           id: item.id,
           name: item.name,
           description: item.description || "",
-          ...item.rule_config,
+          ...item.rule_definition, // ✅ FIX: Changed from rule_config to rule_definition to match database schema
         })) || null
       );
     } catch (error) {
@@ -1126,7 +1164,18 @@ export class ConfigurationService {
   async saveStaffGroupsToDB() {
     if (!this.settings.staffGroups) return;
 
+    // ✅ SAFETY CHECK: Prevent data wipe if settings are empty
+    // Do NOT delete if we have nothing to insert - this prevents accidental data loss
+    if (this.settings.staffGroups.length === 0) {
+      console.warn("⚠️ SAFETY: Refusing to delete all staff groups - settings array is empty");
+      console.warn("   This prevents accidental data wipe from stale/empty settings cache");
+      return;
+    }
+
     try {
+      console.log(`🗑️ Deleting existing staff groups for version ${this.currentVersionId}`);
+      console.log(`📊 Will re-insert ${this.settings.staffGroups.length} groups`);
+
       // Delete existing staff groups for this version
       await supabase
         .from("staff_groups")
@@ -1244,7 +1293,18 @@ export class ConfigurationService {
   async savePriorityRulesToDB() {
     if (!this.settings.priorityRules) return;
 
+    // ✅ SAFETY CHECK: Prevent data wipe if settings are empty
+    // Do NOT delete if we have nothing to insert - this prevents accidental data loss
+    if (this.settings.priorityRules.length === 0) {
+      console.warn("⚠️ SAFETY: Refusing to delete all priority rules - settings array is empty");
+      console.warn("   This prevents accidental data wipe from stale/empty settings cache");
+      return;
+    }
+
     try {
+      console.log(`🗑️ Deleting existing priority rules for version ${this.currentVersionId}`);
+      console.log(`📊 Will re-insert ${this.settings.priorityRules.length} rules`);
+
       // Delete existing priority rules for this version
       await supabase
         .from("priority_rules")
@@ -1258,7 +1318,7 @@ export class ConfigurationService {
           version_id: this.currentVersionId,
           name: rule.name,
           description: rule.description || "",
-          rule_config: {
+          rule_definition: { // ✅ FIX: Changed from rule_config to rule_definition to match database schema
             ruleType: rule.ruleType,
             staffId: rule.staffId,
             shiftType: rule.shiftType,

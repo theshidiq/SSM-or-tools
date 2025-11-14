@@ -104,6 +104,29 @@ export class ScheduleFeatureEngineer {
       "pattern_consistency_score",
       "schedule_predictability",
       "shift_change_velocity",
+
+      // === PHASE 1: SEQUENCE-BASED FEATURES (15 additional) ===
+
+      // Rolling Window Features (5)
+      "rolling_3day_pattern_hash",
+      "rolling_5day_pattern_hash",
+      "rolling_7day_shift_distribution",
+      "rolling_work_rest_ratio",
+      "recent_shift_momentum_score",
+
+      // Position-Based Features (5)
+      "position_in_weekly_cycle",
+      "days_since_last_off",
+      "days_until_usual_off",
+      "position_in_monthly_cycle",
+      "predicted_next_by_position",
+
+      // Transition Probability Features (5)
+      "shift_transition_probability",
+      "consecutive_work_likelihood",
+      "off_day_clustering_tendency",
+      "shift_type_switching_rate",
+      "pattern_stability_index",
     ];
 
     console.log(
@@ -435,6 +458,47 @@ export class ScheduleFeatureEngineer {
         while (idx < 65) features[idx++] = 0.5;
       }
 
+      // === PHASE 1: SEQUENCE-BASED FEATURES (15 additional) ===
+
+      // Rolling Window Features (5)
+      try {
+        features[idx++] = this.calculateRolling3DayPattern(staff, periodData, date);
+        features[idx++] = this.calculateRolling5DayPattern(staff, periodData, date);
+        features[idx++] = this.calculateRolling7DayShiftDistribution(staff, periodData, date);
+        features[idx++] = this.calculateRollingWorkRestRatio(staff, periodData, date);
+        features[idx++] = this.calculateRecentShiftMomentumScore(staff, periodData, date);
+      } catch (error) {
+        console.error("❌ Rolling Window features failed:", error.message);
+        // Fill remaining rolling window features with defaults
+        while (idx < 70) features[idx++] = 0.5;
+      }
+
+      // Position-Based Features (5)
+      try {
+        features[idx++] = this.calculatePositionInWeeklyCycle(staff, periodData, date, allHistoricalData);
+        features[idx++] = this.calculateDaysSinceLastOff(staff, periodData, date);
+        features[idx++] = this.calculateDaysUntilUsualOff(staff, periodData, date, allHistoricalData);
+        features[idx++] = this.calculatePositionInMonthlyCycle(date);
+        features[idx++] = this.predictNextByPosition(staff, periodData, date, allHistoricalData);
+      } catch (error) {
+        console.error("❌ Position-Based features failed:", error.message);
+        // Fill remaining position features with defaults
+        while (idx < 75) features[idx++] = 0.5;
+      }
+
+      // Transition Probability Features (5)
+      try {
+        features[idx++] = this.calculateShiftTransitionProbability(staff, periodData, date, allHistoricalData);
+        features[idx++] = this.calculateConsecutiveWorkLikelihood(staff, periodData, date, allHistoricalData);
+        features[idx++] = this.calculateOffDayClusteringTendency(staff, allHistoricalData);
+        features[idx++] = this.calculateShiftTypeSwitchingRate(staff, allHistoricalData);
+        features[idx++] = this.calculatePatternStabilityIndex(staff, allHistoricalData);
+      } catch (error) {
+        console.error("❌ Transition Probability features failed:", error.message);
+        // Fill remaining transition features with defaults
+        while (idx < 80) features[idx++] = 0.5;
+      }
+
       // Validate feature count matches expected
       if (idx !== expectedFeatures) {
         console.warn(
@@ -471,8 +535,10 @@ export class ScheduleFeatureEngineer {
   shiftToLabel(shift, staff) {
     // Handle different shift types based on staff status
     if (!shift || shift === "") {
-      // Blank/empty - normal shift for regular staff
-      return staff.status === "社員" ? MODEL_CONFIG.SHIFT_TYPES.BLANK : null;
+      // 🔧 FIX: Blank/empty shifts are valid data for both regular and part-time staff
+      // Empty shift means "not scheduled/not working that day" which is valid training data
+      // Return BLANK for all staff types instead of null for part-time staff
+      return MODEL_CONFIG.SHIFT_TYPES.BLANK;
     }
 
     switch (shift) {
@@ -1471,6 +1537,619 @@ export class ScheduleFeatureEngineer {
       hammingScore,
       overall
     };
+  }
+
+  // ============================================================================
+  // PHASE 1: SEQUENCE-BASED FEATURE EXTRACTION METHODS
+  // ============================================================================
+
+  /**
+   * === ROLLING WINDOW FEATURES (5 methods) ===
+   * Analyze recent shift patterns using sliding windows
+   */
+
+  /**
+   * Calculate 3-day rolling pattern hash
+   * Captures very recent shift trends (short-term patterns)
+   */
+  calculateRolling3DayPattern(staff, periodData, date) {
+    try {
+      const { schedule, dateRange } = periodData;
+      const dateIndex = dateRange.findIndex(d => d.toISOString().split('T')[0] === date.toISOString().split('T')[0]);
+
+      if (dateIndex < 3) return 0.5; // Not enough history
+
+      // Get last 3 days of shifts
+      const pattern = [];
+      for (let i = dateIndex - 3; i < dateIndex; i++) {
+        const dateKey = dateRange[i].toISOString().split('T')[0];
+        const shift = schedule[staff.id]?.[dateKey] || "";
+        pattern.push(this.shiftToNumeric(shift, staff));
+      }
+
+      // Create simple hash: sum of encoded values
+      const hash = pattern.reduce((sum, val) => sum + val, 0) / (3 * 4); // Normalize by max possible value
+      return Math.min(1, Math.max(0, hash));
+    } catch (error) {
+      return 0.5;
+    }
+  }
+
+  /**
+   * Calculate 5-day rolling pattern hash
+   * Captures medium-term shift trends (weekly patterns)
+   */
+  calculateRolling5DayPattern(staff, periodData, date) {
+    try {
+      const { schedule, dateRange } = periodData;
+      const dateIndex = dateRange.findIndex(d => d.toISOString().split('T')[0] === date.toISOString().split('T')[0]);
+
+      if (dateIndex < 5) return 0.5; // Not enough history
+
+      // Get last 5 days of shifts
+      const pattern = [];
+      for (let i = dateIndex - 5; i < dateIndex; i++) {
+        const dateKey = dateRange[i].toISOString().split('T')[0];
+        const shift = schedule[staff.id]?.[dateKey] || "";
+        pattern.push(this.shiftToNumeric(shift, staff));
+      }
+
+      // Weighted hash - more recent days have higher weight
+      const weights = [0.1, 0.15, 0.2, 0.25, 0.3];
+      const weightedSum = pattern.reduce((sum, val, idx) => sum + val * weights[idx], 0);
+      return Math.min(1, Math.max(0, weightedSum / 4)); // Normalize by max shift value
+    } catch (error) {
+      return 0.5;
+    }
+  }
+
+  /**
+   * Calculate 7-day shift distribution
+   * Analyzes the variety and balance of shifts over past week
+   */
+  calculateRolling7DayShiftDistribution(staff, periodData, date) {
+    try {
+      const { schedule, dateRange } = periodData;
+      const dateIndex = dateRange.findIndex(d => d.toISOString().split('T')[0] === date.toISOString().split('T')[0]);
+
+      if (dateIndex < 7) return 0.5; // Not enough history
+
+      // Count shift types in last 7 days
+      const shiftCounts = { work: 0, off: 0, early: 0, late: 0 };
+      for (let i = dateIndex - 7; i < dateIndex; i++) {
+        const dateKey = dateRange[i].toISOString().split('T')[0];
+        const shift = schedule[staff.id]?.[dateKey] || "";
+
+        if (shift === "×" || shift === "⊘") {
+          shiftCounts.off++;
+        } else if (shift === "△") {
+          shiftCounts.early++;
+        } else if (shift === "▽") {
+          shiftCounts.late++;
+        } else {
+          shiftCounts.work++;
+        }
+      }
+
+      // Calculate entropy-like diversity score
+      const total = 7;
+      const proportions = Object.values(shiftCounts).map(count => count / total);
+      const entropy = proportions.reduce((sum, p) => {
+        return p > 0 ? sum - p * Math.log2(p) : sum;
+      }, 0);
+
+      // Normalize entropy (max entropy for 4 categories is 2)
+      return Math.min(1, entropy / 2);
+    } catch (error) {
+      return 0.5;
+    }
+  }
+
+  /**
+   * Calculate rolling work/rest ratio
+   * Measures work intensity over recent period
+   */
+  calculateRollingWorkRestRatio(staff, periodData, date) {
+    try {
+      const { schedule, dateRange } = periodData;
+      const dateIndex = dateRange.findIndex(d => d.toISOString().split('T')[0] === date.toISOString().split('T')[0]);
+
+      if (dateIndex < 7) return 0.5; // Not enough history
+
+      let workDays = 0;
+      let restDays = 0;
+
+      for (let i = dateIndex - 7; i < dateIndex; i++) {
+        const dateKey = dateRange[i].toISOString().split('T')[0];
+        const shift = schedule[staff.id]?.[dateKey] || "";
+
+        if (shift === "×" || shift === "⊘") {
+          restDays++;
+        } else {
+          workDays++;
+        }
+      }
+
+      // Ratio: workDays / (workDays + restDays), normalized to 0-1
+      const ratio = workDays / 7;
+      return Math.min(1, Math.max(0, ratio));
+    } catch (error) {
+      return 0.5;
+    }
+  }
+
+  /**
+   * Calculate recent shift momentum score
+   * Detects if staff is in a work streak or rest streak
+   */
+  calculateRecentShiftMomentumScore(staff, periodData, date) {
+    try {
+      const { schedule, dateRange } = periodData;
+      const dateIndex = dateRange.findIndex(d => d.toISOString().split('T')[0] === date.toISOString().split('T')[0]);
+
+      if (dateIndex < 5) return 0.5; // Not enough history
+
+      // Count consecutive work or rest days leading up to current date
+      let consecutiveWork = 0;
+      let consecutiveRest = 0;
+
+      for (let i = dateIndex - 1; i >= Math.max(0, dateIndex - 5); i--) {
+        const dateKey = dateRange[i].toISOString().split('T')[0];
+        const shift = schedule[staff.id]?.[dateKey] || "";
+
+        const isRest = shift === "×" || shift === "⊘";
+
+        if (isRest) {
+          consecutiveRest++;
+          if (consecutiveWork > 0) break; // Streak ended
+        } else {
+          consecutiveWork++;
+          if (consecutiveRest > 0) break; // Streak ended
+        }
+      }
+
+      // Convert to momentum score
+      // Positive for work streak, negative for rest streak
+      const momentum = (consecutiveWork - consecutiveRest) / 5;
+      return (momentum + 1) / 2; // Normalize to 0-1
+    } catch (error) {
+      return 0.5;
+    }
+  }
+
+  /**
+   * === POSITION-BASED FEATURES (5 methods) ===
+   * Analyze position within rotation cycles
+   */
+
+  /**
+   * Calculate position in weekly rotation cycle
+   * Identifies where staff is in their typical weekly pattern
+   */
+  calculatePositionInWeeklyCycle(staff, periodData, date, allHistoricalData) {
+    try {
+      // Simple: day of week (0=Sunday, 6=Saturday)
+      const dayOfWeek = date.getDay();
+
+      // Analyze historical: which day of week does this staff typically work/rest?
+      const dayPreferences = this.analyzeDayOfWeekPreferences(staff, allHistoricalData);
+
+      // Combine day of week with historical preference
+      const historicalScore = dayPreferences[dayOfWeek] || 0.5;
+      const positionScore = dayOfWeek / 6; // Normalize to 0-1
+
+      // Weighted average
+      return positionScore * 0.3 + historicalScore * 0.7;
+    } catch (error) {
+      return 0.5;
+    }
+  }
+
+  /**
+   * Calculate days since last off day
+   * Important for predicting when next rest is needed
+   */
+  calculateDaysSinceLastOff(staff, periodData, date) {
+    try {
+      const { schedule, dateRange } = periodData;
+      const dateIndex = dateRange.findIndex(d => d.toISOString().split('T')[0] === date.toISOString().split('T')[0]);
+
+      let daysSince = 0;
+      for (let i = dateIndex - 1; i >= 0; i--) {
+        daysSince++;
+        const dateKey = dateRange[i].toISOString().split('T')[0];
+        const shift = schedule[staff.id]?.[dateKey] || "";
+
+        if (shift === "×" || shift === "⊘") {
+          break; // Found last off day
+        }
+
+        if (daysSince >= 10) break; // Cap at 10 days
+      }
+
+      // Normalize: 0 = just had off, 1 = 10+ days without off
+      return Math.min(1, daysSince / 10);
+    } catch (error) {
+      return 0.5;
+    }
+  }
+
+  /**
+   * Calculate days until usual off day
+   * Predicts upcoming rest based on historical patterns
+   */
+  calculateDaysUntilUsualOff(staff, periodData, date, allHistoricalData) {
+    try {
+      // Analyze historical off day frequency
+      const historicalPatterns = this.analyzeHistoricalPatterns(staff, allHistoricalData);
+      const avgDaysBetweenOffs = historicalPatterns.offFreq > 0 ? 1 / historicalPatterns.offFreq : 7;
+
+      // Days since last off
+      const daysSince = this.calculateDaysSinceLastOff(staff, periodData, date) * 10;
+
+      // Estimated days until next off
+      const daysUntil = Math.max(0, avgDaysBetweenOffs - daysSince);
+
+      // Normalize to 0-1 (0 = should be soon, 1 = far away)
+      return Math.min(1, daysUntil / 10);
+    } catch (error) {
+      return 0.5;
+    }
+  }
+
+  /**
+   * Calculate position in monthly cycle
+   * Some staff have monthly patterns (e.g., prefer offs at month start/end)
+   */
+  calculatePositionInMonthlyCycle(date) {
+    try {
+      const dayOfMonth = date.getDate();
+      const totalDays = new Date(date.getFullYear(), date.getMonth() + 1, 0).getDate();
+
+      // Normalize to 0-1
+      return dayOfMonth / totalDays;
+    } catch (error) {
+      return 0.5;
+    }
+  }
+
+  /**
+   * Predict next shift based on position in patterns
+   * Uses historical position analysis to predict likely next shift
+   */
+  predictNextByPosition(staff, periodData, date, allHistoricalData) {
+    try {
+      const dayOfWeek = date.getDay();
+      const dayPreferences = this.analyzeDayOfWeekPreferences(staff, allHistoricalData);
+
+      // Return the historical probability of working on this day of week
+      return dayPreferences[dayOfWeek] || 0.5;
+    } catch (error) {
+      return 0.5;
+    }
+  }
+
+  /**
+   * === TRANSITION PROBABILITY FEATURES (5 methods) ===
+   * Analyze shift-to-shift transitions
+   */
+
+  /**
+   * Calculate shift transition probability
+   * Probability that current shift type transitions to another specific type
+   */
+  calculateShiftTransitionProbability(staff, periodData, date, allHistoricalData) {
+    try {
+      // Get current shift (from previous day)
+      const { schedule, dateRange } = periodData;
+      const dateIndex = dateRange.findIndex(d => d.toISOString().split('T')[0] === date.toISOString().split('T')[0]);
+
+      if (dateIndex < 1) return 0.5; // No previous day
+
+      const prevDateKey = dateRange[dateIndex - 1].toISOString().split('T')[0];
+      const prevShift = schedule[staff.id]?.[prevDateKey] || "";
+
+      // Build transition matrix from historical data
+      const transitions = this.buildTransitionMatrix(staff, allHistoricalData);
+      const prevNumeric = this.shiftToNumeric(prevShift, staff);
+
+      // Get probability distribution for next shift
+      const nextProbs = transitions[prevNumeric] || [0.25, 0.25, 0.25, 0.25];
+
+      // Return average probability (as a single feature)
+      return nextProbs.reduce((sum, p) => sum + p, 0) / nextProbs.length;
+    } catch (error) {
+      return 0.5;
+    }
+  }
+
+  /**
+   * Calculate consecutive work day likelihood
+   * Probability of continuing to work based on current streak
+   */
+  calculateConsecutiveWorkLikelihood(staff, periodData, date, allHistoricalData) {
+    try {
+      const daysSince = this.calculateDaysSinceLastOff(staff, periodData, date) * 10;
+
+      // Analyze historical: what's the longest work streak?
+      const historicalPatterns = this.analyzeHistoricalPatterns(staff, allHistoricalData);
+      const avgWorkStreak = historicalPatterns.consistency * 7; // Rough estimate
+
+      // Likelihood decreases as current streak approaches historical average
+      const likelihood = Math.max(0, 1 - (daysSince / avgWorkStreak));
+      return Math.min(1, Math.max(0, likelihood));
+    } catch (error) {
+      return 0.5;
+    }
+  }
+
+  /**
+   * Calculate off day clustering tendency
+   * Do offs tend to cluster together or spread evenly?
+   */
+  calculateOffDayClusteringTendency(staff, allHistoricalData) {
+    try {
+      let totalTransitions = 0;
+      let offToOffTransitions = 0;
+
+      // Analyze all historical data
+      Object.values(allHistoricalData).forEach(periodData => {
+        const { schedule, dateRange } = periodData;
+        const staffSchedule = schedule[staff.id] || {};
+
+        for (let i = 1; i < dateRange.length; i++) {
+          const prevDateKey = dateRange[i - 1].toISOString().split('T')[0];
+          const currDateKey = dateRange[i].toISOString().split('T')[0];
+
+          const prevShift = staffSchedule[prevDateKey] || "";
+          const currShift = staffSchedule[currDateKey] || "";
+
+          const prevIsOff = prevShift === "×" || prevShift === "⊘";
+          const currIsOff = currShift === "×" || currShift === "⊘";
+
+          if (prevIsOff) {
+            totalTransitions++;
+            if (currIsOff) {
+              offToOffTransitions++;
+            }
+          }
+        }
+      });
+
+      // Clustering score: high if offs follow offs
+      return totalTransitions > 0 ? offToOffTransitions / totalTransitions : 0.5;
+    } catch (error) {
+      return 0.5;
+    }
+  }
+
+  /**
+   * Calculate shift type switching rate
+   * How often does staff change between different shift types?
+   */
+  calculateShiftTypeSwitchingRate(staff, allHistoricalData) {
+    try {
+      let totalTransitions = 0;
+      let switches = 0;
+
+      // Analyze all historical data
+      Object.values(allHistoricalData).forEach(periodData => {
+        const { schedule, dateRange } = periodData;
+        const staffSchedule = schedule[staff.id] || {};
+
+        for (let i = 1; i < dateRange.length; i++) {
+          const prevDateKey = dateRange[i - 1].toISOString().split('T')[0];
+          const currDateKey = dateRange[i].toISOString().split('T')[0];
+
+          const prevShift = staffSchedule[prevDateKey] || "";
+          const currShift = staffSchedule[currDateKey] || "";
+
+          // Ignore transitions involving blanks
+          if (prevShift && currShift) {
+            totalTransitions++;
+            if (prevShift !== currShift) {
+              switches++;
+            }
+          }
+        }
+      });
+
+      // Switching rate: 0 = very stable, 1 = changes every day
+      return totalTransitions > 0 ? switches / totalTransitions : 0.5;
+    } catch (error) {
+      return 0.5;
+    }
+  }
+
+  /**
+   * Calculate pattern stability index
+   * How consistent are shift patterns across different time periods?
+   */
+  calculatePatternStabilityIndex(staff, allHistoricalData) {
+    try {
+      // Compare shift distributions across periods
+      const periodDistributions = [];
+
+      Object.values(allHistoricalData).forEach(periodData => {
+        const { schedule, dateRange } = periodData;
+        const staffSchedule = schedule[staff.id] || {};
+
+        const dist = { work: 0, off: 0, early: 0, late: 0, total: 0 };
+        dateRange.forEach(date => {
+          const dateKey = date.toISOString().split('T')[0];
+          const shift = staffSchedule[dateKey] || "";
+
+          dist.total++;
+          if (shift === "×" || shift === "⊘") {
+            dist.off++;
+          } else if (shift === "△") {
+            dist.early++;
+          } else if (shift === "▽") {
+            dist.late++;
+          } else {
+            dist.work++;
+          }
+        });
+
+        // Normalize
+        if (dist.total > 0) {
+          periodDistributions.push({
+            work: dist.work / dist.total,
+            off: dist.off / dist.total,
+            early: dist.early / dist.total,
+            late: dist.late / dist.total
+          });
+        }
+      });
+
+      if (periodDistributions.length < 2) return 0.5;
+
+      // Calculate variance across periods
+      const avgDist = {
+        work: periodDistributions.reduce((sum, d) => sum + d.work, 0) / periodDistributions.length,
+        off: periodDistributions.reduce((sum, d) => sum + d.off, 0) / periodDistributions.length,
+        early: periodDistributions.reduce((sum, d) => sum + d.early, 0) / periodDistributions.length,
+        late: periodDistributions.reduce((sum, d) => sum + d.late, 0) / periodDistributions.length
+      };
+
+      const variance = periodDistributions.reduce((sum, dist) => {
+        return sum +
+          Math.pow(dist.work - avgDist.work, 2) +
+          Math.pow(dist.off - avgDist.off, 2) +
+          Math.pow(dist.early - avgDist.early, 2) +
+          Math.pow(dist.late - avgDist.late, 2);
+      }, 0) / periodDistributions.length;
+
+      // Stability: low variance = high stability
+      // Invert: 1 = very stable, 0 = very unstable
+      return Math.max(0, 1 - Math.sqrt(variance));
+    } catch (error) {
+      return 0.5;
+    }
+  }
+
+  // ============================================================================
+  // HELPER METHODS FOR SEQUENCE FEATURES
+  // ============================================================================
+
+  /**
+   * Convert shift symbol to numeric value for pattern analysis
+   */
+  shiftToNumeric(shift, staff) {
+    if (!shift || shift === "") {
+      return staff.status === "社員" ? 1 : 0; // Regular staff blank = normal (1)
+    }
+    switch (shift) {
+      case "○": return 1; // Normal (part-time)
+      case "△": return 2; // Early
+      case "▽": return 3; // Late
+      case "×": return 0; // Off
+      case "⊘": return 0; // Unavailable (treat as off)
+      default: return 1; // Unknown defaults to normal
+    }
+  }
+
+  /**
+   * Analyze day-of-week preferences from historical data
+   * Returns: {0: 0.8, 1: 0.7, ..., 6: 0.5} (Sunday to Saturday work probabilities)
+   */
+  analyzeDayOfWeekPreferences(staff, allHistoricalData) {
+    const dayStats = {0: {work: 0, total: 0}, 1: {work: 0, total: 0}, 2: {work: 0, total: 0},
+                      3: {work: 0, total: 0}, 4: {work: 0, total: 0}, 5: {work: 0, total: 0}, 6: {work: 0, total: 0}};
+
+    try {
+      Object.values(allHistoricalData).forEach(periodData => {
+        const { schedule, dateRange } = periodData;
+        const staffSchedule = schedule[staff.id] || {};
+
+        dateRange.forEach(date => {
+          const dayOfWeek = date.getDay();
+          const dateKey = date.toISOString().split('T')[0];
+          const shift = staffSchedule[dateKey] || "";
+
+          dayStats[dayOfWeek].total++;
+          if (shift !== "×" && shift !== "⊘") {
+            dayStats[dayOfWeek].work++;
+          }
+        });
+      });
+
+      // Calculate probabilities
+      const preferences = {};
+      for (let day = 0; day <= 6; day++) {
+        preferences[day] = dayStats[day].total > 0
+          ? dayStats[day].work / dayStats[day].total
+          : 0.5;
+      }
+
+      return preferences;
+    } catch (error) {
+      return {0: 0.5, 1: 0.5, 2: 0.5, 3: 0.5, 4: 0.5, 5: 0.5, 6: 0.5};
+    }
+  }
+
+  /**
+   * Build Markov transition matrix for shift types
+   * Returns: [[p00, p01, p02, p03], [p10, p11, p12, p13], ...]
+   * where pij = probability of transitioning from shift i to shift j
+   */
+  buildTransitionMatrix(staff, allHistoricalData) {
+    // Initialize 4x4 matrix (off, normal, early, late)
+    const matrix = [
+      [0, 0, 0, 0], // From off (0)
+      [0, 0, 0, 0], // From normal (1)
+      [0, 0, 0, 0], // From early (2)
+      [0, 0, 0, 0]  // From late (3)
+    ];
+    const counts = [
+      [0, 0, 0, 0],
+      [0, 0, 0, 0],
+      [0, 0, 0, 0],
+      [0, 0, 0, 0]
+    ];
+
+    try {
+      Object.values(allHistoricalData).forEach(periodData => {
+        const { schedule, dateRange } = periodData;
+        const staffSchedule = schedule[staff.id] || {};
+
+        for (let i = 1; i < dateRange.length; i++) {
+          const prevDateKey = dateRange[i - 1].toISOString().split('T')[0];
+          const currDateKey = dateRange[i].toISOString().split('T')[0];
+
+          const prevShift = staffSchedule[prevDateKey] || "";
+          const currShift = staffSchedule[currDateKey] || "";
+
+          const prevNumeric = this.shiftToNumeric(prevShift, staff);
+          const currNumeric = this.shiftToNumeric(currShift, staff);
+
+          counts[prevNumeric][currNumeric]++;
+        }
+      });
+
+      // Convert counts to probabilities
+      for (let i = 0; i < 4; i++) {
+        const rowTotal = counts[i].reduce((sum, val) => sum + val, 0);
+        if (rowTotal > 0) {
+          for (let j = 0; j < 4; j++) {
+            matrix[i][j] = counts[i][j] / rowTotal;
+          }
+        } else {
+          // Default uniform distribution if no data
+          matrix[i] = [0.25, 0.25, 0.25, 0.25];
+        }
+      }
+
+      return matrix;
+    } catch (error) {
+      // Return uniform distribution on error
+      return [
+        [0.25, 0.25, 0.25, 0.25],
+        [0.25, 0.25, 0.25, 0.25],
+        [0.25, 0.25, 0.25, 0.25],
+        [0.25, 0.25, 0.25, 0.25]
+      ];
+    }
   }
 }
 

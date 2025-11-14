@@ -246,16 +246,23 @@ const useScheduleSelection = (
    */
   const applyToSelected = useCallback(
     (shiftValue) => {
-      if (selectedCells.size === 0) return;
+      console.log(`🎯 [APPLY-TO-SELECTED] Called with shiftValue: ${shiftValue}, selectedCells.size: ${selectedCells.size}`);
+
+      if (selectedCells.size === 0) {
+        console.warn(`⚠️ [APPLY-TO-SELECTED] No cells selected, returning early`);
+        return;
+      }
 
       // Apply bulk update using batch method if available
       if (updateSchedule && typeof updateSchedule === "function") {
+        console.log(`📦 [APPLY-TO-SELECTED] Using batch update method`);
         try {
           // Use Immer for efficient immutable updates with structural sharing
           // Much faster than JSON.parse/stringify (95% improvement: 5ms vs 50-80ms)
           const newSchedule = produce(scheduleData, (draft) => {
             selectedCells.forEach((cellKey) => {
               const { staffId, dateKey } = parseCellKey(cellKey);
+              console.log(`  ➡️ [APPLY-TO-SELECTED] Updating cell ${cellKey}: staffId=${staffId}, dateKey=${dateKey}, value=${shiftValue}`);
 
               // Ensure staff exists in schedule
               if (!draft[staffId]) {
@@ -268,19 +275,29 @@ const useScheduleSelection = (
           });
 
           // Verify changes were made before calling updateSchedule
-          const hasChanges = Array.from(selectedCells).some((cellKey) => {
+          const changesDetail = Array.from(selectedCells).map((cellKey) => {
             const { staffId, dateKey } = parseCellKey(cellKey);
-            return (
-              scheduleData[staffId]?.[dateKey] !==
-              newSchedule[staffId]?.[dateKey]
-            );
+            const oldValue = scheduleData[staffId]?.[dateKey];
+            const newValue = newSchedule[staffId]?.[dateKey];
+            const changed = oldValue !== newValue;
+            return { cellKey, oldValue, newValue, changed };
           });
 
+          const hasChanges = changesDetail.some(detail => detail.changed);
+
+          console.log(`🔍 [APPLY-TO-SELECTED] hasChanges: ${hasChanges}`);
+          console.log(`📋 [APPLY-TO-SELECTED] Changes detail:`, changesDetail);
+
           if (hasChanges) {
+            console.log(`💾 [APPLY-TO-SELECTED] Calling updateSchedule with new schedule`);
             updateSchedule(newSchedule);
+          } else {
+            console.log(`⏭️ [APPLY-TO-SELECTED] No changes detected, skipping updateSchedule`);
+            console.log(`   Old schedule keys:`, Object.keys(scheduleData));
+            console.log(`   New schedule keys:`, Object.keys(newSchedule));
           }
         } catch (error) {
-          console.error("Error in bulk operation:", error);
+          console.error("❌ [APPLY-TO-SELECTED] Error in bulk operation:", error);
           // Fallback to individual updates if batch update fails
           selectedCells.forEach((cellKey) => {
             const { staffId, dateKey } = parseCellKey(cellKey);
@@ -288,6 +305,7 @@ const useScheduleSelection = (
           });
         }
       } else {
+        console.log(`🔄 [APPLY-TO-SELECTED] Using individual update method (updateSchedule not available)`);
         // Fallback to individual updates if updateSchedule is not available
         selectedCells.forEach((cellKey) => {
           const { staffId, dateKey } = parseCellKey(cellKey);

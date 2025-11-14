@@ -251,7 +251,7 @@ const DailyLimitsTab = ({
 
   const createNewDailyLimit = () => {
     const newLimit = {
-      id: `daily-limit-${Date.now()}`,
+      id: crypto.randomUUID(),
       name: "New Daily Limit",
       limitConfig: {
         shiftType: "any",
@@ -273,7 +273,7 @@ const DailyLimitsTab = ({
 
   const createNewMonthlyLimit = () => {
     const newLimit = {
-      id: `monthly-limit-${Date.now()}`,
+      id: crypto.randomUUID(),
       name: "New Monthly Limit",
       limitConfig: {
         limitType: "max_off_days",

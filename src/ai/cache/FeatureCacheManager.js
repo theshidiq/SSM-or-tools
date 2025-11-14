@@ -57,6 +57,26 @@ class FeatureCacheManager {
     additionalConfig = {},
   ) {
     try {
+      // ✅ FIX: Include database state for smart cache invalidation
+      // Extract database state from additionalConfig
+      const priorityRules = additionalConfig.priorityRules || [];
+      const dailyLimits = additionalConfig.dailyLimits || [];
+      const monthlyLimits = additionalConfig.monthlyLimits || [];
+
+      // Create stable checksums for database entities
+      const priorityRulesChecksum = this.hashObject(
+        priorityRules.map(r => ({
+          id: r.id,
+          staffId: r.staffId,
+          ruleType: r.ruleType,
+          priorityLevel: r.priorityLevel,
+          isActive: r.isActive
+        }))
+      );
+
+      const dailyLimitsChecksum = this.hashObject(dailyLimits);
+      const monthlyLimitsChecksum = this.hashObject(monthlyLimits);
+
       const configData = {
         staff: staffMembers.map((s) => ({
           id: s.id,
@@ -65,11 +85,35 @@ class FeatureCacheManager {
           department: s.department,
         })),
         scheduleStructure: Object.keys(scheduleData),
-        additional: additionalConfig,
+        // Database state checksums - cache invalidates when these change
+        databaseState: {
+          priorityRulesChecksum,
+          dailyLimitsChecksum,
+          monthlyLimitsChecksum
+        },
+        additional: {
+          ...additionalConfig,
+          // Remove raw arrays from additional config to keep hash size small
+          priorityRules: undefined,
+          dailyLimits: undefined,
+          monthlyLimits: undefined
+        },
         timestamp: Math.floor(Date.now() / (1000 * 60 * 10)), // 10-minute granularity for stability
       };
 
-      return this.hashObject(configData);
+      const finalHash = this.hashObject(configData);
+
+      // Log cache key changes for debugging
+      if (this.configHash && this.configHash !== finalHash) {
+        console.log("🔄 [FeatureCacheManager] Cache invalidated - database state changed", {
+          oldHash: this.configHash,
+          newHash: finalHash,
+          priorityRulesCount: priorityRules.length,
+          dailyLimitsCount: dailyLimits.length
+        });
+      }
+
+      return finalHash;
     } catch (error) {
       console.warn("⚠️ Config hash generation failed:", error.message);
       return `fallback-${Date.now()}`;

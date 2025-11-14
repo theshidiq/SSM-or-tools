@@ -838,3 +838,478 @@ export const recognizePatternsForAllStaff = (staffProfiles) => {
   );
   return allPatterns;
 };
+
+// ============================================================================
+// PHASE 1: SEQUENCE-BASED UTILITIES
+// ============================================================================
+
+/**
+ * Extract a rolling window of shifts for sequence analysis
+ * @param {Array} shifts - Array of shift values in chronological order
+ * @param {number} windowSize - Size of the rolling window (e.g., 3, 5, 7)
+ * @returns {Array} Array of shift windows
+ */
+export const extractRollingWindows = (shifts, windowSize) => {
+  if (!shifts || shifts.length < windowSize) {
+    return [];
+  }
+
+  const windows = [];
+  for (let i = 0; i <= shifts.length - windowSize; i++) {
+    windows.push(shifts.slice(i, i + windowSize));
+  }
+
+  return windows;
+};
+
+/**
+ * Calculate shift transition matrix for Markov analysis
+ * @param {Array} shifts - Array of shift values in chronological order
+ * @returns {Object} Transition matrix with probabilities
+ */
+export const calculateShiftTransitionMatrix = (shifts) => {
+  // Shift types: off (0), normal (1), early (2), late (3)
+  const matrix = [
+    [0, 0, 0, 0], // From off
+    [0, 0, 0, 0], // From normal
+    [0, 0, 0, 0], // From early
+    [0, 0, 0, 0], // From late
+  ];
+
+  const counts = [
+    [0, 0, 0, 0],
+    [0, 0, 0, 0],
+    [0, 0, 0, 0],
+    [0, 0, 0, 0],
+  ];
+
+  // Convert shifts to numeric indices
+  const shiftToIndex = (shift) => {
+    if (isOffDay(shift)) return 0;
+    if (isEarlyShift(shift)) return 2;
+    if (isLateShift(shift)) return 3;
+    return 1; // Normal shift
+  };
+
+  // Count transitions
+  for (let i = 1; i < shifts.length; i++) {
+    const fromIndex = shiftToIndex(shifts[i - 1]);
+    const toIndex = shiftToIndex(shifts[i]);
+    counts[fromIndex][toIndex]++;
+  }
+
+  // Convert counts to probabilities
+  for (let i = 0; i < 4; i++) {
+    const rowTotal = counts[i].reduce((sum, val) => sum + val, 0);
+    if (rowTotal > 0) {
+      for (let j = 0; j < 4; j++) {
+        matrix[i][j] = counts[i][j] / rowTotal;
+      }
+    } else {
+      // Default uniform distribution if no data
+      matrix[i] = [0.25, 0.25, 0.25, 0.25];
+    }
+  }
+
+  return {
+    matrix,
+    counts,
+    totalTransitions: counts.flat().reduce((sum, val) => sum + val, 0),
+  };
+};
+
+/**
+ * Detect position-based patterns (e.g., weekly cycle positions)
+ * @param {Object} staffProfile - Staff profile with shift history
+ * @param {string} cycleType - Type of cycle ('weekly', 'monthly')
+ * @returns {Object} Position-based pattern analysis
+ */
+export const detectPositionPatterns = (staffProfile, cycleType = "weekly") => {
+  const patterns = {
+    staffId: staffProfile.id,
+    staffName: staffProfile.name,
+    cycleType,
+    positions: {},
+    predictions: {},
+  };
+
+  const cycleLength = cycleType === "weekly" ? 7 : 30;
+
+  // Initialize position buckets
+  for (let i = 0; i < cycleLength; i++) {
+    patterns.positions[i] = {
+      total: 0,
+      off: 0,
+      early: 0,
+      late: 0,
+      normal: 0,
+      distribution: {},
+    };
+  }
+
+  // Analyze shift history by position in cycle
+  Object.keys(staffProfile.shiftHistory).forEach((monthIndex) => {
+    const monthSchedule = staffProfile.shiftHistory[monthIndex];
+    const sortedDates = Object.keys(monthSchedule).sort();
+
+    sortedDates.forEach((dateKey, index) => {
+      const position = index % cycleLength;
+      const shift = monthSchedule[dateKey];
+
+      patterns.positions[position].total++;
+
+      if (isOffDay(shift)) {
+        patterns.positions[position].off++;
+      } else if (isEarlyShift(shift)) {
+        patterns.positions[position].early++;
+      } else if (isLateShift(shift)) {
+        patterns.positions[position].late++;
+      } else {
+        patterns.positions[position].normal++;
+      }
+
+      // Track distribution
+      if (!patterns.positions[position].distribution[shift]) {
+        patterns.positions[position].distribution[shift] = 0;
+      }
+      patterns.positions[position].distribution[shift]++;
+    });
+  });
+
+  // Generate predictions for each position
+  Object.keys(patterns.positions).forEach((position) => {
+    const posData = patterns.positions[position];
+    if (posData.total > 0) {
+      const offProb = posData.off / posData.total;
+      const earlyProb = posData.early / posData.total;
+      const lateProb = posData.late / posData.total;
+      const normalProb = posData.normal / posData.total;
+
+      // Find most likely shift for this position
+      let predictedShift = "unknown";
+      let maxProb = 0;
+
+      if (offProb > maxProb) {
+        maxProb = offProb;
+        predictedShift = "×";
+      }
+      if (earlyProb > maxProb) {
+        maxProb = earlyProb;
+        predictedShift = "△";
+      }
+      if (lateProb > maxProb) {
+        maxProb = lateProb;
+        predictedShift = "▽";
+      }
+      if (normalProb > maxProb) {
+        maxProb = normalProb;
+        predictedShift = staffProfile.status === "社員" ? "" : "○";
+      }
+
+      patterns.predictions[position] = {
+        shift: predictedShift,
+        confidence: maxProb,
+        confidenceLevel: getConfidenceLevel(maxProb * 100),
+      };
+    }
+  });
+
+  return patterns;
+};
+
+/**
+ * Analyze shift momentum (work/rest streak tendencies)
+ * @param {Array} shifts - Array of shift values in chronological order
+ * @returns {Object} Momentum analysis
+ */
+export const analyzeShiftMomentum = (shifts) => {
+  const momentum = {
+    currentStreak: 0,
+    streakType: "none",
+    averageWorkStreak: 0,
+    averageRestStreak: 0,
+    momentum: 0, // -1 to 1, negative = rest tendency, positive = work tendency
+  };
+
+  if (!shifts || shifts.length === 0) {
+    return momentum;
+  }
+
+  let workStreaks = [];
+  let restStreaks = [];
+  let currentWorkStreak = 0;
+  let currentRestStreak = 0;
+
+  // Analyze streaks
+  shifts.forEach((shift) => {
+    if (isOffDay(shift)) {
+      if (currentWorkStreak > 0) {
+        workStreaks.push(currentWorkStreak);
+        currentWorkStreak = 0;
+      }
+      currentRestStreak++;
+    } else {
+      if (currentRestStreak > 0) {
+        restStreaks.push(currentRestStreak);
+        currentRestStreak = 0;
+      }
+      currentWorkStreak++;
+    }
+  });
+
+  // Don't forget last streak
+  if (currentWorkStreak > 0) workStreaks.push(currentWorkStreak);
+  if (currentRestStreak > 0) restStreaks.push(currentRestStreak);
+
+  // Calculate averages
+  if (workStreaks.length > 0) {
+    momentum.averageWorkStreak =
+      workStreaks.reduce((sum, val) => sum + val, 0) / workStreaks.length;
+  }
+  if (restStreaks.length > 0) {
+    momentum.averageRestStreak =
+      restStreaks.reduce((sum, val) => sum + val, 0) / restStreaks.length;
+  }
+
+  // Current streak
+  if (currentWorkStreak > 0) {
+    momentum.currentStreak = currentWorkStreak;
+    momentum.streakType = "work";
+  } else if (currentRestStreak > 0) {
+    momentum.currentStreak = currentRestStreak;
+    momentum.streakType = "rest";
+  }
+
+  // Calculate momentum (-1 to 1)
+  const totalWork = workStreaks.reduce((sum, val) => sum + val, 0);
+  const totalRest = restStreaks.reduce((sum, val) => sum + val, 0);
+  if (totalWork + totalRest > 0) {
+    momentum.momentum = (totalWork - totalRest) / (totalWork + totalRest);
+  }
+
+  return momentum;
+};
+
+/**
+ * Get sequence features for a specific date (integrates with FeatureEngineering)
+ * @param {Object} staffProfile - Staff profile with shift history
+ * @param {string} dateKey - Date key for prediction target
+ * @param {number} lookbackDays - Number of days to look back (default 7)
+ * @returns {Object} Sequence features for the date
+ */
+export const getSequenceFeaturesForDate = (
+  staffProfile,
+  dateKey,
+  lookbackDays = 7,
+) => {
+  const features = {
+    rollingWindows: {
+      window3: [],
+      window5: [],
+      window7: [],
+    },
+    transitionMatrix: null,
+    positionFeatures: {
+      weeklyPosition: 0,
+      monthlyPosition: 0,
+    },
+    momentum: null,
+  };
+
+  // Collect all shifts up to the target date
+  const allShifts = [];
+  Object.keys(staffProfile.shiftHistory)
+    .sort()
+    .forEach((monthIndex) => {
+      const monthSchedule = staffProfile.shiftHistory[monthIndex];
+      Object.keys(monthSchedule)
+        .sort()
+        .forEach((date) => {
+          if (date < dateKey) {
+            allShifts.push(monthSchedule[date]);
+          }
+        });
+    });
+
+  // Extract rolling windows
+  if (allShifts.length >= 3) {
+    features.rollingWindows.window3 = extractRollingWindows(allShifts, 3);
+  }
+  if (allShifts.length >= 5) {
+    features.rollingWindows.window5 = extractRollingWindows(allShifts, 5);
+  }
+  if (allShifts.length >= 7) {
+    features.rollingWindows.window7 = extractRollingWindows(allShifts, 7);
+  }
+
+  // Calculate transition matrix
+  if (allShifts.length >= 2) {
+    features.transitionMatrix = calculateShiftTransitionMatrix(allShifts);
+  }
+
+  // Calculate position features
+  const targetDate = new Date(dateKey);
+  features.positionFeatures.weeklyPosition = targetDate.getDay();
+  features.positionFeatures.monthlyPosition = targetDate.getDate();
+
+  // Analyze momentum
+  if (allShifts.length > 0) {
+    const recentShifts = allShifts.slice(-lookbackDays);
+    features.momentum = analyzeShiftMomentum(recentShifts);
+  }
+
+  return features;
+};
+
+/**
+ * Calculate pattern stability index (how stable are the patterns over time)
+ * @param {Object} staffProfile - Staff profile with shift history
+ * @param {number} windowSize - Size of comparison window (default 30 days)
+ * @returns {Object} Stability analysis
+ */
+export const calculatePatternStability = (
+  staffProfile,
+  windowSize = 30,
+) => {
+  const stability = {
+    staffId: staffProfile.id,
+    staffName: staffProfile.name,
+    stabilityScore: 0, // 0-100
+    stabilityLevel: "unstable",
+    variabilityTrend: "stable", // 'increasing', 'decreasing', 'stable'
+    recommendations: [],
+  };
+
+  // Group shifts into windows
+  const windows = [];
+  let currentWindow = [];
+
+  Object.keys(staffProfile.shiftHistory)
+    .sort()
+    .forEach((monthIndex) => {
+      const monthSchedule = staffProfile.shiftHistory[monthIndex];
+      Object.keys(monthSchedule)
+        .sort()
+        .forEach((dateKey) => {
+          currentWindow.push(monthSchedule[dateKey]);
+
+          if (currentWindow.length >= windowSize) {
+            windows.push([...currentWindow]);
+            currentWindow = [];
+          }
+        });
+    });
+
+  // Add last window if not empty
+  if (currentWindow.length > 0) {
+    windows.push(currentWindow);
+  }
+
+  // Calculate pattern consistency across windows
+  if (windows.length >= 2) {
+    const windowStats = windows.map((window) => {
+      const stats = {
+        offCount: 0,
+        earlyCount: 0,
+        lateCount: 0,
+        normalCount: 0,
+      };
+
+      window.forEach((shift) => {
+        if (isOffDay(shift)) stats.offCount++;
+        else if (isEarlyShift(shift)) stats.earlyCount++;
+        else if (isLateShift(shift)) stats.lateCount++;
+        else stats.normalCount++;
+      });
+
+      // Normalize by window length
+      const total = window.length;
+      return {
+        offRatio: stats.offCount / total,
+        earlyRatio: stats.earlyCount / total,
+        lateRatio: stats.lateCount / total,
+        normalRatio: stats.normalCount / total,
+      };
+    });
+
+    // Calculate variance across windows for each shift type
+    const calculateVariance = (ratios) => {
+      const mean = ratios.reduce((sum, val) => sum + val, 0) / ratios.length;
+      const variance =
+        ratios.reduce((sum, val) => sum + Math.pow(val - mean, 2), 0) /
+        ratios.length;
+      return Math.sqrt(variance);
+    };
+
+    const offVariance = calculateVariance(
+      windowStats.map((s) => s.offRatio),
+    );
+    const earlyVariance = calculateVariance(
+      windowStats.map((s) => s.earlyRatio),
+    );
+    const lateVariance = calculateVariance(
+      windowStats.map((s) => s.lateRatio),
+    );
+    const normalVariance = calculateVariance(
+      windowStats.map((s) => s.normalRatio),
+    );
+
+    const avgVariance =
+      (offVariance + earlyVariance + lateVariance + normalVariance) / 4;
+
+    // Convert variance to stability score (inverse relationship)
+    stability.stabilityScore = Math.max(0, Math.min(100, 100 - avgVariance * 100));
+
+    // Determine stability level
+    if (stability.stabilityScore >= 80) {
+      stability.stabilityLevel = "highly_stable";
+    } else if (stability.stabilityScore >= 60) {
+      stability.stabilityLevel = "stable";
+    } else if (stability.stabilityScore >= 40) {
+      stability.stabilityLevel = "moderately_stable";
+    } else {
+      stability.stabilityLevel = "unstable";
+    }
+
+    // Analyze trend
+    if (windows.length >= 3) {
+      const firstHalf = windowStats.slice(0, Math.floor(windows.length / 2));
+      const secondHalf = windowStats.slice(Math.floor(windows.length / 2));
+
+      const firstHalfVariance = calculateVariance(
+        firstHalf.map((s) => s.offRatio),
+      );
+      const secondHalfVariance = calculateVariance(
+        secondHalf.map((s) => s.offRatio),
+      );
+
+      if (secondHalfVariance > firstHalfVariance * 1.2) {
+        stability.variabilityTrend = "increasing";
+      } else if (secondHalfVariance < firstHalfVariance * 0.8) {
+        stability.variabilityTrend = "decreasing";
+      } else {
+        stability.variabilityTrend = "stable";
+      }
+    }
+  }
+
+  // Generate recommendations
+  if (stability.stabilityScore < 50) {
+    stability.recommendations.push({
+      type: "stability",
+      message: "Consider establishing more consistent shift patterns",
+      priority: "medium",
+    });
+  }
+
+  if (stability.variabilityTrend === "increasing") {
+    stability.recommendations.push({
+      type: "trend",
+      message:
+        "Pattern variability is increasing - review recent scheduling changes",
+      priority: "high",
+    });
+  }
+
+  return stability;
+};

@@ -5,7 +5,7 @@
  * Provides structured representation of staff groups and their relationships.
  */
 
-import { STAFF_CONFLICT_GROUPS } from "../constraints/ConstraintEngine";
+import { getStaffConflictGroups } from "../constraints/ConstraintEngine";
 
 /**
  * Class representing a staff group with conflict rules
@@ -276,10 +276,12 @@ export class StaffGroupManager {
   }
 
   /**
-   * Initialize default staff groups from constraint engine
+   * Initialize default staff groups from database
+   * ✅ CLEANED: No hardcoded groups - database-only
    */
-  initializeDefaultGroups() {
-    STAFF_CONFLICT_GROUPS.forEach((groupDef) => {
+  async initializeDefaultGroups() {
+    const staffGroups = await getStaffConflictGroups();
+    staffGroups.forEach((groupDef) => {
       const group = new StaffGroup(
         groupDef.name,
         groupDef.members,

@@ -10,7 +10,7 @@ class ConfigurationCacheManager {
   constructor() {
     this.cache = new Map();
     this.lastCacheTime = null;
-    this.cacheTimeout = 30 * 60 * 1000; // 30 minutes
+    this.cacheTimeout = 5 * 60 * 1000; // ✅ FIX: Reduced from 30 to 5 minutes for fresher data
     this.isInitialized = false;
     this.initPromise = null;
 

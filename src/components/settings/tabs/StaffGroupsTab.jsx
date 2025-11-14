@@ -25,6 +25,7 @@ import ConflictsModal from "../shared/ConflictsModal";
 import { useBackupStaffService } from "../../../hooks/useBackupStaffService";
 import { useScheduleValidation } from "../../../hooks/useScheduleValidation";
 import { useSettings } from "../../../contexts/SettingsContext";
+import { useWebSocketSettings } from "../../../hooks/useWebSocketSettings";
 
 const PRESET_COLORS = [
   "#3B82F6",
@@ -243,6 +244,9 @@ const StaffGroupsTab = ({
   // Phase 3: Get settings from Context instead of props (eliminates prop drilling)
   const { settings, updateSettings } = useSettings();
 
+  // Get hard delete function from WebSocket settings
+  const { hardDeleteStaffGroup } = useWebSocketSettings();
+
   const [editingGroup, setEditingGroup] = useState(null);
   const [originalGroupData, setOriginalGroupData] = useState(null);
   const [draggedStaff, setDraggedStaff] = useState(null);
@@ -273,41 +277,36 @@ const StaffGroupsTab = ({
 
   // Fix: Memoize derived arrays to prevent unnecessary re-renders
   // Transform WebSocket multi-table format to localStorage-compatible format
-  const staffGroups = useMemo(() => {
+  // ✅ FIX #1: Keep ALL groups in state (including soft-deleted) to prevent deletion loop
+  // Only filter for UI display, NOT for state management
+  const allStaffGroups = useMemo(() => {
     const groups = settings?.staffGroups || [];
 
-    // 🔍 DEBUG: Log all groups before filtering
-    console.log('🔍 [staffGroups useMemo] Total groups from settings:', groups.length);
-    groups.forEach((group, index) => {
-      console.log(`🔍 [staffGroups useMemo] Group ${index}:`, {
-        id: group.id,
-        name: group.name,
-        is_active: group.is_active,
-        isActive: group.isActive,
-        willBeFiltered: group.is_active === false || group.isActive === false,
-      });
+    // Normalize members array (don't filter here!)
+    return groups.map((group) => ({
+      ...group,
+      // Extract members from groupConfig if stored there (multi-table backend)
+      // Otherwise use members directly, or default to empty array
+      members: group.members || group.groupConfig?.members || [],
+    }));
+  }, [settings?.staffGroups]);
+
+  // Separate memoized value for DISPLAY ONLY (active groups)
+  const staffGroups = useMemo(() => {
+    console.log('🔍 [staffGroups useMemo] Total groups from settings:', allStaffGroups.length);
+
+    // ✅ FIX #3: Use only isActive (normalized field name) for consistency
+    const activeGroups = allStaffGroups.filter((group) => {
+      const isDeleted = group.isActive === false;
+      if (isDeleted) {
+        console.log(`🗑️ [staffGroups useMemo] Hiding soft-deleted group from UI: ${group.name} (${group.id})`);
+      }
+      return !isDeleted;
     });
 
-    // ✅ FIX: Filter out soft-deleted groups and ensure members array exists
-    const filtered = groups
-      .filter((group) => {
-        const shouldKeep = group.is_active !== false && group.isActive !== false;
-        if (!shouldKeep) {
-          console.log(`🗑️ [staffGroups useMemo] Filtering out deleted group: ${group.name} (${group.id})`);
-        }
-        return shouldKeep;
-      })
-      .map((group) => ({
-        ...group,
-        // Extract members from groupConfig if stored there (multi-table backend)
-        // Otherwise use members directly, or default to empty array
-        members: group.members || group.groupConfig?.members || [],
-      }));
-
-    console.log('🔍 [staffGroups useMemo] Filtered groups count:', filtered.length);
-
-    return filtered;
-  }, [settings?.staffGroups]);
+    console.log('🔍 [staffGroups useMemo] Active groups for display:', activeGroups.length);
+    return activeGroups;
+  }, [allStaffGroups]);
   const conflictRules = useMemo(
     () => settings?.conflictRules || [],
     [settings?.conflictRules],
@@ -491,13 +490,27 @@ const StaffGroupsTab = ({
         // Use ref to get current settings to avoid infinite loop
         const currentSettings = settingsRef.current;
 
-        console.log(
-          "💫 [updateStaffGroups] Creating updated settings object...",
-        );
+        // ✅ FIX #2: Guard against initial mount with null/empty state to prevent database wipe
+        const currentGroups = currentSettings?.staffGroups;
+        let mergedGroups;
+
+        if (!currentGroups || !Array.isArray(currentGroups) || currentGroups.length === 0) {
+          // First mount or empty state - don't merge, just use newGroups
+          console.log('💫 [updateStaffGroups] First mount or empty state - using newGroups only (no merge)');
+          mergedGroups = newGroups;
+        } else {
+          // Normal operation - merge active groups with soft-deleted ones
+          const softDeletedGroups = currentGroups.filter(g => g.isActive === false);
+          mergedGroups = [...newGroups, ...softDeletedGroups];
+          console.log(`💫 [updateStaffGroups] Merging ${newGroups.length} active + ${softDeletedGroups.length} soft-deleted = ${mergedGroups.length} total`);
+        }
+
+        console.log("💫 [updateStaffGroups] Creating updated settings object...");
+
         // Create a completely new settings object to ensure proper state update
         const updatedSettings = {
           ...currentSettings,
-          staffGroups: [...newGroups], // Create a new array reference
+          staffGroups: mergedGroups, // ✅ Includes soft-deleted groups
         };
 
         console.log("💫 [updateStaffGroups] Calling updateSettings via ref...");
@@ -603,18 +616,18 @@ const StaffGroupsTab = ({
 
   const createNewGroup = () => {
     // Generate a unique group name based on existing ACTIVE groups
-    // ✅ FIX: Only check active groups (is_active !== false)
+    // ✅ FIX #3: Only check active groups (isActive !== false) using normalized field name
     // Soft-deleted groups don't count for uniqueness
 
     console.log('🔍 [createNewGroup] START - Current staffGroups:', staffGroups);
-    console.log('🔍 [createNewGroup] Active groups:', staffGroups.filter(g => g.is_active !== false));
-    console.log('🔍 [createNewGroup] Inactive groups:', staffGroups.filter(g => g.is_active === false));
+    console.log('🔍 [createNewGroup] Active groups:', staffGroups.filter(g => g.isActive !== false));
+    console.log('🔍 [createNewGroup] Inactive groups:', staffGroups.filter(g => g.isActive === false));
 
     let groupNumber = 1;
     let newGroupName = `New Group ${groupNumber}`;
 
     // Keep incrementing until we find a unique name among ACTIVE groups only
-    while (staffGroups.some((group) => group.is_active !== false && group.name === newGroupName)) {
+    while (staffGroups.some((group) => group.isActive !== false && group.name === newGroupName)) {
       console.log(`🔍 [createNewGroup] "${newGroupName}" already exists in active groups, trying next number`);
       groupNumber++;
       newGroupName = `New Group ${groupNumber}`;
@@ -711,6 +724,7 @@ const StaffGroupsTab = ({
   }, []);
 
   // Delete group logic - called when user confirms deletion
+  // ✅ HARD DELETE: Permanently removes group from database
   const performDeleteGroup = useCallback(
     async (groupId) => {
       console.log(
@@ -718,34 +732,25 @@ const StaffGroupsTab = ({
         groupId,
       );
 
-      // 🔍 DEBUG: Log the group being deleted
+      // ✅ FIX #5: Validate group exists before attempting delete
       const groupToDelete = staffGroups.find((g) => g.id === groupId);
-      console.log("🗑️ [StaffGroupsTab] Group to delete:", groupToDelete);
+
+      if (!groupToDelete) {
+        console.error('❌ [performDeleteGroup] Group not found:', groupId);
+        toast.error('Group not found - it may have already been deleted');
+        return; // Early return - don't proceed with delete
+      }
+
+      console.log("🗑️ [StaffGroupsTab] Group to PERMANENTLY delete:", groupToDelete);
+
+      // ✅ FIX #5: Warn if trying to delete already soft-deleted group
+      if (groupToDelete.isActive === false) {
+        console.warn('⚠️  [performDeleteGroup] Group already soft-deleted:', groupId);
+        // Proceed with hard delete - this is expected for already soft-deleted groups
+      }
 
       try {
-        // ❌ PROBLEM IDENTIFIED: We're REMOVING the group from the array instead of soft-deleting it
-        // This causes the Go server to detect a DELETE operation, but then it broadcasts back
-        // the full list including the soft-deleted group, which should be filtered out
-
-        // 🔧 FIX: Instead of filtering out, mark as deleted (soft-delete)
-        const updatedGroups = staffGroups.map((group) =>
-          group.id === groupId
-            ? { ...group, is_active: false } // Soft-delete
-            : group
-        );
-
-        console.log("🗑️ [StaffGroupsTab] Updated groups (with soft-delete):", {
-          totalGroups: updatedGroups.length,
-          deletedGroup: updatedGroups.find((g) => g.id === groupId),
-        });
-
-        // Remove related intra-group conflict rules
-        const updatedRules = conflictRules.filter(
-          (rule) =>
-            !(rule.type === "intra_group_conflict" && rule.groupId === groupId),
-        );
-
-        // Remove related backup assignments using hook
+        // Remove related backup assignments using hook BEFORE deleting group
         const relatedBackupAssignments = backupAssignments.filter(
           (assignment) => assignment.groupId === groupId,
         );
@@ -755,29 +760,36 @@ const StaffGroupsTab = ({
           await hookRemoveBackupAssignment(assignment.id);
         }
 
-        // Update settings in a single atomic operation (backup assignments handled by hook)
+        // Remove related intra-group conflict rules
+        const updatedRules = conflictRules.filter(
+          (rule) =>
+            !(rule.type === "intra_group_conflict" && rule.groupId === groupId),
+        );
+
+        // Update conflict rules first (before hard delete)
         const updatedSettings = {
           ...settings,
-          staffGroups: [...updatedGroups],
           conflictRules: [...updatedRules],
         };
-
-        // Update settings (this will trigger change detection)
-        console.log("🗑️ [StaffGroupsTab] Calling updateSettings with:", {
-          oldGroupsCount: settings.staffGroups?.length,
-          newGroupsCount: updatedSettings.staffGroups?.length,
-          deletedGroupId: groupId,
-          updatedSettingsStaffGroups: updatedSettings.staffGroups.map((g) => ({
-            id: g.id,
-            name: g.name,
-            is_active: g.is_active,
-          })),
-        });
         updateSettings(updatedSettings);
-        console.log("🗑️ [StaffGroupsTab] updateSettings called successfully");
+
+        // ✅ HARD DELETE: Call WebSocket function to permanently delete group
+        console.log("🗑️ [StaffGroupsTab] Calling hardDeleteStaffGroup WebSocket function");
+        await hardDeleteStaffGroup(groupId);
+        console.log("🗑️ [StaffGroupsTab] hardDeleteStaffGroup completed successfully");
+
+        // Show success toast
+        toast.success(`Permanently deleted group: ${groupToDelete.name}`);
       } catch (error) {
-        console.error("🗑️ [StaffGroupsTab] Error deleting group:", error);
-        throw error;
+        console.error("🗑️ [StaffGroupsTab] Error permanently deleting group:", error);
+
+        // ✅ FIX #5: Better error handling for specific error types
+        if (error.message?.includes('not found') || error.message?.includes('does not exist')) {
+          toast.warning(`Group "${groupToDelete.name}" was already deleted`);
+        } else {
+          toast.error(`Failed to delete group: ${error.message}`);
+          throw error; // Re-throw unexpected errors
+        }
       }
     },
     [
@@ -787,6 +799,7 @@ const StaffGroupsTab = ({
       settings,
       updateSettings,
       hookRemoveBackupAssignment,
+      hardDeleteStaffGroup,
     ],
   );
 

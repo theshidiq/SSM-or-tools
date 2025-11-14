@@ -26,6 +26,7 @@ const MESSAGE_TYPES = {
   SETTINGS_UPDATE_STAFF_GROUPS: "SETTINGS_UPDATE_STAFF_GROUPS",
   SETTINGS_CREATE_STAFF_GROUP: "SETTINGS_CREATE_STAFF_GROUP",
   SETTINGS_DELETE_STAFF_GROUP: "SETTINGS_DELETE_STAFF_GROUP",
+  SETTINGS_HARD_DELETE_STAFF_GROUP: "SETTINGS_HARD_DELETE_STAFF_GROUP",
   SETTINGS_UPDATE_DAILY_LIMITS: "SETTINGS_UPDATE_DAILY_LIMITS",
   SETTINGS_UPDATE_MONTHLY_LIMITS: "SETTINGS_UPDATE_MONTHLY_LIMITS",
   SETTINGS_CREATE_PRIORITY_RULE: "SETTINGS_CREATE_PRIORITY_RULE",
@@ -99,6 +100,14 @@ export const useWebSocketSettings = (options = {}) => {
   const handleSettingsSyncResponse = useCallback(
     (payload, messageClientId) => {
       try {
+        // 🔍 DEBUG: Log raw payload to see what server sent
+        console.log("🔍 [SYNC] Raw payload received:", JSON.stringify(payload).substring(0, 500));
+        console.log("🔍 [SYNC] Staff groups in payload:", payload?.settings?.staffGroups);
+        if (payload?.settings?.staffGroups?.[0]) {
+          console.log("🔍 [SYNC] First group structure:", payload.settings.staffGroups[0]);
+          console.log("🔍 [SYNC] First group members:", payload.settings.staffGroups[0].members);
+        }
+
         // ✅ FIX #1: IGNORE SELF-BROADCASTS - Don't process messages from ourselves
         if (messageClientId && messageClientId === clientIdRef.current) {
           console.log("⏭️ [SYNC] Ignoring self-broadcast (clientId match)");
@@ -569,6 +578,42 @@ export const useWebSocketSettings = (options = {}) => {
   );
 
   /**
+   * Permanently delete a staff group (hard delete - cannot be undone)
+   */
+  const hardDeleteStaffGroup = useCallback(
+    (groupId) => {
+      if (!enabled) {
+        const error = new Error("WebSocket disabled");
+        console.log(
+          "🚫 Phase 3 Settings: Staff group hard deletion blocked - WebSocket disabled",
+        );
+        return Promise.reject(error);
+      }
+
+      if (wsRef.current?.readyState === WebSocket.OPEN) {
+        const message = {
+          type: MESSAGE_TYPES.SETTINGS_HARD_DELETE_STAFF_GROUP,
+          payload: { groupId },
+          timestamp: new Date().toISOString(),
+          clientId: clientIdRef.current,
+        };
+
+        wsRef.current.send(JSON.stringify(message));
+        console.log("📤 Phase 3 Settings: Sent staff group HARD deletion:", groupId);
+
+        return Promise.resolve();
+      } else {
+        const error = new Error("WebSocket not connected");
+        console.error(
+          "❌ Phase 3 Settings: Failed to hard delete staff group - not connected",
+        );
+        return Promise.reject(error);
+      }
+    },
+    [enabled],
+  );
+
+  /**
    * Update daily limits (table-specific operation)
    */
   const updateDailyLimits = useCallback(
@@ -1023,6 +1068,7 @@ export const useWebSocketSettings = (options = {}) => {
     updateStaffGroups,
     createStaffGroup,
     deleteStaffGroup,
+    hardDeleteStaffGroup,
     updateDailyLimits,
     updateMonthlyLimits,
     createPriorityRule,

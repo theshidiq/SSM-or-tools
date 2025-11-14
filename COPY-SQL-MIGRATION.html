@@ -1,0 +1,314 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Research Survey Migration SQL</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            max-width: 1200px;
+            margin: 40px auto;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 30px;
+            border-radius: 8px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #333;
+            border-bottom: 3px solid #3ecf8e;
+            padding-bottom: 10px;
+        }
+        .instructions {
+            background: #e3f2fd;
+            padding: 20px;
+            border-radius: 6px;
+            margin: 20px 0;
+            border-left: 4px solid #2196f3;
+        }
+        .instructions ol {
+            margin: 10px 0;
+            padding-left: 20px;
+        }
+        .instructions li {
+            margin: 10px 0;
+        }
+        .sql-container {
+            background: #1e1e1e;
+            color: #d4d4d4;
+            padding: 20px;
+            border-radius: 6px;
+            overflow-x: auto;
+            position: relative;
+        }
+        pre {
+            margin: 0;
+            font-family: 'Monaco', 'Menlo', 'Courier New', monospace;
+            font-size: 13px;
+            line-height: 1.5;
+        }
+        .copy-button {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            background: #3ecf8e;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-weight: bold;
+            transition: background 0.3s;
+        }
+        .copy-button:hover {
+            background: #2eaf7e;
+        }
+        .copy-button.copied {
+            background: #4caf50;
+        }
+        .link {
+            color: #2196f3;
+            text-decoration: none;
+            font-weight: bold;
+        }
+        .link:hover {
+            text-decoration: underline;
+        }
+        .success-note {
+            background: #e8f5e9;
+            padding: 15px;
+            border-radius: 6px;
+            margin-top: 20px;
+            border-left: 4px solid #4caf50;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🗄️ Research Survey Database Migration</h1>
+
+        <div class="instructions">
+            <h2>📋 How to Apply the Migration</h2>
+            <ol>
+                <li><strong>Click the "📋 Copy SQL" button below</strong> (the SQL will be copied to your clipboard)</li>
+                <li><strong>Open Supabase Dashboard:</strong> <a href="https://app.supabase.com/project/ymdyejrljmvajqjbejvh/editor" target="_blank" class="link">Click here to open SQL Editor</a></li>
+                <li><strong>Click "New query"</strong> in the SQL Editor</li>
+                <li><strong>Paste the SQL</strong> (Cmd+V / Ctrl+V)</li>
+                <li><strong>Click "Run"</strong> (or press Cmd+Enter / Ctrl+Enter)</li>
+                <li><strong>Wait for success message</strong> ✅</li>
+                <li><strong>Refresh your browser</strong> at <code>http://localhost:3001/research</code></li>
+            </ol>
+        </div>
+
+        <div class="sql-container">
+            <button class="copy-button" onclick="copySQL()">📋 Copy SQL</button>
+            <pre id="sql-code">-- Migration: Create survey_responses table for research questionnaire
+-- Created: 2025-10-31
+-- Purpose: Store manager responses comparing manual vs AI shift scheduling
+
+-- Enable UUID extension if not already enabled
+CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+
+-- Create survey_responses table
+CREATE TABLE IF NOT EXISTS survey_responses (
+    -- Primary key and metadata
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+
+    -- Section 1: Background Information
+    position TEXT,
+    position_other TEXT,
+    experience_years TEXT,
+    staff_count TEXT,
+    manual_duration_years INTEGER DEFAULT 0,
+    manual_duration_months INTEGER DEFAULT 0,
+    ai_duration_years INTEGER DEFAULT 0,
+    ai_duration_months INTEGER DEFAULT 0,
+
+    -- Section 2: Time Efficiency
+    manual_time_category TEXT,
+    ai_time_category TEXT,
+    time_satisfaction INTEGER,
+    time_satisfaction_reason TEXT,
+    time_consuming_tasks TEXT[],
+    most_time_saved_task TEXT,
+    still_manual_tasks BOOLEAN,
+    still_manual_tasks_detail TEXT,
+
+    -- Section 3: Accuracy and Quality
+    manual_violation_frequency TEXT,
+    ai_violation_frequency TEXT,
+    constraint_accuracy_satisfaction INTEGER,
+    constraint_accuracy_comments TEXT,
+    manual_fairness_rating INTEGER,
+    ai_fairness_rating INTEGER,
+    ai_pattern_understanding INTEGER,
+    ai_pattern_examples TEXT,
+
+    -- Section 4: Decision Support
+    ai_trust_rating INTEGER,
+    pattern_recognition_usefulness TEXT,
+    pattern_recognition_how_helpful TEXT,
+    optimization_usage TEXT,
+    decision_quality_improvement INTEGER,
+    decision_improvements TEXT,
+    modification_frequency TEXT,
+    ai_adaptation_rating INTEGER,
+    fine_tuning_ease INTEGER,
+
+    -- Section 5: User Experience
+    manual_usability_rating INTEGER,
+    ai_usability_rating INTEGER,
+    learning_difficulty TEXT,
+    learning_time_period TEXT,
+    realtime_sync_rating INTEGER,
+    response_time_satisfaction INTEGER,
+    stability_satisfaction INTEGER,
+    mobile_experience BOOLEAN,
+    mobile_rating INTEGER,
+
+    -- Section 6: Business Impact
+    manual_staff_dissatisfaction INTEGER,
+    staff_satisfaction_change TEXT,
+    staff_satisfaction_improvements TEXT,
+    shift_change_requests TEXT,
+    shift_issues_reduction INTEGER,
+    management_efficiency INTEGER,
+    time_focus_areas TEXT,
+    cost_reasonableness TEXT,
+    roi_rating INTEGER,
+    annual_time_saved TEXT,
+
+    -- Section 7: Improvements and Future
+    improvement_areas TEXT[],
+    manual_better_aspects TEXT,
+    manual_better_details TEXT,
+    training_support_rating INTEGER,
+    recommendation_level TEXT,
+    recommendation_reason TEXT,
+    continue_using_5years TEXT,
+    future_feature_expectations TEXT,
+
+    -- Section 8: Overall Evaluation
+    overall_comparison INTEGER,
+    return_to_manual TEXT,
+    top_benefits TEXT[],
+    top_drawbacks TEXT,
+    most_challenging_manual_experience TEXT,
+    most_impressive_ai_experience TEXT,
+    additional_comments TEXT,
+
+    -- Completion tracking
+    completed BOOLEAN DEFAULT FALSE,
+    current_section INTEGER DEFAULT 1,
+    language TEXT DEFAULT 'ja',
+
+    -- Contact info (optional)
+    respondent_name TEXT,
+    respondent_email TEXT
+);
+
+-- Create indexes
+CREATE INDEX IF NOT EXISTS idx_survey_responses_created_at ON survey_responses(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_survey_responses_completed ON survey_responses(completed);
+
+-- Create trigger function
+CREATE OR REPLACE FUNCTION update_updated_at_column()
+RETURNS TRIGGER AS $$
+BEGIN
+    NEW.updated_at = NOW();
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+-- Create trigger
+DROP TRIGGER IF EXISTS update_survey_responses_updated_at ON survey_responses;
+CREATE TRIGGER update_survey_responses_updated_at
+    BEFORE UPDATE ON survey_responses
+    FOR EACH ROW
+    EXECUTE FUNCTION update_updated_at_column();
+
+-- Create analytics views
+CREATE OR REPLACE VIEW survey_analytics AS
+SELECT
+    COUNT(*) as total_responses,
+    COUNT(*) FILTER (WHERE completed = true) as completed_responses,
+    AVG(time_satisfaction) as avg_time_satisfaction,
+    AVG(ai_usability_rating) as avg_usability,
+    AVG(roi_rating) as avg_roi
+FROM survey_responses;
+
+CREATE OR REPLACE VIEW time_efficiency_stats AS
+SELECT
+    manual_time_category,
+    ai_time_category,
+    COUNT(*) as response_count,
+    AVG(time_satisfaction) as avg_satisfaction
+FROM survey_responses
+WHERE completed = true
+GROUP BY manual_time_category, ai_time_category
+ORDER BY response_count DESC;
+
+CREATE OR REPLACE VIEW satisfaction_by_category AS
+SELECT
+    'Time Efficiency' as category,
+    AVG(time_satisfaction) as avg_rating,
+    COUNT(*) as response_count
+FROM survey_responses WHERE completed = true
+UNION ALL
+SELECT
+    'Constraint Accuracy',
+    AVG(constraint_accuracy_satisfaction),
+    COUNT(*)
+FROM survey_responses WHERE completed = true
+UNION ALL
+SELECT
+    'AI Trust',
+    AVG(ai_trust_rating),
+    COUNT(*)
+FROM survey_responses WHERE completed = true
+UNION ALL
+SELECT
+    'Usability',
+    AVG(ai_usability_rating),
+    COUNT(*)
+FROM survey_responses WHERE completed = true
+UNION ALL
+SELECT
+    'ROI',
+    AVG(roi_rating),
+    COUNT(*)
+FROM survey_responses WHERE completed = true;</pre>
+        </div>
+
+        <div class="success-note">
+            <h3>✅ After Running the Migration:</h3>
+            <ul>
+                <li>The <code>survey_responses</code> table will be created with 50+ fields</li>
+                <li>Three analytics views will be created: <code>survey_analytics</code>, <code>time_efficiency_stats</code>, <code>satisfaction_by_category</code></li>
+                <li>Refresh your browser at <code>http://localhost:3001/research</code></li>
+                <li>The 404 errors will disappear and the form will work! 🎉</li>
+            </ul>
+        </div>
+    </div>
+
+    <script>
+        function copySQL() {
+            const sqlCode = document.getElementById('sql-code').textContent;
+            navigator.clipboard.writeText(sqlCode).then(() => {
+                const button = document.querySelector('.copy-button');
+                button.textContent = '✅ Copied!';
+                button.classList.add('copied');
+                setTimeout(() => {
+                    button.textContent = '📋 Copy SQL';
+                    button.classList.remove('copied');
+                }, 2000);
+            });
+        }
+    </script>
+</body>
+</html>

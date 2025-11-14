@@ -449,7 +449,7 @@ export const useScheduleDataPrefetch = (
         );
         return {
           staff: processedStaffMembers,
-          schedule: schedule,
+          schedule: currentScheduleData?.schedule || {}, // ✅ FIX: Use React Query data directly
           dateRange: generateDateRange(periodIndex),
           isFromCache: true,
           scheduleId: currentScheduleId,
@@ -460,7 +460,7 @@ export const useScheduleDataPrefetch = (
       try {
         return {
           staff: processedStaffMembers,
-          schedule: schedule,
+          schedule: currentScheduleData?.schedule || {}, // ✅ FIX: Use React Query data directly instead of stale state
           dateRange: dateRange,
           isFromCache: true,
           scheduleId: currentScheduleId,
@@ -484,7 +484,7 @@ export const useScheduleDataPrefetch = (
     [
       currentMonthIndex,
       processedStaffMembers,
-      schedule,
+      currentScheduleData, // ✅ FIX: Use currentScheduleData instead of schedule state
       dateRange,
       currentScheduleId,
       isWebSocketEnabled,
@@ -534,9 +534,14 @@ export const useScheduleDataPrefetch = (
     onMutate: async ({ scheduleData }) => {
       // Optimistic update to local state
       const previousSchedule = schedule;
+
+      console.log(`⚡ [WEBSOCKET-PREFETCH] Applying optimistic update for period ${currentMonthIndex}`);
+      console.log(`   Old schedule staff count: ${Object.keys(previousSchedule).length}`);
+      console.log(`   New schedule staff count: ${Object.keys(scheduleData).length}`);
+
       setSchedule(scheduleData);
 
-      console.log(`⚡ [WEBSOCKET-PREFETCH] Optimistic schedule update applied`);
+      console.log(`✅ [WEBSOCKET-PREFETCH] Optimistic schedule update applied - state should re-render`);
       return { previousSchedule };
     },
     onError: (error, variables, context) => {

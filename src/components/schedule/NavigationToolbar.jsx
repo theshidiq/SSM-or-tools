@@ -44,6 +44,7 @@ import ErrorBoundary from "../ui/ErrorBoundary";
 import { AILoadingSpinner } from "../ui/LoadingStates";
 import { LazyAIAssistantModal } from "../lazy/LazyAIComponents";
 import { ScheduleImportModal } from "../import";
+import { ModelStatusBadge } from "../ai/ModelStatusBadge";
 
 const NavigationToolbar = ({
   currentMonthIndex,
@@ -622,6 +623,9 @@ const NavigationToolbar = ({
                   <p>Settings - Configure ML models and business rules</p>
                 </TooltipContent>
               </Tooltip>
+
+              {/* Model Status Badge - NEW */}
+              <ModelStatusBadge />
 
               {/* Delete Current Period */}
               <Tooltip>

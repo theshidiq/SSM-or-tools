@@ -13,7 +13,6 @@ import {
   isWorkingShift,
   getDayOfWeek,
   isWeekday,
-  STAFF_CONFLICT_GROUPS,
   PRIORITY_RULES,
   getMonthlyLimits,
   validateAllConstraints,

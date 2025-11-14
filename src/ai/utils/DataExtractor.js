@@ -9,6 +9,14 @@ import { generateDateRange } from "../../utils/dateUtils";
 import { optimizedStorage } from "../../utils/storageUtils";
 import { shiftSymbols } from "../../constants/shiftConstants";
 import { isStaffActiveInCurrentPeriod } from "../../utils/staffUtils";
+import { detectAvailablePeriods } from "../../utils/periodDetection";
+import {
+  detectPositionPatterns,
+  calculateShiftTransitionMatrix,
+  analyzeShiftMomentum,
+  calculatePatternStability,
+  getSequenceFeaturesForDate,
+} from "../core/PatternRecognizer";
 
 /**
  * Extract schedule data for a specific period
@@ -54,20 +62,46 @@ export const extractPeriodData = (monthIndex) => {
 
 /**
  * Extract all available historical data from all periods
- * @returns {Array} Array of period data objects
+ * @param {Array<number>} periodsToUse - Optional array of period indices to use (e.g., [0,1,2,3,4])
+ * @returns {Object} All period data with metadata
  */
-export const extractAllHistoricalData = () => {
+export const extractAllHistoricalData = (periodsToUse = null) => {
   const allData = [];
 
-  // Extract data from all 6 periods (0-5)
-  for (let monthIndex = 0; monthIndex < 6; monthIndex++) {
+  // 🔥 DYNAMIC PERIOD DETECTION: Automatically detect all periods with data
+  let availablePeriods;
+
+  if (periodsToUse && Array.isArray(periodsToUse) && periodsToUse.length > 0) {
+    // Use filtered periods provided by caller
+    availablePeriods = periodsToUse;
+    console.log(`📅 [DataExtractor] Using ${availablePeriods.length} filtered periods for training:`, availablePeriods);
+  } else {
+    // Use all available periods
+    availablePeriods = detectAvailablePeriods();
+    console.log(`📊 [DataExtractor] Using ${availablePeriods.length} periods for training:`, availablePeriods);
+  }
+
+  if (availablePeriods.length === 0) {
+    console.error('❌ [DataExtractor] No periods found with schedule data!');
+    console.error('💡 [DataExtractor] Make sure you have created schedules and saved them to localStorage');
+    console.error('💡 [DataExtractor] Expected localStorage keys: scheduleData_0, scheduleData_1, etc.');
+  }
+
+  // Extract data from specified periods
+  for (const monthIndex of availablePeriods) {
     const periodData = extractPeriodData(monthIndex);
     if (periodData.success) {
       allData.push(periodData);
+    } else {
+      console.warn(`⚠️ [DataExtractor] Failed to extract period ${monthIndex}:`, periodData.error);
     }
   }
 
-  return allData;
+  return {
+    periods: allData,
+    periodsUsed: availablePeriods,
+    totalPeriods: availablePeriods.length,
+  };
 };
 
 /**
@@ -150,6 +184,173 @@ export const extractStaffProfiles = (allPeriodData) => {
   });
 
   return staffProfiles;
+};
+
+/**
+ * PHASE 2: Enrich staff profiles with per-staff pattern memory
+ * @param {Object} staffProfiles - Staff profiles from extractStaffProfiles
+ * @returns {Object} Enhanced staff profiles with pattern analysis
+ */
+export const enrichStaffProfilesWithPatterns = (staffProfiles) => {
+  console.log("🧠 PHASE 2: Enriching staff profiles with pattern memory...");
+
+  const enrichedProfiles = {};
+
+  Object.keys(staffProfiles).forEach((staffId) => {
+    const profile = staffProfiles[staffId];
+
+    // Skip staff with insufficient data
+    if (profile.totalShifts < 10) {
+      console.log(
+        `⏭️ Skipping ${profile.name} - insufficient data (${profile.totalShifts} shifts)`,
+      );
+      enrichedProfiles[staffId] = profile;
+      return;
+    }
+
+    try {
+      // Collect all shifts in chronological order
+      const allShifts = [];
+      Object.keys(profile.shiftHistory)
+        .sort()
+        .forEach((monthIndex) => {
+          const monthSchedule = profile.shiftHistory[monthIndex];
+          Object.keys(monthSchedule)
+            .sort()
+            .forEach((dateKey) => {
+              allShifts.push(monthSchedule[dateKey]);
+            });
+        });
+
+      // Calculate pattern memory features
+      const patternMemory = {
+        // Position-based patterns (weekly cycle)
+        weeklyPositionPatterns: detectPositionPatterns(profile, "weekly"),
+
+        // Position-based patterns (monthly cycle)
+        monthlyPositionPatterns: detectPositionPatterns(profile, "monthly"),
+
+        // Shift transition matrix (Markov analysis)
+        transitionMatrix: calculateShiftTransitionMatrix(allShifts),
+
+        // Shift momentum analysis
+        momentum: analyzeShiftMomentum(allShifts),
+
+        // Pattern stability over time
+        stability: calculatePatternStability(profile, 30),
+
+        // Statistics
+        stats: {
+          totalHistoricalShifts: allShifts.length,
+          periodsAnalyzed: Object.keys(profile.shiftHistory).length,
+          averageShiftsPerPeriod:
+            allShifts.length / Object.keys(profile.shiftHistory).length,
+        },
+      };
+
+      // Add pattern memory to profile
+      enrichedProfiles[staffId] = {
+        ...profile,
+        patternMemory,
+        hasPatternMemory: true,
+      };
+
+      console.log(
+        `✅ ${profile.name}: Pattern memory added (${allShifts.length} shifts analyzed)`,
+      );
+    } catch (error) {
+      console.error(`❌ Failed to enrich ${profile.name}:`, error);
+      enrichedProfiles[staffId] = {
+        ...profile,
+        hasPatternMemory: false,
+      };
+    }
+  });
+
+  console.log(
+    `🎯 Pattern memory enrichment completed for ${Object.keys(enrichedProfiles).length} staff members`,
+  );
+  return enrichedProfiles;
+};
+
+/**
+ * Get staff-specific prediction context for a given date
+ * @param {Object} staffProfile - Enriched staff profile with pattern memory
+ * @param {string} targetDate - Target date for prediction (ISO format)
+ * @returns {Object} Staff-specific context for predictions
+ */
+export const getStaffPredictionContext = (staffProfile, targetDate) => {
+  if (!staffProfile.hasPatternMemory) {
+    return {
+      hasContext: false,
+      reason: "No pattern memory available",
+    };
+  }
+
+  const { patternMemory } = staffProfile;
+  const targetDateObj = new Date(targetDate);
+
+  // Get position-based predictions
+  const weeklyPosition = targetDateObj.getDay();
+  const monthlyPosition = targetDateObj.getDate() - 1; // 0-indexed
+
+  const weeklyPrediction =
+    patternMemory.weeklyPositionPatterns.predictions[weeklyPosition];
+  const monthlyPrediction =
+    patternMemory.monthlyPositionPatterns.predictions[monthlyPosition];
+
+  // Get sequence features for the target date
+  const sequenceFeatures = getSequenceFeaturesForDate(
+    staffProfile,
+    targetDate,
+    7,
+  );
+
+  // Calculate confidence based on pattern stability
+  const baseConfidence = patternMemory.stability.stabilityScore / 100;
+  const weeklyConfidence = weeklyPrediction?.confidence || 0.5;
+  const monthlyConfidence = monthlyPrediction?.confidence || 0.5;
+
+  // Weighted average confidence
+  const overallConfidence =
+    baseConfidence * 0.4 + weeklyConfidence * 0.4 + monthlyConfidence * 0.2;
+
+  return {
+    hasContext: true,
+    staffId: staffProfile.id,
+    staffName: staffProfile.name,
+    targetDate,
+    predictions: {
+      weekly: weeklyPrediction,
+      monthly: monthlyPrediction,
+    },
+    transitionMatrix: patternMemory.transitionMatrix.matrix,
+    momentum: patternMemory.momentum,
+    stability: {
+      score: patternMemory.stability.stabilityScore,
+      level: patternMemory.stability.stabilityLevel,
+      trend: patternMemory.stability.variabilityTrend,
+    },
+    sequenceFeatures,
+    confidence: {
+      overall: overallConfidence,
+      base: baseConfidence,
+      weekly: weeklyConfidence,
+      monthly: monthlyConfidence,
+    },
+    recommendations: [
+      ...patternMemory.stability.recommendations,
+      ...(overallConfidence < 0.5
+        ? [
+            {
+              type: "low_confidence",
+              message: "Pattern confidence is low - predictions may be less accurate",
+              priority: "medium",
+            },
+          ]
+        : []),
+    ],
+  };
 };
 
 /**
@@ -373,14 +574,17 @@ export const extractDataQualityMetrics = (allPeriodData) => {
 
 /**
  * Main function to extract and structure all data for AI analysis
+ * @param {boolean} enrichWithPatterns - Whether to enrich with Phase 2 pattern memory (default: true)
+ * @param {Array<number>} periodsToUse - Optional array of period indices to use (e.g., [0,1,2,3,4])
  * @returns {Object} Complete data extraction for AI processing
  */
-export const extractAllDataForAI = () => {
+export const extractAllDataForAI = (enrichWithPatterns = true, periodsToUse = null) => {
   try {
     console.log("🔍 Extracting all data for AI analysis...");
 
-    // Extract all historical data
-    const allPeriodData = extractAllHistoricalData();
+    // Extract all historical data with dynamic period detection (optionally filtered)
+    const historicalDataResult = extractAllHistoricalData(periodsToUse);
+    const { periods: allPeriodData, periodsUsed, totalPeriods } = historicalDataResult;
 
     if (allPeriodData.length === 0) {
       return {
@@ -391,7 +595,16 @@ export const extractAllDataForAI = () => {
     }
 
     // Extract staff profiles
-    const staffProfiles = extractStaffProfiles(allPeriodData);
+    let staffProfiles = extractStaffProfiles(allPeriodData);
+
+    // PHASE 2: Enrich with per-staff pattern memory
+    if (enrichWithPatterns) {
+      try {
+        staffProfiles = enrichStaffProfilesWithPatterns(staffProfiles);
+      } catch (error) {
+        console.warn("⚠️ Pattern enrichment failed, continuing without:", error);
+      }
+    }
 
     // Extract coverage patterns
     const coveragePatterns = extractDailyCoveragePatterns(allPeriodData);
@@ -402,9 +615,17 @@ export const extractAllDataForAI = () => {
     // Extract data quality metrics
     const dataQualityMetrics = extractDataQualityMetrics(allPeriodData);
 
+    // Count staff with pattern memory
+    const staffWithPatterns = Object.values(staffProfiles).filter(
+      (p) => p.hasPatternMemory,
+    ).length;
+
     const result = {
       success: true,
       extractedAt: new Date().toISOString(),
+      phase2Enabled: enrichWithPatterns,
+      periodsUsed, // NEW: Track which periods were used
+      totalPeriods, // NEW: Total count of periods
       data: {
         rawPeriodData: allPeriodData,
         staffProfiles,
@@ -413,7 +634,9 @@ export const extractAllDataForAI = () => {
         dataQualityMetrics,
         summary: {
           totalPeriods: allPeriodData.length,
+          periodsUsed, // NEW: Include in summary
           totalStaff: Object.keys(staffProfiles).length,
+          staffWithPatternMemory: staffWithPatterns,
           totalDays: dataQualityMetrics.totalDays,
           totalShifts: dataQualityMetrics.totalShifts,
           dataCompleteness:

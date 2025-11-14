@@ -17,7 +17,6 @@ import {
   validateProximityPatterns,
   getViolationRecommendations,
   VIOLATION_TYPES,
-  STAFF_CONFLICT_GROUPS,
   PRIORITY_RULES,
   DAILY_LIMITS,
   getMonthlyLimits,
@@ -34,6 +33,7 @@ import {
   getDayOfWeek,
 } from "../constraints/ConstraintEngine";
 import { ConfigurationService } from "../../services/ConfigurationService.js";
+import { analyzeShiftMomentum } from "../core/PatternRecognizer";
 
 export class BusinessRuleValidator {
   constructor() {
@@ -173,9 +173,9 @@ export class BusinessRuleValidator {
     }
 
     // Fallback to cached configuration (legacy path)
+    // ✅ CLEANED: No static staff groups fallback - database-only
     return {
-      staffGroups:
-        this.configurationCache.get("staffGroups") || STAFF_CONFLICT_GROUPS,
+      staffGroups: this.configurationCache.get("staffGroups") || [],
       dailyLimits: this.configurationCache.get("dailyLimits") || DAILY_LIMITS,
       monthlyLimits: this.configurationCache.get("monthlyLimits") || {},
       priorityRules:
@@ -1017,6 +1017,9 @@ export class BusinessRuleValidator {
       // Final validation and adjustments
       await this.applyFinalAdjustments(schedule, staffMembers, dateRange);
 
+      // 🔧 FIX: Post-generation repair to eliminate any consecutive off-days
+      await this.repairConsecutiveOffDays(schedule, staffMembers, dateRange);
+
       console.log("✅ Rule-based schedule generated");
 
       // 🎯 DEBUG: Log final schedule to verify randomization
@@ -1194,13 +1197,28 @@ export class BusinessRuleValidator {
         rule.ruleDefinition?.staff_id ||  // ← JSONB nested structure (safety net)
         rule.ruleDefinition?.staffId ||
         rule.ruleConfig?.staffId ||
-        rule.preferences?.staffId;  // ← Alternative nested location
+        rule.preferences?.staffId ||
+        rule.constraints?.staffId ||  // ← Additional location
+        rule.validity?.staffId;  // ← Another possible location
 
+      // 🔧 FIX: Enhanced logging to show all checked fields
       if (!staffId) {
         console.log(
           `⚠️ [PRIORITY-TRANSFORM] Rule ${index}: Missing staffId (checked all locations), skipping`,
         );
-        console.log(`   Raw rule:`, JSON.stringify(rule, null, 2).substring(0, 200));
+        console.log(`   🔍 Checked fields:`, {
+          'rule.staffId': rule.staffId,
+          'rule.staff_id': rule.staff_id,
+          'rule.ruleDefinition?.staff_id': rule.ruleDefinition?.staff_id,
+          'rule.ruleDefinition?.staffId': rule.ruleDefinition?.staffId,
+          'rule.ruleConfig?.staffId': rule.ruleConfig?.staffId,
+          'rule.preferences?.staffId': rule.preferences?.staffId,
+          'rule.constraints?.staffId': rule.constraints?.staffId,
+          'rule.validity?.staffId': rule.validity?.staffId
+        });
+        console.log(`   📋 Rule name: "${rule.name}", type: "${rule.ruleType}"`);
+        console.log(`   ⚠️ This may be a GLOBAL rule (applies to all staff) - currently not supported`);
+        console.log(`   Raw rule:`, JSON.stringify(rule, null, 2).substring(0, 300));
         return;
       }
 
@@ -1550,7 +1568,33 @@ export class BusinessRuleValidator {
         }
 
         if (bestCandidate) {
-          // Assign off day
+          // 🔧 FIX: Check for consecutive off-days before assigning
+          const candidateDate = new Date(bestCandidate.dateKey);
+          const prevDate = new Date(candidateDate);
+          prevDate.setDate(prevDate.getDate() - 1);
+          const nextDate = new Date(candidateDate);
+          nextDate.setDate(nextDate.getDate() + 1);
+
+          const prevDateKey = prevDate.toISOString().split("T")[0];
+          const nextDateKey = nextDate.toISOString().split("T")[0];
+
+          const prevIsOff = schedule[staff.id][prevDateKey] === "×";
+          const nextIsOff = schedule[staff.id][nextDateKey] === "×";
+
+          // Skip this candidate if it would create consecutive off-days
+          if (prevIsOff || nextIsOff) {
+            console.log(
+              `📅 [RULE-GEN]   ⚠ ${staff.name}: Skipping ${bestCandidate.date.toLocaleDateString('ja-JP')} ` +
+              `(would create consecutive off-days)`
+            );
+
+            // Remove this candidate and try next
+            shuffledDays.splice(bestCandidate.arrayIndex, 1);
+            nextOffDayIndex = (bestCandidate.arrayIndex) % Math.max(shuffledDays.length, 1);
+            continue;
+          }
+
+          // Assign off day (no consecutive pattern detected)
           schedule[staff.id][bestCandidate.dateKey] = "×";
           globalOffDayCount[bestCandidate.dateKey]++;
           offDaysSet++;
@@ -1682,6 +1726,68 @@ export class BusinessRuleValidator {
     console.log(
       `✅ [FINAL] Final adjustments complete (empty cells = normal working days)`,
     );
+  }
+
+  /**
+   * 🔧 FIX: Repair consecutive off-days in generated schedule
+   * This is a post-generation safety net to eliminate any ×× patterns
+   * @param {Object} schedule - Schedule to repair
+   * @param {Array} staffMembers - Staff member data
+   * @param {Array} dateRange - Date range
+   */
+  async repairConsecutiveOffDays(schedule, staffMembers, dateRange) {
+    console.log("🔧 [REPAIR] Scanning for consecutive off-days to repair...");
+
+    let repairsApplied = 0;
+
+    staffMembers.forEach((staff) => {
+      if (!schedule[staff.id]) return;
+
+      // Scan for consecutive off-days
+      let consecutiveOffDays = [];
+
+      dateRange.forEach((date, index) => {
+        const dateKey = date.toISOString().split("T")[0];
+        const shift = schedule[staff.id][dateKey];
+
+        if (shift === "×") {
+          consecutiveOffDays.push({ dateKey, index });
+        } else {
+          // Process streak if we have 2+ consecutive off-days
+          if (consecutiveOffDays.length >= 2) {
+            // Break up the streak by changing the middle day to normal shift
+            const middleIndex = Math.floor(consecutiveOffDays.length / 2);
+            const middleDate = consecutiveOffDays[middleIndex].dateKey;
+
+            console.log(
+              `🔧 [REPAIR]   → ${staff.name}: Breaking up ${consecutiveOffDays.length} consecutive off-days ` +
+              `by converting ${middleDate} to normal shift`
+            );
+
+            schedule[staff.id][middleDate] = ""; // Convert to normal shift
+            repairsApplied++;
+          }
+
+          consecutiveOffDays = [];
+        }
+      });
+
+      // Check final streak at end of period
+      if (consecutiveOffDays.length >= 2) {
+        const middleIndex = Math.floor(consecutiveOffDays.length / 2);
+        const middleDate = consecutiveOffDays[middleIndex].dateKey;
+
+        console.log(
+          `🔧 [REPAIR]   → ${staff.name}: Breaking up ${consecutiveOffDays.length} consecutive off-days at period end ` +
+          `by converting ${middleDate} to normal shift`
+        );
+
+        schedule[staff.id][middleDate] = "";
+        repairsApplied++;
+      }
+    });
+
+    console.log(`✅ [REPAIR] Repair complete: ${repairsApplied} consecutive patterns eliminated`);
   }
 
   /**
@@ -2064,19 +2170,18 @@ export class BusinessRuleValidator {
   assessConsecutiveDaysOffQuality(workPatterns) {
     const offStreaks = workPatterns.consecutiveOffStreaks;
 
-    if (offStreaks.length === 0) return 50; // No consecutive off days
+    if (offStreaks.length === 0) return 100; // No consecutive off days = Perfect
 
-    // Ideal consecutive off days: 2-3 days
+    // 🔧 FIX: Penalize consecutive off-days instead of rewarding them
+    // Consecutive off-days (××) should be avoided for better staff utilization
     let qualityScore = 0;
     offStreaks.forEach((streak) => {
-      if (streak === 2 || streak === 3) {
-        qualityScore += 100; // Perfect
-      } else if (streak === 1 || streak === 4) {
-        qualityScore += 70; // Good
-      } else if (streak >= 5) {
-        qualityScore += 40; // Too long (might indicate scheduling issues)
-      } else {
-        qualityScore += 30; // Very short streaks
+      if (streak === 1) {
+        qualityScore += 100; // Perfect - no consecutive patterns
+      } else if (streak === 2) {
+        qualityScore += 20; // Bad - 2 consecutive off-days
+      } else if (streak >= 3) {
+        qualityScore += 0; // Terrible - 3+ consecutive off-days
       }
     });
 
@@ -2573,6 +2678,151 @@ export class BusinessRuleValidator {
     } catch (error) {
       console.warn("⚠️ Cost efficiency calculation failed:", error.message);
       return 75; // Default reasonable score
+    }
+  }
+
+  /**
+   * PHASE 3: Sequence-aware constraint validation
+   * Validates schedules based on shift momentum and pattern sequences
+   * @param {Object} schedule - Schedule data
+   * @param {Object} staffProfiles - Staff profiles with pattern memory
+   * @param {Array} dateRange - Date range
+   * @returns {Object} Sequence validation result
+   */
+  async validateSequencePatterns(schedule, staffProfiles, dateRange) {
+    const violations = [];
+    const warnings = [];
+
+    try {
+      console.log("🔄 [PHASE-3] Performing sequence-aware validation...");
+
+      Object.values(staffProfiles).forEach((profile) => {
+        if (!profile.hasPatternMemory) return;
+
+        // Collect schedule sequence for this staff
+        const scheduleSequence = [];
+        dateRange.forEach((date) => {
+          const dateKey = date.toISOString().split("T")[0];
+          const shift = schedule[profile.id]?.[dateKey];
+          if (shift !== undefined) {
+            scheduleSequence.push(shift);
+          }
+        });
+
+        if (scheduleSequence.length === 0) return;
+
+        // Analyze momentum of proposed schedule
+        const proposedMomentum = analyzeShiftMomentum(scheduleSequence);
+        const historicalMomentum = profile.patternMemory.momentum;
+
+        // Check for extreme deviations from historical patterns
+        if (historicalMomentum && proposedMomentum) {
+          // Check work streak deviation
+          if (proposedMomentum.averageWorkStreak > historicalMomentum.averageWorkStreak * 1.5) {
+            violations.push({
+              type: "excessive_work_streak",
+              staffId: profile.id,
+              staffName: profile.name,
+              severity: "medium",
+              message: `Proposed work streaks (${proposedMomentum.averageWorkStreak.toFixed(1)} days avg) exceed historical pattern (${historicalMomentum.averageWorkStreak.toFixed(1)} days) by >50%`,
+              suggestion: "Consider adding more rest days to match historical patterns",
+            });
+          }
+
+          // Check rest streak deviation
+          if (proposedMomentum.averageRestStreak < historicalMomentum.averageRestStreak * 0.5) {
+            violations.push({
+              type: "insufficient_rest",
+              staffId: profile.id,
+              staffName: profile.name,
+              severity: "high",
+              message: `Proposed rest periods (${proposedMomentum.averageRestStreak.toFixed(1)} days avg) are less than half of historical pattern (${historicalMomentum.averageRestStreak.toFixed(1)} days)`,
+              suggestion: "Increase rest days to prevent burnout",
+            });
+          }
+
+          // Check momentum direction reversal
+          const momentumChange = proposedMomentum.momentum - historicalMomentum.momentum;
+          if (Math.abs(momentumChange) > 0.6) {
+            warnings.push({
+              type: "momentum_reversal",
+              staffId: profile.id,
+              staffName: profile.name,
+              severity: "low",
+              message: `Work/rest momentum has reversed significantly (${(momentumChange * 100).toFixed(0)}% change)`,
+              suggestion: "Verify this schedule aligns with staff preferences",
+            });
+          }
+        }
+
+        // Check pattern stability compatibility
+        if (profile.patternMemory.stability) {
+          const stabilityLevel = profile.patternMemory.stability.stabilityLevel;
+
+          if (stabilityLevel === "highly_stable" || stabilityLevel === "stable") {
+            // For staff with stable patterns, check consistency with historical position patterns
+            const weeklyPatterns = profile.patternMemory.weeklyPositionPatterns;
+
+            dateRange.forEach((date, index) => {
+              const dateKey = date.toISOString().split("T")[0];
+              const proposedShift = schedule[profile.id]?.[dateKey];
+              const weeklyPosition = date.getDay();
+              const historicalPrediction = weeklyPatterns.predictions[weeklyPosition];
+
+              if (historicalPrediction && historicalPrediction.confidence > 0.7) {
+                if (proposedShift !== historicalPrediction.shift) {
+                  warnings.push({
+                    type: "pattern_deviation",
+                    staffId: profile.id,
+                    staffName: profile.name,
+                    date: dateKey,
+                    severity: "low",
+                    message: `Proposed shift "${proposedShift}" deviates from strong historical pattern "${historicalPrediction.shift}" (${(historicalPrediction.confidence * 100).toFixed(0)}% confidence) for ${getDayOfWeek(dateKey)}`,
+                    suggestion: `Consider using "${historicalPrediction.shift}" to match established patterns`,
+                  });
+                }
+              }
+            });
+          }
+        }
+      });
+
+      const result = {
+        valid: violations.length === 0,
+        violations,
+        warnings,
+        summary: {
+          totalSequenceViolations: violations.length,
+          totalSequenceWarnings: warnings.length,
+          staffAnalyzed: Object.values(staffProfiles).filter((p) => p.hasPatternMemory).length,
+        },
+      };
+
+      if (violations.length > 0) {
+        console.log(`⚠️ [PHASE-3] Found ${violations.length} sequence violations`);
+      } else if (warnings.length > 0) {
+        console.log(`ℹ️ [PHASE-3] Found ${warnings.length} sequence warnings`);
+      } else {
+        console.log(`✅ [PHASE-3] Sequence validation passed`);
+      }
+
+      return result;
+    } catch (error) {
+      console.error("❌ [PHASE-3] Sequence validation failed:", error);
+      return {
+        valid: true, // Don't fail validation on sequence check errors
+        violations: [],
+        warnings: [{
+          type: "sequence_validation_error",
+          message: `Sequence validation error: ${error.message}`,
+          severity: "low",
+        }],
+        summary: {
+          totalSequenceViolations: 0,
+          totalSequenceWarnings: 1,
+          error: error.message,
+        },
+      };
     }
   }
 }
