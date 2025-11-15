@@ -454,6 +454,10 @@ func (s *StaffSyncServer) fetchStaffGroups(versionID string) ([]StaffGroup, erro
 	url := fmt.Sprintf("%s/rest/v1/staff_groups?version_id=eq.%s&select=*",
 		s.supabaseURL, versionID)
 
+	// 🔍 DEBUG: Log fetch query details
+	log.Printf("🔍 [fetchStaffGroups] Fetching from URL: %s", url)
+	log.Printf("🔍 [fetchStaffGroups] Version ID: %s", versionID)
+
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create request: %w", err)
@@ -481,14 +485,22 @@ func (s *StaffSyncServer) fetchStaffGroups(versionID string) ([]StaffGroup, erro
 
 	var groups []StaffGroup
 	if err := json.Unmarshal(body, &groups); err != nil {
+		log.Printf("❌ [fetchStaffGroups] Failed to parse response: %v", err)
 		return nil, fmt.Errorf("failed to parse response: %w", err)
 	}
 
-	// 🔍 DEBUG: Log parsed groups to see if GroupConfig is populated
-	for _, group := range groups {
-		if group.Name == "Group 4" {
-			log.Printf("🔍 [fetchStaffGroups] Group 4 after unmarshal: %+v", group)
-			log.Printf("🔍 [fetchStaffGroups] Group 4 GroupConfig: %+v", group.GroupConfig)
+	// 🔍 DEBUG: Log all parsed groups with their members
+	log.Printf("🔍 [fetchStaffGroups] Fetched %d staff group(s) from database", len(groups))
+	for i, group := range groups {
+		log.Printf("   - Group %d: %s (ID: %s, IsActive: %v)", i+1, group.Name, group.ID, group.IsActive)
+		if group.GroupConfig != nil {
+			if members, ok := group.GroupConfig["members"]; ok {
+				log.Printf("     Members in GroupConfig: %+v", members)
+			} else {
+				log.Printf("     ⚠️ No members field in GroupConfig")
+			}
+		} else {
+			log.Printf("     ⚠️ GroupConfig is nil")
 		}
 	}
 
@@ -733,6 +745,14 @@ func (s *StaffSyncServer) fetchAggregatedSettings(versionID string) (*SettingsAg
 		mlConfigs = []MLModelConfig{}
 	}
 
+	// 🔍 DEBUG: Log aggregated settings summary
+	log.Printf("🔍 [fetchAggregatedSettings] Successfully aggregated settings for version %s:", versionID)
+	log.Printf("   - Staff Groups: %d", len(staffGroups))
+	log.Printf("   - Daily Limits: %d", len(dailyLimits))
+	log.Printf("   - Monthly Limits: %d", len(monthlyLimits))
+	log.Printf("   - Priority Rules: %d", len(priorityRules))
+	log.Printf("   - ML Configs: %d", len(mlConfigs))
+
 	return &SettingsAggregate{
 		StaffGroups:    staffGroups,
 		DailyLimits:    dailyLimits,
@@ -747,7 +767,191 @@ func (s *StaffSyncServer) fetchAggregatedSettings(versionID string) (*SettingsAg
 // UPDATE OPERATIONS - Table-Specific Updates with Audit Logging
 // ============================================================================
 
-// updateStaffGroup updates a staff group in the database
+// upsertStaffGroup attempts to update a staff group, returns number of rows affected
+// Returns (rowsAffected int, error)
+func (s *StaffSyncServer) upsertStaffGroup(versionID string, groupData map[string]interface{}) (int, error) {
+	groupID, ok := groupData["id"].(string)
+	if !ok {
+		return 0, fmt.Errorf("missing or invalid group id")
+	}
+
+	// 🔍 DEBUG: Log what we received from React
+	log.Printf("🔍 [upsertStaffGroup] Received groupData: %+v", groupData)
+	if members, ok := groupData["members"]; ok {
+		log.Printf("🔍 [upsertStaffGroup] Members field present: %+v", members)
+	} else {
+		log.Printf("⚠️ [upsertStaffGroup] Members field MISSING from groupData")
+	}
+
+	url := fmt.Sprintf("%s/rest/v1/staff_groups?id=eq.%s&version_id=eq.%s",
+		s.supabaseURL, groupID, versionID)
+
+	// Prepare update data with snake_case field names
+	updateData := make(map[string]interface{})
+
+	if name, ok := groupData["name"]; ok {
+		updateData["name"] = name
+	}
+	if description, ok := groupData["description"]; ok {
+		updateData["description"] = description
+	}
+	if color, ok := groupData["color"]; ok {
+		updateData["color"] = color
+	}
+
+	// ✅ FIX: Handle members field from React - store in group_config JSONB
+	if groupConfig, ok := groupData["groupConfig"].(map[string]interface{}); ok {
+		if members, membersOk := groupData["members"]; membersOk {
+			groupConfig["members"] = members
+		}
+		updateData["group_config"] = groupConfig
+	} else {
+		if members, membersOk := groupData["members"]; membersOk {
+			updateData["group_config"] = map[string]interface{}{
+				"members": members,
+			}
+		} else if groupData["groupConfig"] != nil {
+			updateData["group_config"] = groupData["groupConfig"]
+		}
+	}
+
+	// Always update timestamp
+	updateData["updated_at"] = time.Now().UTC().Format(time.RFC3339)
+
+	log.Printf("🔍 [upsertStaffGroup] Sending to Supabase: %+v", updateData)
+
+	jsonData, _ := json.Marshal(updateData)
+
+	log.Printf("🔍 [SQL DEBUG] PATCH URL: %s", url)
+	log.Printf("🔍 [SQL DEBUG] Request body: %s", string(jsonData))
+
+	req, err := http.NewRequest("PATCH", url, bytes.NewBuffer(jsonData))
+	if err != nil {
+		return 0, fmt.Errorf("failed to create request: %w", err)
+	}
+
+	req.Header.Set("Authorization", "Bearer "+s.supabaseKey)
+	req.Header.Set("apikey", s.supabaseKey)
+	req.Header.Set("Content-Type", "application/json")
+	// 🔧 UPSERT FIX: Use return=representation to get actual data back
+	req.Header.Set("Prefer", "return=representation")
+
+	client := &http.Client{Timeout: 10 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		log.Printf("❌ [upsertStaffGroup] HTTP request failed: %v", err)
+		return 0, fmt.Errorf("failed to update staff group: %w", err)
+	}
+	defer resp.Body.Close()
+
+	body, _ := io.ReadAll(resp.Body)
+
+	log.Printf("🔍 [upsertStaffGroup] HTTP Response Status: %d", resp.StatusCode)
+	log.Printf("🔍 [SQL DEBUG] Response body: %s", string(body))
+
+	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusNoContent {
+		log.Printf("❌ [upsertStaffGroup] Update failed with status %d: %s", resp.StatusCode, string(body))
+		return 0, fmt.Errorf("update failed with status %d: %s", resp.StatusCode, string(body))
+	}
+
+	// Check if any rows were affected by parsing the response
+	// With return=representation, empty array [] means 0 rows affected
+	var result []map[string]interface{}
+	if err := json.Unmarshal(body, &result); err == nil {
+		rowsAffected := len(result)
+		log.Printf("✅ [upsertStaffGroup] Rows affected: %d", rowsAffected)
+		return rowsAffected, nil
+	}
+
+	// If we can't parse, assume success (backward compatibility)
+	log.Printf("⚠️ [upsertStaffGroup] Could not parse response, assuming 1 row affected")
+	return 1, nil
+}
+
+// createStaffGroup inserts a new staff group into the database
+func (s *StaffSyncServer) createStaffGroup(versionID string, groupData map[string]interface{}) error {
+	groupID, ok := groupData["id"].(string)
+	if !ok {
+		return fmt.Errorf("missing or invalid group id")
+	}
+
+	log.Printf("🔍 [createStaffGroup] Creating new group: %s", groupID)
+
+	url := fmt.Sprintf("%s/rest/v1/staff_groups", s.supabaseURL)
+
+	// Prepare insert data
+	insertData := make(map[string]interface{})
+	insertData["id"] = groupID
+	insertData["version_id"] = versionID
+	insertData["restaurant_id"] = s.getRestaurantID()
+
+	if name, ok := groupData["name"]; ok {
+		insertData["name"] = name
+	}
+	if description, ok := groupData["description"]; ok {
+		insertData["description"] = description
+	}
+	if color, ok := groupData["color"]; ok {
+		insertData["color"] = color
+	}
+
+	// Handle members field
+	if groupConfig, ok := groupData["groupConfig"].(map[string]interface{}); ok {
+		if members, membersOk := groupData["members"]; membersOk {
+			groupConfig["members"] = members
+		}
+		insertData["group_config"] = groupConfig
+	} else {
+		if members, membersOk := groupData["members"]; membersOk {
+			insertData["group_config"] = map[string]interface{}{
+				"members": members,
+			}
+		}
+	}
+
+	insertData["is_active"] = true
+	insertData["created_at"] = time.Now().UTC().Format(time.RFC3339)
+	insertData["updated_at"] = time.Now().UTC().Format(time.RFC3339)
+
+	log.Printf("🔍 [createStaffGroup] Insert data: %+v", insertData)
+
+	jsonData, _ := json.Marshal(insertData)
+	log.Printf("🔍 [SQL DEBUG] POST URL: %s", url)
+	log.Printf("🔍 [SQL DEBUG] Request body: %s", string(jsonData))
+
+	req, err := http.NewRequest("POST", url, bytes.NewBuffer(jsonData))
+	if err != nil {
+		return fmt.Errorf("failed to create request: %w", err)
+	}
+
+	req.Header.Set("Authorization", "Bearer "+s.supabaseKey)
+	req.Header.Set("apikey", s.supabaseKey)
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Prefer", "return=representation")
+
+	client := &http.Client{Timeout: 10 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		log.Printf("❌ [createStaffGroup] HTTP request failed: %v", err)
+		return fmt.Errorf("failed to create staff group: %w", err)
+	}
+	defer resp.Body.Close()
+
+	body, _ := io.ReadAll(resp.Body)
+
+	log.Printf("🔍 [createStaffGroup] HTTP Response Status: %d", resp.StatusCode)
+	log.Printf("🔍 [SQL DEBUG] Response body: %s", string(body))
+
+	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusCreated {
+		log.Printf("❌ [createStaffGroup] Create failed with status %d: %s", resp.StatusCode, string(body))
+		return fmt.Errorf("create failed with status %d: %s", resp.StatusCode, string(body))
+	}
+
+	log.Printf("✅ [createStaffGroup] Successfully created staff group in database")
+	return nil
+}
+
+// updateStaffGroup updates a staff group in the database (legacy - kept for compatibility)
 func (s *StaffSyncServer) updateStaffGroup(versionID string, groupData map[string]interface{}) error {
 	groupID, ok := groupData["id"].(string)
 	if !ok {
@@ -806,6 +1010,11 @@ func (s *StaffSyncServer) updateStaffGroup(versionID string, groupData map[strin
 	log.Printf("🔍 [updateStaffGroup] Sending to Supabase: %+v", updateData)
 
 	jsonData, _ := json.Marshal(updateData)
+
+	// 🔍 DEBUG: Log SQL query details
+	log.Printf("🔍 [SQL DEBUG] PATCH URL: %s", url)
+	log.Printf("🔍 [SQL DEBUG] Request body: %s", string(jsonData))
+
 	req, err := http.NewRequest("PATCH", url, bytes.NewBuffer(jsonData))
 	if err != nil {
 		return fmt.Errorf("failed to create request: %w", err)
@@ -819,15 +1028,24 @@ func (s *StaffSyncServer) updateStaffGroup(versionID string, groupData map[strin
 	client := &http.Client{Timeout: 10 * time.Second}
 	resp, err := client.Do(req)
 	if err != nil {
+		log.Printf("❌ [updateStaffGroup] HTTP request failed: %v", err)
 		return fmt.Errorf("failed to update staff group: %w", err)
 	}
 	defer resp.Body.Close()
 
+	// Read response body for logging
+	body, _ := io.ReadAll(resp.Body)
+
+	// 🔍 DEBUG: Log HTTP response status and body
+	log.Printf("🔍 [updateStaffGroup] HTTP Response Status: %d", resp.StatusCode)
+	log.Printf("🔍 [SQL DEBUG] Response body: %s", string(body))
+
 	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusNoContent {
-		body, _ := io.ReadAll(resp.Body)
+		log.Printf("❌ [updateStaffGroup] Update failed with status %d: %s", resp.StatusCode, string(body))
 		return fmt.Errorf("update failed with status %d: %s", resp.StatusCode, string(body))
 	}
 
+	log.Printf("✅ [updateStaffGroup] Successfully updated staff group in database")
 	return nil
 }
 
@@ -2081,23 +2299,50 @@ func (s *StaffSyncServer) handleStaffGroupsUpdate(client *Client, msg *Message) 
 		return
 	}
 
+	// ✅ DEBUG: Log the group data we received
+	log.Printf("🔍 [handleStaffGroupsUpdate] Group data received:")
+	log.Printf("   - ID: %v", groupData["id"])
+	log.Printf("   - Name: %v", groupData["name"])
+	log.Printf("   - Members: %v", groupData["members"])
+	log.Printf("   - Full groupData: %+v", groupData)
+
 	// Get active version
 	version, err := s.fetchActiveConfigVersion()
 	if err != nil {
+		log.Printf("❌ Failed to fetch active version: %v", err)
 		s.sendErrorResponse(client, "Failed to fetch active version", err)
 		return
 	}
 
+	log.Printf("🔍 [handleStaffGroupsUpdate] Using version_id: %s", version.ID)
+
 	// Check if version is locked
 	if version.IsLocked {
+		log.Printf("❌ Version is locked, cannot update")
 		s.sendErrorResponse(client, "Cannot modify locked version", nil)
 		return
 	}
 
-	// Update staff group in database
-	if err := s.updateStaffGroup(version.ID, groupData); err != nil {
-		s.sendErrorResponse(client, "Failed to update staff group", err)
+	// 🔧 UPSERT: Try UPDATE first, if no rows affected, CREATE instead
+	log.Printf("🔍 [handleStaffGroupsUpdate] Calling updateStaffGroup...")
+	rowsAffected, err := s.upsertStaffGroup(version.ID, groupData)
+	if err != nil {
+		log.Printf("❌ upsertStaffGroup failed: %v", err)
+		s.sendErrorResponse(client, "Failed to upsert staff group", err)
 		return
+	}
+
+	if rowsAffected == 0 {
+		log.Printf("⚠️ UPDATE affected 0 rows - group doesn't exist, falling back to CREATE")
+		// Group doesn't exist in database, create it instead
+		if err := s.createStaffGroup(version.ID, groupData); err != nil {
+			log.Printf("❌ createStaffGroup failed: %v", err)
+			s.sendErrorResponse(client, "Failed to create staff group", err)
+			return
+		}
+		log.Printf("✅ createStaffGroup succeeded (UPSERT fallback)")
+	} else {
+		log.Printf("✅ updateStaffGroup succeeded (%d row(s) affected)", rowsAffected)
 	}
 
 	// Log change to audit trail
@@ -2108,10 +2353,18 @@ func (s *StaffSyncServer) handleStaffGroupsUpdate(client *Client, msg *Message) 
 	log.Printf("✅ Successfully updated staff group")
 
 	// Fetch fresh aggregated settings
+	log.Printf("🔍 [handleStaffGroupsUpdate] Fetching fresh aggregated settings...")
 	settings, err := s.fetchAggregatedSettings(version.ID)
 	if err != nil {
-		log.Printf("⚠️ Failed to fetch updated settings: %v", err)
+		log.Printf("❌ Failed to fetch updated settings: %v", err)
 		return
+	}
+
+	// ✅ DEBUG: Log how many staff groups were returned
+	log.Printf("🔍 [handleStaffGroupsUpdate] fetchAggregatedSettings returned:")
+	log.Printf("   - Staff Groups count: %d", len(settings.StaffGroups))
+	for i, group := range settings.StaffGroups {
+		log.Printf("   - Group %d: %s (ID: %s)", i, group.Name, group.ID)
 	}
 
 	// Broadcast updated settings to all clients

@@ -368,24 +368,36 @@ export const useSettingsData = (autosaveEnabled = true) => {
 
       if (useWebSocket) {
         // 🔧 FIX: CRITICAL - Prevent circular updates when syncing FROM WebSocket
-        // If we're currently syncing from WebSocket, DON'T send updates back to WebSocket
+        // But ALLOW user-initiated updates even during sync
         console.log(`🔍 [UPDATE CHECK] isSyncingFromWebSocketRef.current = ${isSyncingFromWebSocketRef.current}`);
         if (isSyncingFromWebSocketRef.current) {
-          console.log(
-            "⏭️ Skipping WebSocket update - currently syncing FROM server (prevents infinite loop)",
-          );
-          console.log("⚠️ WARNING: User data will NOT be saved to database!");
-          // Still update local state for UI consistency
-          setSettings(newSettings);
-          startupLogger.logSettingsChange(
-            'useSettingsData.updateSettings',
-            'SKIPPED WebSocket update (syncing FROM server)',
-            newSettings
-          );
-          setValidationErrors({});
-          return;
+          // ✅ IMPROVED: Check if this is a circular update (wsSettings → setSettings → updateSettings)
+          // or a legitimate user operation (user creates/updates → updateSettings)
+          const isCircularUpdate = wsSettings && JSON.stringify(newSettings) === JSON.stringify(wsSettings);
+
+          if (isCircularUpdate) {
+            console.log(
+              "⏭️ Skipping WebSocket update - circular update detected (wsSettings → setSettings → updateSettings)",
+            );
+            console.log("   This prevents infinite loop from WebSocket broadcast");
+            // Still update local state for UI consistency
+            setSettings(newSettings);
+            startupLogger.logSettingsChange(
+              'useSettingsData.updateSettings',
+              'SKIPPED WebSocket update (circular from server)',
+              newSettings
+            );
+            setValidationErrors({});
+            return;
+          } else {
+            console.log(
+              "✅ User-initiated update detected during WebSocket sync - ALLOWING database save",
+            );
+            console.log("   This is NOT a circular update - data differs from wsSettings");
+          }
+        } else {
+          console.log("✅ isSyncingFromWebSocketRef is false - proceeding with database save");
         }
-        console.log("✅ isSyncingFromWebSocketRef is false - proceeding with database save");
 
         console.log("🔄 Updating settings via WebSocket multi-table backend");
 

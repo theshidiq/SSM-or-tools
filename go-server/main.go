@@ -265,6 +265,11 @@ func (s *StaffSyncServer) handleStaffSync(w http.ResponseWriter, r *http.Request
 
 		log.Printf("Received message type: %s from client: %s", msg.Type, client.clientId)
 
+		// 🔍 DEBUG: Log payload details for settings messages
+		if payload, ok := msg.Payload.(map[string]interface{}); ok {
+			log.Printf("🔍 [MESSAGE PAYLOAD] Keys: %v", getKeys(payload))
+		}
+
 		switch msg.Type {
 		// Staff management handlers
 		case MESSAGE_SYNC_REQUEST:
