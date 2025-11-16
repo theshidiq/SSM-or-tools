@@ -104,15 +104,15 @@ export class ConfigurationService {
     const CURRENT_MIGRATION_VERSION = 3;
     const currentVersion = settings.migrationVersion || 0;
 
-    // Migrate dailyLimits from object to array format
-    if (settings.dailyLimits && !Array.isArray(settings.dailyLimits)) {
-      console.log("Migrating dailyLimits from object to array format");
-      const oldLimits = settings.dailyLimits;
-      migratedSettings.dailyLimits = [];
+    // Migrate weeklyLimits from object to array format
+    if (settings.weeklyLimits && !Array.isArray(settings.weeklyLimits)) {
+      console.log("Migrating weeklyLimits from object to array format");
+      const oldLimits = settings.weeklyLimits;
+      migratedSettings.weeklyLimits = [];
 
       // Convert old object format to new array format
       if (oldLimits.maxOffPerDay) {
-        migratedSettings.dailyLimits.push({
+        migratedSettings.weeklyLimits.push({
           id: "daily-limit-off",
           name: "Maximum Off Days",
           shiftType: "off",
@@ -127,7 +127,7 @@ export class ConfigurationService {
       }
 
       if (oldLimits.maxEarlyPerDay) {
-        migratedSettings.dailyLimits.push({
+        migratedSettings.weeklyLimits.push({
           id: "daily-limit-early",
           name: "Maximum Early Shifts",
           shiftType: "early",
@@ -142,7 +142,7 @@ export class ConfigurationService {
       }
 
       if (oldLimits.maxLatePerDay) {
-        migratedSettings.dailyLimits.push({
+        migratedSettings.weeklyLimits.push({
           id: "daily-limit-late",
           name: "Maximum Late Shifts",
           shiftType: "late",
@@ -157,7 +157,7 @@ export class ConfigurationService {
       }
 
       if (oldLimits.minWorkingStaffPerDay) {
-        migratedSettings.dailyLimits.push({
+        migratedSettings.weeklyLimits.push({
           id: "daily-limit-min-working",
           name: "Minimum Working Staff",
           shiftType: "any",
@@ -469,7 +469,7 @@ export class ConfigurationService {
       ],
 
       // Daily Limits
-      dailyLimits: [
+      weeklyLimits: [
         {
           id: "daily-limit-off",
           name: "Maximum Off Days",
@@ -592,16 +592,16 @@ export class ConfigurationService {
   /**
    * Get daily limits
    */
-  getDailyLimits() {
+  getWeeklyLimits() {
     const settings = this.settings || this.getDefaultSettings();
-    return settings.dailyLimits || this.getDefaultSettings().dailyLimits;
+    return settings.weeklyLimits || this.getDefaultSettings().weeklyLimits;
   }
 
   /**
    * Update daily limits
    */
-  async updateDailyLimits(dailyLimits) {
-    return await this.saveSettings({ dailyLimits });
+  async updateWeeklyLimits(weeklyLimits) {
+    return await this.saveSettings({ weeklyLimits });
   }
 
   /**
@@ -688,7 +688,7 @@ export class ConfigurationService {
     console.log("✅ [ConfigurationService] Settings cache updated", {
       priorityRules: this.settings.priorityRules?.length || 0,
       staffGroups: this.settings.staffGroups?.length || 0,
-      dailyLimits: this.settings.dailyLimits?.length || 0,
+      weeklyLimits: this.settings.weeklyLimits?.length || 0,
       monthlyLimits: this.settings.monthlyLimits?.length || 0,
     });
   }
@@ -904,14 +904,14 @@ export class ConfigurationService {
       // Load all configuration data
       const [
         staffGroups,
-        dailyLimits,
+        weeklyLimits,
         monthlyLimits,
         priorityRules,
         mlConfigs,
         backupAssignments,
       ] = await Promise.all([
         this.loadStaffGroupsFromDB(),
-        this.loadDailyLimitsFromDB(),
+        this.loadWeeklyLimitsFromDB(),
         this.loadMonthlyLimitsFromDB(),
         this.loadPriorityRulesFromDB(),
         this.loadMLConfigFromDB(),
@@ -922,7 +922,7 @@ export class ConfigurationService {
       const databaseSettings = {
         ...this.settings,
         staffGroups: staffGroups || this.settings.staffGroups,
-        dailyLimits: dailyLimits || this.settings.dailyLimits,
+        weeklyLimits: weeklyLimits || this.settings.weeklyLimits,
         monthlyLimits: monthlyLimits || this.settings.monthlyLimits,
         priorityRules: priorityRules || this.settings.priorityRules,
         mlParameters: mlConfigs || this.settings.mlParameters,
@@ -963,7 +963,7 @@ export class ConfigurationService {
       // Save all configuration components
       await Promise.all([
         this.saveStaffGroupsToDB(),
-        this.saveDailyLimitsToDB(),
+        this.saveWeeklyLimitsToDB(),
         this.saveMonthlyLimitsToDB(),
         this.savePriorityRulesToDB(),
         this.saveMLConfigToDB(),
@@ -1039,10 +1039,10 @@ export class ConfigurationService {
     }
   }
 
-  async loadDailyLimitsFromDB() {
+  async loadWeeklyLimitsFromDB() {
     try {
       const { data, error } = await supabase
-        .from("daily_limits")
+        .from("weekly_limits")
         .select("*")
         .eq("version_id", this.currentVersionId);
 
@@ -1056,7 +1056,7 @@ export class ConfigurationService {
         })) || null
       );
     } catch (error) {
-      console.warn("Failed to load daily limits from database:", error);
+      console.warn("Failed to load weekly limits from database:", error);
       return null;
     }
   }
@@ -1208,19 +1208,19 @@ export class ConfigurationService {
     }
   }
 
-  async saveDailyLimitsToDB() {
-    if (!this.settings.dailyLimits) return;
+  async saveWeeklyLimitsToDB() {
+    if (!this.settings.weeklyLimits) return;
 
     try {
-      // Delete existing daily limits for this version
+      // Delete existing weekly limits for this version
       await supabase
-        .from("daily_limits")
+        .from("weekly_limits")
         .delete()
         .eq("version_id", this.currentVersionId);
 
-      // Insert new daily limits
-      if (this.settings.dailyLimits.length > 0) {
-        const limitsData = this.settings.dailyLimits.map((limit) => ({
+      // Insert new weekly limits
+      if (this.settings.weeklyLimits.length > 0) {
+        const limitsData = this.settings.weeklyLimits.map((limit) => ({
           restaurant_id: this.restaurantId,
           version_id: this.currentVersionId,
           name: limit.name,
@@ -1238,13 +1238,13 @@ export class ConfigurationService {
         }));
 
         const { error } = await supabase
-          .from("daily_limits")
+          .from("weekly_limits")
           .insert(limitsData);
 
         if (error) throw error;
       }
     } catch (error) {
-      console.error("Failed to save daily limits to database:", error);
+      console.error("Failed to save weekly limits to database:", error);
       throw error;
     }
   }

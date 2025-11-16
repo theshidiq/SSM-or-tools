@@ -23,7 +23,7 @@ import (
 // SettingsAggregate combines all 5 settings tables + version info
 type SettingsAggregate struct {
 	StaffGroups    []StaffGroup    `json:"staffGroups"`
-	DailyLimits    []DailyLimit    `json:"dailyLimits"`
+	WeeklyLimits   []WeeklyLimit   `json:"weeklyLimits"`
 	MonthlyLimits  []MonthlyLimit  `json:"monthlyLimits"`
 	PriorityRules  []PriorityRule  `json:"priorityRules"`
 	MLModelConfigs []MLModelConfig `json:"mlModelConfigs"`
@@ -44,6 +44,18 @@ func (sa *SettingsAggregate) MarshalJSON() ([]byte, error) {
 		}
 	}
 
+	// Convert weekly limits to React format (snake_case → camelCase)
+	reactWeeklyLimits := make([]map[string]interface{}, len(sa.WeeklyLimits))
+	for i, limit := range sa.WeeklyLimits {
+		reactWeeklyLimits[i] = limit.ToReactFormat()
+	}
+
+	// Convert monthly limits to React format (snake_case → camelCase)
+	reactMonthlyLimits := make([]map[string]interface{}, len(sa.MonthlyLimits))
+	for i, limit := range sa.MonthlyLimits {
+		reactMonthlyLimits[i] = limit.ToReactFormat()
+	}
+
 	// Convert priority rules to React format (CRITICAL FIX!)
 	reactPriorityRules := make([]map[string]interface{}, len(sa.PriorityRules))
 	for i, rule := range sa.PriorityRules {
@@ -59,9 +71,9 @@ func (sa *SettingsAggregate) MarshalJSON() ([]byte, error) {
 	// Create response structure with converted data
 	response := map[string]interface{}{
 		"staffGroups":    reactGroups,
-		"dailyLimits":    sa.DailyLimits,
-		"monthlyLimits":  sa.MonthlyLimits,
-		"priorityRules":  reactPriorityRules, // ← FIXED: Now using converted format
+		"weeklyLimits":   reactWeeklyLimits,   // ✅ FIXED: Now using converted format
+		"monthlyLimits":  reactMonthlyLimits,  // ✅ FIXED: Now using converted format
+		"priorityRules":  reactPriorityRules,  // ← FIXED: Now using converted format
 		"mlModelConfigs": sa.MLModelConfigs,
 		"version":        sa.Version,
 	}
@@ -115,37 +127,39 @@ func (sg *StaffGroup) ToReactFormat() map[string]interface{} {
 	return reactData
 }
 
-// DailyLimit represents daily shift constraints
-type DailyLimit struct {
+// WeeklyLimit represents shift symbol constraints over rolling 7-day periods
+// NOT calendar weeks (Mon-Sun), but any consecutive 7-day window
+// Example: Maximum 2 "day off (×)" symbols in any 7-day period
+type WeeklyLimit struct {
 	ID               string                 `json:"id"`
-	RestaurantID     string                 `json:"restaurantId"`
-	VersionID        string                 `json:"versionId"`
+	RestaurantID     string                 `json:"restaurant_id"` // Changed: Supabase uses snake_case
+	VersionID        string                 `json:"version_id"`    // Changed: Supabase uses snake_case
 	Name             string                 `json:"name"`
-	LimitConfig      map[string]interface{} `json:"limitConfig"`
-	PenaltyWeight    float64                `json:"penaltyWeight"`
-	IsHardConstraint bool                   `json:"isHardConstraint"`
-	EffectiveFrom    *time.Time             `json:"effectiveFrom"`
-	EffectiveUntil   *time.Time             `json:"effectiveUntil"`
-	IsActive         bool                   `json:"isActive"`
-	CreatedAt        time.Time              `json:"createdAt"`
-	UpdatedAt        time.Time              `json:"updatedAt"`
+	LimitConfig      map[string]interface{} `json:"limit_config"`      // Changed: Supabase uses snake_case
+	PenaltyWeight    float64                `json:"penalty_weight"`    // Changed: Supabase uses snake_case
+	IsHardConstraint bool                   `json:"is_hard_constraint"` // Changed: Supabase uses snake_case
+	EffectiveFrom    *time.Time             `json:"effective_from"`    // Changed: Supabase uses snake_case
+	EffectiveUntil   *time.Time             `json:"effective_until"`   // Changed: Supabase uses snake_case
+	IsActive         bool                   `json:"is_active"`         // Changed: Supabase uses snake_case
+	CreatedAt        time.Time              `json:"created_at"`        // Changed: Supabase uses snake_case
+	UpdatedAt        time.Time              `json:"updated_at"`        // Changed: Supabase uses snake_case
 }
 
 // ToReactFormat converts snake_case to camelCase for React
-func (dl *DailyLimit) ToReactFormat() map[string]interface{} {
+func (wl *WeeklyLimit) ToReactFormat() map[string]interface{} {
 	return map[string]interface{}{
-		"id":               dl.ID,
-		"restaurantId":     dl.RestaurantID,
-		"versionId":        dl.VersionID,
-		"name":             dl.Name,
-		"limitConfig":      dl.LimitConfig,
-		"penaltyWeight":    dl.PenaltyWeight,
-		"isHardConstraint": dl.IsHardConstraint,
-		"effectiveFrom":    dl.EffectiveFrom,
-		"effectiveUntil":   dl.EffectiveUntil,
-		"isActive":         dl.IsActive,
-		"createdAt":        dl.CreatedAt,
-		"updatedAt":        dl.UpdatedAt,
+		"id":               wl.ID,
+		"restaurantId":     wl.RestaurantID,
+		"versionId":        wl.VersionID,
+		"name":             wl.Name,
+		"limitConfig":      wl.LimitConfig,
+		"penaltyWeight":    wl.PenaltyWeight,
+		"isHardConstraint": wl.IsHardConstraint,
+		"effectiveFrom":    wl.EffectiveFrom,
+		"effectiveUntil":   wl.EffectiveUntil,
+		"isActive":         wl.IsActive,
+		"createdAt":        wl.CreatedAt,
+		"updatedAt":        wl.UpdatedAt,
 	}
 }
 
@@ -507,10 +521,10 @@ func (s *StaffSyncServer) fetchStaffGroups(versionID string) ([]StaffGroup, erro
 	return groups, nil
 }
 
-// fetchDailyLimits retrieves daily limits for a specific version
+// fetchWeeklyLimits retrieves weekly limits for a specific version
 // 🔧 FIX: Removed is_active filter to include soft-deleted limits in client state
-func (s *StaffSyncServer) fetchDailyLimits(versionID string) ([]DailyLimit, error) {
-	url := fmt.Sprintf("%s/rest/v1/daily_limits?version_id=eq.%s&select=*",
+func (s *StaffSyncServer) fetchWeeklyLimits(versionID string) ([]WeeklyLimit, error) {
+	url := fmt.Sprintf("%s/rest/v1/weekly_limits?version_id=eq.%s&select=*",
 		s.supabaseURL, versionID)
 
 	req, err := http.NewRequest("GET", url, nil)
@@ -535,7 +549,7 @@ func (s *StaffSyncServer) fetchDailyLimits(versionID string) ([]DailyLimit, erro
 		return nil, fmt.Errorf("Supabase request failed with status %d: %s", resp.StatusCode, string(body))
 	}
 
-	var limits []DailyLimit
+	var limits []WeeklyLimit
 	if err := json.Unmarshal(body, &limits); err != nil {
 		return nil, fmt.Errorf("failed to parse response: %w", err)
 	}
@@ -721,10 +735,10 @@ func (s *StaffSyncServer) fetchAggregatedSettings(versionID string) (*SettingsAg
 		staffGroups = []StaffGroup{}
 	}
 
-	dailyLimits, err := s.fetchDailyLimits(versionID)
+	weeklyLimits, err := s.fetchWeeklyLimits(versionID)
 	if err != nil {
-		log.Printf("⚠️ Failed to fetch daily limits: %v", err)
-		dailyLimits = []DailyLimit{}
+		log.Printf("⚠️ Failed to fetch weekly limits: %v", err)
+		weeklyLimits = []WeeklyLimit{}
 	}
 
 	monthlyLimits, err := s.fetchMonthlyLimits(versionID)
@@ -748,14 +762,14 @@ func (s *StaffSyncServer) fetchAggregatedSettings(versionID string) (*SettingsAg
 	// 🔍 DEBUG: Log aggregated settings summary
 	log.Printf("🔍 [fetchAggregatedSettings] Successfully aggregated settings for version %s:", versionID)
 	log.Printf("   - Staff Groups: %d", len(staffGroups))
-	log.Printf("   - Daily Limits: %d", len(dailyLimits))
+	log.Printf("   - Weekly Limits: %d", len(weeklyLimits))
 	log.Printf("   - Monthly Limits: %d", len(monthlyLimits))
 	log.Printf("   - Priority Rules: %d", len(priorityRules))
 	log.Printf("   - ML Configs: %d", len(mlConfigs))
 
 	return &SettingsAggregate{
 		StaffGroups:    staffGroups,
-		DailyLimits:    dailyLimits,
+		WeeklyLimits:   weeklyLimits,
 		MonthlyLimits:  monthlyLimits,
 		PriorityRules:  priorityRules,
 		MLModelConfigs: mlConfigs,
@@ -1049,14 +1063,18 @@ func (s *StaffSyncServer) updateStaffGroup(versionID string, groupData map[strin
 	return nil
 }
 
-// updateDailyLimit updates a daily limit in the database
-func (s *StaffSyncServer) updateDailyLimit(versionID string, limitData map[string]interface{}) error {
+// updateWeeklyLimit updates a weekly limit in the database (internal - use upsertWeeklyLimit instead)
+// Weekly limits track shift symbol occurrences over rolling 7-day periods
+// Returns (rowsAffected, error) to support UPSERT logic
+func (s *StaffSyncServer) updateWeeklyLimit(versionID string, limitData map[string]interface{}) (int, error) {
 	limitID, ok := limitData["id"].(string)
 	if !ok {
-		return fmt.Errorf("missing or invalid limit id")
+		return 0, fmt.Errorf("missing or invalid limit id")
 	}
 
-	url := fmt.Sprintf("%s/rest/v1/daily_limits?id=eq.%s&version_id=eq.%s",
+	log.Printf("🔍 [updateWeeklyLimit] Received limitData: %+v", limitData)
+
+	url := fmt.Sprintf("%s/rest/v1/weekly_limits?id=eq.%s&version_id=eq.%s",
 		s.supabaseURL, limitID, versionID)
 
 	// Prepare update data with snake_case field names
@@ -1083,29 +1101,157 @@ func (s *StaffSyncServer) updateDailyLimit(versionID string, limitData map[strin
 
 	updateData["updated_at"] = time.Now().UTC().Format(time.RFC3339)
 
+	log.Printf("🔍 [updateWeeklyLimit] Sending to Supabase: %+v", updateData)
+
 	jsonData, _ := json.Marshal(updateData)
+
+	log.Printf("🔍 [SQL DEBUG] PATCH URL: %s", url)
+	log.Printf("🔍 [SQL DEBUG] Request body: %s", string(jsonData))
+
 	req, err := http.NewRequest("PATCH", url, bytes.NewBuffer(jsonData))
 	if err != nil {
-		return fmt.Errorf("failed to create request: %w", err)
+		return 0, fmt.Errorf("failed to create request: %w", err)
 	}
 
 	req.Header.Set("Authorization", "Bearer "+s.supabaseKey)
 	req.Header.Set("apikey", s.supabaseKey)
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Prefer", "return=minimal")
+	// 🔧 UPSERT FIX: Use return=representation to get actual data back
+	req.Header.Set("Prefer", "return=representation")
 
 	client := &http.Client{Timeout: 10 * time.Second}
 	resp, err := client.Do(req)
 	if err != nil {
-		return fmt.Errorf("failed to update daily limit: %w", err)
+		log.Printf("❌ [updateWeeklyLimit] HTTP request failed: %v", err)
+		return 0, fmt.Errorf("failed to update weekly limit: %w", err)
 	}
 	defer resp.Body.Close()
 
+	body, _ := io.ReadAll(resp.Body)
+
+	log.Printf("🔍 [updateWeeklyLimit] HTTP Response Status: %d", resp.StatusCode)
+	log.Printf("🔍 [SQL DEBUG] Response body: %s", string(body))
+
 	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusNoContent {
-		body, _ := io.ReadAll(resp.Body)
-		return fmt.Errorf("update failed with status %d: %s", resp.StatusCode, string(body))
+		log.Printf("❌ [updateWeeklyLimit] Update failed with status %d: %s", resp.StatusCode, string(body))
+		return 0, fmt.Errorf("update failed with status %d: %s", resp.StatusCode, string(body))
 	}
 
+	// Check if any rows were affected by parsing the response
+	// With return=representation, empty array [] means 0 rows affected
+	var result []map[string]interface{}
+	if err := json.Unmarshal(body, &result); err == nil {
+		rowsAffected := len(result)
+		log.Printf("✅ [updateWeeklyLimit] Rows affected: %d", rowsAffected)
+		return rowsAffected, nil
+	}
+
+	// If we can't parse, assume success (backward compatibility)
+	log.Printf("⚠️ [updateWeeklyLimit] Could not parse response, assuming 1 row affected")
+	return 1, nil
+}
+
+// upsertWeeklyLimit attempts to update, falls back to create if limit doesn't exist
+// Returns (rowsAffected, error) - use this for all weekly limit modifications
+func (s *StaffSyncServer) upsertWeeklyLimit(versionID string, limitData map[string]interface{}) (int, error) {
+	limitID, ok := limitData["id"].(string)
+	if !ok {
+		return 0, fmt.Errorf("missing or invalid limit id")
+	}
+
+	log.Printf("🔧 [upsertWeeklyLimit] Attempting UPSERT for limit: %s", limitID)
+
+	// Try UPDATE first
+	rowsAffected, err := s.updateWeeklyLimit(versionID, limitData)
+	if err != nil {
+		log.Printf("❌ [upsertWeeklyLimit] Update failed: %v", err)
+		return 0, err
+	}
+
+	// If 0 rows affected, the limit doesn't exist yet - CREATE it
+	if rowsAffected == 0 {
+		log.Printf("🔧 [upsertWeeklyLimit] 0 rows updated, creating new limit...")
+		err := s.createWeeklyLimit(versionID, limitData)
+		if err != nil {
+			log.Printf("❌ [upsertWeeklyLimit] Create failed: %v", err)
+			return 0, err
+		}
+		return 1, nil
+	}
+
+	log.Printf("✅ [upsertWeeklyLimit] Successfully updated %d row(s)", rowsAffected)
+	return rowsAffected, nil
+}
+
+// createWeeklyLimit inserts a new weekly limit into the database
+// Weekly limits constrain shift symbols over rolling 7-day periods (e.g., max 2 day-offs in any 7-day window)
+func (s *StaffSyncServer) createWeeklyLimit(versionID string, limitData map[string]interface{}) error {
+	limitID, ok := limitData["id"].(string)
+	if !ok {
+		return fmt.Errorf("missing or invalid limit id")
+	}
+
+	log.Printf("🔍 [createWeeklyLimit] Creating new weekly limit: %s", limitID)
+
+	url := fmt.Sprintf("%s/rest/v1/weekly_limits", s.supabaseURL)
+
+	// Prepare insert data with snake_case field names
+	insertData := make(map[string]interface{})
+	insertData["id"] = limitID
+	insertData["version_id"] = versionID
+	insertData["restaurant_id"] = s.getRestaurantID()
+
+	if name, ok := limitData["name"]; ok {
+		insertData["name"] = name
+	}
+	if limitConfig, ok := limitData["limitConfig"]; ok {
+		insertData["limit_config"] = limitConfig
+	}
+	if penaltyWeight, ok := limitData["penaltyWeight"]; ok {
+		insertData["penalty_weight"] = penaltyWeight
+	}
+	if isHardConstraint, ok := limitData["isHardConstraint"]; ok {
+		insertData["is_hard_constraint"] = isHardConstraint
+	}
+	if effectiveFrom, ok := limitData["effectiveFrom"]; ok {
+		insertData["effective_from"] = effectiveFrom
+	}
+	if effectiveUntil, ok := limitData["effectiveUntil"]; ok {
+		insertData["effective_until"] = effectiveUntil
+	}
+
+	insertData["is_active"] = true
+	insertData["created_at"] = time.Now().UTC().Format(time.RFC3339)
+	insertData["updated_at"] = time.Now().UTC().Format(time.RFC3339)
+
+	jsonData, _ := json.Marshal(insertData)
+	log.Printf("🔍 [createWeeklyLimit] Insert data: %s", string(jsonData))
+
+	req, err := http.NewRequest("POST", url, bytes.NewBuffer(jsonData))
+	if err != nil {
+		return fmt.Errorf("failed to create request: %w", err)
+	}
+
+	req.Header.Set("apikey", s.supabaseKey)
+	req.Header.Set("Authorization", "Bearer "+s.supabaseKey)
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Prefer", "return=representation")
+
+	client := &http.Client{Timeout: 10 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		return fmt.Errorf("failed to create weekly limit: %w", err)
+	}
+	defer resp.Body.Close()
+
+	body, _ := io.ReadAll(resp.Body)
+	log.Printf("🔍 [createWeeklyLimit] Response status: %d, body: %s", resp.StatusCode, string(body))
+
+	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusCreated {
+		return fmt.Errorf("create failed with status %d: %s", resp.StatusCode, string(body))
+	}
+
+	log.Printf("✅ [createWeeklyLimit] Successfully created weekly limit in database")
 	return nil
 }
 
@@ -1830,7 +1976,7 @@ func (s *StaffSyncServer) hardDeleteStaffGroup(versionID string, groupID string)
 
 // insertDailyLimit inserts a new daily limit into the database
 func (s *StaffSyncServer) insertDailyLimit(versionID string, limitData map[string]interface{}) error {
-	url := fmt.Sprintf("%s/rest/v1/daily_limits", s.supabaseURL)
+	url := fmt.Sprintf("%s/rest/v1/weekly_limits", s.supabaseURL)
 
 	insertData := make(map[string]interface{})
 	insertData["version_id"] = versionID
@@ -2257,8 +2403,8 @@ func (s *StaffSyncServer) handleSettingsSyncRequest(client *Client, msg *Message
 		return
 	}
 
-	log.Printf("✅ Retrieved aggregated settings: %d staff groups, %d daily limits, %d monthly limits, %d priority rules, %d ML configs",
-		len(settings.StaffGroups), len(settings.DailyLimits), len(settings.MonthlyLimits),
+	log.Printf("✅ Retrieved aggregated settings: %d staff groups, %d weekly limits, %d monthly limits, %d priority rules, %d ML configs",
+		len(settings.StaffGroups), len(settings.WeeklyLimits), len(settings.MonthlyLimits),
 		len(settings.PriorityRules), len(settings.MLModelConfigs))
 
 	// Send aggregated response
@@ -2619,9 +2765,10 @@ func (s *StaffSyncServer) handleStaffGroupHardDelete(client *Client, msg *Messag
 	log.Printf("📡 Broadcasted hard group deletion to all clients (containing %d groups)", len(settings.StaffGroups))
 }
 
-// handleDailyLimitsUpdate updates a daily limit and broadcasts changes
-func (s *StaffSyncServer) handleDailyLimitsUpdate(client *Client, msg *Message) {
-	log.Printf("📊 Processing SETTINGS_UPDATE_DAILY_LIMITS from client %s", client.clientId)
+// handleWeeklyLimitsUpdate updates a weekly limit and broadcasts changes
+// Weekly limits constrain shift symbols over rolling 7-day periods (e.g., max 2 day-offs in any 7-day window)
+func (s *StaffSyncServer) handleWeeklyLimitsUpdate(client *Client, msg *Message) {
+	log.Printf("📊 Processing SETTINGS_UPDATE_WEEKLY_LIMITS from client %s", client.clientId)
 
 	payload, ok := msg.Payload.(map[string]interface{})
 	if !ok {
@@ -2646,16 +2793,19 @@ func (s *StaffSyncServer) handleDailyLimitsUpdate(client *Client, msg *Message) 
 		return
 	}
 
-	if err := s.updateDailyLimit(version.ID, limitData); err != nil {
-		s.sendErrorResponse(client, "Failed to update daily limit", err)
+	// 🔧 UPSERT FIX: Use upsertWeeklyLimit to handle both create and update
+	rowsAffected, err := s.upsertWeeklyLimit(version.ID, limitData)
+	if err != nil {
+		s.sendErrorResponse(client, "Failed to upsert weekly limit", err)
 		return
 	}
+	log.Printf("🔧 [handleWeeklyLimitsUpdate] Upserted weekly limit, rows affected: %d", rowsAffected)
 
-	if err := s.logConfigChange(version.ID, "daily_limits", "UPDATE", limitData); err != nil {
+	if err := s.logConfigChange(version.ID, "weekly_limits", "UPDATE", limitData); err != nil {
 		log.Printf("⚠️ Failed to log config change: %v", err)
 	}
 
-	log.Printf("✅ Successfully updated daily limit")
+	log.Printf("✅ Successfully updated weekly limit")
 
 	settings, err := s.fetchAggregatedSettings(version.ID)
 	if err != nil {
@@ -2667,14 +2817,14 @@ func (s *StaffSyncServer) handleDailyLimitsUpdate(client *Client, msg *Message) 
 		Type: "SETTINGS_SYNC_RESPONSE",
 		Payload: map[string]interface{}{
 			"settings": settings,
-			"updated":  "daily_limits",
+			"updated":  "weekly_limits",
 		},
 		Timestamp: time.Now(),
 		ClientID:  msg.ClientID,
 	}
 
 	s.broadcastToAll(&freshMsg)
-	log.Printf("📡 Broadcasted updated daily limits to all clients")
+	log.Printf("📡 Broadcasted updated weekly limits to all clients")
 }
 
 // handleMonthlyLimitsUpdate updates a monthly limit and broadcasts changes
@@ -3040,7 +3190,7 @@ func (s *StaffSyncServer) handleSettingsMigrate(client *Client, msg *Message) {
 		log.Printf("✅ Migrated %d staff groups", len(staffGroups))
 	}
 
-	// 3. Migrate daily limits array → daily_limits table
+	// 3. Migrate daily limits array → weekly_limits table
 	if dailyLimits, ok := settings["dailyLimits"].([]interface{}); ok {
 		for _, limit := range dailyLimits {
 			limitMap := limit.(map[string]interface{})
@@ -3048,7 +3198,7 @@ func (s *StaffSyncServer) handleSettingsMigrate(client *Client, msg *Message) {
 				log.Printf("⚠️ Failed to migrate daily limit: %v", err)
 				continue
 			}
-			s.logConfigChange(version.ID, "daily_limits", "INSERT", limitMap)
+			s.logConfigChange(version.ID, "weekly_limits", "INSERT", limitMap)
 		}
 		log.Printf("✅ Migrated %d daily limits", len(dailyLimits))
 	}
@@ -3311,7 +3461,7 @@ func (s *StaffSyncServer) insertDefaultSettings(versionID string) error {
 	}
 
 	for i, limit := range defaultDailyLimits {
-		// Prepare insert data for daily_limits table
+		// Prepare insert data for weekly_limits table
 		insertData := map[string]interface{}{
 			"version_id":            versionID,
 			"limit_id":              limit["id"],
@@ -3328,7 +3478,7 @@ func (s *StaffSyncServer) insertDefaultSettings(versionID string) error {
 		}
 
 		// POST to Supabase REST API
-		url := fmt.Sprintf("%s/rest/v1/daily_limits", s.supabaseURL)
+		url := fmt.Sprintf("%s/rest/v1/weekly_limits", s.supabaseURL)
 		req, err := http.NewRequest("POST", url, bytes.NewBuffer(jsonData))
 		if err != nil {
 			return fmt.Errorf("failed to create request for daily limit: %w", err)

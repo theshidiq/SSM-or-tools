@@ -33,7 +33,7 @@ export const useSettingsData = (autosaveEnabled = true) => {
     createStaffGroup: wsCreateStaffGroup,
     deleteStaffGroup: wsDeleteStaffGroup,
     hardDeleteStaffGroup: wsHardDeleteStaffGroup,
-    updateDailyLimits: wsUpdateDailyLimits,
+    updateWeeklyLimits: wsUpdateWeeklyLimits,
     updateMonthlyLimits: wsUpdateMonthlyLimits,
     createPriorityRule: wsCreatePriorityRule,
     updatePriorityRules: wsUpdatePriorityRules,
@@ -55,7 +55,7 @@ export const useSettingsData = (autosaveEnabled = true) => {
     wsCreateStaffGroup,
     wsDeleteStaffGroup,
     wsHardDeleteStaffGroup,
-    wsUpdateDailyLimits,
+    wsUpdateWeeklyLimits,
     wsUpdateMonthlyLimits,
     wsCreatePriorityRule,
     wsUpdatePriorityRules,
@@ -70,7 +70,7 @@ export const useSettingsData = (autosaveEnabled = true) => {
       wsCreateStaffGroup,
       wsDeleteStaffGroup,
       wsHardDeleteStaffGroup,
-      wsUpdateDailyLimits,
+      wsUpdateWeeklyLimits,
       wsUpdateMonthlyLimits,
       wsCreatePriorityRule,
       wsUpdatePriorityRules,
@@ -82,7 +82,7 @@ export const useSettingsData = (autosaveEnabled = true) => {
     wsCreateStaffGroup,
     wsDeleteStaffGroup,
     wsHardDeleteStaffGroup,
-    wsUpdateDailyLimits,
+    wsUpdateWeeklyLimits,
     wsUpdateMonthlyLimits,
     wsCreatePriorityRule,
     wsUpdatePriorityRules,
@@ -170,7 +170,7 @@ export const useSettingsData = (autosaveEnabled = true) => {
       // ✅ FIX #2: Use ?? for all arrays to prevent connection drop mass deletions
       const aggregatedSettings = {
         staffGroups: normalizedStaffGroups, // ✅ FIX #3: Use normalized groups with consistent field names
-        dailyLimits: wsSettings?.dailyLimits ?? [],
+        weeklyLimits: wsSettings?.weeklyLimits ?? [],
         monthlyLimits: wsSettings?.monthlyLimits ?? [],
         priorityRules: wsSettings?.priorityRules ?? [],
         mlParameters: wsSettings?.mlModelConfigs?.[0] ?? {},
@@ -230,7 +230,7 @@ export const useSettingsData = (autosaveEnabled = true) => {
       previousSettingsRef.current = {
         staffGroupsCount: settings.staffGroups?.length || 0,
         priorityRulesCount: settings.priorityRules?.length || 0,
-        dailyLimitsCount: settings.dailyLimits?.length || 0,
+        weeklyLimitsCount: settings.weeklyLimits?.length || 0,
         monthlyLimitsCount: settings.monthlyLimits?.length || 0,
       };
       return;
@@ -239,7 +239,7 @@ export const useSettingsData = (autosaveEnabled = true) => {
     const current = {
       staffGroupsCount: settings.staffGroups?.length || 0,
       priorityRulesCount: settings.priorityRules?.length || 0,
-      dailyLimitsCount: settings.dailyLimits?.length || 0,
+      weeklyLimitsCount: settings.weeklyLimits?.length || 0,
       monthlyLimitsCount: settings.monthlyLimits?.length || 0,
     };
 
@@ -252,8 +252,8 @@ export const useSettingsData = (autosaveEnabled = true) => {
     if (prev.priorityRulesCount > 0 && current.priorityRulesCount === 0) {
       wipeDetected.push(`priorityRules (${prev.priorityRulesCount} → 0)`);
     }
-    if (prev.dailyLimitsCount > 0 && current.dailyLimitsCount === 0) {
-      wipeDetected.push(`dailyLimits (${prev.dailyLimitsCount} → 0)`);
+    if (prev.weeklyLimitsCount > 0 && current.weeklyLimitsCount === 0) {
+      wipeDetected.push(`weeklyLimits (${prev.weeklyLimitsCount} → 0)`);
     }
     if (prev.monthlyLimitsCount > 0 && current.monthlyLimitsCount === 0) {
       wipeDetected.push(`monthlyLimits (${prev.monthlyLimitsCount} → 0)`);
@@ -570,14 +570,14 @@ export const useSettingsData = (autosaveEnabled = true) => {
         }
         } // ✅ FIX #5: Close the else block for initial load guard
 
-        // Detect and update daily limits
+        // Detect and update weekly limits
         if (
-          JSON.stringify(oldSettings.dailyLimits) !==
-          JSON.stringify(newSettings.dailyLimits)
+          JSON.stringify(oldSettings.weeklyLimits) !==
+          JSON.stringify(newSettings.weeklyLimits)
         ) {
-          console.log("  - Updating daily_limits table");
-          newSettings.dailyLimits?.forEach((limit) => {
-            callbacks.wsUpdateDailyLimits(limit);
+          console.log("  - Updating weekly_limits table");
+          newSettings.weeklyLimits?.forEach((limit) => {
+            callbacks.wsUpdateWeeklyLimits(limit);
           });
         }
 
@@ -723,7 +723,7 @@ export const useSettingsData = (autosaveEnabled = true) => {
     console.log("  - Current settings counts:", {
       staffGroups: settings?.staffGroups?.length || 0,
       priorityRules: settings?.priorityRules?.length || 0,
-      dailyLimits: settings?.dailyLimits?.length || 0,
+      weeklyLimits: settings?.weeklyLimits?.length || 0,
       monthlyLimits: settings?.monthlyLimits?.length || 0,
     });
     console.log("  - Stack trace:", new Error().stack);
@@ -746,7 +746,7 @@ export const useSettingsData = (autosaveEnabled = true) => {
         console.log("  - Default settings loaded:", {
           staffGroups: defaultSettings?.staffGroups?.length || 0,
           priorityRules: defaultSettings?.priorityRules?.length || 0,
-          dailyLimits: defaultSettings?.dailyLimits?.length || 0,
+          weeklyLimits: defaultSettings?.weeklyLimits?.length || 0,
           monthlyLimits: defaultSettings?.monthlyLimits?.length || 0,
         });
         setSettings(defaultSettings);
@@ -836,7 +836,7 @@ export const useSettingsData = (autosaveEnabled = true) => {
         `  - Staff Groups: ${parsedSettings.staffGroups?.length || 0} items`,
       );
       console.log(
-        `  - Daily Limits: ${parsedSettings.dailyLimits?.length || 0} items`,
+        `  - Daily Limits: ${parsedSettings.weeklyLimits?.length || 0} items`,
       );
       console.log(
         `  - Monthly Limits: ${parsedSettings.monthlyLimits?.length || 0} items`,

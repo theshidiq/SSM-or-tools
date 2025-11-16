@@ -27,7 +27,7 @@ const MESSAGE_TYPES = {
   SETTINGS_CREATE_STAFF_GROUP: "SETTINGS_CREATE_STAFF_GROUP",
   SETTINGS_DELETE_STAFF_GROUP: "SETTINGS_DELETE_STAFF_GROUP",
   SETTINGS_HARD_DELETE_STAFF_GROUP: "SETTINGS_HARD_DELETE_STAFF_GROUP",
-  SETTINGS_UPDATE_DAILY_LIMITS: "SETTINGS_UPDATE_DAILY_LIMITS",
+  SETTINGS_UPDATE_WEEKLY_LIMITS: "SETTINGS_UPDATE_WEEKLY_LIMITS",
   SETTINGS_UPDATE_MONTHLY_LIMITS: "SETTINGS_UPDATE_MONTHLY_LIMITS",
   SETTINGS_CREATE_PRIORITY_RULE: "SETTINGS_CREATE_PRIORITY_RULE",
   SETTINGS_UPDATE_PRIORITY_RULES: "SETTINGS_UPDATE_PRIORITY_RULES",
@@ -614,21 +614,21 @@ export const useWebSocketSettings = (options = {}) => {
   );
 
   /**
-   * Update daily limits (table-specific operation)
+   * Update weekly limits (table-specific operation)
    */
-  const updateDailyLimits = useCallback(
+  const updateWeeklyLimits = useCallback(
     (limitData) => {
       if (!enabled) {
         const error = new Error("WebSocket disabled");
         console.log(
-          "🚫 Phase 3 Settings: Daily limits update blocked - WebSocket disabled",
+          "🚫 Phase 3 Settings: Weekly limits update blocked - WebSocket disabled",
         );
         return Promise.reject(error);
       }
 
       if (wsRef.current?.readyState === WebSocket.OPEN) {
         const message = {
-          type: MESSAGE_TYPES.SETTINGS_UPDATE_DAILY_LIMITS,
+          type: MESSAGE_TYPES.SETTINGS_UPDATE_WEEKLY_LIMITS,
           payload: { limit: limitData },
           timestamp: new Date().toISOString(),
           clientId: clientIdRef.current,
@@ -636,7 +636,7 @@ export const useWebSocketSettings = (options = {}) => {
 
         wsRef.current.send(JSON.stringify(message));
         console.log(
-          "📤 Phase 3 Settings: Sent daily limits update:",
+          "📤 Phase 3 Settings: Sent weekly limits update:",
           limitData,
         );
 
@@ -644,7 +644,7 @@ export const useWebSocketSettings = (options = {}) => {
       } else {
         const error = new Error("WebSocket not connected");
         console.error(
-          "❌ Phase 3 Settings: Failed to update daily limits - not connected",
+          "❌ Phase 3 Settings: Failed to update weekly limits - not connected",
         );
         return Promise.reject(error);
       }
@@ -1069,7 +1069,7 @@ export const useWebSocketSettings = (options = {}) => {
     createStaffGroup,
     deleteStaffGroup,
     hardDeleteStaffGroup,
-    updateDailyLimits,
+    updateWeeklyLimits,
     updateMonthlyLimits,
     createPriorityRule,
     updatePriorityRules,
