@@ -1753,22 +1753,36 @@ export class BusinessRuleValidator {
                 Math.max(shuffledDays.length, 1);
               continue;
             } else {
-              // Would violate weekly limit, use △ as fallback
-              schedule[staff.id][bestCandidate.dateKey] = "△";
-              offDaysSet++; // Still counts toward off-day target
+              // Would violate weekly limit, use △ as fallback (ONLY for 社員)
+              if (staff.status === "社員") {
+                schedule[staff.id][bestCandidate.dateKey] = "△";
+                offDaysSet++; // Still counts toward off-day target
 
-              console.log(
-                `✅ [5-DAY-REST] ${staff.name}: Assigned △ on ${bestCandidate.date.toLocaleDateString('ja-JP')} ` +
-                `(5-day rest, × blocked by weekly limit)`,
-              );
+                console.log(
+                  `✅ [5-DAY-REST] ${staff.name}: Assigned △ on ${bestCandidate.date.toLocaleDateString('ja-JP')} ` +
+                  `(5-day rest, × blocked by weekly limit)`,
+                );
 
-              // Remove used day and continue
-              shuffledDays.splice(bestCandidate.arrayIndex, 1);
-              const jitter = Math.floor(Math.random() * 2);
-              nextOffDayIndex =
-                (bestCandidate.arrayIndex + interval + jitter) %
-                Math.max(shuffledDays.length, 1);
-              continue;
+                // Remove used day and continue
+                shuffledDays.splice(bestCandidate.arrayIndex, 1);
+                const jitter = Math.floor(Math.random() * 2);
+                nextOffDayIndex =
+                  (bestCandidate.arrayIndex + interval + jitter) %
+                  Math.max(shuffledDays.length, 1);
+                continue;
+              } else {
+                // Non-社員 cannot use △ as fallback, skip this day
+                console.log(
+                  `⏭️ [5-DAY-REST] ${staff.name} (${staff.status}): Cannot use △ fallback (non-社員), skipping this rest day`,
+                );
+                // Remove day from candidates and try next
+                shuffledDays.splice(bestCandidate.arrayIndex, 1);
+                const jitter = Math.floor(Math.random() * 2);
+                nextOffDayIndex =
+                  (bestCandidate.arrayIndex + interval + jitter) %
+                  Math.max(shuffledDays.length, 1);
+                continue;
+              }
             }
           }
 
@@ -1912,8 +1926,8 @@ export class BusinessRuleValidator {
             }
           }
 
-          // If × violates limits everywhere, try △ (early shift) as fallback
-          if (!restAssigned) {
+          // If × violates limits everywhere, try △ (early shift) as fallback - ONLY for 社員
+          if (!restAssigned && staff.status === "社員") {
             for (const dateKey of windowDates) {
               const currentShift = schedule[staff.id][dateKey];
 
@@ -1929,6 +1943,10 @@ export class BusinessRuleValidator {
               );
               break;
             }
+          } else if (!restAssigned && staff.status !== "社員") {
+            console.log(
+              `⏭️ [5-DAY-REST] ${staff.name} (${staff.status}): Cannot use △ fallback (non-社員), 5-day rest violation remains`,
+            );
           }
 
           // If still not assigned (very rare), log warning
@@ -1987,6 +2005,17 @@ export class BusinessRuleValidator {
       }
 
       const maxOffDaysPerWeek = offDayLimit.maxCount;
+
+      // ✅ CHECK SCOPE AND TARGET IDS: If limit has staff_status scope, only apply to specified statuses
+      if (offDayLimit.constraints?.scope === "staff_status") {
+        const targetStatuses = offDayLimit.constraints.targetIds || [];
+        if (!targetStatuses.includes(staff.status)) {
+          console.log(
+            `⏭️ [WEEKLY-LIMIT-SKIP] ${staff.name} (${staff.status}): Staff status not in targetIds [${targetStatuses.join(", ")}] - EXEMPT from weekly limit`
+          );
+          return false; // Staff is exempt from this limit
+        }
+      }
 
       console.log(
         `🔍 [WEEKLY-LIMIT-CHECK] ${staff.name}: Checking if × on ${dateKey} would violate limit (max: ${maxOffDaysPerWeek})`

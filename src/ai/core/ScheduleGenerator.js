@@ -15,7 +15,9 @@ import {
   isWeekday,
   PRIORITY_RULES,
   getMonthlyLimits,
+  getWeeklyLimits, // ✅ NEW: Weekly limits loader
   validateAllConstraints,
+  validateWeeklyLimits, // ✅ NEW: Weekly validation function
   getPriorityRules,
   getStaffConflictGroups,
   getDailyLimits,
@@ -23,6 +25,7 @@ import {
   onConfigurationCacheInvalidated,
   invalidateConfigurationCache,
   refreshAllConfigurations,
+  VIOLATION_TYPES, // ✅ NEW: Violation type constants
 } from "../constraints/ConstraintEngine";
 import { configService } from "../../services/ConfigurationService.js";
 import BackupStaffService from "../../services/BackupStaffService";
@@ -111,11 +114,12 @@ export class ScheduleGenerator {
 
     // Constraint weights for different settings
     this.constraintWeights = {
-      staffGroups: 0.3,
-      dailyLimits: 0.25,
-      priorityRules: 0.2,
+      staffGroups: 0.25,
+      weeklyLimits: 0.2, // ✅ NEW: Rolling 7-day window constraints
+      dailyLimits: 0.2,
+      priorityRules: 0.15,
       monthlyLimits: 0.15,
-      fairness: 0.1,
+      fairness: 0.05,
     };
 
     // Monthly balancing tracking
@@ -129,6 +133,16 @@ export class ScheduleGenerator {
       improvementThreshold: 0.05,
       adaptationRate: 0.1,
     };
+  }
+
+  /**
+   * Check if staff member is eligible for early shift (△)
+   * Only 社員 staff can work early shifts
+   * @param {Object} staff - Staff member object with status field
+   * @returns {boolean} True if staff can work early shifts
+   */
+  isEligibleForEarlyShift(staff) {
+    return staff.status === "社員";
   }
 
   /**
@@ -617,11 +631,23 @@ export class ScheduleGenerator {
             staffMembers,
             dayCounts,
             backupCoverageNeeds,
+            dateRange,
           );
 
-          if (suggestedShift) {
-            workingSchedule[staff.id][dateKey] = suggestedShift;
-            changesApplied++;
+          // ✅ BUGFIX: Check for null/undefined explicitly (not falsy, since "" is valid normal shift)
+          if (suggestedShift !== null && suggestedShift !== undefined) {
+            // ✅ Final limit check before assignment (defense in depth)
+            const limitsOK = await this.canAssignShift(
+              staff,
+              dateKey,
+              suggestedShift,
+              workingSchedule,
+              dateRange,
+            );
+            if (limitsOK) {
+              workingSchedule[staff.id][dateKey] = suggestedShift;
+              changesApplied++;
+            }
           }
         }
       }
@@ -850,9 +876,19 @@ export class ScheduleGenerator {
             }
           }
 
-          workingSchedule[staff.id][dateKey] = assignedShift;
-          changesApplied++;
-          assignedCount++;
+          // ✅ Check weekly/monthly limits before assignment
+          const limitsOK = await this.canAssignShift(
+            staff,
+            dateKey,
+            assignedShift,
+            workingSchedule,
+            dateRange,
+          );
+          if (limitsOK) {
+            workingSchedule[staff.id][dateKey] = assignedShift;
+            changesApplied++;
+            assignedCount++;
+          }
         }
       }
     }
@@ -933,12 +969,22 @@ export class ScheduleGenerator {
           );
 
           if (priorityShift) {
-            workingSchedule[staff.id][dateKey] = priorityShift;
-            changesApplied++;
-            console.log(
-              `🎯 Priority rule applied in pattern strategy for ${staff.name}`,
+            // ✅ Check weekly/monthly limits before applying priority shift
+            const limitsOK = await this.canAssignShift(
+              staff,
+              dateKey,
+              priorityShift,
+              workingSchedule,
+              dateRange,
             );
-            continue;
+            if (limitsOK) {
+              workingSchedule[staff.id][dateKey] = priorityShift;
+              changesApplied++;
+              console.log(
+                `🎯 Priority rule applied in pattern strategy for ${staff.name}`,
+              );
+              continue;
+            }
           }
 
           // If no priority rule, use pattern-based prediction
@@ -952,15 +998,17 @@ export class ScheduleGenerator {
               workingSchedule,
             );
 
-            if (suggestedShift) {
-              // Validate against constraints before applying
+            // ✅ BUGFIX: Check for null/undefined explicitly (not falsy, since "" is valid normal shift)
+            if (suggestedShift !== null && suggestedShift !== undefined) {
+              // Validate against constraints and limits before applying
               if (
-                this.validateShiftAssignment(
+                await this.validateShiftAssignment(
                   staff,
                   dateKey,
                   suggestedShift,
                   workingSchedule,
                   staffMembers,
+                  dateRange,
                 )
               ) {
                 workingSchedule[staff.id][dateKey] = suggestedShift;
@@ -1033,6 +1081,7 @@ export class ScheduleGenerator {
     staffMembers,
     dayCounts,
     backupCoverageNeeds,
+    dateRange = [],
   ) {
     const dayOfWeek = getDayOfWeek(dateKey);
 
@@ -1093,6 +1142,7 @@ export class ScheduleGenerator {
       schedule,
       staffMembers,
       dayCounts,
+      dateRange,
     );
   }
 
@@ -1102,6 +1152,7 @@ export class ScheduleGenerator {
     schedule,
     staffMembers,
     dayCounts,
+    dateRange = [],
   ) {
     const dayOfWeek = getDayOfWeek(dateKey);
 
@@ -1146,9 +1197,66 @@ export class ScheduleGenerator {
       staffMembers,
     );
 
-    // Decision logic
-    if (canTakeOffDay && !hasGroupConflict && Math.random() < 0.2) {
-      return "×"; // Day off
+    // ===== HARD CONSTRAINT: 5-Day Rest Rule =====
+    // Check if staff needs rest (no × or △ in last 5 days)
+    const restDaysInWindow = this.countRestDays(staff, dateKey, schedule, 5);
+    const needsRest = restDaysInWindow === 0;
+
+    if (needsRest) {
+      console.log(
+        `⚠️ [5-DAY-REST] ${staff.name}: No × or △ in last 5 days - MUST assign rest`,
+      );
+
+      // Priority 1: Try × (off day) if no group conflict
+      if (!hasGroupConflict) {
+        const offDayOK = await this.canAssignShift(
+          staff,
+          dateKey,
+          "×",
+          schedule,
+          dateRange,
+        );
+        if (offDayOK) {
+          console.log(`✅ [5-DAY-REST] ${staff.name}: Assigned × (off day)`);
+          return "×";
+        }
+        console.log(
+          `⚠️ [5-DAY-REST] ${staff.name}: × blocked by weekly limit`,
+        );
+      } else {
+        console.log(
+          `⚠️ [5-DAY-REST] ${staff.name}: × blocked by group conflict`,
+        );
+      }
+
+      // Priority 2: Try △ (early shift) as fallback - ONLY for 社員
+      if (this.isEligibleForEarlyShift(staff)) {
+        const earlyShiftOK = await this.canAssignShift(
+          staff,
+          dateKey,
+          "△",
+          schedule,
+          dateRange,
+        );
+        if (earlyShiftOK) {
+          console.log(
+            `✅ [5-DAY-REST] ${staff.name}: Assigned △ (early shift rest)`,
+          );
+          return "△";
+        }
+        console.log(`⚠️ [5-DAY-REST] ${staff.name}: △ also blocked by limits`);
+      } else {
+        console.log(
+          `⏭️ [5-DAY-REST] ${staff.name} (${staff.status}): Early shift not allowed for non-社員 staff`,
+        );
+      }
+
+      // Both × and △ blocked: Log conflict, continue to normal assignment
+      console.warn(
+        `❌ [CONFLICT] ${staff.name}: 5-day rest needed but × and △ blocked. ` +
+          `Assigning normal shift to respect limit priority.`,
+      );
+      // Fall through to normal assignment below
     }
 
     // Assign working shift based on day and needs
@@ -1156,9 +1264,11 @@ export class ScheduleGenerator {
     const maxEarlyPerDay =
       dailyLimits.find((l) => l.shiftType === "early")?.maxCount || 2;
 
+    // ✅ Special case: Head chef Sunday early shift (only if 社員)
     if (
       dayOfWeek === "sunday" &&
       staff.name === "料理長" &&
+      this.isEligibleForEarlyShift(staff) &&
       dayCounts.early < maxEarlyPerDay
     ) {
       // Check group conflict for early shift
@@ -1170,11 +1280,26 @@ export class ScheduleGenerator {
         staffMembers,
       );
       if (!hasEarlyGroupConflict) {
-        return "△"; // Early shift for head chef on Sunday
+        // ✅ Check weekly/monthly limits before assigning early shift
+        const limitsOK = await this.canAssignShift(
+          staff,
+          dateKey,
+          "△",
+          schedule,
+          dateRange,
+        );
+        if (limitsOK) {
+          return "△"; // Early shift for head chef on Sunday
+        }
       }
     }
 
-    if (dayCounts.early < maxEarlyPerDay && Math.random() < 0.3) {
+    // ✅ EARLY SHIFT ELIGIBILITY: Only 社員 staff can work early shifts
+    if (
+      this.isEligibleForEarlyShift(staff) &&
+      dayCounts.early < maxEarlyPerDay &&
+      Math.random() < 0.3
+    ) {
       // Check group conflict for early shift
       const hasEarlyGroupConflict = await this.checkGroupConflicts(
         staff,
@@ -1184,7 +1309,17 @@ export class ScheduleGenerator {
         staffMembers,
       );
       if (!hasEarlyGroupConflict) {
-        return "△"; // Early shift
+        // ✅ Check weekly/monthly limits before assigning early shift
+        const limitsOK = await this.canAssignShift(
+          staff,
+          dateKey,
+          "△",
+          schedule,
+          dateRange,
+        );
+        if (limitsOK) {
+          return "△"; // Early shift
+        }
       }
     }
 
@@ -1193,10 +1328,61 @@ export class ScheduleGenerator {
       dailyLimits.find((l) => l.shiftType === "late")?.maxCount || 3;
 
     if (dayCounts.late < maxLatePerDay && Math.random() < 0.2) {
-      return "◇"; // Late shift
+      // ✅ Check weekly/monthly limits before assigning late shift
+      const limitsOK = await this.canAssignShift(
+        staff,
+        dateKey,
+        "◇",
+        schedule,
+        dateRange,
+      );
+      if (limitsOK) {
+        return "◇"; // Late shift
+      }
     }
 
     return ""; // Normal shift
+  }
+
+  /**
+   * Count rest days (off days × or early shifts △) for a staff member in the last N days
+   * Used to enforce "within 5 days, staff should have at least 1 rest day" rule
+   * @param {Object} staff - Staff member
+   * @param {string} currentDate - Current date being evaluated (YYYY-MM-DD)
+   * @param {Object} schedule - Current schedule state
+   * @param {number} lookbackDays - Number of days to look back (default: 5)
+   * @returns {number} Count of rest days (× or △) in the lookback window
+   */
+  countRestDays(staff, currentDate, schedule, lookbackDays = 5) {
+    try {
+      const staffSchedule = schedule[staff.id];
+      if (!staffSchedule) return 0;
+
+      const currentDateObj = new Date(currentDate);
+      let restDayCount = 0;
+
+      // Look back N days from current date (not including current date)
+      for (let i = 1; i <= lookbackDays; i++) {
+        const checkDate = new Date(currentDateObj);
+        checkDate.setDate(checkDate.getDate() - i);
+        const checkDateKey = checkDate.toISOString().split("T")[0];
+
+        const shift = staffSchedule[checkDateKey];
+
+        // Count × (off days) or △ (early shifts) as rest days
+        if (shift === "×" || shift === "△") {
+          restDayCount++;
+        }
+      }
+
+      return restDayCount;
+    } catch (error) {
+      console.warn(
+        `⚠️ [REST-COUNT] Error counting rest days for ${staff.name}:`,
+        error,
+      );
+      return 0; // Safe fallback
+    }
   }
 
   /**
@@ -1262,6 +1448,23 @@ export class ScheduleGenerator {
       validation.summary.mediumViolations *
       8 *
       this.constraintWeights.priorityRules;
+
+    // ✅ NEW: Weekly limits violation penalties (rolling 7-day windows)
+    const weeklyViolations = validation.violations.filter(v =>
+      v.type === VIOLATION_TYPES.WEEKLY_OFF_LIMIT ||
+      v.type === VIOLATION_TYPES.WEEKLY_EARLY_LIMIT ||
+      v.type === VIOLATION_TYPES.WEEKLY_LATE_LIMIT
+    );
+    weeklyViolations.forEach(violation => {
+      // High penalty for weekly off limit violations (critical for staff health)
+      if (violation.type === VIOLATION_TYPES.WEEKLY_OFF_LIMIT) {
+        penalties += 20 * this.constraintWeights.weeklyLimits;
+      }
+      // Medium penalty for early/late shift weekly violations
+      else {
+        penalties += 10 * this.constraintWeights.weeklyLimits;
+      }
+    });
 
     // Enhanced scoring components
     const balanceScore = this.calculateBalanceScore(
@@ -1619,6 +1822,288 @@ export class ScheduleGenerator {
   }
 
   /**
+   * ✅ NEW: Check if assigning a shift would violate weekly limits
+   * Uses rolling 7-day window validation to prevent over-assignment
+   * @param {Object} schedule - Current schedule state
+   * @param {Object} staff - Staff member
+   * @param {string} dateKey - Date to check (YYYY-MM-DD)
+   * @param {string} proposedShift - Shift to assign (×, △, ◇, etc.)
+   * @param {Array} dateRange - Full date range for the period
+   * @param {Array} weeklyLimits - Weekly limits configuration
+   * @returns {boolean} True if assignment would violate weekly limits
+   */
+  async wouldViolateWeeklyLimits(
+    schedule,
+    staff,
+    dateKey,
+    proposedShift,
+    dateRange,
+    weeklyLimits = null
+  ) {
+    try {
+      // Load weekly limits if not provided
+      if (!weeklyLimits) {
+        weeklyLimits = await getWeeklyLimits();
+      }
+
+      // Need at least 7 days to validate weekly windows
+      if (!dateRange || dateRange.length < 7) {
+        return false;
+      }
+
+      // Find the date in the range
+      const dateIndex = dateRange.findIndex(
+        d => d.toISOString().split("T")[0] === dateKey
+      );
+      if (dateIndex === -1) return false;
+
+      // Get relevant weekly limit based on shift type
+      let limit = null;
+      let checkFunction = null;
+
+      if (isOffDay(proposedShift)) {
+        limit = weeklyLimits?.find(l => l.shiftType === "off" || l.shiftType === "×");
+        checkFunction = isOffDay;
+      } else if (isEarlyShift(proposedShift)) {
+        limit = weeklyLimits?.find(l => l.shiftType === "early" || l.shiftType === "△");
+        checkFunction = isEarlyShift;
+      } else if (isLateShift(proposedShift)) {
+        limit = weeklyLimits?.find(l => l.shiftType === "late" || l.shiftType === "◇");
+        checkFunction = isLateShift;
+      }
+
+      if (!limit || !checkFunction) {
+        return false; // No limit configured for this shift type
+      }
+
+      const maxCount = limit.maxCount || 7; // Default: no limit
+
+      // Check all 7-day windows that include this date
+      // A date can be in up to 7 different windows (positions 0-6 in each window)
+      for (let windowStart = Math.max(0, dateIndex - 6);
+           windowStart <= Math.min(dateIndex, dateRange.length - 7);
+           windowStart++) {
+
+        const window = dateRange.slice(windowStart, windowStart + 7);
+        let count = 0;
+
+        // Get staff schedule once for the window
+        const staffSchedule = schedule[staff.id];
+
+        // Count shifts of this type in the window
+        window.forEach((date, idx) => {
+          const d = date.toISOString().split("T")[0];
+
+          if (staffSchedule && staffSchedule[d] !== undefined) {
+            const shift = staffSchedule[d];
+
+            // Count existing shifts of this type
+            if (checkFunction(shift)) {
+              count++;
+            }
+
+            // Handle proposed shift assignment at this date
+            if (d === dateKey && checkFunction(proposedShift)) {
+              // Only increment if we're changing shift type or assigning to empty cell
+              // If replacing same shift type: already counted above, no change to count
+              if (!checkFunction(shift)) {
+                count++; // New shift of this type (replacing different type or empty)
+              }
+            }
+          } else if (d === dateKey && checkFunction(proposedShift)) {
+            count++; // Assigning to empty cell
+          }
+        });
+
+        // Check if this window would be violated
+        if (count > maxCount) {
+          return true; // Would violate weekly limit
+        }
+      }
+
+      return false; // No violation
+    } catch (error) {
+      console.warn(
+        `⚠️ [WEEKLY-LIMIT] Error checking weekly limits for ${staff.name}:`,
+        error,
+      );
+      return false; // Don't block on errors (fail-open)
+    }
+  }
+
+  /**
+   * Check if assigning a shift would violate monthly limits
+   * @param {Object} schedule - Current schedule
+   * @param {Object} staff - Staff member
+   * @param {string} dateKey - Date in YYYY-MM-DD format
+   * @param {string} proposedShift - Proposed shift value (×, △, ◇, etc.)
+   * @param {Array} dateRange - All dates in the schedule period
+   * @param {Array} monthlyLimits - Optional pre-loaded monthly limits
+   * @returns {Promise<boolean>} True if would violate, false otherwise
+   */
+  async wouldViolateMonthlyLimits(
+    schedule,
+    staff,
+    dateKey,
+    proposedShift,
+    dateRange,
+    monthlyLimits = null,
+  ) {
+    try {
+      // Load monthly limits if not provided
+      if (!monthlyLimits) {
+        const date = new Date(dateKey);
+        monthlyLimits = await getMonthlyLimits(
+          date.getFullYear(),
+          date.getMonth() + 1,
+        );
+      }
+
+      if (!monthlyLimits || monthlyLimits.length === 0) {
+        return false; // No limits configured
+      }
+
+      // Find applicable limit based on proposed shift type
+      let applicableLimit = null;
+
+      if (isOffDay(proposedShift)) {
+        applicableLimit = monthlyLimits.find(
+          (l) =>
+            l.enabled !== false &&
+            (l.shiftType === "off" || l.shiftType === "×" || l.limitType === "max_off_days"),
+        );
+      } else if (isEarlyShift(proposedShift)) {
+        applicableLimit = monthlyLimits.find(
+          (l) =>
+            l.enabled !== false &&
+            (l.shiftType === "early" || l.shiftType === "△"),
+        );
+      } else if (isLateShift(proposedShift)) {
+        applicableLimit = monthlyLimits.find(
+          (l) =>
+            l.enabled !== false &&
+            (l.shiftType === "late" || l.shiftType === "◇"),
+        );
+      }
+
+      if (!applicableLimit) {
+        return false; // No limit for this shift type
+      }
+
+      // Check if limit applies to this staff member
+      const { scope, targetIds } = applicableLimit;
+      if (scope === "individual" && targetIds && targetIds.length > 0) {
+        if (!targetIds.includes(staff.id)) {
+          return false; // Limit doesn't apply to this staff member
+        }
+      }
+
+      // Get all dates in the same month as the proposed date
+      const proposedDate = new Date(dateKey);
+      const proposedMonth = proposedDate.getMonth();
+      const proposedYear = proposedDate.getFullYear();
+
+      const datesInMonth = dateRange.filter((date) => {
+        return (
+          date.getMonth() === proposedMonth && date.getFullYear() === proposedYear
+        );
+      });
+
+      // Count existing shifts of this type in the month
+      let monthCount = 0;
+      for (const date of datesInMonth) {
+        const checkDateKey = date.toISOString().split("T")[0];
+        const existingShift = schedule[staff.id]?.[checkDateKey] || "";
+
+        // Skip the proposed date (we're checking if adding it would violate)
+        if (checkDateKey === dateKey) continue;
+
+        // Count matching shift types
+        if (isOffDay(proposedShift) && isOffDay(existingShift)) {
+          monthCount++;
+        } else if (isEarlyShift(proposedShift) && isEarlyShift(existingShift)) {
+          monthCount++;
+        } else if (isLateShift(proposedShift) && isLateShift(existingShift)) {
+          monthCount++;
+        }
+      }
+
+      // Check if adding this shift would exceed the limit
+      const maxCount = applicableLimit.maxCount || applicableLimit.maxOffDaysPerMonth || Infinity;
+      const wouldExceed = monthCount + 1 > maxCount;
+
+      if (wouldExceed) {
+        console.log(
+          `🚫 [MONTHLY-LIMIT] ${staff.name}: Would exceed monthly limit for ${proposedShift} ` +
+          `(current: ${monthCount}, max: ${maxCount}, proposed date: ${dateKey})`,
+        );
+      }
+
+      return wouldExceed;
+    } catch (error) {
+      console.warn(
+        `⚠️ [MONTHLY-LIMIT] Error checking monthly limits for ${staff.name}:`,
+        error,
+      );
+      return false; // Don't block on errors
+    }
+  }
+
+  /**
+   * Unified check to determine if a shift can be assigned without violating limits
+   * @param {Object} staff - Staff member
+   * @param {string} dateKey - Date in YYYY-MM-DD format
+   * @param {string} proposedShift - Proposed shift value
+   * @param {Object} schedule - Current schedule
+   * @param {Array} dateRange - All dates in the schedule period
+   * @returns {Promise<boolean>} True if can assign, false if would violate limits
+   */
+  async canAssignShift(staff, dateKey, proposedShift, schedule, dateRange) {
+    try {
+      // Check weekly limits first (rolling 7-day windows)
+      const weeklyViolation = await this.wouldViolateWeeklyLimits(
+        schedule,
+        staff,
+        dateKey,
+        proposedShift,
+        dateRange,
+      );
+
+      if (weeklyViolation) {
+        console.log(
+          `🚫 [LIMIT-CHECK] ${staff.name}: Blocked by weekly limit (${proposedShift} on ${dateKey})`,
+        );
+        return false;
+      }
+
+      // Check monthly limits (month-to-date)
+      const monthlyViolation = await this.wouldViolateMonthlyLimits(
+        schedule,
+        staff,
+        dateKey,
+        proposedShift,
+        dateRange,
+      );
+
+      if (monthlyViolation) {
+        console.log(
+          `🚫 [LIMIT-CHECK] ${staff.name}: Blocked by monthly limit (${proposedShift} on ${dateKey})`,
+        );
+        return false;
+      }
+
+      // All checks passed
+      return true;
+    } catch (error) {
+      console.warn(
+        `⚠️ [LIMIT-CHECK] Error checking limits for ${staff.name}:`,
+        error,
+      );
+      return true; // Don't block on errors
+    }
+  }
+
+  /**
    * Determine if a priority rule should be applied
    * @param {Object} rule - Priority rule
    * @param {string} currentShift - Current shift value
@@ -1969,7 +2454,12 @@ export class ScheduleGenerator {
 
       // Backup staff should work normal shifts to provide stable coverage
       // unless there's a specific operational need for different shifts
-      if (dayCounts.early < earlyLimit && criticalGroup.criticality > 3) {
+      // ✅ EARLY SHIFT ELIGIBILITY: Only 社員 backup staff can work early shifts
+      if (
+        this.isEligibleForEarlyShift(staff) &&
+        dayCounts.early < earlyLimit &&
+        criticalGroup.criticality > 3
+      ) {
         return "△"; // Early shift for critical coverage
       }
 
@@ -1977,7 +2467,12 @@ export class ScheduleGenerator {
     }
 
     // Regular shift selection logic
-    if (dayCounts.early < earlyLimit && Math.random() < 0.3) {
+    // ✅ EARLY SHIFT ELIGIBILITY: Only 社員 staff can work early shifts
+    if (
+      this.isEligibleForEarlyShift(staff) &&
+      dayCounts.early < earlyLimit &&
+      Math.random() < 0.3
+    ) {
       return "△"; // Early shift
     }
 
@@ -2112,24 +2607,62 @@ export class ScheduleGenerator {
     return "";
   }
 
-  validateShiftAssignment(staff, dateKey, shift, schedule, staffMembers) {
-    // Validate if shift assignment is allowed
-    return true;
+  async validateShiftAssignment(
+    staff,
+    dateKey,
+    shift,
+    schedule,
+    staffMembers,
+    dateRange,
+  ) {
+    // Validate if shift assignment is allowed with actual limit checks
+    return await this.canAssignShift(staff, dateKey, shift, schedule, dateRange);
   }
 
-  fillRemainingSlots(schedule, staffMembers, dateRange) {
-    // Fill any remaining empty slots with balanced approach
+  async fillRemainingSlots(schedule, staffMembers, dateRange) {
+    // Fill any remaining empty slots with balanced approach and limit enforcement
     let changesApplied = 0;
 
-    dateRange.forEach((date) => {
+    for (const date of dateRange) {
       const dateKey = date.toISOString().split("T")[0];
-      staffMembers.forEach((staff) => {
+
+      for (const staff of staffMembers) {
         if (schedule[staff.id][dateKey] === "") {
-          schedule[staff.id][dateKey] = "";
-          changesApplied++;
+          // Get day counts for this date
+          const dayCounts = this.countDayAssignments(
+            schedule,
+            dateKey,
+            staffMembers,
+          );
+
+          // Suggest a shift using the existing logic
+          const suggestedShift = await this.suggestShiftForStaff(
+            staff,
+            dateKey,
+            schedule,
+            staffMembers,
+            dayCounts,
+            dateRange,
+          );
+
+          // Only assign if it passes limit checks
+          if (suggestedShift !== null && suggestedShift !== undefined) {
+            const limitsOK = await this.canAssignShift(
+              staff,
+              dateKey,
+              suggestedShift,
+              schedule,
+              dateRange,
+            );
+
+            if (limitsOK) {
+              schedule[staff.id][dateKey] = suggestedShift;
+              changesApplied++;
+            }
+          }
         }
-      });
-    });
+      }
+    }
 
     return { changesApplied };
   }

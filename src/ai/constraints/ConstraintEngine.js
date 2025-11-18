@@ -12,7 +12,9 @@ import { ConfigurationService } from "../../services/ConfigurationService.js";
 let configService = null;
 const configCache = new Map();
 let cacheTimestamp = 0;
-const CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
+// ✅ PHASE 3 FIX: Reduced cache duration from 5 minutes to 30 seconds
+// This minimizes stale data window while maintaining performance
+const CACHE_DURATION = 30 * 1000; // 30 seconds (was 5 minutes)
 
 // Cache invalidation callbacks
 const cacheInvalidationCallbacks = new Set();
@@ -124,6 +126,9 @@ const getCachedConfig = async (configType) => {
         case "daily_limits":
           configPromise = configService.getDailyLimits();
           break;
+        case "weekly_limits":
+          configPromise = configService.getWeeklyLimits();
+          break;
         case "monthly_limits":
           configPromise = configService.getMonthlyLimits();
           break;
@@ -212,6 +217,8 @@ const getStaticConfiguration = (configType) => {
       return STATIC_PRIORITY_RULES;
     case "daily_limits":
       return STATIC_DAILY_LIMITS;
+    case "weekly_limits":
+      return STATIC_WEEKLY_LIMITS;
     case "monthly_limits":
       return (year, month) => getStaticMonthlyLimits(year, month);
     default:
@@ -244,6 +251,24 @@ const STATIC_DAILY_LIMITS = {
 };
 
 /**
+ * Static weekly limits (rolling 7-day window constraints)
+ * Used as fallback when database limits are not available
+ */
+const STATIC_WEEKLY_LIMITS = [
+  {
+    id: "default-weekly-off",
+    name: "Default Weekly Off Limit",
+    shiftType: "off",
+    maxCount: 2, // Max 2 days off in any 7-day period
+    daysOfWeek: [0, 1, 2, 3, 4, 5, 6],
+    scope: "all",
+    targetIds: [],
+    isHard: true,
+    penalty: 50,
+  },
+];
+
+/**
  * Static monthly limits based on days in month
  */
 const getStaticMonthlyLimits = (year, month) => {
@@ -265,6 +290,15 @@ export const getPriorityRules = async () => {
 
 export const getDailyLimits = async () => {
   return await getCachedConfig("daily_limits");
+};
+
+/**
+ * Get weekly limits from database
+ * Weekly limits validate rolling 7-day windows for shift constraints
+ * Example: Max 2 days off within any 7-day period
+ */
+export const getWeeklyLimits = async () => {
+  return await getCachedConfig("weekly_limits");
 };
 
 export const getBackupAssignments = async () => {
@@ -313,6 +347,7 @@ export const refreshAllConfigurations = async () => {
     getCachedConfig("staff_groups"),
     getCachedConfig("priority_rules"),
     getCachedConfig("daily_limits"),
+    getCachedConfig("weekly_limits"), // ✅ NEW: Weekly limits cache refresh
     getCachedConfig("monthly_limits"),
     getCachedConfig("backup_assignments"),
   ];
@@ -333,6 +368,9 @@ export const VIOLATION_TYPES = {
   MONTHLY_OFF_LIMIT: "monthly_off_limit",
   DAILY_OFF_LIMIT: "daily_off_limit",
   DAILY_EARLY_LIMIT: "daily_early_limit",
+  WEEKLY_OFF_LIMIT: "weekly_off_limit", // ✅ NEW: Rolling 7-day window off day limit
+  WEEKLY_EARLY_LIMIT: "weekly_early_limit", // ✅ NEW: Rolling 7-day window early shift limit
+  WEEKLY_LATE_LIMIT: "weekly_late_limit", // ✅ NEW: Rolling 7-day window late shift limit
   STAFF_GROUP_CONFLICT: "staff_group_conflict",
   PRIORITY_RULE_VIOLATION: "priority_rule_violation",
   INSUFFICIENT_COVERAGE: "insufficient_coverage",
@@ -522,8 +560,15 @@ export const validateDailyLimits = async (
         offCount++;
         dayData.off.push(staff.name);
       } else if (isEarlyShift(shift)) {
-        earlyCount++;
-        dayData.early.push(staff.name);
+        // ✅ EARLY SHIFT LIMIT: Only count 社員 staff (exclude 派遣 and パート)
+        if (staff.status === "社員") {
+          earlyCount++;
+          dayData.early.push(staff.name);
+        } else {
+          console.log(
+            `⏭️ [EARLY-SHIFT-SKIP] ${staff.name} (${staff.status}): Early shift does not count toward limit`,
+          );
+        }
       } else if (isLateShift(shift)) {
         lateCount++;
         dayData.late.push(staff.name);
@@ -598,6 +643,173 @@ export const validateDailyLimits = async (
       workingCount,
       coverage: totalStaff > 0 ? (workingCount / totalStaff) * 100 : 0,
     },
+  };
+};
+
+/**
+ * Validate weekly limits using rolling 7-day windows
+ * Ensures each staff member doesn't exceed maxCount days off/early/late in any consecutive 7-day period
+ * @param {Object} scheduleData - Complete schedule data for all staff
+ * @param {Object} staffMember - Staff member object with id and name
+ * @param {Array} dateRange - Array of Date objects for the period
+ * @param {Array} weeklyLimits - Weekly limits configuration from database
+ * @returns {Object} Validation result with violations array
+ */
+export const validateWeeklyLimits = async (
+  scheduleData,
+  staffMember,
+  dateRange,
+  weeklyLimits = null
+) => {
+  const violations = [];
+
+  // Load weekly limits if not provided
+  if (!weeklyLimits) {
+    weeklyLimits = await getWeeklyLimits();
+  }
+
+  // Handle case where weeklyLimits is empty or invalid
+  if (!weeklyLimits || !Array.isArray(weeklyLimits) || weeklyLimits.length === 0) {
+    // Use static fallback
+    weeklyLimits = STATIC_WEEKLY_LIMITS;
+  }
+
+  // Get staff schedule data
+  const staffSchedule = scheduleData[staffMember.id];
+  if (!staffSchedule) {
+    return { valid: true, violations: [] };
+  }
+
+  // Need at least 7 days to validate weekly windows
+  if (dateRange.length < 7) {
+    return { valid: true, violations: [] };
+  }
+
+  // Get limits for different shift types
+  const offLimit = weeklyLimits.find(l =>
+    l.shiftType === "off" || l.shiftType === "×"
+  );
+  const earlyLimit = weeklyLimits.find(l =>
+    l.shiftType === "early" || l.shiftType === "△"
+  );
+  const lateLimit = weeklyLimits.find(l =>
+    l.shiftType === "late" || l.shiftType === "◇"
+  );
+
+  const maxOffDaysPerWeek = offLimit?.maxCount || 2;
+  const maxEarlyDaysPerWeek = earlyLimit?.maxCount || 7; // Default: no limit
+  const maxLateDaysPerWeek = lateLimit?.maxCount || 7; // Default: no limit
+
+  // Rolling 7-day window validation
+  // For a period of N days, we check (N - 6) windows
+  // Example: 14 days = windows [0-6], [1-7], [2-8], ..., [7-13] = 8 windows
+  for (let i = 0; i <= dateRange.length - 7; i++) {
+    const window = dateRange.slice(i, i + 7);
+
+    let daysOffInWindow = 0;
+    let earlyShiftsInWindow = 0;
+    let lateShiftsInWindow = 0;
+    const windowDetails = {
+      offDays: [],
+      earlyDays: [],
+      lateDays: [],
+    };
+
+    // Count shifts in this 7-day window
+    window.forEach(date => {
+      const dateKey = date.toISOString().split("T")[0];
+      const shift = staffSchedule[dateKey];
+
+      if (shift !== undefined) {
+        if (isOffDay(shift)) {
+          daysOffInWindow++;
+          windowDetails.offDays.push(dateKey);
+        } else if (isEarlyShift(shift)) {
+          earlyShiftsInWindow++;
+          windowDetails.earlyDays.push(dateKey);
+        } else if (isLateShift(shift)) {
+          lateShiftsInWindow++;
+          windowDetails.lateDays.push(dateKey);
+        }
+      }
+    });
+
+    const windowStart = window[0].toISOString().split("T")[0];
+    const windowEnd = window[6].toISOString().split("T")[0];
+
+    // Check off days limit
+    if (offLimit && daysOffInWindow > maxOffDaysPerWeek) {
+      violations.push({
+        type: VIOLATION_TYPES.WEEKLY_OFF_LIMIT,
+        severity: "high",
+        staffId: staffMember.id,
+        staffName: staffMember.name,
+        window: {
+          start: windowStart,
+          end: windowEnd,
+        },
+        count: daysOffInWindow,
+        limit: maxOffDaysPerWeek,
+        message: `${staffMember.name} has ${daysOffInWindow} days off in 7-day window (${windowStart} to ${windowEnd}), exceeding limit of ${maxOffDaysPerWeek}`,
+        details: {
+          shiftType: "off",
+          offDays: windowDetails.offDays,
+          windowDates: window.map(d => d.toISOString().split("T")[0]),
+          excess: daysOffInWindow - maxOffDaysPerWeek,
+        },
+      });
+    }
+
+    // Check early shifts limit
+    if (earlyLimit && earlyShiftsInWindow > maxEarlyDaysPerWeek) {
+      violations.push({
+        type: VIOLATION_TYPES.WEEKLY_EARLY_LIMIT,
+        severity: "medium",
+        staffId: staffMember.id,
+        staffName: staffMember.name,
+        window: {
+          start: windowStart,
+          end: windowEnd,
+        },
+        count: earlyShiftsInWindow,
+        limit: maxEarlyDaysPerWeek,
+        message: `${staffMember.name} has ${earlyShiftsInWindow} early shifts in 7-day window (${windowStart} to ${windowEnd}), exceeding limit of ${maxEarlyDaysPerWeek}`,
+        details: {
+          shiftType: "early",
+          earlyDays: windowDetails.earlyDays,
+          windowDates: window.map(d => d.toISOString().split("T")[0]),
+          excess: earlyShiftsInWindow - maxEarlyDaysPerWeek,
+        },
+      });
+    }
+
+    // Check late shifts limit
+    if (lateLimit && lateShiftsInWindow > maxLateDaysPerWeek) {
+      violations.push({
+        type: VIOLATION_TYPES.WEEKLY_LATE_LIMIT,
+        severity: "medium",
+        staffId: staffMember.id,
+        staffName: staffMember.name,
+        window: {
+          start: windowStart,
+          end: windowEnd,
+        },
+        count: lateShiftsInWindow,
+        limit: maxLateDaysPerWeek,
+        message: `${staffMember.name} has ${lateShiftsInWindow} late shifts in 7-day window (${windowStart} to ${windowEnd}), exceeding limit of ${maxLateDaysPerWeek}`,
+        details: {
+          shiftType: "late",
+          lateDays: windowDetails.lateDays,
+          windowDates: window.map(d => d.toISOString().split("T")[0]),
+          excess: lateShiftsInWindow - maxLateDaysPerWeek,
+        },
+      });
+    }
+  }
+
+  return {
+    valid: violations.length === 0,
+    violations,
   };
 };
 
@@ -1339,6 +1551,16 @@ export const validateAllConstraints = async (
       if (!consecutivePatternsResult.valid) {
         allViolations.push(...consecutivePatternsResult.violations);
       }
+
+      // ✅ NEW: Validate weekly limits with rolling 7-day windows
+      const weeklyLimitsResult = await validateWeeklyLimits(
+        scheduleData,
+        staff,
+        dateRange,
+      );
+      if (!weeklyLimitsResult.valid) {
+        allViolations.push(...weeklyLimitsResult.violations);
+      }
     }
   }
 
@@ -1451,6 +1673,7 @@ export const validateAllConstraints = async (
     summary: validationSummary,
     constraintStatus: {
       monthlyLimits: "checked",
+      weeklyLimits: "checked", // ✅ NEW: Rolling 7-day window validation
       dailyLimits: "checked",
       staffGroupConflicts: "checked",
       priorityRules: "checked",
@@ -1633,6 +1856,7 @@ export const getAllConfigurations = async () => {
     const [
       staffGroups,
       dailyLimits,
+      weeklyLimits,
       priorityRules,
       businessRules,
       constraintConfig,
@@ -1641,6 +1865,7 @@ export const getAllConfigurations = async () => {
     ] = await Promise.allSettled([
       withTimeout(getStaffConflictGroups(), "staffGroups"),
       withTimeout(getDailyLimits(), "dailyLimits"),
+      withTimeout(getWeeklyLimits(), "weeklyLimits"),
       withTimeout(getPriorityRules(), "priorityRules"),
       withTimeout(getBusinessRules(), "businessRules"),
       withTimeout(getConstraintConfiguration(), "constraintConfig"),
@@ -1651,6 +1876,8 @@ export const getAllConfigurations = async () => {
     const configurations = {
       staffGroups: staffGroups.status === "fulfilled" ? staffGroups.value : {},
       dailyLimits: dailyLimits.status === "fulfilled" ? dailyLimits.value : {},
+      weeklyLimits:
+        weeklyLimits.status === "fulfilled" ? weeklyLimits.value : [],
       priorityRules:
         priorityRules.status === "fulfilled" ? priorityRules.value : [],
       businessRules:
@@ -1672,6 +1899,7 @@ export const getAllConfigurations = async () => {
     return {
       staffGroups: {},
       dailyLimits: {},
+      weeklyLimits: [],
       priorityRules: [],
       businessRules: {},
       constraintConfig: {},
