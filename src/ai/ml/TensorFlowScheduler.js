@@ -924,18 +924,45 @@ export class TensorFlowScheduler {
       if (priorityRules && priorityRules.length > 0) {
         console.log(`🎯 [ML] Applying ${priorityRules.length} priority rule(s) to ML predictions...`);
 
+        // ✅ CRITICAL FIX: Sort rules by priority - preferred_shift should override avoid_shift
+        // When rules have same priority_level, apply in this order:
+        // 1. avoid_shift (apply first, can be overridden)
+        // 2. preferred_shift (apply last, highest priority)
+        const sortedRules = [...priorityRules].sort((a, b) => {
+          const aPriority = a.preferences?.priorityLevel || 3;
+          const bPriority = b.preferences?.priorityLevel || 3;
+
+          // Sort by priority level first (higher = more important)
+          if (aPriority !== bPriority) {
+            return bPriority - aPriority;
+          }
+
+          // If same priority, preferred_shift comes AFTER avoid_shift (so it wins)
+          const typeOrder = { 'avoid_shift': 0, 'preferred_shift': 1 };
+          const aOrder = typeOrder[a.ruleType] ?? 0;
+          const bOrder = typeOrder[b.ruleType] ?? 0;
+          return aOrder - bOrder;
+        });
+
         let rulesAppliedCount = 0;
-        priorityRules.forEach(rule => {
-          if (!rule.staffId || !rule.preferences?.daysOfWeek) {
-            console.warn(`⚠️ [ML-PRIORITY] Skipping invalid rule:`, rule);
+        sortedRules.forEach(rule => {
+          // ✅ COMPATIBILITY FIX: Support both legacy staffId and new staffIds array format
+          const staffIdList = rule.staffIds && rule.staffIds.length > 0
+            ? rule.staffIds
+            : (rule.staffId ? [rule.staffId] : []);
+
+          if (staffIdList.length === 0 || !rule.preferences?.daysOfWeek) {
+            console.warn(`⚠️ [ML-PRIORITY] Skipping invalid rule (no staffIds):`, rule);
             return;
           }
 
-          const staff = staffMembers.find(s => s.id === rule.staffId || s.name === rule.staffId);
-          if (!staff) {
-            console.warn(`⚠️ [ML-PRIORITY] Staff not found for rule:`, rule.staffId);
-            return;
-          }
+          // Apply rule to all staff members in the list
+          staffIdList.forEach(staffId => {
+            const staff = staffMembers.find(s => s.id === staffId || s.name === staffId);
+            if (!staff) {
+              console.warn(`⚠️ [ML-PRIORITY] Staff not found for rule:`, staffId);
+              return;
+            }
 
           if (!predictions[staff.id]) {
             console.warn(`⚠️ [ML-PRIORITY] No predictions for staff:`, staff.name);
@@ -952,15 +979,28 @@ export class TensorFlowScheduler {
             if (rule.preferences.daysOfWeek.includes(dayOfWeek)) {
               const shiftValue = this.convertShiftTypeToSymbol(rule.preferences.shiftType);
 
-              // Override ML prediction with user's priority preference
-              predictions[staff.id][dateKey] = shiftValue;
-              predictionConfidence[staff.id][dateKey] = 1.0; // Maximum confidence for user preferences
-              rulesAppliedCount++;
-
-              console.log(`  ✅ [ML-PRIORITY] ${staff.name}: Set "${shiftValue}" on ${date.toLocaleDateString('ja-JP')} (${dayNames[dayOfWeek]})`);
+              // ✅ CRITICAL FIX: Handle avoid_shift vs preferred_shift correctly
+              if (rule.ruleType === 'avoid_shift') {
+                // avoid_shift: DON'T set the specified shift, keep it normal/blank
+                // Only clear if it matches the avoided shift type
+                const currentShift = predictions[staff.id][dateKey];
+                if (currentShift === shiftValue) {
+                  predictions[staff.id][dateKey] = ''; // Clear to normal/blank
+                  predictionConfidence[staff.id][dateKey] = 1.0;
+                  rulesAppliedCount++;
+                  console.log(`  ✅ [ML-PRIORITY] ${staff.name}: Cleared "${shiftValue}" (avoid) on ${date.toLocaleDateString('ja-JP')} (${dayNames[dayOfWeek]})`);
+                }
+              } else {
+                // preferred_shift: SET the specified shift
+                predictions[staff.id][dateKey] = shiftValue;
+                predictionConfidence[staff.id][dateKey] = 1.0;
+                rulesAppliedCount++;
+                console.log(`  ✅ [ML-PRIORITY] ${staff.name}: Set "${shiftValue}" on ${date.toLocaleDateString('ja-JP')} (${dayNames[dayOfWeek]})`);
+              }
             }
           });
-        });
+          }); // Close staffIdList.forEach
+        }); // Close priorityRules.forEach
 
         console.log(`✅ [ML] Applied ${rulesAppliedCount} priority rule override(s) to ML predictions`);
       }

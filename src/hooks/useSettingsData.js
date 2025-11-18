@@ -3,6 +3,7 @@ import { configService } from "../services/ConfigurationService";
 import { useAutosave } from "./useAutosave";
 import { useWebSocketSettings } from "./useWebSocketSettings";
 import startupLogger from "../utils/startupLogger";
+import { invalidateConfigurationCache } from "../ai/constraints/ConstraintEngine";
 
 // Feature flag for WebSocket settings (multi-table backend)
 const WEBSOCKET_SETTINGS_ENABLED =
@@ -178,6 +179,13 @@ export const useSettingsData = (autosaveEnabled = true) => {
       };
 
       setSettings(aggregatedSettings);
+
+      // ✅ PHASE 1 FIX: Invalidate AI cache when WebSocket updates settings
+      // This ensures ConstraintEngine refreshes and uses latest database rules
+      console.log("🔄 [CACHE BRIDGE] Invalidating AI cache due to WebSocket settings update");
+      invalidateConfigurationCache();
+      console.log("✅ [CACHE BRIDGE] AI cache invalidated - next AI generation will use fresh rules");
+
       startupLogger.logSettingsChange(
         'useSettingsData.WebSocketSync',
         'Settings aggregated from WebSocket',

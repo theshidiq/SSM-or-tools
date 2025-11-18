@@ -495,6 +495,18 @@ export const useAIAssistant = (
         // Continue without cache - not critical for operation
       }
 
+      // ✅ PHASE 2 FIX: Force-refresh all configurations before AI generation
+      // This ensures AI uses the absolute latest rules from database, not cached data
+      try {
+        console.log("🔄 [FORCE REFRESH] Refreshing all AI configurations before generation...");
+        const constraintEngine = await loadConstraintEngine();
+        await constraintEngine.refreshAllConfigurations();
+        console.log("✅ [FORCE REFRESH] All AI configurations refreshed - using latest database rules");
+      } catch (refreshError) {
+        console.warn("⚠️ Configuration refresh failed:", refreshError.message);
+        // Continue with potentially cached data - not critical but log the issue
+      }
+
       // Prepare data for processing
       const dateRange = generateDateRange(currentMonthIndex);
       const processingData = {

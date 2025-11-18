@@ -1052,6 +1052,34 @@ export const useScheduleDataPrefetch = (
           }
         }
 
+        // ✅ CRITICAL FIX: For AI-generated updates, apply immediately (don't wait for WebSocket)
+        // This prevents AI predictions from being overwritten by stale WebSocket data
+        if (isFromAI) {
+          console.log('🤖 [AI-PROTECTION] Applying AI-generated schedule immediately to UI');
+          setSchedule(newScheduleData);  // ✅ Immediate UI update with AI predictions
+
+          // Sync to backend asynchronously (non-blocking)
+          if (isWebSocketEnabled && webSocketShifts.isConnected) {
+            console.log(`📅 [AI-WEBSOCKET] Syncing AI schedule to WebSocket (Schedule: ${scheduleIdToUse})`);
+            webSocketShifts
+              .bulkUpdateSchedule(newScheduleData)
+              .then(() => {
+                console.log("✅ [AI-WEBSOCKET] AI schedule synced to WebSocket successfully");
+              })
+              .catch((error) => {
+                console.error("❌ [AI-WEBSOCKET] WebSocket sync failed, trying Supabase:", error);
+                // Fallback to Supabase if WebSocket fails
+                scheduleOperations.updateScheduleViaSupabase(
+                  newScheduleData,
+                  staffForSave,
+                  scheduleIdToUse,
+                ).catch(err => console.error("❌ [AI-SUPABASE] Supabase fallback failed:", err));
+              });
+          }
+
+          return Promise.resolve();  // Return immediately (don't block UI)
+        }
+
         // WebSocket-first bulk update (with existing or newly created schedule ID)
         if (isWebSocketEnabled && webSocketShifts.isConnected) {
           console.log(`📅 [WEBSOCKET-PREFETCH] WebSocket bulk schedule update (Schedule: ${scheduleIdToUse})`);

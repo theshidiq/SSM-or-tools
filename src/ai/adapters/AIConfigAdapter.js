@@ -445,6 +445,60 @@ export function transformMonthlyLimits(dbMonthlyLimits) {
 }
 
 /**
+ * ✅ NEW: Transform weekly limits from database format to AI-compatible array
+ * Weekly limits enforce rolling 7-day window constraints (e.g., max 2 days off per week)
+ *
+ * @param {Array} dbWeeklyLimits - Weekly limits from database
+ * @returns {Array} AI-compatible weekly limits array
+ */
+export function transformWeeklyLimits(dbWeeklyLimits) {
+  if (!dbWeeklyLimits || !Array.isArray(dbWeeklyLimits)) {
+    console.warn('⚠️ AIConfigAdapter: Invalid weekly limits input, using defaults');
+    return [];
+  }
+
+  const limits = dbWeeklyLimits
+    .filter(limit => limit.is_active !== false)
+    .map((limit) => {
+      try {
+        const config = limit.limit_config || {};
+
+        return {
+          id: limit.id,
+          name: limit.name || 'Unnamed Weekly Limit',
+
+          // Core constraint
+          shiftType: config.shiftType || config.shift_type || limit.shift_type || 'off',
+          maxCount: config.maxCount ?? config.max_count ?? limit.max_count ?? 2,
+
+          // Rolling window configuration
+          windowSize: config.windowSize ?? config.window_size ?? 7, // Default: 7-day window
+
+          // Scope and targeting
+          scope: config.scope || limit.scope || 'all',
+          targetIds: config.targetIds || config.target_ids || limit.target_ids || [],
+          daysOfWeek: config.daysOfWeek || config.days_of_week || [0, 1, 2, 3, 4, 5, 6],
+
+          // Constraint properties
+          isHard: limit.is_hard_constraint ?? config.isHardConstraint ?? true,
+          penalty: config.penalty || config.penaltyWeight || config.penalty_weight || 50,
+
+          // Metadata
+          description: limit.description || config.description || '',
+          enabled: limit.is_active !== false,
+        };
+      } catch (error) {
+        console.error(`❌ AIConfigAdapter: Failed to transform weekly limit ${limit.id}:`, error);
+        return null;
+      }
+    })
+    .filter(Boolean);
+
+  console.log(`✅ AIConfigAdapter: Transformed ${limits.length} weekly limits`);
+  return limits;
+}
+
+/**
  * Main transformation function: Create unified AI configuration from database settings
  *
  * This is the primary entry point for transforming WebSocket/database settings
@@ -453,6 +507,7 @@ export function transformMonthlyLimits(dbMonthlyLimits) {
  * @param {Object} settings - Raw settings from database (WebSocket message)
  * @param {Array} settings.staffGroups - Staff groups array
  * @param {Array} settings.dailyLimits - Daily limits array
+ * @param {Array} settings.weeklyLimits - Weekly limits array (rolling 7-day windows)
  * @param {Array} settings.monthlyLimits - Monthly limits array
  * @param {Array} settings.priorityRules - Priority rules array
  * @param {Array} settings.mlModelConfigs - ML model configurations array
@@ -473,6 +528,9 @@ export function createAIConfiguration(settings) {
 
       // Daily limits (Array format for constraint engine)
       dailyLimits: transformDailyLimits(settings.dailyLimits),
+
+      // ✅ NEW: Weekly limits (Array format for rolling 7-day window validation)
+      weeklyLimits: transformWeeklyLimits(settings.weeklyLimits),
 
       // Monthly limits (Array format)
       monthlyLimits: transformMonthlyLimits(settings.monthlyLimits),
@@ -499,6 +557,7 @@ export function createAIConfiguration(settings) {
     console.log('✅ AIConfigAdapter: Configuration transformation complete');
     console.log(`  - Staff Groups: ${Object.keys(aiConfig.staffGroups).length}`);
     console.log(`  - Daily Limits: ${aiConfig.dailyLimits.length}`);
+    console.log(`  - Weekly Limits: ${aiConfig.weeklyLimits.length}`); // ✅ NEW
     console.log(`  - Monthly Limits: ${aiConfig.monthlyLimits.length}`);
     console.log(`  - Priority Rules: ${aiConfig.priorityRules.length}`);
     console.log(`  - ML Model: ${aiConfig.mlConfig.modelType}`);

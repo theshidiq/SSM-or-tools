@@ -1209,20 +1209,33 @@ export class ScheduleGenerator {
 
       // Priority 1: Try × (off day) if no group conflict
       if (!hasGroupConflict) {
-        const offDayOK = await this.canAssignShift(
+        // ✅ ADJACENT CONFLICT CHECK: Prevent × next to △ (early shifts)
+        const hasAdjacentConflict = this.hasAdjacentConflict(
           staff,
           dateKey,
           "×",
           schedule,
-          dateRange,
         );
-        if (offDayOK) {
-          console.log(`✅ [5-DAY-REST] ${staff.name}: Assigned × (off day)`);
-          return "×";
+        if (!hasAdjacentConflict) {
+          const offDayOK = await this.canAssignShift(
+            staff,
+            dateKey,
+            "×",
+            schedule,
+            dateRange,
+          );
+          if (offDayOK) {
+            console.log(`✅ [5-DAY-REST] ${staff.name}: Assigned × (off day)`);
+            return "×";
+          }
+          console.log(
+            `⚠️ [5-DAY-REST] ${staff.name}: × blocked by weekly limit`,
+          );
+        } else {
+          console.log(
+            `⏭️ [5-DAY-REST] ${staff.name}: × blocked by adjacent early shift conflict`,
+          );
         }
-        console.log(
-          `⚠️ [5-DAY-REST] ${staff.name}: × blocked by weekly limit`,
-        );
       } else {
         console.log(
           `⚠️ [5-DAY-REST] ${staff.name}: × blocked by group conflict`,
@@ -1231,20 +1244,33 @@ export class ScheduleGenerator {
 
       // Priority 2: Try △ (early shift) as fallback - ONLY for 社員
       if (this.isEligibleForEarlyShift(staff)) {
-        const earlyShiftOK = await this.canAssignShift(
+        // ✅ ADJACENT CONFLICT CHECK: Prevent △ next to × (off days)
+        const hasAdjacentConflict = this.hasAdjacentConflict(
           staff,
           dateKey,
           "△",
           schedule,
-          dateRange,
         );
-        if (earlyShiftOK) {
-          console.log(
-            `✅ [5-DAY-REST] ${staff.name}: Assigned △ (early shift rest)`,
+        if (!hasAdjacentConflict) {
+          const earlyShiftOK = await this.canAssignShift(
+            staff,
+            dateKey,
+            "△",
+            schedule,
+            dateRange,
           );
-          return "△";
+          if (earlyShiftOK) {
+            console.log(
+              `✅ [5-DAY-REST] ${staff.name}: Assigned △ (early shift rest)`,
+            );
+            return "△";
+          }
+          console.log(`⚠️ [5-DAY-REST] ${staff.name}: △ also blocked by limits`);
+        } else {
+          console.log(
+            `⏭️ [5-DAY-REST] ${staff.name}: △ blocked by adjacent off day conflict`,
+          );
         }
-        console.log(`⚠️ [5-DAY-REST] ${staff.name}: △ also blocked by limits`);
       } else {
         console.log(
           `⏭️ [5-DAY-REST] ${staff.name} (${staff.status}): Early shift not allowed for non-社員 staff`,
@@ -1271,25 +1297,34 @@ export class ScheduleGenerator {
       this.isEligibleForEarlyShift(staff) &&
       dayCounts.early < maxEarlyPerDay
     ) {
-      // Check group conflict for early shift
-      const hasEarlyGroupConflict = await this.checkGroupConflicts(
+      // ✅ ADJACENT CONFLICT CHECK: Prevent △ next to × (off days)
+      const hasAdjacentConflict = this.hasAdjacentConflict(
         staff,
         dateKey,
         "△",
         schedule,
-        staffMembers,
       );
-      if (!hasEarlyGroupConflict) {
-        // ✅ Check weekly/monthly limits before assigning early shift
-        const limitsOK = await this.canAssignShift(
+      if (!hasAdjacentConflict) {
+        // Check group conflict for early shift
+        const hasEarlyGroupConflict = await this.checkGroupConflicts(
           staff,
           dateKey,
           "△",
           schedule,
-          dateRange,
+          staffMembers,
         );
-        if (limitsOK) {
-          return "△"; // Early shift for head chef on Sunday
+        if (!hasEarlyGroupConflict) {
+          // ✅ Check weekly/monthly limits before assigning early shift
+          const limitsOK = await this.canAssignShift(
+            staff,
+            dateKey,
+            "△",
+            schedule,
+            dateRange,
+          );
+          if (limitsOK) {
+            return "△"; // Early shift for head chef on Sunday
+          }
         }
       }
     }
@@ -1312,25 +1347,39 @@ export class ScheduleGenerator {
       dayCounts.early < maxEarlyPerDay &&
       Math.random() < 0.2 // Reduced from 0.3 to 0.2 (20% probability)
     ) {
-      // Check group conflict for early shift
-      const hasEarlyGroupConflict = await this.checkGroupConflicts(
+      // ✅ ADJACENT CONFLICT CHECK: Prevent △ next to × (off days)
+      const hasAdjacentConflict = this.hasAdjacentConflict(
         staff,
         dateKey,
         "△",
         schedule,
-        staffMembers,
       );
-      if (!hasEarlyGroupConflict) {
-        // ✅ Check weekly/monthly limits before assigning early shift
-        const limitsOK = await this.canAssignShift(
+      if (hasAdjacentConflict) {
+        // Skip △ assignment due to adjacent × (off day)
+        console.log(
+          `⏭️ [ADJACENT-SKIP] ${staff.name}: Skipping △ due to adjacent off day`,
+        );
+      } else {
+        // Check group conflict for early shift
+        const hasEarlyGroupConflict = await this.checkGroupConflicts(
           staff,
           dateKey,
           "△",
           schedule,
-          dateRange,
+          staffMembers,
         );
-        if (limitsOK) {
-          return "△"; // Early shift
+        if (!hasEarlyGroupConflict) {
+          // ✅ Check weekly/monthly limits before assigning early shift
+          const limitsOK = await this.canAssignShift(
+            staff,
+            dateKey,
+            "△",
+            schedule,
+            dateRange,
+          );
+          if (limitsOK) {
+            return "△"; // Early shift
+          }
         }
       }
     }
@@ -1434,6 +1483,59 @@ export class ScheduleGenerator {
         error,
       );
       return 0; // Safe fallback
+    }
+  }
+
+  /**
+   * Check if adjacent days (yesterday or tomorrow) have conflicting shift patterns
+   * Prevents consecutive off days (×) and early shifts (△) for better rotation
+   * @param {Object} staff - Staff member object
+   * @param {string} currentDate - Current date being evaluated (YYYY-MM-DD)
+   * @param {string} proposedShift - Shift being proposed (△ or ×)
+   * @param {Object} schedule - Current schedule state
+   * @returns {boolean} True if adjacent day has conflicting pattern
+   */
+  hasAdjacentConflict(staff, currentDate, proposedShift, schedule) {
+    try {
+      const staffSchedule = schedule[staff.id];
+      if (!staffSchedule) return false;
+
+      const currentDateObj = new Date(currentDate);
+
+      // Check yesterday and tomorrow
+      const daysToCheck = [-1, 1]; // -1 = yesterday, +1 = tomorrow
+
+      for (const offset of daysToCheck) {
+        const adjacentDate = new Date(currentDateObj);
+        adjacentDate.setDate(adjacentDate.getDate() + offset);
+        const adjacentDateKey = adjacentDate.toISOString().split("T")[0];
+
+        const adjacentShift = staffSchedule[adjacentDateKey];
+
+        // If proposing △ (early shift), check if adjacent day is × (off day)
+        if (proposedShift === "△" && adjacentShift === "×") {
+          console.log(
+            `⏭️ [ADJACENT-CONFLICT] ${staff.name}: Cannot assign △ on ${currentDate}, adjacent day ${adjacentDateKey} is ×`,
+          );
+          return true;
+        }
+
+        // If proposing × (off day), check if adjacent day is △ (early shift)
+        if (proposedShift === "×" && adjacentShift === "△") {
+          console.log(
+            `⏭️ [ADJACENT-CONFLICT] ${staff.name}: Cannot assign × on ${currentDate}, adjacent day ${adjacentDateKey} is △`,
+          );
+          return true;
+        }
+      }
+
+      return false; // No conflict found
+    } catch (error) {
+      console.warn(
+        `⚠️ [ADJACENT-CHECK] Error checking adjacent conflicts for ${staff.name}:`,
+        error,
+      );
+      return false; // Safe fallback - allow assignment
     }
   }
 
@@ -2512,7 +2614,16 @@ export class ScheduleGenerator {
         dayCounts.early < earlyLimit &&
         criticalGroup.criticality > 3
       ) {
-        return "△"; // Early shift for critical coverage
+        // ✅ ADJACENT CONFLICT CHECK: Prevent △ next to × (off days)
+        const hasAdjacentConflict = this.hasAdjacentConflict(
+          staff,
+          dateKey,
+          "△",
+          schedule,
+        );
+        if (!hasAdjacentConflict) {
+          return "△"; // Early shift for critical coverage
+        }
       }
 
       return ""; // Normal shift for stable backup coverage
@@ -2525,7 +2636,16 @@ export class ScheduleGenerator {
       dayCounts.early < earlyLimit &&
       Math.random() < 0.2 // Reduced from 0.3 to 0.2 (20% probability)
     ) {
-      return "△"; // Early shift
+      // ✅ ADJACENT CONFLICT CHECK: Prevent △ next to × (off days)
+      const hasAdjacentConflict = this.hasAdjacentConflict(
+        staff,
+        dateKey,
+        "△",
+        schedule,
+      );
+      if (!hasAdjacentConflict) {
+        return "△"; // Early shift
+      }
     }
 
     if (dayCounts.late < lateLimit && Math.random() < 0.2) {

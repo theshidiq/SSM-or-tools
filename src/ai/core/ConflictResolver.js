@@ -100,6 +100,25 @@ export class ConflictResolver {
       resolve: this.resolveDailyEarlyLimit.bind(this),
     });
 
+    // ✅ NEW: Weekly limits resolvers (rolling 7-day window)
+    this.resolutionStrategies.set(VIOLATION_TYPES.WEEKLY_OFF_LIMIT, {
+      priority: 675,
+      name: "Weekly Off Limit Resolution",
+      resolve: this.resolveWeeklyOffLimit.bind(this),
+    });
+
+    this.resolutionStrategies.set(VIOLATION_TYPES.WEEKLY_EARLY_LIMIT, {
+      priority: 650,
+      name: "Weekly Early Limit Resolution",
+      resolve: this.resolveWeeklyEarlyLimit.bind(this),
+    });
+
+    this.resolutionStrategies.set(VIOLATION_TYPES.WEEKLY_LATE_LIMIT, {
+      priority: 625,
+      name: "Weekly Late Limit Resolution",
+      resolve: this.resolveWeeklyLateLimit.bind(this),
+    });
+
     this.resolutionStrategies.set(VIOLATION_TYPES.MONTHLY_OFF_LIMIT, {
       priority: 600,
       name: "Monthly Off Limit Resolution",
@@ -694,6 +713,139 @@ export class ConflictResolver {
       success: changesApplied > 0,
       changesApplied,
       description: `Changed ${changesApplied} off days to working for ${staffName} to meet monthly limits`,
+    };
+  }
+
+  /**
+   * ✅ NEW: Resolve weekly off limit violations (rolling 7-day window)
+   * @param {Object} violation - Violation details with window info
+   * @param {Object} schedule - Working schedule
+   * @param {Array} staffMembers - Staff members
+   * @param {Array} dateRange - Date range
+   * @param {Object} options - Resolution options
+   * @returns {Object} Resolution result
+   */
+  async resolveWeeklyOffLimit(
+    violation,
+    schedule,
+    staffMembers,
+    dateRange,
+    options = {},
+  ) {
+    const { staffName, staffId, window, details, count, limit } = violation;
+    const { excess, offDays } = details;
+
+    const staff = staffMembers.find((s) => s.id === staffId || s.name === staffName);
+    if (!staff) {
+      return { success: false, error: "Staff member not found" };
+    }
+
+    let changesApplied = 0;
+
+    // Convert the most recent off days in this window to working days
+    // Sort by date to get most recent first
+    const sortedOffDays = [...offDays].sort((a, b) => new Date(b) - new Date(a));
+    const daysToChange = sortedOffDays.slice(0, excess);
+
+    daysToChange.forEach((dateKey) => {
+      if (schedule[staff.id] && schedule[staff.id][dateKey]) {
+        schedule[staff.id][dateKey] = ""; // Change to normal working shift
+        changesApplied++;
+      }
+    });
+
+    return {
+      success: changesApplied > 0,
+      changesApplied,
+      description: `Changed ${changesApplied} off days to working for ${staffName} in window ${window.start} to ${window.end} (weekly limit: ${limit})`,
+    };
+  }
+
+  /**
+   * ✅ NEW: Resolve weekly early limit violations (rolling 7-day window)
+   * @param {Object} violation - Violation details with window info
+   * @param {Object} schedule - Working schedule
+   * @param {Array} staffMembers - Staff members
+   * @param {Array} dateRange - Date range
+   * @param {Object} options - Resolution options
+   * @returns {Object} Resolution result
+   */
+  async resolveWeeklyEarlyLimit(
+    violation,
+    schedule,
+    staffMembers,
+    dateRange,
+    options = {},
+  ) {
+    const { staffName, staffId, window, details, count, limit } = violation;
+    const { excess, earlyDays } = details;
+
+    const staff = staffMembers.find((s) => s.id === staffId || s.name === staffName);
+    if (!staff) {
+      return { success: false, error: "Staff member not found" };
+    }
+
+    let changesApplied = 0;
+
+    // Convert the most recent early shifts in this window to normal shifts
+    const sortedEarlyDays = [...earlyDays].sort((a, b) => new Date(b) - new Date(a));
+    const daysToChange = sortedEarlyDays.slice(0, excess);
+
+    daysToChange.forEach((dateKey) => {
+      if (schedule[staff.id] && schedule[staff.id][dateKey]) {
+        schedule[staff.id][dateKey] = ""; // Change to normal shift
+        changesApplied++;
+      }
+    });
+
+    return {
+      success: changesApplied > 0,
+      changesApplied,
+      description: `Changed ${changesApplied} early shifts to normal for ${staffName} in window ${window.start} to ${window.end} (weekly limit: ${limit})`,
+    };
+  }
+
+  /**
+   * ✅ NEW: Resolve weekly late limit violations (rolling 7-day window)
+   * @param {Object} violation - Violation details with window info
+   * @param {Object} schedule - Working schedule
+   * @param {Array} staffMembers - Staff members
+   * @param {Array} dateRange - Date range
+   * @param {Object} options - Resolution options
+   * @returns {Object} Resolution result
+   */
+  async resolveWeeklyLateLimit(
+    violation,
+    schedule,
+    staffMembers,
+    dateRange,
+    options = {},
+  ) {
+    const { staffName, staffId, window, details, count, limit } = violation;
+    const { excess, lateDays } = details;
+
+    const staff = staffMembers.find((s) => s.id === staffId || s.name === staffName);
+    if (!staff) {
+      return { success: false, error: "Staff member not found" };
+    }
+
+    let changesApplied = 0;
+
+    // Convert the most recent late shifts in this window to normal shifts
+    const sortedLateDays = [...lateDays].sort((a, b) => new Date(b) - new Date(a));
+    const daysToChange = sortedLateDays.slice(0, excess);
+
+    daysToChange.forEach((dateKey) => {
+      if (schedule[staff.id] && schedule[staff.id][dateKey]) {
+        schedule[staff.id][dateKey] = ""; // Change to normal shift
+        changesApplied++;
+      }
+    });
+
+    return {
+      success: changesApplied > 0,
+      changesApplied,
+      description: `Changed ${changesApplied} late shifts to normal for ${staffName} in window ${window.start} to ${window.end} (weekly limit: ${limit})`,
     };
   }
 

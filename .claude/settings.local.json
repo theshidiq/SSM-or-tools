@@ -27,7 +27,9 @@
       "Bash(cat:*)",
       "Bash(node /tmp/check-priority-rules.js:*)",
       "Bash(open:*)",
-      "mcp__chrome-devtools__select_page"
+      "mcp__chrome-devtools__select_page",
+      "mcp__chrome-devtools__evaluate_script",
+      "Bash(go run:*)"
     ],
     "deny": [],
     "ask": []

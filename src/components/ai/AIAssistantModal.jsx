@@ -145,6 +145,10 @@ const AIAssistantModal = ({
                   <Badge variant="secondary">{aiSettings.dailyLimits?.length || 0}</Badge>
                 </div>
                 <div className="flex items-center justify-between">
+                  <span>Weekly Limits:</span>
+                  <Badge variant="secondary">{aiSettings.weeklyLimits?.length || 0}</Badge>
+                </div>
+                <div className="flex items-center justify-between">
                   <span>Priority Rules:</span>
                   <Badge variant="secondary">{aiSettings.priorityRules?.length || 0}</Badge>
                 </div>

@@ -10,7 +10,9 @@ class ConfigurationCacheManager {
   constructor() {
     this.cache = new Map();
     this.lastCacheTime = null;
-    this.cacheTimeout = 5 * 60 * 1000; // ✅ FIX: Reduced from 30 to 5 minutes for fresher data
+    // ✅ PHASE 3 FIX: Reduced cache timeout from 5 minutes to 30 seconds
+    // This minimizes stale data window while maintaining performance
+    this.cacheTimeout = 30 * 1000; // 30 seconds (was 5 minutes)
     this.isInitialized = false;
     this.initPromise = null;
 
@@ -21,6 +23,7 @@ class ConfigurationCacheManager {
     this.CACHE_KEYS = {
       STAFF_GROUPS: "staff_groups",
       DAILY_LIMITS: "daily_limits",
+      WEEKLY_LIMITS: "weekly_limits", // ✅ NEW: Rolling 7-day window limits
       PRIORITY_RULES: "priority_rules",
       BUSINESS_RULES: "business_rules",
       CONSTRAINT_CONFIG: "constraint_config",
@@ -115,6 +118,11 @@ class ConfigurationCacheManager {
         this.CACHE_KEYS.DAILY_LIMITS,
         configurations.dailyLimits || {},
       );
+      // ✅ NEW: Cache weekly limits for rolling 7-day window validation
+      this.cache.set(
+        this.CACHE_KEYS.WEEKLY_LIMITS,
+        configurations.weeklyLimits || [],
+      );
       this.cache.set(
         this.CACHE_KEYS.PRIORITY_RULES,
         configurations.priorityRules || [],
@@ -144,6 +152,7 @@ class ConfigurationCacheManager {
       console.log("📋 Cached configurations:", {
         staffGroups: Object.keys(configurations.staffGroups || {}).length,
         dailyLimits: Object.keys(configurations.dailyLimits || {}).length,
+        weeklyLimits: (configurations.weeklyLimits || []).length, // ✅ NEW
         priorityRules: (configurations.priorityRules || []).length,
         businessRules: Object.keys(configurations.businessRules || {}).length,
       });
@@ -287,6 +296,20 @@ class ConfigurationCacheManager {
         }
       });
     }
+
+    // ✅ PHASE 1 FIX: Register with ConstraintEngine's cache invalidation system
+    // This ensures ConfigurationCacheManager refreshes when WebSocket updates arrive
+    import("../constraints/ConstraintEngine").then((module) => {
+      if (module.registerCacheInvalidationCallback) {
+        console.log("🔄 [CACHE BRIDGE] Registering ConfigurationCacheManager with ConstraintEngine invalidation system");
+        module.registerCacheInvalidationCallback(() => {
+          console.log("🔄 [CACHE BRIDGE] ConstraintEngine cache invalidated - refreshing ConfigurationCacheManager");
+          this.refreshCache();
+        });
+      }
+    }).catch((error) => {
+      console.warn("⚠️ Failed to register with ConstraintEngine cache invalidation:", error);
+    });
 
     // Setup periodic cache validation (every 5 minutes)
     setInterval(

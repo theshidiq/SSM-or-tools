@@ -108,6 +108,13 @@ export const useWebSocketSettings = (options = {}) => {
           console.log("🔍 [SYNC] First group members:", payload.settings.staffGroups[0].members);
         }
 
+        // 🔍 DEBUG: Log weeklyLimits to diagnose empty array issue
+        console.log("🔍 [SYNC] Weekly limits in payload:", payload?.settings?.weeklyLimits);
+        console.log("🔍 [SYNC] Weekly limits array length:", payload?.settings?.weeklyLimits?.length || 0);
+        if (payload?.settings?.weeklyLimits?.[0]) {
+          console.log("🔍 [SYNC] First weekly limit:", payload.settings.weeklyLimits[0]);
+        }
+
         // ✅ FIX #1: IGNORE SELF-BROADCASTS - Don't process messages from ourselves
         if (messageClientId && messageClientId === clientIdRef.current) {
           console.log("⏭️ [SYNC] Ignoring self-broadcast (clientId match)");
@@ -161,6 +168,7 @@ export const useWebSocketSettings = (options = {}) => {
         console.log("📊 Settings synced from multi-table backend:", {
           staffGroups: actualSettings.staffGroups?.length || 0,
           dailyLimits: actualSettings.dailyLimits?.length || 0,
+          weeklyLimits: actualSettings.weeklyLimits?.length || 0,
           monthlyLimits: actualSettings.monthlyLimits?.length || 0,
           priorityRules: actualSettings.priorityRules?.length || 0,
           mlModelConfigs: actualSettings.mlModelConfigs?.length || 0,
