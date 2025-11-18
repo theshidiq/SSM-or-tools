@@ -158,12 +158,24 @@ export class BusinessRuleValidator {
     if (this.settingsProvider) {
       try {
         const settings = this.settingsProvider.getSettings();
-        return {
+
+        // 🔍 DEBUG: Log what settings provider returns
+        console.log("🔍 [getLiveSettings] Raw settings from provider:", {
+          weeklyLimits: settings.weeklyLimits,
+          weeklyLimitsLength: settings.weeklyLimits?.length || 0,
+        });
+
+        const result = {
           staffGroups: settings.staffGroups || [],
           dailyLimits: settings.dailyLimits || DAILY_LIMITS,
+          weeklyLimits: settings.weeklyLimits || [],
           monthlyLimits: settings.monthlyLimits || {},
           priorityRules: settings.priorityRules || PRIORITY_RULES,
         };
+
+        console.log("🔍 [getLiveSettings] Returning weeklyLimits:", result.weeklyLimits);
+
+        return result;
       } catch (error) {
         console.warn(
           "⚠️ Failed to get live settings, using cached config:",
@@ -172,11 +184,14 @@ export class BusinessRuleValidator {
       }
     }
 
+    console.log("🔍 [getLiveSettings] No settingsProvider, using cached config");
+
     // Fallback to cached configuration (legacy path)
     // ✅ CLEANED: No static staff groups fallback - database-only
     return {
       staffGroups: this.configurationCache.get("staffGroups") || [],
       dailyLimits: this.configurationCache.get("dailyLimits") || DAILY_LIMITS,
+      weeklyLimits: this.configurationCache.get("weeklyLimits") || [],
       monthlyLimits: this.configurationCache.get("monthlyLimits") || {},
       priorityRules:
         this.configurationCache.get("priorityRules") || PRIORITY_RULES,
@@ -1007,15 +1022,28 @@ export class BusinessRuleValidator {
 
       // Apply staff group constraints
       await this.applyStaffGroupConstraints(schedule, staffMembers, dateRange);
+      // ✅ Re-enforce priority rules (prevent overwrites)
+      await this.applyPriorityRules(schedule, staffMembers, dateRange);
 
       // Distribute off days evenly
       await this.distributeOffDays(schedule, staffMembers, dateRange);
+      // ✅ Re-enforce priority rules (prevent overwrites)
+      await this.applyPriorityRules(schedule, staffMembers, dateRange);
+
+      // ✅ NEW: Enforce 5-day rest constraint across entire schedule
+      await this.enforce5DayRestConstraint(schedule, staffMembers, dateRange);
+      // ✅ Re-enforce priority rules (prevent overwrites from rest enforcement)
+      await this.applyPriorityRules(schedule, staffMembers, dateRange);
 
       // Apply coverage compensation rules
       await this.applyCoverageCompensation(schedule, staffMembers, dateRange);
+      // ✅ Re-enforce priority rules (prevent overwrites)
+      await this.applyPriorityRules(schedule, staffMembers, dateRange);
 
       // Final validation and adjustments
       await this.applyFinalAdjustments(schedule, staffMembers, dateRange);
+      // ✅ Final priority rules enforcement (ensure no overwrites)
+      await this.applyPriorityRules(schedule, staffMembers, dateRange);
 
       // 🔧 FIX: Post-generation repair to eliminate any consecutive off-days
       await this.repairConsecutiveOffDays(schedule, staffMembers, dateRange);
@@ -1110,16 +1138,17 @@ export class BusinessRuleValidator {
 
       const rules = priorityRules[staffIdentifier];
       const preferredShifts = rules.preferredShifts || [];
+      const avoidedShifts = rules.avoidedShifts || [];
 
-      if (preferredShifts.length === 0) {
+      if (preferredShifts.length === 0 && avoidedShifts.length === 0) {
         console.log(
-          `⚠️ [PRIORITY] ${staff.name}: No preferredShifts defined`,
+          `⚠️ [PRIORITY] ${staff.name}: No preferredShifts or avoidedShifts defined`,
         );
         return;
       }
 
       console.log(
-        `🎯 [PRIORITY] ${staff.name}: Processing ${preferredShifts.length} preferred shift(s)`,
+        `🎯 [PRIORITY] ${staff.name}: Processing ${preferredShifts.length} preferred shift(s) and ${avoidedShifts.length} avoided shift(s)`,
       );
 
       let staffRulesApplied = 0;
@@ -1128,6 +1157,39 @@ export class BusinessRuleValidator {
         const dateKey = date.toISOString().split("T")[0];
         const dayOfWeek = getDayOfWeek(dateKey);
 
+        // ✅ STEP 1: Process avoidedShifts FIRST (clear avoided shifts)
+        avoidedShifts.forEach((rule) => {
+          if (rule.day === dayOfWeek) {
+            let avoidedShiftValue = "";
+
+            switch (rule.shift) {
+              case "early":
+                avoidedShiftValue = "△";
+                break;
+              case "off":
+                avoidedShiftValue = "×";
+                break;
+              case "late":
+                avoidedShiftValue = "◇";
+                break;
+              default:
+                avoidedShiftValue = "";
+            }
+
+            // Check if current schedule has the avoided shift
+            const currentShift = schedule[staff.id][dateKey] || "";
+            if (currentShift === avoidedShiftValue) {
+              // Clear the avoided shift (set to blank/normal)
+              schedule[staff.id][dateKey] = "";
+              staffRulesApplied++;
+              console.log(
+                `🚫 [PRIORITY]   → ${staff.name}: CLEARED "${avoidedShiftValue}" on ${date.toLocaleDateString('ja-JP')} (${dayOfWeek}) - keeping blank/normal`,
+              );
+            }
+          }
+        });
+
+        // ✅ STEP 2: Process preferredShifts SECOND (set preferred shifts, can override avoid)
         preferredShifts.forEach((rule) => {
           if (rule.day === dayOfWeek) {
             let shiftValue = "";
@@ -1149,7 +1211,7 @@ export class BusinessRuleValidator {
             schedule[staff.id][dateKey] = shiftValue;
             staffRulesApplied++;
             console.log(
-              `🎯 [PRIORITY]   → ${staff.name}: Set "${shiftValue}" on ${date.toLocaleDateString('ja-JP')} (${dayOfWeek})`,
+              `✅ [PRIORITY]   → ${staff.name}: SET "${shiftValue}" on ${date.toLocaleDateString('ja-JP')} (${dayOfWeek}) - preferred shift applied`,
             );
           }
         });
@@ -1190,31 +1252,28 @@ export class BusinessRuleValidator {
     ];
 
     rulesArray.forEach((rule, index) => {
-      // Extract staffId from multiple possible locations (defensive extraction)
-      const staffId =
-        rule.staffId ||
-        rule.staff_id ||
-        rule.ruleDefinition?.staff_id ||  // ← JSONB nested structure (safety net)
-        rule.ruleDefinition?.staffId ||
-        rule.ruleConfig?.staffId ||
-        rule.preferences?.staffId ||
-        rule.constraints?.staffId ||  // ← Additional location
-        rule.validity?.staffId;  // ← Another possible location
+      // ✅ CRITICAL FIX: Extract staffIds ARRAY (support both new and legacy formats)
+      // New format: staffIds = ["uuid1", "uuid2", ...]
+      // Legacy format: staffId = "uuid" (convert to array for consistent processing)
+      const staffIds =
+        rule.staffIds ||                          // ← NEW: array format
+        rule.staff_ids ||                         // ← NEW: snake_case array
+        rule.ruleDefinition?.staff_ids ||         // ← NEW: JSONB nested array
+        (rule.staffId ? [rule.staffId] : null) || // ← Legacy: singular → convert to array
+        (rule.staff_id ? [rule.staff_id] : null) || // ← Legacy: snake_case singular
+        (rule.ruleDefinition?.staff_id ? [rule.ruleDefinition.staff_id] : null) || // ← Legacy: JSONB singular
+        (rule.ruleConfig?.staffId ? [rule.ruleConfig.staffId] : null);
 
-      // 🔧 FIX: Enhanced logging to show all checked fields
-      if (!staffId) {
+      if (!staffIds || staffIds.length === 0) {
         console.log(
-          `⚠️ [PRIORITY-TRANSFORM] Rule ${index}: Missing staffId (checked all locations), skipping`,
+          `⚠️ [PRIORITY-TRANSFORM] Rule ${index}: Missing staffIds (checked all locations), skipping`,
         );
         console.log(`   🔍 Checked fields:`, {
-          'rule.staffId': rule.staffId,
-          'rule.staff_id': rule.staff_id,
-          'rule.ruleDefinition?.staff_id': rule.ruleDefinition?.staff_id,
-          'rule.ruleDefinition?.staffId': rule.ruleDefinition?.staffId,
-          'rule.ruleConfig?.staffId': rule.ruleConfig?.staffId,
-          'rule.preferences?.staffId': rule.preferences?.staffId,
-          'rule.constraints?.staffId': rule.constraints?.staffId,
-          'rule.validity?.staffId': rule.validity?.staffId
+          'rule.staffIds': rule.staffIds,
+          'rule.staff_ids': rule.staff_ids,
+          'rule.ruleDefinition?.staff_ids': rule.ruleDefinition?.staff_ids,
+          'rule.staffId (legacy)': rule.staffId,
+          'rule.staff_id (legacy)': rule.staff_id,
         });
         console.log(`   📋 Rule name: "${rule.name}", type: "${rule.ruleType}"`);
         console.log(`   ⚠️ This may be a GLOBAL rule (applies to all staff) - currently not supported`);
@@ -1222,26 +1281,33 @@ export class BusinessRuleValidator {
         return;
       }
 
-      console.log(`🔍 [DEBUG] Rule ${index}: staffId="${staffId}"`);
+      console.log(`🔍 [DEBUG] Rule ${index}: Processing ${staffIds.length} staff member(s)`);
 
-      // Find staff to validate and get both ID and name
-      const staff = staffMembers.find(
-        (s) => s.id === staffId || s.name === staffId,
-      );
+      // ✅ NEW: Loop through ALL staff members in the staffIds array
+      staffIds.forEach((staffId, staffIndex) => {
+        console.log(`🔍 [DEBUG]   Staff ${staffIndex + 1}/${staffIds.length}: staffId="${staffId}"`);
 
-      if (!staff) {
-        console.log(
-          `⚠️ [PRIORITY-TRANSFORM] Rule ${index}: Staff not found for staffId "${staffId}"`,
+        // Find staff to validate and get both ID and name
+        const staff = staffMembers.find(
+          (s) => s.id === staffId || s.name === staffId,
         );
-        return;
-      }
 
-      // Use staff ID as the primary key (fall back to name if no ID)
-      const staffKey = staff.id || staff.name;
+        if (!staff) {
+          console.log(
+            `⚠️ [PRIORITY-TRANSFORM] Rule ${index}: Staff not found for staffId "${staffId}"`,
+          );
+          return; // Skip this staff member, continue with others
+        }
+
+        // Use staff ID as the primary key (fall back to name if no ID)
+        const staffKey = staff.id || staff.name;
 
       // Initialize staff entry if not exists
       if (!rulesObject[staffKey]) {
-        rulesObject[staffKey] = { preferredShifts: [] };
+        rulesObject[staffKey] = {
+          preferredShifts: [],  // For preferred_shift rules
+          avoidedShifts: []     // For avoid_shift rules
+        };
       }
 
       // Convert daysOfWeek array to individual preferred shifts (defensive extraction)
@@ -1275,19 +1341,28 @@ export class BusinessRuleValidator {
       }
 
       daysOfWeek.forEach((dayNum) => {
-        const preferredShift = {
+        const shiftRule = {
           day: dayNames[dayNum] || dayNum,
           shift: shiftType,
           priority: rule.priorityLevel || rule.priority_level || 3,
         };
 
-        rulesObject[staffKey].preferredShifts.push(preferredShift);
-
-        console.log(
-          `🔄 [PRIORITY-TRANSFORM]   → ${staff.name}: dayNum=${dayNum} → ${dayNames[dayNum]} = ${shiftType}`,
-        );
+        // ✅ CRITICAL FIX: Separate avoid_shift from preferred_shift
+        if (rule.ruleType === 'avoid_shift') {
+          rulesObject[staffKey].avoidedShifts.push(shiftRule);
+          console.log(
+            `🚫 [PRIORITY-TRANSFORM]   → ${staff.name}: dayNum=${dayNum} → AVOID ${shiftType} on ${dayNames[dayNum]}`,
+          );
+        } else {
+          // preferred_shift (default)
+          rulesObject[staffKey].preferredShifts.push(shiftRule);
+          console.log(
+            `✅ [PRIORITY-TRANSFORM]   → ${staff.name}: dayNum=${dayNum} → PREFER ${shiftType} on ${dayNames[dayNum]}`,
+          );
+        }
       });
-    });
+      }); // Close staffIds.forEach loop (multi-staff support)
+    }); // Close rulesArray.forEach loop
 
     const transformedCount = Object.keys(rulesObject).length;
     console.log(
@@ -1396,6 +1471,47 @@ export class BusinessRuleValidator {
   }
 
   /**
+   * ✅ 5-DAY REST CONSTRAINT HELPER
+   * Count rest days (× or △) in the last N days for a staff member
+   * @param {Object} staff - Staff member
+   * @param {string} currentDate - Current date in ISO format (YYYY-MM-DD)
+   * @param {Object} schedule - Current schedule state
+   * @param {number} lookbackDays - Number of days to look back (default 5)
+   * @returns {number} Count of rest days in the window
+   */
+  countRestDays(staff, currentDate, schedule, lookbackDays = 5) {
+    try {
+      const staffSchedule = schedule[staff.id];
+      if (!staffSchedule) return 0;
+
+      const currentDateObj = new Date(currentDate);
+      let restDayCount = 0;
+
+      // Look back N days from current date (not including current date)
+      for (let i = 1; i <= lookbackDays; i++) {
+        const checkDate = new Date(currentDateObj);
+        checkDate.setDate(checkDate.getDate() - i);
+        const checkDateKey = checkDate.toISOString().split("T")[0];
+
+        const shift = staffSchedule[checkDateKey];
+
+        // Count × (off days) or △ (early shifts) as rest days
+        if (shift === "×" || shift === "△") {
+          restDayCount++;
+        }
+      }
+
+      return restDayCount;
+    } catch (error) {
+      console.warn(
+        `⚠️ [5-DAY-REST-COUNT] Error counting rest days for ${staff.name}:`,
+        error,
+      );
+      return 0; // Safe fallback - don't block on errors
+    }
+  }
+
+  /**
    * Distribute off days evenly among staff
    * @param {Object} schedule - Schedule to modify
    * @param {Array} staffMembers - Staff member data
@@ -1485,8 +1601,8 @@ export class BusinessRuleValidator {
       globalOffDayCount[dateKey] = 0;
     });
 
-    staffMembers.forEach((staff) => {
-      if (!schedule[staff.id]) return;
+    for (const staff of staffMembers) {
+      if (!schedule[staff.id]) continue;
 
       let offDaysSet = 0;
       const targetOffDays = Math.min(maxOffPerMonth - 1, 6); // Conservative target
@@ -1567,7 +1683,95 @@ export class BusinessRuleValidator {
           }
         }
 
+        // ✅ CRITICAL: Check weekly limit for best candidate
         if (bestCandidate) {
+          const wouldViolateWeeklyLimit =
+            await this.wouldViolateWeeklyOffDayLimit(
+              schedule,
+              staff,
+              bestCandidate.dateKey,
+              dateRange,
+            );
+
+          if (wouldViolateWeeklyLimit) {
+            // This candidate would violate weekly limit, remove and try next
+            console.log(
+              `⚠️ [WEEKLY-LIMIT] ${staff.name}: Cannot assign × on ${bestCandidate.date.toLocaleDateString('ja-JP')} - would violate weekly limit`,
+            );
+            shuffledDays.splice(bestCandidate.arrayIndex, 1);
+            nextOffDayIndex =
+              bestCandidate.arrayIndex % Math.max(shuffledDays.length, 1);
+            continue; // Try finding another candidate
+          } else {
+            console.log(
+              `✅ [WEEKLY-LIMIT] ${staff.name}: Can assign × on ${bestCandidate.date.toLocaleDateString('ja-JP')} - within weekly limit`,
+            );
+          }
+        }
+
+        if (bestCandidate) {
+          // ✅ 5-DAY REST CONSTRAINT: Check if staff needs mandatory rest
+          const restDaysInWindow = this.countRestDays(
+            staff,
+            bestCandidate.dateKey,
+            schedule,
+            5,
+          );
+          const needsRest = restDaysInWindow === 0;
+
+          if (needsRest) {
+            console.log(
+              `⚠️ [5-DAY-REST] ${staff.name}: No × or △ in last 5 days before ${bestCandidate.date.toLocaleDateString('ja-JP')} - checking if can assign rest`,
+            );
+
+            // ✅ PRIORITY: Weekly limits > 5-day rest
+            // Check if × would violate weekly limit
+            const wouldViolateWeeklyLimit =
+              await this.wouldViolateWeeklyOffDayLimit(
+                schedule,
+                staff,
+                bestCandidate.dateKey,
+                dateRange,
+              );
+
+            if (!wouldViolateWeeklyLimit) {
+              // Safe to assign × without violating weekly limit
+              schedule[staff.id][bestCandidate.dateKey] = "×";
+              globalOffDayCount[bestCandidate.dateKey]++;
+              offDaysSet++;
+
+              console.log(
+                `✅ [5-DAY-REST] ${staff.name}: Assigned × on ${bestCandidate.date.toLocaleDateString('ja-JP')} ` +
+                `(5-day rest, respects weekly limit) [Global: ${globalOffDayCount[bestCandidate.dateKey]}/${maxOffPerDay}]`,
+              );
+
+              // Remove used day and continue
+              shuffledDays.splice(bestCandidate.arrayIndex, 1);
+              const jitter = Math.floor(Math.random() * 2);
+              nextOffDayIndex =
+                (bestCandidate.arrayIndex + interval + jitter) %
+                Math.max(shuffledDays.length, 1);
+              continue;
+            } else {
+              // Would violate weekly limit, use △ as fallback
+              schedule[staff.id][bestCandidate.dateKey] = "△";
+              offDaysSet++; // Still counts toward off-day target
+
+              console.log(
+                `✅ [5-DAY-REST] ${staff.name}: Assigned △ on ${bestCandidate.date.toLocaleDateString('ja-JP')} ` +
+                `(5-day rest, × blocked by weekly limit)`,
+              );
+
+              // Remove used day and continue
+              shuffledDays.splice(bestCandidate.arrayIndex, 1);
+              const jitter = Math.floor(Math.random() * 2);
+              nextOffDayIndex =
+                (bestCandidate.arrayIndex + interval + jitter) %
+                Math.max(shuffledDays.length, 1);
+              continue;
+            }
+          }
+
           // 🔧 FIX: Check for consecutive off-days before assigning
           const candidateDate = new Date(bestCandidate.dateKey);
           const prevDate = new Date(candidateDate);
@@ -1585,12 +1789,13 @@ export class BusinessRuleValidator {
           if (prevIsOff || nextIsOff) {
             console.log(
               `📅 [RULE-GEN]   ⚠ ${staff.name}: Skipping ${bestCandidate.date.toLocaleDateString('ja-JP')} ` +
-              `(would create consecutive off-days)`
+              `(would create consecutive off-days)`,
             );
 
             // Remove this candidate and try next
             shuffledDays.splice(bestCandidate.arrayIndex, 1);
-            nextOffDayIndex = (bestCandidate.arrayIndex) % Math.max(shuffledDays.length, 1);
+            nextOffDayIndex =
+              bestCandidate.arrayIndex % Math.max(shuffledDays.length, 1);
             continue;
           }
 
@@ -1626,9 +1831,229 @@ export class BusinessRuleValidator {
       console.log(
         `📅 [RULE-GEN] ${staff.name}: Set ${offDaysSet}/${targetOffDays} off days`,
       );
-    });
+    }
 
     console.log("✅ [RULE-GEN] Off days distributed");
+  }
+
+  /**
+   * ✅ ENFORCE 5-DAY REST CONSTRAINT
+   * Post-processing to ensure every 5-day window has at least 1 rest day (× or △)
+   * @param {Object} schedule - Schedule to modify
+   * @param {Array} staffMembers - Staff member data
+   * @param {Array} dateRange - Date range
+   */
+  async enforce5DayRestConstraint(schedule, staffMembers, dateRange) {
+    console.log("🔍 [5-DAY-REST] Scanning schedule for 5-day rest violations...");
+
+    let violationsFixed = 0;
+    const windowSize = 5;
+
+    for (const staff of staffMembers) {
+      if (!schedule[staff.id]) continue;
+
+      // Scan through each 5-day window
+      for (let startIdx = 0; startIdx <= dateRange.length - windowSize; startIdx++) {
+        const window = dateRange.slice(startIdx, startIdx + windowSize);
+        const windowDates = window.map((d) => d.toISOString().split("T")[0]);
+
+        // Count rest days (× or △) in this window
+        let restDayCount = 0;
+        let hasOffDay = false;
+        let hasEarlyShift = false;
+
+        windowDates.forEach((dateKey) => {
+          const shift = schedule[staff.id][dateKey];
+          if (shift === "×") {
+            restDayCount++;
+            hasOffDay = true;
+          } else if (shift === "△") {
+            restDayCount++;
+            hasEarlyShift = true;
+          }
+        });
+
+        // VIOLATION: No rest days in this 5-day window
+        if (restDayCount === 0) {
+          console.log(
+            `⚠️ [5-DAY-REST] ${staff.name}: VIOLATION in window ${windowDates[0]} to ${windowDates[4]} - no rest days`,
+          );
+
+          // Try to assign × (off day) on one of the days in the window
+          let restAssigned = false;
+
+          for (const dateKey of windowDates) {
+            const currentShift = schedule[staff.id][dateKey];
+
+            // Skip if already has a priority rule (△ from priority rules)
+            if (currentShift === "△") continue;
+
+            // Skip if already × (shouldn't happen but defensive)
+            if (currentShift === "×") continue;
+
+            // Try to assign × (off day)
+            // Check if this would violate weekly limits
+            const dateObj = new Date(dateKey);
+            const wouldViolateLimit = await this.wouldViolateWeeklyOffDayLimit(
+              schedule,
+              staff,
+              dateKey,
+              dateRange,
+            );
+
+            if (!wouldViolateLimit) {
+              schedule[staff.id][dateKey] = "×";
+              violationsFixed++;
+              restAssigned = true;
+              console.log(
+                `✅ [5-DAY-REST] ${staff.name}: Assigned × on ${dateKey} to fix violation`,
+              );
+              break; // Fixed this window, move to next
+            }
+          }
+
+          // If × violates limits everywhere, try △ (early shift) as fallback
+          if (!restAssigned) {
+            for (const dateKey of windowDates) {
+              const currentShift = schedule[staff.id][dateKey];
+
+              // Skip if already △
+              if (currentShift === "△") continue;
+
+              // Try △ (no limits on △, it's just a shift type)
+              schedule[staff.id][dateKey] = "△";
+              violationsFixed++;
+              restAssigned = true;
+              console.log(
+                `✅ [5-DAY-REST] ${staff.name}: Assigned △ on ${dateKey} to fix violation (× blocked by limits)`,
+              );
+              break;
+            }
+          }
+
+          // If still not assigned (very rare), log warning
+          if (!restAssigned) {
+            console.warn(
+              `❌ [5-DAY-REST] ${staff.name}: Could not fix violation in window ${windowDates[0]} to ${windowDates[4]}`,
+            );
+          }
+        }
+      }
+    }
+
+    console.log(
+      `✅ [5-DAY-REST] Constraint enforcement complete: ${violationsFixed} violations fixed`,
+    );
+  }
+
+  /**
+   * Check if assigning × would violate weekly off-day limit
+   * @param {Object} schedule - Current schedule
+   * @param {Object} staff - Staff member
+   * @param {string} dateKey - Date to check
+   * @param {Array} dateRange - Full date range
+   * @returns {boolean} True if would violate limit
+   */
+  async wouldViolateWeeklyOffDayLimit(schedule, staff, dateKey, dateRange) {
+    try {
+      // Get weekly limits from live settings
+      const liveSettings = this.getLiveSettings();
+      const weeklyLimits = liveSettings.weeklyLimits || [];
+
+      console.log(
+        `🔍 [WEEKLY-LIMIT-DEBUG] ${staff.name}: weeklyLimits array length:`,
+        weeklyLimits.length
+      );
+      console.log(
+        `🔍 [WEEKLY-LIMIT-DEBUG] ${staff.name}: weeklyLimits content:`,
+        JSON.stringify(weeklyLimits)
+      );
+
+      // Find the off-day limit
+      const offDayLimit = weeklyLimits.find(
+        (l) => l.shiftType === "off" || l.name?.toLowerCase().includes("off"),
+      );
+
+      console.log(
+        `🔍 [WEEKLY-LIMIT-DEBUG] ${staff.name}: Found offDayLimit:`,
+        JSON.stringify(offDayLimit)
+      );
+
+      if (!offDayLimit || !offDayLimit.maxCount) {
+        console.warn(
+          `⚠️ [WEEKLY-LIMIT-DEBUG] ${staff.name}: NO WEEKLY LIMIT CONFIGURED! Allowing all assignments (offDayLimit: ${JSON.stringify(offDayLimit)})`
+        );
+        return false; // No limit configured, allow assignment
+      }
+
+      const maxOffDaysPerWeek = offDayLimit.maxCount;
+
+      console.log(
+        `🔍 [WEEKLY-LIMIT-CHECK] ${staff.name}: Checking if × on ${dateKey} would violate limit (max: ${maxOffDaysPerWeek})`
+      );
+
+      // Find the date in the dateRange
+      const dateIndex = dateRange.findIndex(
+        (d) => d.toISOString().split("T")[0] === dateKey,
+      );
+
+      if (dateIndex === -1) {
+        console.log(`⚠️ [WEEKLY-LIMIT-CHECK] ${staff.name}: Date ${dateKey} not found in dateRange`);
+        return false;
+      }
+
+      // Check all 7-day windows that include this date
+      let maxWindowCount = 0;
+      let violatingWindow = null;
+
+      for (
+        let windowStart = Math.max(0, dateIndex - 6);
+        windowStart <= Math.min(dateIndex, dateRange.length - 7);
+        windowStart++
+      ) {
+        const window = dateRange.slice(windowStart, windowStart + 7);
+        let offDayCount = 0;
+        const windowDates = [];
+
+        window.forEach((date) => {
+          const d = date.toISOString().split("T")[0];
+          const shift = schedule[staff.id][d];
+          windowDates.push(d);
+
+          if (shift === "×") {
+            offDayCount++;
+          }
+
+          // Count the proposed assignment (only if not already ×)
+          if (d === dateKey && shift !== "×") {
+            offDayCount++; // This would be the new ×
+          }
+        });
+
+        if (offDayCount > maxWindowCount) {
+          maxWindowCount = offDayCount;
+          violatingWindow = windowDates;
+        }
+
+        if (offDayCount > maxOffDaysPerWeek) {
+          console.log(
+            `❌ [WEEKLY-LIMIT-CHECK] ${staff.name}: VIOLATION in window ${windowDates[0]} to ${windowDates[6]} - would have ${offDayCount} off days (limit: ${maxOffDaysPerWeek})`
+          );
+          return true; // Would violate weekly limit
+        }
+      }
+
+      console.log(
+        `✅ [WEEKLY-LIMIT-CHECK] ${staff.name}: SAFE - max window would have ${maxWindowCount}/${maxOffDaysPerWeek} off days`
+      );
+      return false; // No violation
+    } catch (error) {
+      console.warn(
+        `⚠️ [5-DAY-REST] Error checking weekly limit for ${staff.name}:`,
+        error,
+      );
+      return false; // Don't block on errors
+    }
   }
 
   /**

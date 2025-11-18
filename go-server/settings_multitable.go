@@ -48,6 +48,19 @@ func (sa *SettingsAggregate) MarshalJSON() ([]byte, error) {
 	reactWeeklyLimits := make([]map[string]interface{}, len(sa.WeeklyLimits))
 	for i, limit := range sa.WeeklyLimits {
 		reactWeeklyLimits[i] = limit.ToReactFormat()
+
+		// 🔍 DEBUG: Log ToReactFormat() output to verify extraction
+		log.Printf("🔍 [ToReactFormat-WeeklyLimit] Limit %d '%s' after ToReactFormat:", i, limit.Name)
+		if maxCount, ok := reactWeeklyLimits[i]["maxCount"]; ok {
+			log.Printf("   ✅ maxCount extracted to top level: %v", maxCount)
+		} else {
+			log.Printf("   ❌ maxCount NOT found at top level!")
+		}
+		if shiftType, ok := reactWeeklyLimits[i]["shiftType"]; ok {
+			log.Printf("   ✅ shiftType extracted to top level: %v", shiftType)
+		} else {
+			log.Printf("   ❌ shiftType NOT found at top level!")
+		}
 	}
 
 	// Convert monthly limits to React format (snake_case → camelCase)
@@ -147,7 +160,7 @@ type WeeklyLimit struct {
 
 // ToReactFormat converts snake_case to camelCase for React
 func (wl *WeeklyLimit) ToReactFormat() map[string]interface{} {
-	return map[string]interface{}{
+	reactData := map[string]interface{}{
 		"id":               wl.ID,
 		"restaurantId":     wl.RestaurantID,
 		"versionId":        wl.VersionID,
@@ -161,6 +174,29 @@ func (wl *WeeklyLimit) ToReactFormat() map[string]interface{} {
 		"createdAt":        wl.CreatedAt,
 		"updatedAt":        wl.UpdatedAt,
 	}
+
+	// ✅ FIX: Extract fields from limit_config JSONB to top level for React
+	// React expects: { id, name, maxCount: 2, shiftType: "off", ... }
+	// Database stores: { id, name, limit_config: { maxCount: 2, shiftType: "off", ... } }
+	if wl.LimitConfig != nil {
+		if maxCount, ok := wl.LimitConfig["maxCount"]; ok {
+			reactData["maxCount"] = maxCount
+		}
+		if shiftType, ok := wl.LimitConfig["shiftType"]; ok {
+			reactData["shiftType"] = shiftType
+		}
+		if daysOfWeek, ok := wl.LimitConfig["daysOfWeek"]; ok {
+			reactData["daysOfWeek"] = daysOfWeek
+		}
+		if scope, ok := wl.LimitConfig["scope"]; ok {
+			reactData["scope"] = scope
+		}
+		if targetIds, ok := wl.LimitConfig["targetIds"]; ok {
+			reactData["targetIds"] = targetIds
+		}
+	}
+
+	return reactData
 }
 
 // MonthlyLimit represents monthly shift constraints
@@ -2407,6 +2443,15 @@ func (s *StaffSyncServer) handleSettingsSyncRequest(client *Client, msg *Message
 		len(settings.StaffGroups), len(settings.WeeklyLimits), len(settings.MonthlyLimits),
 		len(settings.PriorityRules), len(settings.MLModelConfigs))
 
+	// 🔍 DEBUG: Log weeklyLimits content
+	log.Printf("🔍 [WEEKLY-LIMITS-DEBUG] WeeklyLimits array length: %d", len(settings.WeeklyLimits))
+	if len(settings.WeeklyLimits) > 0 {
+		for i, limit := range settings.WeeklyLimits {
+			limitJSON, _ := json.Marshal(limit)
+			log.Printf("🔍 [WEEKLY-LIMITS-DEBUG] Limit %d: %s", i, string(limitJSON))
+		}
+	}
+
 	// Send aggregated response
 	response := Message{
 		Type: "SETTINGS_SYNC_RESPONSE",
@@ -2416,6 +2461,15 @@ func (s *StaffSyncServer) handleSettingsSyncRequest(client *Client, msg *Message
 		},
 		Timestamp: time.Now(),
 		ClientID:  client.clientId,
+	}
+
+	// 🔍 DEBUG: Log what's actually being sent
+	if payloadMap, ok := response.Payload.(map[string]interface{}); ok {
+		if settingsInterface, exists := payloadMap["settings"]; exists {
+			if settingsMap, ok := settingsInterface.(*SettingsAggregate); ok {
+				log.Printf("🔍 [WEBSOCKET-SEND-DEBUG] Sending weeklyLimits count: %d", len(settingsMap.WeeklyLimits))
+			}
+		}
 	}
 
 	if responseBytes, err := json.Marshal(response); err == nil {

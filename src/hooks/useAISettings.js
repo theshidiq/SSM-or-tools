@@ -97,6 +97,35 @@ export const useAISettings = () => {
   }, [settings?.dailyLimits]);
 
   /**
+   * ✅ NEW: Transform weekly limits from database format to AI format
+   * Weekly limits enforce rolling 7-day window constraints
+   * Database: [{ id, name, shiftType, maxCount, limitConfig: {...} }]
+   * AI: [{ id, name, shiftType, maxCount, windowSize: 7, constraints: {...} }]
+   */
+  const weeklyLimits = useMemo(() => {
+    if (!settings?.weeklyLimits) return [];
+
+    return settings.weeklyLimits
+      .filter(limit => limit.isActive !== false) // ✅ FIX: Use camelCase (Go sends isActive)
+      .map((limit) => ({
+        id: limit.id,
+        name: limit.name,
+        // ✅ FIX: Go now extracts these from limitConfig to top level
+        shiftType: limit.shiftType || "off",
+        maxCount: limit.maxCount || 2,
+        windowSize: limit.windowSize || 7, // Rolling 7-day window
+        constraints: {
+          daysOfWeek: limit.daysOfWeek || [0, 1, 2, 3, 4, 5, 6],
+          scope: limit.scope || "all",
+          targetIds: limit.targetIds || [],
+          isHardConstraint: limit.isHardConstraint ?? true,
+          penaltyWeight: limit.penaltyWeight ?? 50,
+        },
+        description: limit.description || "",
+      }));
+  }, [settings?.weeklyLimits]);
+
+  /**
    * Transform monthly limits from database format to AI format
    * Database: [{ id, name, limitConfig: {...} }] or flat format
    * AI: [{ id, name, limitType, maxCount, distribution: {...} }]
@@ -138,7 +167,16 @@ export const useAISettings = () => {
       JSON.stringify(settings.priorityRules, null, 2).substring(0, 500));
 
     return settings.priorityRules.map((rule) => {
-      // Extract staffId - prioritize TOP LEVEL properties first (UI format), then nested (DB seed format)
+      // ✅ NEW: Extract staffIds array (multi-staff support) - prioritize TOP LEVEL first
+      const staffIds =
+        rule.staffIds ||             // ← TOP LEVEL (UI creates this for multi-staff)
+        rule.staff_ids ||            // ← TOP LEVEL (snake_case variant)
+        rule.ruleDefinition?.staff_ids ||  // ← Nested JSONB
+        rule.ruleConfig?.staffIds ||
+        rule.preferences?.staffIds ||
+        null;
+
+      // Extract legacy staffId (single-staff support) - for backward compatibility
       const staffId =
         rule.staffId ||              // ← TOP LEVEL (UI creates this)
         rule.staff_id ||             // ← TOP LEVEL (snake_case variant)
@@ -168,13 +206,16 @@ export const useAISettings = () => {
       if (settings.priorityRules.indexOf(rule) < 2) {
         console.log(`🔍 [useAISettings] Rule "${rule.name}" extraction:`, {
           staffId,
+          staffIds, // ✅ NEW: Log multi-staff array
           shiftType,
           daysOfWeek,
           sources: {
             topLevel_staffId: rule.staffId,
+            topLevel_staffIds: rule.staffIds, // ✅ NEW
             topLevel_shiftType: rule.shiftType,
             topLevel_daysOfWeek: rule.daysOfWeek,
             nested_staffId: rule.ruleDefinition?.staff_id,
+            nested_staffIds: rule.ruleDefinition?.staff_ids, // ✅ NEW
             nested_shiftType: rule.ruleDefinition?.conditions?.shift_type,
             nested_daysOfWeek: rule.ruleDefinition?.conditions?.day_of_week
           }
@@ -186,7 +227,8 @@ export const useAISettings = () => {
         name: rule.name,
         description: rule.description || "",
         ruleType: rule.ruleType || rule.rule_type || "preferred_shift",
-        staffId: staffId,
+        staffId: staffId,  // Legacy single-staff support
+        staffIds: staffIds, // ✅ NEW: Multi-staff support
         preferences: {
           shiftType: shiftType,
           daysOfWeek: daysOfWeek,
@@ -254,10 +296,11 @@ export const useAISettings = () => {
   const allConstraints = useMemo(() => {
     return {
       daily: dailyLimits,
+      weekly: weeklyLimits, // ✅ NEW: Rolling 7-day window constraints
       monthly: monthlyLimits,
       priority: priorityRules.filter(rule => rule.validity.isActive),
     };
-  }, [dailyLimits, monthlyLimits, priorityRules]);
+  }, [dailyLimits, weeklyLimits, monthlyLimits, priorityRules]);
 
   /**
    * Get constraint weights for AI optimization
@@ -274,6 +317,22 @@ export const useAISettings = () => {
       const weight = {
         id: limit.id,
         type: "daily",
+        weight: limit.constraints.penaltyWeight,
+        isHard: limit.constraints.isHardConstraint,
+      };
+
+      if (weight.isHard) {
+        weights.hardConstraints.push(weight);
+      } else {
+        weights.softConstraints.push(weight);
+      }
+    });
+
+    // ✅ NEW: Extract from weekly limits (rolling 7-day windows)
+    weeklyLimits.forEach(limit => {
+      const weight = {
+        id: limit.id,
+        type: "weekly",
         weight: limit.constraints.penaltyWeight,
         isHard: limit.constraints.isHardConstraint,
       };
@@ -413,6 +472,7 @@ export const useAISettings = () => {
     const settingsData = {
       staffGroups,
       dailyLimits,
+      weeklyLimits, // ✅ FIX: Include weekly limits in getSettings() return value
       monthlyLimits,
       priorityRules,
       mlConfig,
@@ -427,6 +487,7 @@ export const useAISettings = () => {
       // Properties for direct access (backward compatibility)
       staffGroups,
       dailyLimits,
+      weeklyLimits, // ✅ NEW: Rolling 7-day window limits
       monthlyLimits,
       priorityRules,
       mlConfig,
@@ -447,6 +508,7 @@ export const useAISettings = () => {
       // Helpers for AI systems
       hasSettings: staffGroups.length > 0 ||
                    dailyLimits.length > 0 ||
+                   weeklyLimits.length > 0 || // ✅ NEW
                    monthlyLimits.length > 0 ||
                    priorityRules.length > 0,
 
@@ -462,6 +524,7 @@ export const useAISettings = () => {
     settings,
     staffGroups,
     dailyLimits,
+    weeklyLimits, // ✅ NEW
     monthlyLimits,
     priorityRules,
     mlConfig,
