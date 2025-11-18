@@ -1262,7 +1262,7 @@ export class ScheduleGenerator {
     // Assign working shift based on day and needs
     // Get early shift limit from configuration
     const maxEarlyPerDay =
-      dailyLimits.find((l) => l.shiftType === "early")?.maxCount || 2;
+      dailyLimits.find((l) => l.shiftType === "early")?.maxCount || 3;
 
     // ✅ Special case: Head chef Sunday early shift (only if 社員)
     if (
@@ -1298,7 +1298,7 @@ export class ScheduleGenerator {
     if (
       this.isEligibleForEarlyShift(staff) &&
       dayCounts.early < maxEarlyPerDay &&
-      Math.random() < 0.3
+      Math.random() < 0.2 // Reduced from 0.3 to 0.2 (20% probability)
     ) {
       // Check group conflict for early shift
       const hasEarlyGroupConflict = await this.checkGroupConflicts(
@@ -2429,7 +2429,7 @@ export class ScheduleGenerator {
 
     // Check daily limits and suggest appropriate shifts
     const earlyLimit =
-      dailyLimits.find((l) => l.shiftType === "early")?.maxCount || 4;
+      dailyLimits.find((l) => l.shiftType === "early")?.maxCount || 3;
     const lateLimit =
       dailyLimits.find((l) => l.shiftType === "late")?.maxCount || 3;
 
@@ -2471,7 +2471,7 @@ export class ScheduleGenerator {
     if (
       this.isEligibleForEarlyShift(staff) &&
       dayCounts.early < earlyLimit &&
-      Math.random() < 0.3
+      Math.random() < 0.2 // Reduced from 0.3 to 0.2 (20% probability)
     ) {
       return "△"; // Early shift
     }

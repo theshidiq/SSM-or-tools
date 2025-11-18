@@ -599,7 +599,7 @@ export const validateDailyLimits = async (
   }
 
   // Check daily early shift limit
-  const maxEarlyPerDay = dailyLimits.maxEarlyPerDay || 4;
+  const maxEarlyPerDay = dailyLimits.maxEarlyPerDay || 3;
   if (earlyCount > maxEarlyPerDay) {
     violations.push({
       type: VIOLATION_TYPES.DAILY_EARLY_LIMIT,
