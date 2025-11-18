@@ -1294,8 +1294,20 @@ export class ScheduleGenerator {
       }
     }
 
-    // ✅ EARLY SHIFT ELIGIBILITY: Only 社員 staff can work early shifts
-    if (
+    // ✅ WEEKLY EARLY SHIFT LIMIT: Check if staff already has 1 early shift this week
+    const earlyShiftsThisWeek = this.countEarlyShiftsInWeek(
+      staff,
+      dateKey,
+      schedule,
+    );
+
+    if (earlyShiftsThisWeek >= 1) {
+      // Staff already has 1 early shift this week, skip △ assignment
+      console.log(
+        `⏭️ [WEEKLY-EARLY-LIMIT] ${staff.name}: Already has ${earlyShiftsThisWeek} early shift(s) this week, skipping △`,
+      );
+    } else if (
+      // ✅ EARLY SHIFT ELIGIBILITY: Only 社員 staff can work early shifts
       this.isEligibleForEarlyShift(staff) &&
       dayCounts.early < maxEarlyPerDay &&
       Math.random() < 0.2 // Reduced from 0.3 to 0.2 (20% probability)
@@ -1379,6 +1391,46 @@ export class ScheduleGenerator {
     } catch (error) {
       console.warn(
         `⚠️ [REST-COUNT] Error counting rest days for ${staff.name}:`,
+        error,
+      );
+      return 0; // Safe fallback
+    }
+  }
+
+  /**
+   * Count early shifts (△) for a staff member in a rolling 7-day window
+   * Used to enforce max 1 early shift per week per staff member
+   * @param {Object} staff - Staff member object
+   * @param {string} currentDate - Current date being evaluated (YYYY-MM-DD)
+   * @param {Object} schedule - Current schedule state
+   * @returns {number} Count of early shifts in the rolling 7-day window
+   */
+  countEarlyShiftsInWeek(staff, currentDate, schedule) {
+    try {
+      const staffSchedule = schedule[staff.id];
+      if (!staffSchedule) return 0;
+
+      const currentDateObj = new Date(currentDate);
+      let earlyShiftCount = 0;
+
+      // Check 7-day rolling window (3 days before + today + 3 days after)
+      for (let i = -3; i <= 3; i++) {
+        const checkDate = new Date(currentDateObj);
+        checkDate.setDate(checkDate.getDate() + i);
+        const checkDateKey = checkDate.toISOString().split("T")[0];
+
+        const shift = staffSchedule[checkDateKey];
+
+        // Count △ (early shifts)
+        if (shift === "△") {
+          earlyShiftCount++;
+        }
+      }
+
+      return earlyShiftCount;
+    } catch (error) {
+      console.warn(
+        `⚠️ [EARLY-COUNT] Error counting early shifts for ${staff.name}:`,
         error,
       );
       return 0; // Safe fallback
