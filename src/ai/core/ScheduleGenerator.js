@@ -1487,13 +1487,14 @@ export class ScheduleGenerator {
   }
 
   /**
-   * Check if adjacent days (yesterday or tomorrow) have conflicting shift patterns
+   * Check if previous days have conflicting shift patterns
    * Prevents consecutive off days (×) and early shifts (△) for better rotation
+   * Checks previous 2 days only (sequential generation means future days are empty)
    * @param {Object} staff - Staff member object
    * @param {string} currentDate - Current date being evaluated (YYYY-MM-DD)
    * @param {string} proposedShift - Shift being proposed (△ or ×)
    * @param {Object} schedule - Current schedule state
-   * @returns {boolean} True if adjacent day has conflicting pattern
+   * @returns {boolean} True if previous days have conflicting pattern
    */
   hasAdjacentConflict(staff, currentDate, proposedShift, schedule) {
     try {
@@ -1502,8 +1503,8 @@ export class ScheduleGenerator {
 
       const currentDateObj = new Date(currentDate);
 
-      // Check yesterday and tomorrow
-      const daysToCheck = [-1, 1]; // -1 = yesterday, +1 = tomorrow
+      // Check previous 2 days only (sequential generation - future days are empty)
+      const daysToCheck = [-1, -2]; // -1 = yesterday, -2 = day before yesterday
 
       for (const offset of daysToCheck) {
         const adjacentDate = new Date(currentDateObj);
@@ -1512,18 +1513,18 @@ export class ScheduleGenerator {
 
         const adjacentShift = staffSchedule[adjacentDateKey];
 
-        // If proposing △ (early shift), check if adjacent day is × (off day)
+        // If proposing △ (early shift), check if previous day is × (off day)
         if (proposedShift === "△" && adjacentShift === "×") {
           console.log(
-            `⏭️ [ADJACENT-CONFLICT] ${staff.name}: Cannot assign △ on ${currentDate}, adjacent day ${adjacentDateKey} is ×`,
+            `⏭️ [ADJACENT-CONFLICT] ${staff.name}: Cannot assign △ on ${currentDate}, previous day ${adjacentDateKey} is ×`,
           );
           return true;
         }
 
-        // If proposing × (off day), check if adjacent day is △ (early shift)
+        // If proposing × (off day), check if previous day is △ (early shift)
         if (proposedShift === "×" && adjacentShift === "△") {
           console.log(
-            `⏭️ [ADJACENT-CONFLICT] ${staff.name}: Cannot assign × on ${currentDate}, adjacent day ${adjacentDateKey} is △`,
+            `⏭️ [ADJACENT-CONFLICT] ${staff.name}: Cannot assign × on ${currentDate}, previous day ${adjacentDateKey} is △`,
           );
           return true;
         }
