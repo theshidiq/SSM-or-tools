@@ -1506,22 +1506,12 @@ export class ScheduleGenerator {
       // Check previous 2 days only (sequential generation - future days are empty)
       const daysToCheck = [-1, -2]; // -1 = yesterday, -2 = day before yesterday
 
-      // DEBUG: Log every call to see if function is executing
-      console.log(
-        `🔍 [ADJACENT-DEBUG] ${staff.name}: Checking ${proposedShift} on ${currentDate}`,
-      );
-
       for (const offset of daysToCheck) {
         const adjacentDate = new Date(currentDateObj);
         adjacentDate.setDate(adjacentDate.getDate() + offset);
         const adjacentDateKey = adjacentDate.toISOString().split("T")[0];
 
         const adjacentShift = staffSchedule[adjacentDateKey];
-
-        // DEBUG: Log what we're checking
-        console.log(
-          `🔍 [ADJACENT-DEBUG] ${staff.name}: Day ${adjacentDateKey} has "${adjacentShift}" (proposing "${proposedShift}")`,
-        );
 
         // If proposing △ (early shift), check if previous day is × (off day)
         if (proposedShift === "△" && adjacentShift === "×") {
