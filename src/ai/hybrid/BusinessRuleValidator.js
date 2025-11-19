@@ -35,6 +35,70 @@ import {
 import { ConfigurationService } from "../../services/ConfigurationService.js";
 import { analyzeShiftMomentum } from "../core/PatternRecognizer";
 
+/**
+ * Check if previous days have conflicting shift patterns
+ * Prevents consecutive off days (×) and early shifts (△) for better rotation
+ * Checks previous 2 days only (sequential generation means future days are empty)
+ * @param {Object} staff - Staff member object
+ * @param {string} currentDate - Current date being evaluated (YYYY-MM-DD)
+ * @param {string} proposedShift - Shift being proposed (△ or ×)
+ * @param {Object} schedule - Current schedule state
+ * @returns {boolean} True if previous days have conflicting pattern
+ */
+function hasAdjacentConflict(staff, currentDate, proposedShift, schedule) {
+  try {
+    const staffSchedule = schedule[staff.id];
+    if (!staffSchedule) return false;
+
+    const currentDateObj = new Date(currentDate);
+
+    // Check previous 2 days only (sequential generation - future days are empty)
+    const daysToCheck = [-1, -2]; // -1 = yesterday, -2 = day before yesterday
+
+    // DEBUG: Log every call to see if function is executing
+    console.log(
+      `🔍 [ADJACENT-DEBUG] ${staff.name}: Checking ${proposedShift} on ${currentDate}`,
+    );
+
+    for (const offset of daysToCheck) {
+      const adjacentDate = new Date(currentDateObj);
+      adjacentDate.setDate(adjacentDate.getDate() + offset);
+      const adjacentDateKey = adjacentDate.toISOString().split("T")[0];
+
+      const adjacentShift = staffSchedule[adjacentDateKey];
+
+      // DEBUG: Log what we're checking
+      console.log(
+        `🔍 [ADJACENT-DEBUG] ${staff.name}: Day ${adjacentDateKey} has "${adjacentShift}" (proposing "${proposedShift}")`,
+      );
+
+      // If proposing △ (early shift), check if previous day is × (off day)
+      if (proposedShift === "△" && adjacentShift === "×") {
+        console.log(
+          `⏭️ [ADJACENT-CONFLICT] ${staff.name}: Cannot assign △ on ${currentDate}, previous day ${adjacentDateKey} is ×`,
+        );
+        return true;
+      }
+
+      // If proposing × (off day), check if previous day is △ (early shift)
+      if (proposedShift === "×" && adjacentShift === "△") {
+        console.log(
+          `⏭️ [ADJACENT-CONFLICT] ${staff.name}: Cannot assign × on ${currentDate}, previous day ${adjacentDateKey} is △`,
+        );
+        return true;
+      }
+    }
+
+    return false; // No conflict found
+  } catch (error) {
+    console.warn(
+      `⚠️ [ADJACENT-CHECK] Error checking adjacent conflicts for ${staff.name}:`,
+      error,
+    );
+    return false; // Safe fallback - allow assignment
+  }
+}
+
 export class BusinessRuleValidator {
   constructor() {
     this.initialized = false;
@@ -1755,6 +1819,26 @@ export class BusinessRuleValidator {
             } else {
               // Would violate weekly limit, use △ as fallback (ONLY for 社員)
               if (staff.status === "社員") {
+                // ✅ ADJACENT CONFLICT CHECK: Prevent △ next to × (off days)
+                const adjacentConflict = hasAdjacentConflict(
+                  staff,
+                  bestCandidate.dateKey,
+                  "△",
+                  schedule,
+                );
+                if (adjacentConflict) {
+                  // Skip this day due to adjacent conflict
+                  console.log(
+                    `⏭️ [5-DAY-REST] ${staff.name}: Cannot assign △ on ${bestCandidate.date.toLocaleDateString('ja-JP')}, blocked by adjacent conflict`,
+                  );
+                  shuffledDays.splice(bestCandidate.arrayIndex, 1);
+                  const jitter = Math.floor(Math.random() * 2);
+                  nextOffDayIndex =
+                    (bestCandidate.arrayIndex + interval + jitter) %
+                    Math.max(shuffledDays.length, 1);
+                  continue;
+                }
+
                 schedule[staff.id][bestCandidate.dateKey] = "△";
                 offDaysSet++; // Still counts toward off-day target
 
@@ -1933,6 +2017,21 @@ export class BusinessRuleValidator {
 
               // Skip if already △
               if (currentShift === "△") continue;
+
+              // ✅ ADJACENT CONFLICT CHECK: Prevent △ next to × (off days)
+              const adjacentConflict = hasAdjacentConflict(
+                staff,
+                dateKey,
+                "△",
+                schedule,
+              );
+              if (adjacentConflict) {
+                // Skip this date, try next date in window
+                console.log(
+                  `⏭️ [5-DAY-REST] ${staff.name}: Cannot assign △ on ${dateKey}, blocked by adjacent conflict`,
+                );
+                continue;
+              }
 
               // Try △ (no limits on △, it's just a shift type)
               schedule[staff.id][dateKey] = "△";
