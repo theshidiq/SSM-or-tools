@@ -1,10 +1,10 @@
-import React, { useState } from "react";
-import { BrowserRouter as Router, Routes, Route, Link } from "react-router-dom";
+import React, { useState, useCallback, useMemo } from "react";
+import { createBrowserRouter, RouterProvider, Outlet, useOutletContext } from "react-router-dom";
 import ShiftScheduleEditorPhase3 from "./components/ShiftScheduleEditorPhase3.jsx";
-// ForceDataLoader removed - obsolete with Phase 4 prefetch architecture
 import DashboardLayout from "./components/layout/DashboardLayout.jsx";
 import PeriodMigration from "./components/migration/PeriodMigration.jsx";
 import ResearchPage from "./components/research/ResearchPage.jsx";
+import WorkingCalendarPage from "./components/calendar/WorkingCalendarPage.jsx";
 import { useSupabase } from "./hooks/useSupabase.js";
 import { usePriorityRulesData } from "./hooks/usePriorityRulesData.js";
 import { useStaffGroupsData } from "./hooks/useStaffGroupsData.js";
@@ -14,6 +14,21 @@ import { supabase } from "./utils/supabase";
 import { useEffect } from "react";
 
 function AppContent() {
+  const [showSettingsModal, setShowSettingsModal] = useState(false);
+  const [migrationComplete, setMigrationComplete] = useState(false);
+
+  // State to receive connection props from ShiftScheduleEditorPhase3
+  const [connectionProps, setConnectionProps] = useState({
+    isConnected: false,
+    isSaving: false,
+    prefetchStats: null,
+  });
+
+  // Stable callback for opening settings modal
+  const handleShowSettings = useCallback(() => {
+    setShowSettingsModal(true);
+  }, []);
+
   const {
     isConnected,
     error,
@@ -122,18 +137,20 @@ function AppContent() {
     populateLocalStorage();
   }, []);
 
-  const [migrationComplete, setMigrationComplete] = useState(false);
-  const [showSettingsModal, setShowSettingsModal] = useState(false);
-
-  // State to receive connection props from ShiftScheduleEditorPhase3
-  const [connectionProps, setConnectionProps] = useState({
-    isConnected: false,
-    isSaving: false,
-    prefetchStats: null,
-  });
-
   // Phase 4: Use prefetch architecture directly - no forced data needed
   const effectiveScheduleData = scheduleData;
+
+  // Memoize the outlet context to prevent infinite re-renders
+  const outletContext = useMemo(() => ({
+    effectiveScheduleData,
+    isConnected,
+    error,
+    saveScheduleData,
+    loadScheduleData,
+    showSettingsModal,
+    setShowSettingsModal,
+    setConnectionProps
+  }), [effectiveScheduleData, isConnected, error, saveScheduleData, loadScheduleData, showSettingsModal, setConnectionProps]);
 
   return (
     <>
@@ -141,40 +158,77 @@ function AppContent() {
       <PeriodMigration onMigrationComplete={() => setMigrationComplete(true)} />
 
       <DashboardLayout
-        onShowSettings={() => setShowSettingsModal(true)}
+        onShowSettings={handleShowSettings}
         isConnected={connectionProps.isConnected}
         isSaving={connectionProps.isSaving}
         prefetchStats={connectionProps.prefetchStats}
       >
-        {/* PHASE 4 PREFETCH ARCHITECTURE - Production Implementation */}
-        <ShiftScheduleEditorPhase3
-          supabaseScheduleData={effectiveScheduleData}
-          isConnected={isConnected}
-          error={error}
-          onSaveSchedule={saveScheduleData}
-          loadScheduleData={loadScheduleData}
-          showSettingsModal={showSettingsModal}
-          setShowSettingsModal={setShowSettingsModal}
-          onConnectionPropsChange={setConnectionProps}
-        />
+        {/* Outlet renders the matched child route */}
+        <Outlet context={outletContext} />
       </DashboardLayout>
     </>
   );
 }
 
-function App() {
-  return (
-    <Router>
+// Create router with proper v7 configuration
+const router = createBrowserRouter([
+  {
+    path: "/",
+    element: (
       <RestaurantProvider>
         <SettingsProvider>
-          <Routes>
-            <Route path="/" element={<AppContent />} />
-            <Route path="/research" element={<ResearchPage />} />
-          </Routes>
+          <AppContent />
         </SettingsProvider>
       </RestaurantProvider>
-    </Router>
+    ),
+    children: [
+      {
+        index: true,
+        element: <ScheduleRoute />,
+      },
+      {
+        path: "calendar",
+        element: <WorkingCalendarPage />,
+      },
+      {
+        path: "research",
+        element: <ResearchPage />,
+      },
+    ],
+  },
+]);
+
+// Schedule route component to access outlet context
+function ScheduleRoute() {
+  console.log('🔵 [SCHEDULE] ScheduleRoute is rendering');
+
+  const {
+    effectiveScheduleData,
+    isConnected,
+    error,
+    saveScheduleData,
+    loadScheduleData,
+    showSettingsModal,
+    setShowSettingsModal,
+    setConnectionProps
+  } = useOutletContext();
+
+  return (
+    <ShiftScheduleEditorPhase3
+      supabaseScheduleData={effectiveScheduleData}
+      isConnected={isConnected}
+      error={error}
+      onSaveSchedule={saveScheduleData}
+      loadScheduleData={loadScheduleData}
+      showSettingsModal={showSettingsModal}
+      setShowSettingsModal={setShowSettingsModal}
+      onConnectionPropsChange={setConnectionProps}
+    />
   );
+}
+
+function App() {
+  return <RouterProvider router={router} />;
 }
 
 export default App;

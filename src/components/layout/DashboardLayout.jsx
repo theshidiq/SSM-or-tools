@@ -1,7 +1,8 @@
-import React, { useState } from "react";
+import React, { useMemo, useCallback } from "react";
+import { useLocation } from "react-router-dom";
 import Sidebar from "./Sidebar";
 
-const DashboardLayout = ({
+const DashboardLayout = React.memo(({
   children,
   onShowSettings,
   // Connection status props for sidebar
@@ -9,34 +10,19 @@ const DashboardLayout = ({
   isSaving,
   prefetchStats,
 }) => {
-  const [currentView, setCurrentView] = useState("schedule");
+  const location = useLocation();
 
-  const handleViewChange = (view) => {
-    setCurrentView(view);
-    console.log(`Navigating to: ${view}`);
-    // Here you can implement actual view routing logic
-  };
+  // Determine currentView based on route - memoized to prevent re-computation
+  const currentView = useMemo(() => {
+    if (location.pathname === "/calendar") return "calendar";
+    if (location.pathname === "/research") return "research";
+    if (location.pathname === "/") return "schedule";
+    return "schedule";
+  }, [location.pathname]);
 
-  const renderContent = () => {
-    if (currentView === "schedule") {
-      return children;
-    }
-
-    // Show "Coming Soon" for all other views
-    return (
-      <div className="flex items-center justify-center h-full bg-background">
-        <div className="text-center">
-          <h1 className="text-4xl font-bold text-muted-foreground mb-4">
-            Coming Soon
-          </h1>
-          <p className="text-lg text-muted-foreground capitalize">
-            {currentView.replace(/([A-Z])/g, " $1").trim()} feature is under
-            development
-          </p>
-        </div>
-      </div>
-    );
-  };
+  const handleViewChange = useCallback((view) => {
+    // Navigation is handled by Sidebar using navigate()
+  }, []);
 
   return (
     <div className="flex h-screen bg-gray-50">
@@ -54,11 +40,13 @@ const DashboardLayout = ({
       <div className="flex-1 flex flex-col overflow-hidden">
         {/* Content Area */}
         <main className="flex-1 overflow-auto">
-          <div className="h-full">{renderContent()}</div>
+          <div className="h-full">{children}</div>
         </main>
       </div>
     </div>
   );
-};
+});
+
+DashboardLayout.displayName = 'DashboardLayout';
 
 export default DashboardLayout;

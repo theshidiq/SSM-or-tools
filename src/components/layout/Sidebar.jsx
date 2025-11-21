@@ -25,6 +25,7 @@ const Sidebar = ({
   prefetchStats = null,
 }) => {
   const navigate = useNavigate();
+  const location = useLocation();
 
   // Calculate realtime status
   const hasAllPeriodsData = prefetchStats?.memoryUsage?.periodCount > 0;
@@ -50,7 +51,7 @@ const Sidebar = ({
   const menuItems = [
     { id: "schedule", label: "Schedule", icon: Calendar, type: "nav" },
     { id: "monitor", label: "Monitor", icon: Monitor, type: "nav" },
-    { id: "calendar", label: "Calendar", icon: CalendarDays, type: "nav" },
+    { id: "calendar", label: "Calendar", icon: CalendarDays, type: "link", path: "/calendar" }, // Working Calendar page
     { id: "menu", label: "Menu", icon: Menu, type: "nav" },
     { id: "alergi", label: "Alergi", icon: AlertTriangle, type: "nav" },
     { id: "research", label: "Research", icon: BarChart3, type: "link", path: "/research" }, // New research link
@@ -83,7 +84,11 @@ const Sidebar = ({
           <nav className="space-y-1">
             {menuItems.map((item) => {
               const Icon = item.icon;
-              const isActive = currentView === item.id;
+              // Check if active by comparing current route or currentView prop
+              const isActive =
+                (item.type === "link" && item.path && location.pathname === item.path) ||
+                (item.id === "schedule" && location.pathname === "/") ||
+                currentView === item.id;
 
               // Render as button for all items
               return (
@@ -91,14 +96,17 @@ const Sidebar = ({
                   key={item.id}
                   onClick={() => {
                     if (item.type === "link" && item.path) {
-                      // Navigate to external route using window.location for full page navigation
+                      // Navigate to route path using navigate
                       console.log('Navigating to:', item.path);
-                      window.location.href = item.path;
+                      navigate(item.path);
                     } else if (item.type === "modal" && item.id === "settings") {
                       // Open Settings modal instead of navigating
                       onShowSettings?.();
+                    } else if (item.id === "schedule") {
+                      // Navigate to home route for schedule
+                      navigate('/');
                     } else {
-                      // Normal navigation
+                      // Normal navigation for other views
                       onViewChange?.(item.id);
                     }
                   }}
