@@ -28,6 +28,7 @@ import PriorityRulesTab from "./tabs/PriorityRulesTab";
 import MLParametersTab from "./tabs/MLParametersTab";
 import DataMigrationTab from "./tabs/DataMigrationTab";
 import PeriodsTab from "./tabs/PeriodsTab";
+import EarlyShiftPreferencesTab from "./tabs/EarlyShiftPreferencesTab";
 
 // Import shared components
 import TabButton from "./shared/TabButton";
@@ -39,6 +40,7 @@ const TABS = [
   { id: "staff-groups", label: "Staff Groups", icon: "👥" },
   { id: "daily-limits", label: "Weekly Limits", icon: "📅" },
   { id: "priority-rules", label: "Priority Rules", icon: "⭐" },
+  { id: "early-shift", label: "Early Shift", icon: "△" },
   { id: "ml-parameters", label: "ML Parameters", icon: "🤖" },
   { id: "periods", label: "Periods", icon: "📆" },
   { id: "data-migration", label: "Data Migration", icon: "🔄" },
@@ -274,6 +276,8 @@ const SettingsModal = ({
             validationErrors={validationErrors[activeTab] || {}}
           />
         );
+      case "early-shift":
+        return <EarlyShiftPreferencesTab />;
       case "ml-parameters":
         // Phase 4.1: MLParametersTab only needs validationErrors (no staffMembers/scheduleId)
         return (

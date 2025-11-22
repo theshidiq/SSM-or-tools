@@ -50,8 +50,8 @@ const Sidebar = ({
   })();
   const menuItems = [
     { id: "schedule", label: "Schedule", icon: Calendar, type: "nav" },
-    { id: "monitor", label: "Monitor", icon: Monitor, type: "nav" },
     { id: "calendar", label: "Calendar", icon: CalendarDays, type: "link", path: "/calendar" }, // Working Calendar page
+    { id: "monitor", label: "Monitor", icon: Monitor, type: "nav" },
     { id: "menu", label: "Menu", icon: Menu, type: "nav" },
     { id: "alergi", label: "Alergi", icon: AlertTriangle, type: "nav" },
     { id: "research", label: "Research", icon: BarChart3, type: "link", path: "/research" }, // New research link

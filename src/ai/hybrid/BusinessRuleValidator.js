@@ -34,6 +34,7 @@ import {
 } from "../constraints/ConstraintEngine";
 import { ConfigurationService } from "../../services/ConfigurationService.js";
 import { analyzeShiftMomentum } from "../core/PatternRecognizer";
+import { CalendarEarlyShiftIntegrator } from "../utils/CalendarEarlyShiftIntegrator";
 
 /**
  * Check if previous days have conflicting shift patterns
@@ -1028,6 +1029,9 @@ export class BusinessRuleValidator {
   /**
    * Generate a rule-based schedule from scratch
    * @param {Object} inputData - Input data for schedule generation
+   * @param {Object} inputData.scheduleData - Current schedule data
+   * @param {Object} inputData.earlyShiftPreferences - Early shift preferences map (Phase 1)
+   * @param {Object} inputData.calendarRules - Calendar rules map (Phase 2)
    * @param {Array} staffMembers - Staff member data
    * @param {Array} dateRange - Date range
    * @returns {Object} Generated rule-based schedule
@@ -1060,6 +1064,18 @@ export class BusinessRuleValidator {
       }
 
       console.log(`✅ Validation passed: ${staffMembers.length} staff, ${dateRange.length} dates`);
+
+      // Extract Phase 3 integration parameters
+      const earlyShiftPreferences = inputData?.earlyShiftPreferences || {};
+      const calendarRules = inputData?.calendarRules || {};
+      const hasPhase3Integration = Object.keys(earlyShiftPreferences).length > 0 || Object.keys(calendarRules).length > 0;
+
+      if (hasPhase3Integration) {
+        console.log("📅 [Phase 3] Calendar + Early Shift Integration enabled", {
+          earlyShiftPreferencesCount: Object.keys(earlyShiftPreferences).length,
+          calendarRulesCount: Object.keys(calendarRules).length,
+        });
+      }
 
       // Initialize empty schedule
       const schedule = {};
@@ -1101,6 +1117,29 @@ export class BusinessRuleValidator {
 
       // 🔧 FIX: Post-generation repair to eliminate any consecutive off-days
       await this.repairConsecutiveOffDays(schedule, staffMembers, dateRange);
+
+      // ✅ NEW (Phase 3): Apply combined calendar rules + early shift preferences
+      // IMPORTANT: This runs LAST to ensure calendar rules override all other business rules
+      if (hasPhase3Integration) {
+        console.log("🔄 [Phase 3] Applying combined calendar rules + early shift preferences (FINAL OVERRIDE)...");
+
+        const combinedResult = CalendarEarlyShiftIntegrator.applyCombinedRules(
+          schedule,
+          calendarRules,
+          earlyShiftPreferences,
+          staffMembers
+        );
+
+        // Update schedule with combined rules applied
+        Object.assign(schedule, combinedResult.schedule);
+
+        console.log("✅ [Phase 3] Combined rules applied successfully (FINAL)", {
+          changesApplied: combinedResult.changesApplied,
+          earlyShiftsAssigned: combinedResult.summary.earlyShiftsAssigned,
+          dayOffsAssigned: combinedResult.summary.dayOffsAssigned,
+          mustWorkChanges: combinedResult.summary.mustWorkChanges,
+        });
+      }
 
       console.log("✅ Rule-based schedule generated");
 

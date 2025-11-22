@@ -28,14 +28,15 @@ export const RestaurantProvider = ({ children }) => {
         const restaurantInfo = JSON.parse(savedRestaurantData);
         setRestaurant(restaurantInfo);
       } else {
-        // Create default restaurant
+        // Use the existing synced restaurant ID from database
+        // This restaurant already exists in Supabase
         const defaultRestaurant = {
-          id: crypto.randomUUID(),
-          name: "My Restaurant",
+          id: "e1661c71-b24f-4ee1-9e8b-7290a43c9575",
+          name: "Sample Restaurant",
           address: "",
           phone: "",
           settings: {},
-          isLocalOnly: true, // All operations are local-only
+          isLocalOnly: false, // Already synced to database
         };
 
         setRestaurant(defaultRestaurant);
@@ -48,14 +49,14 @@ export const RestaurantProvider = ({ children }) => {
       console.error("Failed to initialize restaurant:", err);
       setError(err.message);
 
-      // Use fallback restaurant on error
+      // Use fallback restaurant on error (use the synced restaurant ID)
       const fallbackRestaurant = {
-        id: crypto.randomUUID(),
-        name: "My Restaurant",
+        id: "e1661c71-b24f-4ee1-9e8b-7290a43c9575",
+        name: "Sample Restaurant",
         address: "",
         phone: "",
         settings: {},
-        isLocalOnly: true,
+        isLocalOnly: false,
       };
       setRestaurant(fallbackRestaurant);
       localStorage.setItem(

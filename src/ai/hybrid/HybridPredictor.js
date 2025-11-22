@@ -151,6 +151,11 @@ export class HybridPredictor {
   /**
    * Generate hybrid predictions that combine ML and business rules with intelligent decision engine
    * @param {Object} inputData - Schedule input data
+   * @param {Object} inputData.scheduleData - Current schedule data
+   * @param {number} inputData.currentMonthIndex - Current month index
+   * @param {number} inputData.timestamp - Request timestamp
+   * @param {Object} inputData.earlyShiftPreferences - Early shift preferences map (Phase 1)
+   * @param {Object} inputData.calendarRules - Calendar rules map (Phase 2)
    * @param {Array} staffMembers - Staff member data
    * @param {Array} dateRange - Date range for predictions
    * @param {Function} onProgress - Optional progress callback
@@ -164,8 +169,18 @@ export class HybridPredictor {
       staffCount: staffMembers?.length,
       dateCount: dateRange?.length,
       hasMlEngine: !!this.mlEngine,
-      hasRuleValidator: !!this.ruleValidator
+      hasRuleValidator: !!this.ruleValidator,
+      hasEarlyShiftPreferences: !!inputData?.earlyShiftPreferences,
+      hasCalendarRules: !!inputData?.calendarRules,
     });
+
+    // Log Phase 3 integration parameters
+    if (inputData?.earlyShiftPreferences || inputData?.calendarRules) {
+      console.log("📅 [Phase 3] Calendar + Early Shift Integration parameters detected", {
+        earlyShiftPreferencesCount: Object.keys(inputData?.earlyShiftPreferences || {}).length,
+        calendarRulesCount: Object.keys(inputData?.calendarRules || {}).length,
+      });
+    }
 
     if (!this.isReady()) {
       console.log("🎯 [DEBUG] HybridPredictor.predictSchedule() ERROR: Not ready");

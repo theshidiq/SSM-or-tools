@@ -9,6 +9,9 @@ import { useState, useCallback, useRef, useEffect, useMemo } from "react";
 import { optimizedStorage } from "../utils/storageUtils";
 import { generateDateRange } from "../utils/dateUtils";
 import { useAISettings } from "./useAISettings";
+import { useRestaurant } from "../contexts/RestaurantContext";
+import { EarlyShiftPreferencesLoader } from "../ai/utils/EarlyShiftPreferencesLoader";
+import { CalendarRulesLoader } from "../ai/utils/CalendarRulesLoader";
 
 // Lazy loading functions that only import when needed
 const loadAISystem = async () => {
@@ -89,6 +92,9 @@ export const useAIAssistantLazy = (
 
   // Get AI settings (WebSocket or localStorage)
   const aiSettings = useAISettings();
+
+  // Get restaurant context for loading early shift preferences
+  const { restaurant } = useRestaurant();
 
   // Lightweight fallback system that works without AI
   const fallbackSystem = useMemo(
@@ -206,6 +212,8 @@ export const useAIAssistantLazy = (
                 currentMonthIndex: inputMonthIndex,
                 saveSchedule: inputSaveSchedule,
                 onProgress,
+                earlyShiftPreferences,
+                calendarRules,
               }) => {
                 // Ensure predictor is initialized (lazy initialization)
                 if (!predictor.initialized || !predictor.isReady()) {
@@ -231,6 +239,8 @@ export const useAIAssistantLazy = (
                     scheduleData: inputScheduleData,
                     currentMonthIndex: inputMonthIndex,
                     timestamp: Date.now(),
+                    earlyShiftPreferences,
+                    calendarRules,
                   },
                   inputStaffMembers,
                   dateRange,
@@ -387,6 +397,61 @@ export const useAIAssistantLazy = (
           });
         }
 
+        // Load early shift preferences for AI constraint processing
+        let earlyShiftPreferences = {};
+        if (restaurant?.id) {
+          try {
+            if (onProgress) {
+              onProgress({
+                stage: "loading_preferences",
+                progress: 25,
+                message: "早番設定を読み込み中...",
+              });
+            }
+
+            const dateRange = generateDateRange(currentMonthIndex);
+            earlyShiftPreferences = await EarlyShiftPreferencesLoader.loadPreferences(
+              restaurant.id,
+              dateRange
+            );
+
+            console.log(
+              `✅ [AI-LAZY] Loaded early shift preferences for ${Object.keys(earlyShiftPreferences).length} staff members`
+            );
+          } catch (err) {
+            console.warn("⚠️ [AI-LAZY] Failed to load early shift preferences:", err);
+            // Continue without preferences - AI will work without early shift constraints
+          }
+        }
+
+        // Load calendar rules (must_work, must_day_off) for AI constraint processing
+        let calendarRules = {};
+        if (restaurant?.id) {
+          try {
+            if (onProgress) {
+              onProgress({
+                stage: "loading_calendar_rules",
+                progress: 30,
+                message: "カレンダールールを読み込み中...",
+              });
+            }
+
+            const dateRange = generateDateRange(currentMonthIndex);
+            calendarRules = await CalendarRulesLoader.loadRules(
+              restaurant.id,
+              dateRange
+            );
+
+            const rulesSummary = CalendarRulesLoader.getRulesSummary(calendarRules);
+            console.log(
+              `✅ [AI-LAZY] Loaded ${rulesSummary.totalRules} calendar rules (${rulesSummary.mustWorkCount} must_work, ${rulesSummary.mustDayOffCount} must_day_off)`
+            );
+          } catch (err) {
+            console.warn("⚠️ [AI-LAZY] Failed to load calendar rules:", err);
+            // Continue without calendar rules - AI will work without calendar constraints
+          }
+        }
+
         // Generating predictions using AI system
 
         if (system.generateSchedule) {
@@ -396,6 +461,8 @@ export const useAIAssistantLazy = (
             currentMonthIndex,
             saveSchedule, // Pass backend save operation
             onProgress, // Pass progress callback through
+            earlyShiftPreferences, // Pass early shift preferences for constraint processing
+            calendarRules, // Pass calendar rules (must_work, must_day_off) for constraint processing
           });
 
           console.log("🔍 [AI-LAZY] generateSchedule returned result:", {
@@ -477,6 +544,7 @@ export const useAIAssistantLazy = (
       saveSchedule, // Updated to use backend save operation
       initializeAI,
       fallbackSystem,
+      restaurant, // Add restaurant for early shift preferences loading
     ],
   );
 

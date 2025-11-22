@@ -120,7 +120,7 @@ const WorkingCalendarPage = () => {
     }
 
     if (isTodayDate && ruleType === "must_day_off") {
-      return "bg-gray-200 hover:bg-gray-300 text-red-600 border-gray-300";
+      return "bg-red-600 hover:bg-red-700 text-white font-bold border-red-700";
     }
 
     // Regular cells
@@ -135,8 +135,8 @@ const WorkingCalendarPage = () => {
     }
 
     if (ruleType === "must_day_off") {
-      // Must Day Off - Grey background with red text
-      return "bg-gray-200 hover:bg-gray-300 text-red-600 border-gray-300";
+      // Must Day Off - Red background with white bold text
+      return "bg-red-600 hover:bg-red-700 text-white font-bold border-red-700";
     }
 
     return "bg-white hover:bg-gray-50 text-gray-900 border-gray-200";
@@ -336,10 +336,10 @@ const WorkingCalendarPage = () => {
 
             {/* Must Day Off */}
             <div className="flex items-center gap-2">
-              <div className="w-8 h-8 bg-gray-200 border border-gray-300 rounded flex items-center justify-center text-red-600">
+              <div className="w-8 h-8 bg-red-600 border border-red-700 rounded flex items-center justify-center text-white">
                 <div className="text-center">
-                  <div className="text-xs font-semibold leading-none">1</div>
-                  <div className="text-xs">×</div>
+                  <div className="text-xs font-bold leading-none">1</div>
+                  <div className="text-xs font-bold">×</div>
                 </div>
               </div>
               <div>

@@ -32,6 +32,9 @@ import BackupStaffService from "../../services/BackupStaffService";
 import { GeneticAlgorithm } from "../algorithms/GeneticAlgorithm";
 import { SimulatedAnnealing } from "../algorithms/SimulatedAnnealing";
 import { EnsembleScheduler } from "../ml/EnsembleScheduler";
+import { EarlyShiftPreferencesLoader } from "../utils/EarlyShiftPreferencesLoader";
+import { CalendarRulesLoader } from "../utils/CalendarRulesLoader";
+import { CalendarEarlyShiftIntegrator } from "../utils/CalendarEarlyShiftIntegrator";
 
 /**
  * Main ScheduleGenerator class
@@ -120,6 +123,8 @@ export class ScheduleGenerator {
       priorityRules: 0.15,
       monthlyLimits: 0.15,
       fairness: 0.05,
+      earlyShiftRestrictions: 1.0, // ✅ NEW: Early shift permission enforcement (critical constraint)
+      calendarRules: 1.0, // ✅ NEW: Calendar rules (must_work, must_day_off) enforcement
     };
 
     // Monthly balancing tracking
@@ -455,9 +460,39 @@ export class ScheduleGenerator {
       // Apply adaptive learning
       await this.applyAdaptiveLearning();
 
+      // ✅ NEW: Apply combined calendar rules + early shift preferences (Phase 3)
+      let finalSchedule = bestSchedule?.schedule || workingSchedule;
+      let combinedRulesApplied = false;
+      let combinedRulesSummary = null;
+
+      if (params.calendarRules && params.earlyShiftPreferences) {
+        const hasCalendarRules = Object.keys(params.calendarRules).length > 0;
+        const hasEarlyShiftPrefs = Object.keys(params.earlyShiftPreferences).length > 0;
+
+        if (hasCalendarRules && hasEarlyShiftPrefs) {
+          console.log("🔄 [Phase 3] Applying combined calendar rules + early shift preferences...");
+
+          const combinedResult = CalendarEarlyShiftIntegrator.applyCombinedRules(
+            finalSchedule,
+            params.calendarRules,
+            params.earlyShiftPreferences,
+            staffMembers
+          );
+
+          finalSchedule = combinedResult.schedule;
+          combinedRulesApplied = true;
+          combinedRulesSummary = combinedResult.summary;
+
+          console.log(
+            `✅ [Phase 3] Applied ${combinedResult.changesApplied} combined rule changes:`,
+            combinedRulesSummary
+          );
+        }
+      }
+
       const result = {
         success: bestSchedule !== null,
-        schedule: bestSchedule?.schedule || workingSchedule,
+        schedule: finalSchedule,
         score: bestScore,
         confidence: confidenceScore,
         strategy: strategy,
@@ -466,6 +501,8 @@ export class ScheduleGenerator {
         iterations,
         qualityMetrics,
         constraintAnalysis: qualityMetrics.constraintAnalysis,
+        combinedRulesApplied,
+        combinedRulesSummary,
         metadata: {
           staffCount: staffMembers.length,
           dateCount: dateRange.length,
@@ -1620,6 +1657,75 @@ export class ScheduleGenerator {
         penalties += 10 * this.constraintWeights.weeklyLimits;
       }
     });
+
+    // ✅ NEW: Early shift restriction violation penalties
+    if (options.earlyShiftPreferences && Object.keys(options.earlyShiftPreferences).length > 0) {
+      const earlyShiftValidation = EarlyShiftPreferencesLoader.validateSchedule(
+        schedule,
+        options.earlyShiftPreferences
+      );
+
+      if (!earlyShiftValidation.isValid) {
+        // Very heavy penalty - this is a critical constraint violation
+        // Staff cannot be assigned early shifts without explicit permission
+        const violationCount = earlyShiftValidation.violationCount;
+        penalties += violationCount * 100 * (this.constraintWeights.earlyShiftRestrictions || 1.0);
+
+        console.warn(
+          `⚠️ [ScheduleGen] Early shift restriction violations: ${violationCount}`
+        );
+      }
+    }
+
+    // ✅ NEW: Calendar rule violation penalties (must_work, must_day_off)
+    if (options.calendarRules && Object.keys(options.calendarRules).length > 0) {
+      const calendarValidation = CalendarRulesLoader.validateSchedule(
+        schedule,
+        options.calendarRules,
+        staffMembers
+      );
+
+      if (!calendarValidation.isValid) {
+        // Very heavy penalty - calendar rules are mandatory constraints
+        const violationCount = calendarValidation.violationCount;
+        const mustWorkViolations = calendarValidation.mustWorkViolations;
+        const mustDayOffViolations = calendarValidation.mustDayOffViolations;
+
+        // Different penalties for different rule types
+        penalties += mustWorkViolations * 100 * (this.constraintWeights.calendarRules || 1.0);
+        penalties += mustDayOffViolations * 100 * (this.constraintWeights.calendarRules || 1.0);
+
+        console.warn(
+          `⚠️ [ScheduleGen] Calendar rule violations: ${violationCount} (${mustWorkViolations} must_work, ${mustDayOffViolations} must_day_off)`
+        );
+      }
+    }
+
+    // ✅ NEW: Phase 3 - Combined calendar rules + early shift preferences validation
+    if (
+      options.calendarRules &&
+      options.earlyShiftPreferences &&
+      Object.keys(options.calendarRules).length > 0 &&
+      Object.keys(options.earlyShiftPreferences).length > 0
+    ) {
+      const combinedValidation = CalendarEarlyShiftIntegrator.validateCombinedRules(
+        schedule,
+        options.calendarRules,
+        options.earlyShiftPreferences,
+        staffMembers
+      );
+
+      if (!combinedValidation.isValid) {
+        // Heavy penalty for violating combined rules
+        // This ensures staff with early shift permission get △ on must_day_off dates
+        const violationCount = combinedValidation.violationCount;
+        penalties += violationCount * 80 * (this.constraintWeights.calendarRules || 1.0);
+
+        console.warn(
+          `⚠️ [ScheduleGen] Combined rule violations (Phase 3): ${violationCount}`
+        );
+      }
+    }
 
     // Enhanced scoring components
     const balanceScore = this.calculateBalanceScore(

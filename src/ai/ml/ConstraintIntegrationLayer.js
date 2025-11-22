@@ -27,6 +27,8 @@ export class ConstraintIntegrationLayer {
       priority_rules: new PriorityRuleProcessor(),
       monthly_limits: new MonthlyLimitProcessor(),
       backup_assignments: new BackupAssignmentProcessor(),
+      early_shift_restrictions: new EarlyShiftRestrictionProcessor(),
+      calendar_rules: new CalendarRuleProcessor(),
     };
 
     this.constraintWeights = new Map();
@@ -90,6 +92,8 @@ export class ConstraintIntegrationLayer {
       priority_rules: settings?.priorityRules || [],
       monthly_limits: settings?.monthlyLimits || [],
       backup_assignments: settings?.backupAssignments || [],
+      early_shift_restrictions: settings?.earlyShiftPreferences || {},
+      calendar_rules: settings?.calendarRules || {},
     };
 
     // Add smart weights and penalties to problem context
@@ -571,6 +575,8 @@ export class ConstraintIntegrationLayer {
       workload_balance: 25,
       shift_distribution: 20,
       coverage_requirements: 60,
+      early_shift_restrictions: 100, // Very high weight - critical constraint
+      calendar_rules: 100, // Very high weight - mandatory calendar rules
     };
 
     for (const [type, weight] of Object.entries(defaultWeights)) {
@@ -1054,6 +1060,278 @@ class BackupAssignmentProcessor extends BaseConstraintProcessor {
   evaluateBackupAssignment(solution, assignment, context) {
     // Implementation for evaluating backup assignments
     return null; // No violation found
+  }
+}
+
+/**
+ * Early Shift Restriction Constraint Processor
+ * Validates that staff members can only be assigned early shifts (△)
+ * if they have explicit permission in their preferences
+ */
+class EarlyShiftRestrictionProcessor extends BaseConstraintProcessor {
+  constructor() {
+    super("EarlyShiftRestriction");
+  }
+
+  async process(earlyShiftPreferences, context) {
+    const result = await super.process(earlyShiftPreferences, context);
+
+    if (!earlyShiftPreferences || Object.keys(earlyShiftPreferences).length === 0) {
+      console.log("ℹ️ No early shift preferences configured - skipping restrictions");
+      return result;
+    }
+
+    console.log(
+      `🔍 Processing early shift restrictions for ${Object.keys(earlyShiftPreferences).length} staff members`
+    );
+
+    // Create a hard constraint for early shift permissions
+    const earlyShiftConstraint = {
+      id: "early_shift_permissions",
+      type: "early_shift_restriction",
+      preferences: earlyShiftPreferences,
+      weight: 100, // Very high weight - this is a critical constraint
+      evaluate: (solution) =>
+        this.evaluateEarlyShiftRestrictions(solution, earlyShiftPreferences, context),
+      matrixForm: this.createEarlyShiftMatrix(earlyShiftPreferences, context),
+    };
+
+    // This is a hard constraint - staff cannot be assigned early shifts without permission
+    result.hard.push(earlyShiftConstraint);
+
+    result.weights.early_shift_restrictions = 100;
+    result.mlParameters.earlyShiftViolationPenalty = 100; // Heavy penalty
+
+    return result;
+  }
+
+  /**
+   * Evaluate early shift restriction violations in a solution
+   */
+  evaluateEarlyShiftRestrictions(solution, preferences, context) {
+    const { staffMembers, dateRange } = context;
+
+    if (!staffMembers || !dateRange) {
+      return null;
+    }
+
+    const violations = [];
+
+    staffMembers.forEach((staff, staffIndex) => {
+      dateRange.forEach((date, dateIndex) => {
+        const dateKey = date.toISOString().split("T")[0];
+        const solutionIndex = staffIndex * dateRange.length + dateIndex;
+        const shiftValue = solution[solutionIndex];
+
+        // Check if this is an early shift assignment (△)
+        // In the solution array, early shift is typically represented as ~0.33-0.5
+        const isEarlyShift = shiftValue > 0.25 && shiftValue <= 0.5;
+
+        if (isEarlyShift) {
+          // Check if staff has permission for early shifts on this date
+          const hasPermission = this.canDoEarlyShift(preferences, staff.id, dateKey);
+
+          if (!hasPermission) {
+            violations.push({
+              staffId: staff.id,
+              staffName: staff.name,
+              date: dateKey,
+              shiftValue,
+              reason: "Staff member not authorized for early shifts on this date",
+            });
+          }
+        }
+      });
+    });
+
+    if (violations.length === 0) {
+      return null; // No violations
+    }
+
+    return {
+      severity: "critical",
+      magnitude: violations.length,
+      details: {
+        violationCount: violations.length,
+        violations,
+        message: `${violations.length} early shift assignment(s) violate permission constraints`,
+      },
+    };
+  }
+
+  /**
+   * Check if a staff member can do early shifts on a specific date
+   * (Mirrors logic from EarlyShiftPreferencesLoader)
+   */
+  canDoEarlyShift(preferencesMap, staffId, dateString) {
+    if (!preferencesMap[staffId]) {
+      return false;
+    }
+
+    // Check exact date match first
+    if (preferencesMap[staffId][dateString] !== undefined) {
+      return preferencesMap[staffId][dateString];
+    }
+
+    // Fallback to 'default' if no specific date match
+    if (preferencesMap[staffId]["default"] !== undefined) {
+      return preferencesMap[staffId]["default"];
+    }
+
+    // No preference = not allowed
+    return false;
+  }
+
+  /**
+   * Create matrix representation of early shift restrictions
+   */
+  createEarlyShiftMatrix(preferences, context) {
+    // Matrix form for optimization algorithms
+    // This would create inequality constraints preventing early shift assignments
+    // for unauthorized staff
+    return {
+      coefficients: [],
+      bound: 0,
+      type: "inequality",
+    };
+  }
+}
+
+/**
+ * Calendar Rule Constraint Processor
+ * Enforces must_work and must_day_off rules from calendar_rules table
+ */
+class CalendarRuleProcessor extends BaseConstraintProcessor {
+  constructor() {
+    super("CalendarRule");
+  }
+
+  async process(calendarRules, context) {
+    const result = await super.process(calendarRules, context);
+
+    if (!calendarRules || Object.keys(calendarRules).length === 0) {
+      console.log("ℹ️ No calendar rules configured - skipping calendar constraints");
+      return result;
+    }
+
+    console.log(
+      `🔍 Processing calendar rules for ${Object.keys(calendarRules).length} dates`
+    );
+
+    // Create hard constraints for calendar rules
+    const calendarConstraint = {
+      id: "calendar_rules",
+      type: "calendar_rule",
+      rules: calendarRules,
+      weight: 100, // Very high weight - calendar rules are mandatory
+      evaluate: (solution) =>
+        this.evaluateCalendarRules(solution, calendarRules, context),
+      matrixForm: this.createCalendarRuleMatrix(calendarRules, context),
+    };
+
+    // Calendar rules are hard constraints - must be respected
+    result.hard.push(calendarConstraint);
+
+    result.weights.calendar_rules = 100;
+    result.mlParameters.calendarRuleViolationPenalty = 100; // Heavy penalty
+
+    return result;
+  }
+
+  /**
+   * Evaluate calendar rule violations in a solution
+   */
+  evaluateCalendarRules(solution, rules, context) {
+    const { staffMembers, dateRange } = context;
+
+    if (!staffMembers || !dateRange) {
+      return null;
+    }
+
+    const violations = [];
+
+    // Check each date that has calendar rules
+    Object.keys(rules).forEach((dateKey) => {
+      const rule = rules[dateKey];
+      const dateObj = new Date(dateKey + 'T00:00:00');
+      const dateIndex = dateRange.findIndex(
+        (d) => d.toISOString().split('T')[0] === dateKey
+      );
+
+      if (dateIndex === -1) {
+        return; // Date not in our range
+      }
+
+      staffMembers.forEach((staff, staffIndex) => {
+        const solutionIndex = staffIndex * dateRange.length + dateIndex;
+        const shiftValue = solution[solutionIndex];
+
+        // Check must_day_off violations
+        if (rule.must_day_off) {
+          // Staff should have day off (shift value should be 0 for day off)
+          // In solution array: 0 = day off, >0 = working
+          if (shiftValue > 0.1) {
+            violations.push({
+              type: 'must_day_off_violation',
+              staffId: staff.id,
+              staffName: staff.name,
+              date: dateKey,
+              shiftValue,
+              reason: 'Staff assigned work shift on a must_day_off date',
+              rule: 'must_day_off',
+            });
+          }
+        }
+
+        // Check must_work violations
+        if (rule.must_work) {
+          // Staff should be working (shift value > 0)
+          // Value of 0 means day off
+          if (shiftValue <= 0.1) {
+            violations.push({
+              type: 'must_work_violation',
+              staffId: staff.id,
+              staffName: staff.name,
+              date: dateKey,
+              shiftValue,
+              reason: 'Staff assigned day off on a must_work date',
+              rule: 'must_work',
+            });
+          }
+        }
+      });
+    });
+
+    if (violations.length === 0) {
+      return null; // No violations
+    }
+
+    const mustWorkCount = violations.filter((v) => v.type === 'must_work_violation').length;
+    const mustDayOffCount = violations.filter((v) => v.type === 'must_day_off_violation').length;
+
+    return {
+      severity: "critical",
+      magnitude: violations.length,
+      details: {
+        violationCount: violations.length,
+        mustWorkViolations: mustWorkCount,
+        mustDayOffViolations: mustDayOffCount,
+        violations,
+        message: `${violations.length} calendar rule violation(s): ${mustWorkCount} must_work, ${mustDayOffCount} must_day_off`,
+      },
+    };
+  }
+
+  /**
+   * Create matrix representation of calendar rules
+   */
+  createCalendarRuleMatrix(rules, context) {
+    // Matrix form for optimization algorithms
+    return {
+      coefficients: [],
+      bound: 0,
+      type: "equality",
+    };
   }
 }
 

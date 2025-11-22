@@ -29,7 +29,15 @@
       "Bash(open:*)",
       "mcp__chrome-devtools__select_page",
       "mcp__chrome-devtools__evaluate_script",
-      "Bash(go run:*)"
+      "Bash(go run:*)",
+      "mcp__chrome-devtools__take_screenshot",
+      "mcp__chrome-devtools__new_page",
+      "mcp__supabase__list_projects",
+      "mcp__chrome-devtools__list_network_requests",
+      "Bash(quibbler --version:*)",
+      "Bash(xargs ps:*)",
+      "mcp__supabase__apply_migration",
+      "Bash(npm test:*)"
     ],
     "deny": [],
     "ask": []
