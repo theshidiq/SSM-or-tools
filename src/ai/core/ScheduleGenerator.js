@@ -36,6 +36,7 @@ import { EarlyShiftPreferencesLoader } from "../utils/EarlyShiftPreferencesLoade
 import { CalendarRulesLoader } from "../utils/CalendarRulesLoader";
 import { CalendarEarlyShiftIntegrator } from "../utils/CalendarEarlyShiftIntegrator";
 import { PreGenerationConstraintLocker } from "./PreGenerationConstraintLocker";
+import { ViolationRepairEngine } from "./ViolationRepairEngine";
 
 /**
  * Main ScheduleGenerator class
@@ -498,6 +499,26 @@ export class ScheduleGenerator {
       let combinedRulesApplied = lockingSummary ? true : false;
       let combinedRulesSummary = lockingSummary;
 
+      // ✅ PHASE 2: Automatic violation repair
+      let repairSummary = null;
+      if (this.calendarRules || this.earlyShiftPreferences) {
+        console.log("🔧 [PHASE 2] Running violation repair engine...");
+
+        const repairEngine = new ViolationRepairEngine();
+        const repairContext = {
+          calendarRules: this.calendarRules,
+          earlyShiftPreferences: this.earlyShiftPreferences,
+          staffMembers,
+          dateRange
+        };
+
+        const repairResult = await repairEngine.repairSchedule(finalSchedule, repairContext);
+        finalSchedule = repairResult.schedule;
+        repairSummary = repairResult.summary;
+
+        console.log(`✅ [PHASE 2] Repair complete: ${repairSummary.repairedCount} violations fixed`);
+      }
+
       const result = {
         success: bestSchedule !== null,
         schedule: finalSchedule,
@@ -511,6 +532,7 @@ export class ScheduleGenerator {
         constraintAnalysis: qualityMetrics.constraintAnalysis,
         combinedRulesApplied,
         combinedRulesSummary,
+        repairSummary, // ✅ PHASE 2: Violation repair results
         metadata: {
           staffCount: staffMembers.length,
           dateCount: dateRange.length,
