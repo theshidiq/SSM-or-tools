@@ -102,7 +102,7 @@ export class CalendarEarlyShiftIntegrator {
       });
     });
 
-    // Get must_work dates and ensure no day offs
+    // Get must_work dates and ensure all staff work normal shifts
     const mustWorkDates = CalendarRulesLoader.getMustWorkDates(calendarRules);
 
     mustWorkDates.forEach((dateKey) => {
@@ -113,8 +113,9 @@ export class CalendarEarlyShiftIntegrator {
 
         const currentShift = modifiedSchedule[staff.id][dateKey];
 
-        // If staff has day off on must_work date, change to normal shift
-        if (currentShift === "×" || currentShift === undefined) {
+        // If staff has day off, early shift, or late shift on must_work date, change to normal shift
+        // This ensures everyone works normal shifts on must_work dates (overrides all other shift types)
+        if (currentShift === "×" || currentShift === "△" || currentShift === "◇" || currentShift === undefined) {
           modifiedSchedule[staff.id][dateKey] = ""; // Normal shift
           changesApplied++;
 
@@ -124,7 +125,7 @@ export class CalendarEarlyShiftIntegrator {
             staffName: staff.name,
             previousShift: currentShift,
             newShift: "",
-            reason: "must_work date",
+            reason: "must_work date (override all shift types to normal)",
           });
         }
       });

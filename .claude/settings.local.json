@@ -37,7 +37,8 @@
       "Bash(quibbler --version:*)",
       "Bash(xargs ps:*)",
       "mcp__supabase__apply_migration",
-      "Bash(npm test:*)"
+      "Bash(npm test:*)",
+      "Bash(git add:*)"
     ],
     "deny": [],
     "ask": []
