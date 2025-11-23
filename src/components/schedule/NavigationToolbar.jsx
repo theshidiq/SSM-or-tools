@@ -15,6 +15,7 @@ import {
   TableProperties,
   Eye,
   BarChart3,
+  Eraser,
 } from "lucide-react";
 
 // ShadCN UI components
@@ -60,6 +61,7 @@ const NavigationToolbar = ({
   handlePrint,
   handleAddTable,
   handleDeletePeriod,
+  handleClearPeriod,
   viewMode,
   onViewModeChange,
   // AI Assistant props
@@ -626,6 +628,25 @@ const NavigationToolbar = ({
 
               {/* Model Status Badge - NEW */}
               <ModelStatusBadge />
+
+              {/* Clear Period (erase all shift data, keep period table) */}
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={handleClearPeriod}
+                  >
+                    <Eraser size={16} className="text-orange-600" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p className="japanese-text">
+                    Clear all shifts for{" "}
+                    {monthPeriods[currentMonthIndex]?.label || "current period"}
+                  </p>
+                </TooltipContent>
+              </Tooltip>
 
               {/* Delete Current Period */}
               <Tooltip>

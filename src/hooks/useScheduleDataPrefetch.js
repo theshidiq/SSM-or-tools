@@ -301,7 +301,7 @@ export const useScheduleDataPrefetch = (
   // Update local state when schedule data changes
   useEffect(() => {
     if (currentScheduleData) {
-      setSchedule(currentScheduleData.schedule || {});
+      setSchedule({ ...(currentScheduleData.schedule || {}) }); // Always create new reference
       setCurrentScheduleId(currentScheduleData.scheduleId);
       setIsLoading(false);
     }
@@ -1056,7 +1056,12 @@ export const useScheduleDataPrefetch = (
         // This prevents AI predictions from being overwritten by stale WebSocket data
         if (isFromAI) {
           console.log('🤖 [AI-PROTECTION] Applying AI-generated schedule immediately to UI');
-          setSchedule(newScheduleData);  // ✅ Immediate UI update with AI predictions
+          setSchedule({ ...newScheduleData });  // ✅ Immediate UI update with AI predictions (new reference)
+
+          // Invalidate cache to ensure React Query refetches fresh data
+          queryClient.invalidateQueries({
+            queryKey: PREFETCH_QUERY_KEYS.scheduleData(currentMonthIndex),
+          });
 
           // Sync to backend asynchronously (non-blocking)
           if (isWebSocketEnabled && webSocketShifts.isConnected) {
@@ -1090,7 +1095,12 @@ export const useScheduleDataPrefetch = (
               console.log(
                 "✅ [WEBSOCKET-PREFETCH] Schedule bulk updated via WebSocket",
               );
-              setSchedule(webSocketShifts.scheduleData);
+              setSchedule({ ...webSocketShifts.scheduleData }); // Create new reference
+
+              // Invalidate cache to ensure React Query refetches fresh data
+              queryClient.invalidateQueries({
+                queryKey: PREFETCH_QUERY_KEYS.scheduleData(currentMonthIndex),
+              });
             })
             .catch((error) => {
               console.error(

@@ -480,9 +480,64 @@ const ShiftScheduleEditorPhase3 = ({
   const handleScheduleUpdate = useCallback(
     (newScheduleData, source = "auto") => {
       console.log(`📅 [Phase 3] Schedule update from ${source}`);
-      updateSchedule(newScheduleData, currentStaff, source);
+      updateSchedule(newScheduleData, currentStaff, { source });
     },
     [updateSchedule, currentStaff],
+  );
+
+  // Clear Period handler - clears all shift data while keeping period table
+  const handleClearPeriod = useCallback(
+    async (periodIndex) => {
+      if (periodIndex < 0 || periodIndex >= realtimePeriods.length) return;
+
+      const periodToClear = realtimePeriods[periodIndex];
+      console.log(
+        `🧹 [Phase 3] Clearing shifts for period: ${periodToClear.label} (index ${periodIndex})`,
+      );
+
+      setDeleteModal({
+        isOpen: true,
+        type: "confirm",
+        title: "シフトをクリア",
+        message: `期間「${periodToClear.label}」の全てのシフトをクリアしますか？期間テーブルは保持されます。`,
+        onConfirm: async () => {
+          try {
+            // Create empty schedule object for all staff
+            const emptySchedule = {};
+            effectiveStaffMembers.forEach((staff) => {
+              emptySchedule[staff.id] = {};
+              // Set all dates to empty for this staff member
+              prefetchDateRange.forEach((date) => {
+                const dateKey = date.toISOString().split('T')[0];
+                emptySchedule[staff.id][dateKey] = '';
+              });
+            });
+
+            // Update schedule using handleScheduleUpdate for proper state management
+            await handleScheduleUpdate(emptySchedule, 'clear-period');
+
+            // Invalidate cache first, then refetch to get fresh data with new reference
+            await invalidateAllPeriodsCache();
+            await refetchPrefetchData();
+
+            setDeleteModal({ isOpen: false });
+            console.log(
+              `✅ [Phase 3] Cleared all shifts for period: ${periodToClear.label}`,
+            );
+          } catch (error) {
+            console.error("Failed to clear period shifts:", error);
+            setDeleteModal({
+              isOpen: true,
+              type: "error",
+              title: "エラー",
+              message: "シフトのクリアに失敗しました。もう一度お試しください。",
+            });
+          }
+        },
+        onCancel: () => setDeleteModal({ isOpen: false }),
+      });
+    },
+    [realtimePeriods, effectiveStaffMembers, prefetchDateRange, handleScheduleUpdate, refetchPrefetchData, invalidateAllPeriodsCache],
   );
 
   const handleShiftUpdate = useCallback(
@@ -668,6 +723,7 @@ const ShiftScheduleEditorPhase3 = ({
           handlePrint={handlePrint}
           handleAddTable={handleAddNextPeriod}
           handleDeletePeriod={() => handleDeletePeriod(currentMonthIndex)}
+          handleClearPeriod={() => handleClearPeriod(currentMonthIndex)}
           viewMode={viewMode}
           onViewModeChange={handleViewModeChange}
           scheduleData={schedule}
