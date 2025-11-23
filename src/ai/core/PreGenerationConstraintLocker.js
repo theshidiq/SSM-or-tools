@@ -66,6 +66,7 @@ export class PreGenerationConstraintLocker {
     });
 
     // Lock must_day_off dates - Eligible staff get △, others get ×
+    // ✅ Check for consecutive △ to prevent △△ pattern
     mustDayOffDates.forEach((dateKey) => {
       staffMembers.forEach((staff) => {
         if (!schedule[staff.id]) {
@@ -79,8 +80,44 @@ export class PreGenerationConstraintLocker {
           dateKey
         );
 
-        // Assign early shift or day off
-        const assignedShift = canDoEarly ? "△" : "×";
+        // ✅ Check if previous day has △ to prevent consecutive early shifts
+        let hasPreviousDayEarlyShift = false;
+        if (canDoEarly) {
+          // Use date string manipulation to avoid timezone issues
+          const [year, month, day] = dateKey.split("-").map(Number);
+          const currentDateObj = new Date(year, month - 1, day); // month is 0-indexed
+          const previousDate = new Date(currentDateObj);
+          previousDate.setDate(previousDate.getDate() - 1);
+
+          // Format back to YYYY-MM-DD
+          const previousYear = previousDate.getFullYear();
+          const previousMonth = String(previousDate.getMonth() + 1).padStart(2, "0");
+          const previousDay = String(previousDate.getDate()).padStart(2, "0");
+          const previousDateKey = `${previousYear}-${previousMonth}-${previousDay}`;
+
+          const previousShift = schedule[staff.id]?.[previousDateKey];
+          hasPreviousDayEarlyShift = previousShift === "△";
+        }
+
+        // Assign shift:
+        // - If eligible for △ but previous day has △, assign × to prevent consecutive △
+        // - If eligible for △ and no consecutive conflict, assign △
+        // - If not eligible for △, assign ×
+        let assignedShift;
+        let reason;
+
+        if (canDoEarly && hasPreviousDayEarlyShift) {
+          // Override △ with × to prevent consecutive early shifts
+          assignedShift = "×";
+          reason = "must_day_off (prevents consecutive △, pre-locked)";
+        } else if (canDoEarly) {
+          assignedShift = "△";
+          reason = "must_day_off + early shift eligible (pre-locked)";
+        } else {
+          assignedShift = "×";
+          reason = "must_day_off (pre-locked)";
+        }
+
         schedule[staff.id][dateKey] = assignedShift;
         lockedCells.add(`${staff.id}:${dateKey}`);
         totalLocked++;
@@ -90,9 +127,7 @@ export class PreGenerationConstraintLocker {
           staffId: staff.id,
           staffName: staff.name,
           shift: assignedShift,
-          reason: canDoEarly
-            ? "must_day_off + early shift eligible (pre-locked)"
-            : "must_day_off (pre-locked)",
+          reason: reason,
         });
       });
     });

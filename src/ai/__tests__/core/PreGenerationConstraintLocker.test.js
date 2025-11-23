@@ -22,9 +22,9 @@ describe('PreGenerationConstraintLocker', () => {
   };
 
   const mockEarlyShiftPreferences = {
-    staff1: { can_do_early_shift: true },
-    staff2: { can_do_early_shift: false },
-    staff3: { can_do_early_shift: true }
+    staff1: { default: true },  // can do early shifts
+    staff2: { default: false }, // cannot do early shifts
+    staff3: { default: true }   // can do early shifts
   };
 
   describe('lockMandatoryConstraints', () => {

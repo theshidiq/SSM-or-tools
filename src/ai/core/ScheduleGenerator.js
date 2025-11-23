@@ -1619,6 +1619,57 @@ export class ScheduleGenerator {
   }
 
   /**
+   * Check if assigning an early shift would create consecutive early shifts
+   * Prevents △△ pattern which is undesirable for staff scheduling
+   * @param {Object} staff - Staff member object
+   * @param {string} currentDate - Current date being evaluated (YYYY-MM-DD)
+   * @param {string} proposedShift - Shift being proposed (should be △)
+   * @param {Object} schedule - Current schedule state
+   * @returns {boolean} True if would create consecutive △, false otherwise
+   */
+  hasConsecutiveEarlyShift(staff, currentDate, proposedShift, schedule) {
+    try {
+      // Only check if proposing early shift
+      if (proposedShift !== "△") {
+        return false;
+      }
+
+      const staffSchedule = schedule[staff.id];
+      if (!staffSchedule) return false;
+
+      const currentDateObj = new Date(currentDate);
+
+      // Check previous 2 days (sequential generation - future days are empty)
+      const daysToCheck = [-1, -2]; // -1 = yesterday, -2 = day before yesterday
+
+      for (const offset of daysToCheck) {
+        const adjacentDate = new Date(currentDateObj);
+        adjacentDate.setDate(adjacentDate.getDate() + offset);
+        const adjacentDateKey = adjacentDate.toISOString().split("T")[0];
+
+        const adjacentShift = staffSchedule[adjacentDateKey];
+
+        // If previous day has △, proposing △ would create consecutive early shifts
+        if (adjacentShift === "△") {
+          console.log(
+            `⏭️ [CONSECUTIVE-EARLY-SHIFT] ${staff.name}: Cannot assign △ on ${currentDate}, ` +
+            `previous day ${adjacentDateKey} already has △ (prevents △△ pattern)`
+          );
+          return true;
+        }
+      }
+
+      return false; // No consecutive early shift conflict
+    } catch (error) {
+      console.warn(
+        `⚠️ [CONSECUTIVE-EARLY-CHECK] Error checking consecutive early shifts for ${staff.name}:`,
+        error
+      );
+      return false; // Safe fallback - allow assignment
+    }
+  }
+
+  /**
    * Apply random mutation to schedule for genetic-like variation
    * @param {Object} schedule - Schedule to mutate
    * @param {number} mutationRate - Rate of mutation (0-1)
@@ -2376,6 +2427,18 @@ export class ScheduleGenerator {
           );
           return false;
         }
+      }
+
+      // ✅ Check adjacent conflicts (Tier 1 constraint - Pattern prevention)
+      // Prevents both △-× and △-△ patterns
+      if (this.hasAdjacentConflict(staff, dateKey, proposedShift, schedule)) {
+        return false; // Adjacent conflict already logged in hasAdjacentConflict()
+      }
+
+      // ✅ Check consecutive early shifts (Tier 1 constraint - Staff welfare)
+      // Prevents △△ pattern which is undesirable for staff
+      if (this.hasConsecutiveEarlyShift(staff, dateKey, proposedShift, schedule)) {
+        return false; // Consecutive early shift already logged in hasConsecutiveEarlyShift()
       }
 
       // ✅ PHASE 1: Check consecutive work day limits (Tier 1 constraint - Labor Law)

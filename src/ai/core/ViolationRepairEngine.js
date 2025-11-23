@@ -116,6 +116,7 @@ export class ViolationRepairEngine {
     violations.push(...this.detectCalendarViolations(schedule, context));
     violations.push(...this.detectEarlyShiftPermissionViolations(schedule, context));
     violations.push(...this.detectConsecutiveWorkViolations(schedule, context));
+    violations.push(...this.detectConsecutiveEarlyShiftViolations(schedule, context));
 
     return violations;
   }
@@ -264,6 +265,45 @@ export class ViolationRepairEngine {
           consecutiveWorkDays = 0;
           currentStreak = [];
         }
+      });
+    });
+
+    return violations;
+  }
+
+  /**
+   * Detect consecutive early shift violations (△△ pattern)
+   */
+  detectConsecutiveEarlyShiftViolations(schedule, context) {
+    const { staffMembers = [], dateRange = [] } = context;
+    const violations = [];
+
+    staffMembers.forEach(staff => {
+      const staffSchedule = schedule[staff.id] || {};
+      let previousShift = null;
+      let previousDate = null;
+
+      dateRange.forEach(date => {
+        const dateKey = date.toISOString().split('T')[0];
+        const currentShift = staffSchedule[dateKey];
+
+        // Check if current shift is △ and previous shift was also △
+        if (currentShift === "△" && previousShift === "△") {
+          violations.push({
+            type: 'consecutive_early_shift',
+            constraint: CONSTRAINT_REGISTRY.ADJACENT_CONFLICT, // Use adjacent conflict constraint
+            staffId: staff.id,
+            staffName: staff.name,
+            date: dateKey,
+            previousDate: previousDate,
+            currentShift: currentShift,
+            expectedShift: "×", // Change to day off to break the pattern
+            reason: `Consecutive early shifts detected (△ on ${previousDate} and ${dateKey})`
+          });
+        }
+
+        previousShift = currentShift;
+        previousDate = dateKey;
       });
     });
 
