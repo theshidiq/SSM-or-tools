@@ -38,7 +38,9 @@
       "Bash(xargs ps:*)",
       "mcp__supabase__apply_migration",
       "Bash(npm test:*)",
-      "Bash(git add:*)"
+      "Bash(git add:*)",
+      "Bash(git commit -m \"$(cat <<''EOF''\nFIX: Must_work calendar rules now override all shift types (△, ◇, ×)\n\n## Problem\nAI generation was showing early shifts (△) on must_work dates (2025-12-31, 2026-01-01, 2026-01-02) instead of ensuring all staff work normal shifts. The must_work logic only converted day offs (×) to normal shifts, but didn''t handle early shifts (△) or late shifts (◇).\n\n## Root Cause\nCalendarEarlyShiftIntegrator.js:117 only checked for day offs:\n- Previous: `if (currentShift === \"×\" || currentShift === undefined)`\n- This allowed early shift eligibility rules to assign △ on must_work dates\n\n## Solution\nUpdated must_work logic to override ALL shift types:\n- Now checks: `if (currentShift === \"×\" || currentShift === \"△\" || currentShift === \"◇\" || currentShift === undefined)`\n- Converts all shift types to normal shift (\"\") on must_work dates\n- Added clarifying comments explaining override behavior\n\n## Changes\n- src/ai/utils/CalendarEarlyShiftIntegrator.js:105-132\n  - Line 118: Check for all non-normal shift types (×, △, ◇, undefined)\n  - Lines 116-117: Added comments explaining override behavior\n  - Line 128: Updated reason message for clarity\n\n## Testing\nSince Phase 3 integration runs LAST in BusinessRuleValidator.js:1121-1142, this ensures must_work rules override all earlier business rules (work limits, early shift preferences, etc.)\n\n🤖 Generated with [Claude Code](https://claude.com/claude-code)\n\nCo-Authored-By: Claude <noreply@anthropic.com>\nEOF\n)\")",
+      "Bash(git push)"
     ],
     "deny": [],
     "ask": []

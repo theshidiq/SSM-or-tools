@@ -35,6 +35,7 @@ import { EnsembleScheduler } from "../ml/EnsembleScheduler";
 import { EarlyShiftPreferencesLoader } from "../utils/EarlyShiftPreferencesLoader";
 import { CalendarRulesLoader } from "../utils/CalendarRulesLoader";
 import { CalendarEarlyShiftIntegrator } from "../utils/CalendarEarlyShiftIntegrator";
+import { PreGenerationConstraintLocker } from "./PreGenerationConstraintLocker";
 
 /**
  * Main ScheduleGenerator class
@@ -346,6 +347,10 @@ export class ScheduleGenerator {
       mlParameters = null, // ML parameters from UI
     } = params;
 
+    // ✅ PHASE 1: Store early shift preferences for validation during generation
+    this.earlyShiftPreferences = params.earlyShiftPreferences || {};
+    this.calendarRules = params.calendarRules || {};
+
     console.log(
       `📋 Generating schedule with ${strategy} strategy (ML-enhanced)...`,
     );
@@ -388,6 +393,33 @@ export class ScheduleGenerator {
         existingSchedule,
         preserveExisting,
       );
+
+      // ✅ PHASE 1: Lock calendar-mandated constraints BEFORE generation
+      let lockedCells = new Set();
+      let lockingSummary = null;
+
+      if (this.calendarRules && Object.keys(this.calendarRules).length > 0) {
+        console.log("🔒 [PHASE 1] Applying pre-generation constraint locking...");
+
+        const dateRangeStrings = dateRange.map(d => d.toISOString().split('T')[0]);
+
+        const lockingResult = PreGenerationConstraintLocker.lockMandatoryConstraints(
+          workingSchedule,
+          this.calendarRules,
+          this.earlyShiftPreferences,
+          staffMembers,
+          dateRangeStrings
+        );
+
+        lockedCells = lockingResult.lockedCells;
+        lockingSummary = lockingResult.summary;
+
+        console.log(`✅ [PHASE 1] Locked ${lockedCells.size} cells before generation`);
+        console.log(`   └─ Summary:`, lockingSummary);
+      }
+
+      // Store locked cells for generation algorithms to skip
+      this.lockedCells = lockedCells;
 
       // Choose algorithm based on ML configuration
       if (mlConfig.algorithm === "ensemble") {
@@ -460,35 +492,11 @@ export class ScheduleGenerator {
       // Apply adaptive learning
       await this.applyAdaptiveLearning();
 
-      // ✅ NEW: Apply combined calendar rules + early shift preferences (Phase 3)
+      // ✅ PHASE 1: Calendar rules now applied PRE-generation (no post-generation override needed)
+      // This prevents AI decisions from being overwritten and ensures calendar compliance from the start
       let finalSchedule = bestSchedule?.schedule || workingSchedule;
-      let combinedRulesApplied = false;
-      let combinedRulesSummary = null;
-
-      if (params.calendarRules && params.earlyShiftPreferences) {
-        const hasCalendarRules = Object.keys(params.calendarRules).length > 0;
-        const hasEarlyShiftPrefs = Object.keys(params.earlyShiftPreferences).length > 0;
-
-        if (hasCalendarRules && hasEarlyShiftPrefs) {
-          console.log("🔄 [Phase 3] Applying combined calendar rules + early shift preferences...");
-
-          const combinedResult = CalendarEarlyShiftIntegrator.applyCombinedRules(
-            finalSchedule,
-            params.calendarRules,
-            params.earlyShiftPreferences,
-            staffMembers
-          );
-
-          finalSchedule = combinedResult.schedule;
-          combinedRulesApplied = true;
-          combinedRulesSummary = combinedResult.summary;
-
-          console.log(
-            `✅ [Phase 3] Applied ${combinedResult.changesApplied} combined rule changes:`,
-            combinedRulesSummary
-          );
-        }
-      }
+      let combinedRulesApplied = lockingSummary ? true : false;
+      let combinedRulesSummary = lockingSummary;
 
       const result = {
         success: bestSchedule !== null,
@@ -530,9 +538,20 @@ export class ScheduleGenerator {
       );
       console.log(`🎯 Quality metrics:`, qualityMetrics.summary);
 
+      // ✅ PHASE 1: Clean up instance variables
+      this.earlyShiftPreferences = null;
+      this.calendarRules = null;
+      this.lockedCells = null;
+
       return result;
     } catch (error) {
       console.error("❌ Schedule generation failed:", error);
+
+      // ✅ PHASE 1: Clean up instance variables (error path)
+      this.earlyShiftPreferences = null;
+      this.calendarRules = null;
+      this.lockedCells = null;
+
       return {
         success: false,
         error: error.message,
@@ -2321,7 +2340,59 @@ export class ScheduleGenerator {
    */
   async canAssignShift(staff, dateKey, proposedShift, schedule, dateRange) {
     try {
-      // Check weekly limits first (rolling 7-day windows)
+      // ✅ PHASE 1: Check early shift permissions FIRST (Tier 1 constraint)
+      if (proposedShift === "△" && this.earlyShiftPreferences) {
+        const canDoEarly = EarlyShiftPreferencesLoader.canDoEarlyShift(
+          this.earlyShiftPreferences,
+          staff.id,
+          dateKey
+        );
+
+        if (!canDoEarly) {
+          console.log(
+            `🚫 [EARLY-SHIFT] ${staff.name}: No permission for early shift (△) on ${dateKey}`
+          );
+          return false;
+        }
+      }
+
+      // ✅ PHASE 1: Check consecutive work day limits (Tier 1 constraint - Labor Law)
+      if (proposedShift !== "×" && dateRange && dateRange.length > 0) {
+        const MAX_CONSECUTIVE_WORK_DAYS = 6; // Japanese labor standard
+
+        // Find the index of the proposed date
+        const dateIndex = dateRange.findIndex(
+          d => d.toISOString().split("T")[0] === dateKey
+        );
+
+        if (dateIndex > 0) {
+          // Count backward to find consecutive work days before this date
+          let consecutiveWorkDays = 0;
+          for (let i = dateIndex - 1; i >= 0; i--) {
+            const checkDate = dateRange[i].toISOString().split("T")[0];
+            const existingShift = schedule[staff.id]?.[checkDate];
+
+            // If it's a day off, break the streak
+            if (!existingShift || existingShift === "×") {
+              break;
+            }
+
+            // It's a work day (△, ◇, or normal shift)
+            consecutiveWorkDays++;
+          }
+
+          // Check if adding this work shift would exceed the limit
+          if (consecutiveWorkDays >= MAX_CONSECUTIVE_WORK_DAYS) {
+            console.log(
+              `🚫 [CONSECUTIVE-LIMIT] ${staff.name}: Would exceed ${MAX_CONSECUTIVE_WORK_DAYS} consecutive work days ` +
+              `(current streak: ${consecutiveWorkDays}, proposed: ${proposedShift} on ${dateKey})`
+            );
+            return false;
+          }
+        }
+      }
+
+      // Check weekly limits (rolling 7-day windows)
       const weeklyViolation = await this.wouldViolateWeeklyLimits(
         schedule,
         staff,
