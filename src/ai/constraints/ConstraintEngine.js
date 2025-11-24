@@ -893,6 +893,38 @@ export const validateStaffGroupConflicts = async (
         },
       });
     }
+
+    // ✅ NEW: Check for MIXED conflicts (ANY combination of × and △)
+    // This catches: ××, △△, ×△, and △×
+    const offOrEarlyMembers = groupMembers.filter((member) =>
+      isOffDay(member.shift) || isEarlyShift(member.shift),
+    );
+    if (offOrEarlyMembers.length > 1) {
+      // Only report if not already reported by same-type checks above
+      const hasMixedTypes = offMembers.length > 0 && earlyMembers.length > 0;
+
+      if (hasMixedTypes) {
+        violations.push({
+          type: VIOLATION_TYPES.STAFF_GROUP_CONFLICT,
+          subType: "mixed_off_early", // NEW: Mixed conflict sub-type
+          date: dateKey,
+          group: group.name,
+          message: `${group.name} conflict on ${dateKey}: mixed off/early shifts - ${offOrEarlyMembers.map((m) => `${m.name}(${m.shift})`).join(", ")}`,
+          severity: "high",
+          details: {
+            groupName: group.name,
+            groupMembers: members,
+            conflictingMembers: offOrEarlyMembers.map(
+              (m) => `${m.name} (${m.shift})`,
+            ),
+            conflictCount: offOrEarlyMembers.length,
+            conflictType: "mixed_off_early",
+            offCount: offMembers.length,
+            earlyCount: earlyMembers.length,
+          },
+        });
+      }
+    }
   });
 
   return {
