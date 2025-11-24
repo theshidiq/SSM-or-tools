@@ -2766,12 +2766,24 @@ export class ScheduleGenerator {
     staffMembers,
   ) {
     try {
+      // ✅ ENTRY LOG: Verify function is being called
+      logGroupConflict(
+        `🔵 [GROUP-CONFLICT-ENTRY] Called for ${staff.name}, shift="${proposedShift}", date=${dateKey}`,
+      );
+
       // Get staff groups from configuration
       const staffGroups = await getStaffConflictGroups();
+
+      logGroupConflict(
+        `📂 [GROUP-CONFLICT-CONFIG] Loaded ${staffGroups.length} staff groups from config`,
+      );
 
       // Check if proposed shift is off day or early shift (these create conflicts)
       const isConflictShift = proposedShift === "×" || proposedShift === "△";
       if (!isConflictShift) {
+        logGroupConflict(
+          `⏭️ [GROUP-CONFLICT-SKIP] ${staff.name}: Shift "${proposedShift}" is not × or △, skipping group check`,
+        );
         return false; // Normal/late shifts don't cause group conflicts
       }
 
@@ -2781,6 +2793,9 @@ export class ScheduleGenerator {
       );
 
       if (staffGroups_containing.length === 0) {
+        logGroupConflict(
+          `⏭️ [GROUP-CONFLICT-SKIP] ${staff.name}: Not in any group, skipping`,
+        );
         return false; // Staff not in any group
       }
 
