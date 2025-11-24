@@ -870,9 +870,80 @@ class StaffGroupProcessor extends BaseConstraintProcessor {
   }
 
   evaluateGroupConflict(solution, group, context) {
-    // Implementation for evaluating group conflicts in solution
-    // This would check if multiple group members are off on the same day
-    return null; // No violation found
+    const { staffMembers, dateRange } = context;
+
+    if (!staffMembers || !dateRange || !group.members || group.members.length === 0) {
+      return null;
+    }
+
+    const violations = [];
+
+    // Check each date in the schedule
+    dateRange.forEach((date, dateIndex) => {
+      const dateKey = date.toISOString().split('T')[0];
+      const conflictingMembers = [];
+
+      // Check each member in this group
+      group.members.forEach((memberName) => {
+        // Find staff member by name
+        const staffIndex = staffMembers.findIndex((s) => s.name === memberName);
+
+        if (staffIndex === -1) {
+          return; // Staff member not found
+        }
+
+        const staff = staffMembers[staffIndex];
+        const solutionIndex = staffIndex * dateRange.length + dateIndex;
+        const shiftValue = solution[solutionIndex];
+
+        // Check if this staff member has × (day off) or △ (early shift)
+        // Based on convertToShiftSymbol() logic:
+        // × = 0-0.25, △ = 0.25-0.5
+        const isDayOff = shiftValue <= 0.25;
+        const isEarlyShift = shiftValue > 0.25 && shiftValue <= 0.5;
+
+        if (isDayOff || isEarlyShift) {
+          conflictingMembers.push({
+            staffId: staff.id,
+            staffName: staff.name,
+            shiftValue,
+            shift: isDayOff ? '×' : '△'
+          });
+        }
+      });
+
+      // If more than 1 member has × or △ on same day = violation
+      // This catches ××, △△, ×△, and △× patterns
+      if (conflictingMembers.length > 1) {
+        violations.push({
+          date: dateKey,
+          groupName: group.name,
+          groupId: group.id,
+          conflictingMembers,
+          conflictCount: conflictingMembers.length,
+          reason: `${conflictingMembers.length} members in group "${group.name}" have × or △ on ${dateKey}: ${conflictingMembers.map(m => `${m.staffName}(${m.shift})`).join(', ')}`
+        });
+      }
+    });
+
+    if (violations.length === 0) {
+      return null; // No violations
+    }
+
+    return {
+      severity: "critical",
+      magnitude: violations.length,
+      details: {
+        violationCount: violations.length,
+        violations,
+        message: `${violations.length} group conflict violation(s) detected in group "${group.name}"`,
+        affectedDates: violations.map(v => v.date),
+        conflictPatterns: violations.map(v => ({
+          date: v.date,
+          pattern: v.conflictingMembers.map(m => m.shift).join('')
+        }))
+      }
+    };
   }
 
   evaluateBackupCoverage(solution, group, context) {
