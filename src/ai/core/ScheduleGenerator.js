@@ -400,22 +400,29 @@ export class ScheduleGenerator {
       let lockingSummary = null;
 
       if (this.calendarRules && Object.keys(this.calendarRules).length > 0) {
-        console.log("🔒 [PHASE 1] Applying pre-generation constraint locking...");
-
-        const dateRangeStrings = dateRange.map(d => d.toISOString().split('T')[0]);
-
-        const lockingResult = PreGenerationConstraintLocker.lockMandatoryConstraints(
-          workingSchedule,
-          this.calendarRules,
-          this.earlyShiftPreferences,
-          staffMembers,
-          dateRangeStrings
+        console.log(
+          "🔒 [PHASE 1] Applying pre-generation constraint locking...",
         );
+
+        const dateRangeStrings = dateRange.map(
+          (d) => d.toISOString().split("T")[0],
+        );
+
+        const lockingResult =
+          PreGenerationConstraintLocker.lockMandatoryConstraints(
+            workingSchedule,
+            this.calendarRules,
+            this.earlyShiftPreferences,
+            staffMembers,
+            dateRangeStrings,
+          );
 
         lockedCells = lockingResult.lockedCells;
         lockingSummary = lockingResult.summary;
 
-        console.log(`✅ [PHASE 1] Locked ${lockedCells.size} cells before generation`);
+        console.log(
+          `✅ [PHASE 1] Locked ${lockedCells.size} cells before generation`,
+        );
         console.log(`   └─ Summary:`, lockingSummary);
       }
 
@@ -496,8 +503,8 @@ export class ScheduleGenerator {
       // ✅ PHASE 1: Calendar rules now applied PRE-generation (no post-generation override needed)
       // This prevents AI decisions from being overwritten and ensures calendar compliance from the start
       let finalSchedule = bestSchedule?.schedule || workingSchedule;
-      let combinedRulesApplied = lockingSummary ? true : false;
-      let combinedRulesSummary = lockingSummary;
+      const combinedRulesApplied = lockingSummary ? true : false;
+      const combinedRulesSummary = lockingSummary;
 
       // ✅ PHASE 2: Automatic violation repair
       let repairSummary = null;
@@ -509,14 +516,19 @@ export class ScheduleGenerator {
           calendarRules: this.calendarRules,
           earlyShiftPreferences: this.earlyShiftPreferences,
           staffMembers,
-          dateRange
+          dateRange,
         };
 
-        const repairResult = await repairEngine.repairSchedule(finalSchedule, repairContext);
+        const repairResult = await repairEngine.repairSchedule(
+          finalSchedule,
+          repairContext,
+        );
         finalSchedule = repairResult.schedule;
         repairSummary = repairResult.summary;
 
-        console.log(`✅ [PHASE 2] Repair complete: ${repairSummary.repairedCount} violations fixed`);
+        console.log(
+          `✅ [PHASE 2] Repair complete: ${repairSummary.repairedCount} violations fixed`,
+        );
       }
 
       const result = {
@@ -1343,7 +1355,9 @@ export class ScheduleGenerator {
             );
             return "△";
           }
-          console.log(`⚠️ [5-DAY-REST] ${staff.name}: △ also blocked by limits`);
+          console.log(
+            `⚠️ [5-DAY-REST] ${staff.name}: △ also blocked by limits`,
+          );
         } else {
           console.log(
             `⏭️ [5-DAY-REST] ${staff.name}: △ blocked by adjacent off day conflict`,
@@ -1653,7 +1667,7 @@ export class ScheduleGenerator {
         if (adjacentShift === "△") {
           console.log(
             `⏭️ [CONSECUTIVE-EARLY-SHIFT] ${staff.name}: Cannot assign △ on ${currentDate}, ` +
-            `previous day ${adjacentDateKey} already has △ (prevents △△ pattern)`
+              `previous day ${adjacentDateKey} already has △ (prevents △△ pattern)`,
           );
           return true;
         }
@@ -1663,7 +1677,7 @@ export class ScheduleGenerator {
     } catch (error) {
       console.warn(
         `⚠️ [CONSECUTIVE-EARLY-CHECK] Error checking consecutive early shifts for ${staff.name}:`,
-        error
+        error,
       );
       return false; // Safe fallback - allow assignment
     }
@@ -1734,12 +1748,13 @@ export class ScheduleGenerator {
       this.constraintWeights.priorityRules;
 
     // ✅ NEW: Weekly limits violation penalties (rolling 7-day windows)
-    const weeklyViolations = validation.violations.filter(v =>
-      v.type === VIOLATION_TYPES.WEEKLY_OFF_LIMIT ||
-      v.type === VIOLATION_TYPES.WEEKLY_EARLY_LIMIT ||
-      v.type === VIOLATION_TYPES.WEEKLY_LATE_LIMIT
+    const weeklyViolations = validation.violations.filter(
+      (v) =>
+        v.type === VIOLATION_TYPES.WEEKLY_OFF_LIMIT ||
+        v.type === VIOLATION_TYPES.WEEKLY_EARLY_LIMIT ||
+        v.type === VIOLATION_TYPES.WEEKLY_LATE_LIMIT,
     );
-    weeklyViolations.forEach(violation => {
+    weeklyViolations.forEach((violation) => {
       // High penalty for weekly off limit violations (critical for staff health)
       if (violation.type === VIOLATION_TYPES.WEEKLY_OFF_LIMIT) {
         penalties += 20 * this.constraintWeights.weeklyLimits;
@@ -1751,30 +1766,39 @@ export class ScheduleGenerator {
     });
 
     // ✅ NEW: Early shift restriction violation penalties
-    if (options.earlyShiftPreferences && Object.keys(options.earlyShiftPreferences).length > 0) {
+    if (
+      options.earlyShiftPreferences &&
+      Object.keys(options.earlyShiftPreferences).length > 0
+    ) {
       const earlyShiftValidation = EarlyShiftPreferencesLoader.validateSchedule(
         schedule,
-        options.earlyShiftPreferences
+        options.earlyShiftPreferences,
       );
 
       if (!earlyShiftValidation.isValid) {
         // Very heavy penalty - this is a critical constraint violation
         // Staff cannot be assigned early shifts without explicit permission
         const violationCount = earlyShiftValidation.violationCount;
-        penalties += violationCount * 100 * (this.constraintWeights.earlyShiftRestrictions || 1.0);
+        penalties +=
+          violationCount *
+          100 *
+          (this.constraintWeights.earlyShiftRestrictions || 1.0);
 
         console.warn(
-          `⚠️ [ScheduleGen] Early shift restriction violations: ${violationCount}`
+          `⚠️ [ScheduleGen] Early shift restriction violations: ${violationCount}`,
         );
       }
     }
 
     // ✅ NEW: Calendar rule violation penalties (must_work, must_day_off)
-    if (options.calendarRules && Object.keys(options.calendarRules).length > 0) {
+    if (
+      options.calendarRules &&
+      Object.keys(options.calendarRules).length > 0
+    ) {
       const calendarValidation = CalendarRulesLoader.validateSchedule(
         schedule,
         options.calendarRules,
-        staffMembers
+        staffMembers,
       );
 
       if (!calendarValidation.isValid) {
@@ -1784,11 +1808,17 @@ export class ScheduleGenerator {
         const mustDayOffViolations = calendarValidation.mustDayOffViolations;
 
         // Different penalties for different rule types
-        penalties += mustWorkViolations * 100 * (this.constraintWeights.calendarRules || 1.0);
-        penalties += mustDayOffViolations * 100 * (this.constraintWeights.calendarRules || 1.0);
+        penalties +=
+          mustWorkViolations *
+          100 *
+          (this.constraintWeights.calendarRules || 1.0);
+        penalties +=
+          mustDayOffViolations *
+          100 *
+          (this.constraintWeights.calendarRules || 1.0);
 
         console.warn(
-          `⚠️ [ScheduleGen] Calendar rule violations: ${violationCount} (${mustWorkViolations} must_work, ${mustDayOffViolations} must_day_off)`
+          `⚠️ [ScheduleGen] Calendar rule violations: ${violationCount} (${mustWorkViolations} must_work, ${mustDayOffViolations} must_day_off)`,
         );
       }
     }
@@ -1800,21 +1830,23 @@ export class ScheduleGenerator {
       Object.keys(options.calendarRules).length > 0 &&
       Object.keys(options.earlyShiftPreferences).length > 0
     ) {
-      const combinedValidation = CalendarEarlyShiftIntegrator.validateCombinedRules(
-        schedule,
-        options.calendarRules,
-        options.earlyShiftPreferences,
-        staffMembers
-      );
+      const combinedValidation =
+        CalendarEarlyShiftIntegrator.validateCombinedRules(
+          schedule,
+          options.calendarRules,
+          options.earlyShiftPreferences,
+          staffMembers,
+        );
 
       if (!combinedValidation.isValid) {
         // Heavy penalty for violating combined rules
         // This ensures staff with early shift permission get △ on must_day_off dates
         const violationCount = combinedValidation.violationCount;
-        penalties += violationCount * 80 * (this.constraintWeights.calendarRules || 1.0);
+        penalties +=
+          violationCount * 80 * (this.constraintWeights.calendarRules || 1.0);
 
         console.warn(
-          `⚠️ [ScheduleGen] Combined rule violations (Phase 3): ${violationCount}`
+          `⚠️ [ScheduleGen] Combined rule violations (Phase 3): ${violationCount}`,
         );
       }
     }
@@ -2191,7 +2223,7 @@ export class ScheduleGenerator {
     dateKey,
     proposedShift,
     dateRange,
-    weeklyLimits = null
+    weeklyLimits = null,
   ) {
     try {
       // Load weekly limits if not provided
@@ -2206,7 +2238,7 @@ export class ScheduleGenerator {
 
       // Find the date in the range
       const dateIndex = dateRange.findIndex(
-        d => d.toISOString().split("T")[0] === dateKey
+        (d) => d.toISOString().split("T")[0] === dateKey,
       );
       if (dateIndex === -1) return false;
 
@@ -2215,13 +2247,19 @@ export class ScheduleGenerator {
       let checkFunction = null;
 
       if (isOffDay(proposedShift)) {
-        limit = weeklyLimits?.find(l => l.shiftType === "off" || l.shiftType === "×");
+        limit = weeklyLimits?.find(
+          (l) => l.shiftType === "off" || l.shiftType === "×",
+        );
         checkFunction = isOffDay;
       } else if (isEarlyShift(proposedShift)) {
-        limit = weeklyLimits?.find(l => l.shiftType === "early" || l.shiftType === "△");
+        limit = weeklyLimits?.find(
+          (l) => l.shiftType === "early" || l.shiftType === "△",
+        );
         checkFunction = isEarlyShift;
       } else if (isLateShift(proposedShift)) {
-        limit = weeklyLimits?.find(l => l.shiftType === "late" || l.shiftType === "◇");
+        limit = weeklyLimits?.find(
+          (l) => l.shiftType === "late" || l.shiftType === "◇",
+        );
         checkFunction = isLateShift;
       }
 
@@ -2233,10 +2271,11 @@ export class ScheduleGenerator {
 
       // Check all 7-day windows that include this date
       // A date can be in up to 7 different windows (positions 0-6 in each window)
-      for (let windowStart = Math.max(0, dateIndex - 6);
-           windowStart <= Math.min(dateIndex, dateRange.length - 7);
-           windowStart++) {
-
+      for (
+        let windowStart = Math.max(0, dateIndex - 6);
+        windowStart <= Math.min(dateIndex, dateRange.length - 7);
+        windowStart++
+      ) {
         const window = dateRange.slice(windowStart, windowStart + 7);
         let count = 0;
 
@@ -2323,7 +2362,9 @@ export class ScheduleGenerator {
         applicableLimit = monthlyLimits.find(
           (l) =>
             l.enabled !== false &&
-            (l.shiftType === "off" || l.shiftType === "×" || l.limitType === "max_off_days"),
+            (l.shiftType === "off" ||
+              l.shiftType === "×" ||
+              l.limitType === "max_off_days"),
         );
       } else if (isEarlyShift(proposedShift)) {
         applicableLimit = monthlyLimits.find(
@@ -2358,7 +2399,8 @@ export class ScheduleGenerator {
 
       const datesInMonth = dateRange.filter((date) => {
         return (
-          date.getMonth() === proposedMonth && date.getFullYear() === proposedYear
+          date.getMonth() === proposedMonth &&
+          date.getFullYear() === proposedYear
         );
       });
 
@@ -2382,13 +2424,16 @@ export class ScheduleGenerator {
       }
 
       // Check if adding this shift would exceed the limit
-      const maxCount = applicableLimit.maxCount || applicableLimit.maxOffDaysPerMonth || Infinity;
+      const maxCount =
+        applicableLimit.maxCount ||
+        applicableLimit.maxOffDaysPerMonth ||
+        Infinity;
       const wouldExceed = monthCount + 1 > maxCount;
 
       if (wouldExceed) {
         console.log(
           `🚫 [MONTHLY-LIMIT] ${staff.name}: Would exceed monthly limit for ${proposedShift} ` +
-          `(current: ${monthCount}, max: ${maxCount}, proposed date: ${dateKey})`,
+            `(current: ${monthCount}, max: ${maxCount}, proposed date: ${dateKey})`,
         );
       }
 
@@ -2418,12 +2463,12 @@ export class ScheduleGenerator {
         const canDoEarly = EarlyShiftPreferencesLoader.canDoEarlyShift(
           this.earlyShiftPreferences,
           staff.id,
-          dateKey
+          dateKey,
         );
 
         if (!canDoEarly) {
           console.log(
-            `🚫 [EARLY-SHIFT] ${staff.name}: No permission for early shift (△) on ${dateKey}`
+            `🚫 [EARLY-SHIFT] ${staff.name}: No permission for early shift (△) on ${dateKey}`,
           );
           return false;
         }
@@ -2437,7 +2482,9 @@ export class ScheduleGenerator {
 
       // ✅ Check consecutive early shifts (Tier 1 constraint - Staff welfare)
       // Prevents △△ pattern which is undesirable for staff
-      if (this.hasConsecutiveEarlyShift(staff, dateKey, proposedShift, schedule)) {
+      if (
+        this.hasConsecutiveEarlyShift(staff, dateKey, proposedShift, schedule)
+      ) {
         return false; // Consecutive early shift already logged in hasConsecutiveEarlyShift()
       }
 
@@ -2447,7 +2494,7 @@ export class ScheduleGenerator {
 
         // Find the index of the proposed date
         const dateIndex = dateRange.findIndex(
-          d => d.toISOString().split("T")[0] === dateKey
+          (d) => d.toISOString().split("T")[0] === dateKey,
         );
 
         if (dateIndex > 0) {
@@ -2470,7 +2517,7 @@ export class ScheduleGenerator {
           if (consecutiveWorkDays >= MAX_CONSECUTIVE_WORK_DAYS) {
             console.log(
               `🚫 [CONSECUTIVE-LIMIT] ${staff.name}: Would exceed ${MAX_CONSECUTIVE_WORK_DAYS} consecutive work days ` +
-              `(current streak: ${consecutiveWorkDays}, proposed: ${proposedShift} on ${dateKey})`
+                `(current streak: ${consecutiveWorkDays}, proposed: ${proposedShift} on ${dateKey})`,
             );
             return false;
           }
@@ -2694,20 +2741,44 @@ export class ScheduleGenerator {
         for (const memberName of group.members) {
           if (memberName === staff.name) continue; // Skip current staff
 
-          const memberSchedule = schedule[memberName];
-          if (memberSchedule && memberSchedule[dateKey]) {
-            const memberShift = memberSchedule[dateKey];
-            // Check if group member already has conflicting shift
-            if (memberShift === "×" || memberShift === "△") {
-              conflictCount++;
-            }
+          // ✅ FIX: Find staff member by name, then use ID for schedule lookup
+          const member = staffMembers.find((s) => s.name === memberName);
+
+          if (!member) {
+            console.warn(
+              `⚠️ [GROUP-CONFLICT] Staff member "${memberName}" in group "${group.name}" not found in staffMembers list`,
+            );
+            continue;
+          }
+
+          // ✅ Use staff.id as the key for schedule lookup (schedule is keyed by ID, not name)
+          const memberSchedule = schedule[member.id];
+
+          if (!memberSchedule) {
+            console.warn(
+              `⚠️ [GROUP-CONFLICT] Schedule not found for staff ID: ${member.id} (${memberName})`,
+            );
+            continue;
+          }
+
+          const memberShift = memberSchedule[dateKey];
+
+          // Check if member has conflict shift (× or △)
+          if (memberShift === "×" || memberShift === "△") {
+            conflictCount++;
+            console.log(
+              `📋 [GROUP-CONFLICT] ${memberName} has "${memberShift}" on ${dateKey} (checking against ${staff.name}'s proposed "${proposedShift}")`,
+            );
           }
         }
 
         // If any group member already has conflict shift, proposing another would create violation
         if (conflictCount > 0) {
           console.log(
-            `🚫 Group conflict detected: ${staff.name} in ${group.name} - ${conflictCount} member(s) already off/early on ${dateKey}`,
+            `🚫 [GROUP-CONFLICT] BLOCKED: ${staff.name} cannot have "${proposedShift}" on ${dateKey}\n` +
+              `   Reason: ${conflictCount} member(s) in group "${group.name}" already have × or △\n` +
+              `   Group members: ${group.members.join(", ")}\n` +
+              `   Constraint: Prevent any combination of × or △ within same group on same day`,
           );
           return true;
         }
@@ -3051,7 +3122,13 @@ export class ScheduleGenerator {
     dateRange,
   ) {
     // Validate if shift assignment is allowed with actual limit checks
-    return await this.canAssignShift(staff, dateKey, shift, schedule, dateRange);
+    return await this.canAssignShift(
+      staff,
+      dateKey,
+      shift,
+      schedule,
+      dateRange,
+    );
   }
 
   async fillRemainingSlots(schedule, staffMembers, dateRange) {
