@@ -1487,12 +1487,19 @@ export class BusinessRuleValidator {
     console.log(`📋 [AI] Processing ${staffGroups.length} staff group(s)`);
     console.log(`📋 [AI] Staff groups:`, staffGroups.map(g => ({ name: g.name, members: g.members })));
 
+    let totalGroupsChecked = 0;
+    let totalDatesChecked = 0;
+    let totalConflictsFound = 0;
+    let totalConflictsFixed = 0;
+
     // For each date in the range
     dateRange.forEach((date) => {
       const dateKey = date.toISOString().split("T")[0];
+      totalDatesChecked++;
 
       // For each staff group
       staffGroups.forEach((group) => {
+        totalGroupsChecked++;
         const groupMembers = group.members || [];
         if (groupMembers.length === 0) return;
 
@@ -1532,9 +1539,11 @@ export class BusinessRuleValidator {
 
         // ✅ CRITICAL FIX: If more than 1 member has off/early shift, enforce opposite pattern
         if (offOrEarlyMembers.length > 1) {
+          totalConflictsFound++;
           console.log(
             `⚠️ [AI] ${dateKey}: Group "${group.name}" has ${offOrEarlyMembers.length} members with off/early shifts - fixing conflict`
           );
+          console.log(`  📋 [AI] Conflicting members:`, offOrEarlyMembers.map(m => `${m.staffName}(${m.shift})`).join(', '));
 
           // Strategy: Keep the first member's shift, change the rest to working (○ or empty)
           // This ensures opposite patterns: if one is off (×), others must work (○)
@@ -1547,6 +1556,7 @@ export class BusinessRuleValidator {
             console.log(
               `  ✏️ [AI] Changed ${member.staffName}: "${previousShift}" → "○" (working shift)`
             );
+            totalConflictsFixed++;
           });
 
           console.log(
@@ -1556,11 +1566,25 @@ export class BusinessRuleValidator {
           console.log(
             `  ✓ [AI] ${dateKey}: Group "${group.name}" OK - 1 member off/early, others working`
           );
+        } else if (offOrEarlyMembers.length === 0) {
+          // ✅ NEW: Log when all members are working (no off/early)
+          console.log(
+            `  ✓ [AI] ${dateKey}: Group "${group.name}" OK - all ${membersWithShifts.length} members working`
+          );
+        }
+
+        // ✅ DEBUG: Special logging for Group 7
+        if (group.name === "Group 7" && (dateKey === "2025-12-22" || offOrEarlyMembers.length > 0)) {
+          console.log(`🔍 [DEBUG-GROUP-7] ${dateKey}: Group 7 detailed status`);
+          console.log(`  Members in group:`, groupMembers);
+          console.log(`  Members with shifts:`, membersWithShifts);
+          console.log(`  Off/Early members:`, offOrEarlyMembers);
         }
       });
     });
 
-    console.log("✅ [AI] Staff group constraints applied successfully");
+    console.log(`✅ [AI] Staff group constraints applied successfully`);
+    console.log(`📊 [AI] Stats: ${totalGroupsChecked} group-dates checked, ${totalConflictsFound} conflicts found, ${totalConflictsFixed} fixes applied`);
   }
 
   /**
