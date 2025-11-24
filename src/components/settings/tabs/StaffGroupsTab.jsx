@@ -244,8 +244,8 @@ const StaffGroupsTab = ({
   // Phase 3: Get settings from Context instead of props (eliminates prop drilling)
   const { settings, updateSettings } = useSettings();
 
-  // Get hard delete function from WebSocket settings
-  const { hardDeleteStaffGroup } = useWebSocketSettings();
+  // Get delete functions from WebSocket settings
+  const { deleteStaffGroup, hardDeleteStaffGroup } = useWebSocketSettings();
 
   const [editingGroup, setEditingGroup] = useState(null);
   const [originalGroupData, setOriginalGroupData] = useState(null);
@@ -773,10 +773,16 @@ const StaffGroupsTab = ({
         };
         updateSettings(updatedSettings);
 
-        // ✅ HARD DELETE: Call WebSocket function to permanently delete group
-        console.log("🗑️ [StaffGroupsTab] Calling hardDeleteStaffGroup WebSocket function");
+        // ✅ TWO-STEP DELETE: Soft-delete first, then hard-delete
+        // Step 1: Soft-delete (set isActive = false)
+        console.log("🗑️ [StaffGroupsTab] Step 1: Calling deleteStaffGroup (soft-delete)");
+        await deleteStaffGroup(groupId);
+        console.log("🗑️ [StaffGroupsTab] Soft-delete completed successfully");
+
+        // Step 2: Hard-delete (permanently remove from database)
+        console.log("🗑️ [StaffGroupsTab] Step 2: Calling hardDeleteStaffGroup (permanent delete)");
         await hardDeleteStaffGroup(groupId);
-        console.log("🗑️ [StaffGroupsTab] hardDeleteStaffGroup completed successfully");
+        console.log("🗑️ [StaffGroupsTab] Hard-delete completed successfully");
 
         // Show success toast
         toast.success(`Permanently deleted group: ${groupToDelete.name}`);
@@ -799,6 +805,7 @@ const StaffGroupsTab = ({
       settings,
       updateSettings,
       hookRemoveBackupAssignment,
+      deleteStaffGroup,
       hardDeleteStaffGroup,
     ],
   );
