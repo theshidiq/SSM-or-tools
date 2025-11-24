@@ -615,29 +615,13 @@ const StaffGroupsTab = ({
   };
 
   const createNewGroup = () => {
-    // Generate a unique group name based on existing ACTIVE groups
-    // ✅ FIX #3: Only check active groups (isActive !== false) using normalized field name
-    // Soft-deleted groups don't count for uniqueness
-
-    console.log('🔍 [createNewGroup] START - Current staffGroups:', staffGroups);
-    console.log('🔍 [createNewGroup] Active groups:', staffGroups.filter(g => g.isActive !== false));
-    console.log('🔍 [createNewGroup] Inactive groups:', staffGroups.filter(g => g.isActive === false));
-
-    let groupNumber = 1;
-    let newGroupName = `New Group ${groupNumber}`;
-
-    // Keep incrementing until we find a unique name among ACTIVE groups only
-    while (staffGroups.some((group) => group.isActive !== false && group.name === newGroupName)) {
-      console.log(`🔍 [createNewGroup] "${newGroupName}" already exists in active groups, trying next number`);
-      groupNumber++;
-      newGroupName = `New Group ${groupNumber}`;
-    }
-
-    console.log(`✅ [createNewGroup] Generated unique name: "${newGroupName}"`);
+    // Create new group with empty name - user will name it themselves
+    // This avoids unique constraint issues and provides better UX
+    console.log('🔍 [createNewGroup] Creating new group with empty name');
 
     const newGroup = {
       id: crypto.randomUUID(), // Generate proper UUID for Supabase
-      name: newGroupName,
+      name: "", // Empty name - user will fill it in
       description: "",
       color: getNextAvailableColor(),
       members: [], // Always initialize members array (WebSocket multi-table backend compatibility)
@@ -645,6 +629,7 @@ const StaffGroupsTab = ({
 
     console.log('✅ [createNewGroup] New group object:', newGroup);
 
+    // Set editing mode immediately so user can enter name
     setEditingGroup(newGroup.id);
     updateStaffGroups([...staffGroups, newGroup]);
 
@@ -1258,12 +1243,13 @@ const StaffGroupsTab = ({
                   onChange={(e) =>
                     updateGroup(group.id, { name: e.target.value })
                   }
-                  className="font-semibold text-lg bg-transparent border-b-2 border-blue-500 focus:outline-none w-full"
+                  placeholder="Enter group name..."
+                  className="font-semibold text-lg bg-transparent border-b-2 border-blue-500 focus:outline-none w-full placeholder:text-gray-400 placeholder:font-normal"
                   autoFocus
                 />
               ) : (
                 <h3 className="font-semibold text-lg text-gray-800 truncate">
-                  {displayName}
+                  {displayName || <span className="text-gray-400 font-normal italic">Unnamed Group</span>}
                 </h3>
               )}
             </div>
