@@ -872,7 +872,11 @@ class StaffGroupProcessor extends BaseConstraintProcessor {
   evaluateGroupConflict(solution, group, context) {
     const { staffMembers, dateRange } = context;
 
+    console.log(`🔍 [GROUP-CONFLICT-ML] Evaluating group "${group.name}" (ID: ${group.id})`);
+    console.log(`   Members: ${group.members?.join(', ') || 'none'}`);
+
     if (!staffMembers || !dateRange || !group.members || group.members.length === 0) {
+      console.log(`⏭️ [GROUP-CONFLICT-ML] Skipping group "${group.name}": missing data`);
       return null;
     }
 
@@ -915,20 +919,29 @@ class StaffGroupProcessor extends BaseConstraintProcessor {
       // If more than 1 member has × or △ on same day = violation
       // This catches ××, △△, ×△, and △× patterns
       if (conflictingMembers.length > 1) {
-        violations.push({
+        const violationDetail = {
           date: dateKey,
           groupName: group.name,
           groupId: group.id,
           conflictingMembers,
           conflictCount: conflictingMembers.length,
           reason: `${conflictingMembers.length} members in group "${group.name}" have × or △ on ${dateKey}: ${conflictingMembers.map(m => `${m.staffName}(${m.shift})`).join(', ')}`
-        });
+        };
+
+        violations.push(violationDetail);
+
+        console.log(`🚫 [GROUP-CONFLICT-ML] VIOLATION on ${dateKey}:`);
+        console.log(`   Group: ${group.name}`);
+        console.log(`   Conflicting members: ${conflictingMembers.map(m => `${m.staffName}(${m.shift})`).join(', ')}`);
       }
     });
 
     if (violations.length === 0) {
+      console.log(`✅ [GROUP-CONFLICT-ML] No violations found for group "${group.name}"`);
       return null; // No violations
     }
+
+    console.log(`❌ [GROUP-CONFLICT-ML] Found ${violations.length} violation(s) for group "${group.name}"`);
 
     return {
       severity: "critical",
