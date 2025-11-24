@@ -51,33 +51,9 @@ function logGroupConflict(message) {
   console.log(message); // Also log to console for real-time viewing
 }
 
-// Export to window for easy access
-if (typeof window !== "undefined") {
-  window.viewGroupConflictLogs = () => {
-    console.log("\n=== GROUP-CONFLICT LOGS ===\n");
-    groupConflictLogs.forEach((log) => console.log(log));
-    console.log(`\n=== Total: ${groupConflictLogs.length} logs ===\n`);
-    return groupConflictLogs;
-  };
-
-  window.clearGroupConflictLogs = () => {
-    groupConflictLogs.length = 0;
-    console.log("✅ Group conflict logs cleared");
-  };
-
-  window.searchGroupConflictLogs = (keyword) => {
-    const filtered = groupConflictLogs.filter((log) =>
-      log.toLowerCase().includes(keyword.toLowerCase()),
-    );
-    console.log(`\n=== Search results for "${keyword}" ===\n`);
-    filtered.forEach((log) => console.log(log));
-    console.log(`\n=== Found: ${filtered.length} matching logs ===\n`);
-    return filtered;
-  };
-}
-
 /**
  * Main ScheduleGenerator class
+ * Note: Window exports (viewGroupConflictLogs, etc.) are initialized in constructor
  */
 export class ScheduleGenerator {
   constructor() {
@@ -103,6 +79,9 @@ export class ScheduleGenerator {
     this.geneticAlgorithm = new GeneticAlgorithm();
     this.simulatedAnnealing = new SimulatedAnnealing();
     this.ensembleScheduler = new EnsembleScheduler();
+
+    // ✅ Initialize GROUP-CONFLICT logger window functions
+    this.initializeGroupConflictLogger();
 
     // ML parameter presets mapping
     this.mlPresets = {
@@ -188,6 +167,40 @@ export class ScheduleGenerator {
    */
   isEligibleForEarlyShift(staff) {
     return staff.status === "社員";
+  }
+
+  /**
+   * Initialize GROUP-CONFLICT logger window functions
+   * Makes viewGroupConflictLogs, searchGroupConflictLogs, clearGroupConflictLogs available globally
+   */
+  initializeGroupConflictLogger() {
+    if (typeof window !== "undefined") {
+      window.viewGroupConflictLogs = () => {
+        console.log("\n=== GROUP-CONFLICT LOGS ===\n");
+        groupConflictLogs.forEach((log) => console.log(log));
+        console.log(`\n=== Total: ${groupConflictLogs.length} logs ===\n`);
+        return groupConflictLogs;
+      };
+
+      window.clearGroupConflictLogs = () => {
+        groupConflictLogs.length = 0;
+        console.log("✅ Group conflict logs cleared");
+      };
+
+      window.searchGroupConflictLogs = (keyword) => {
+        const filtered = groupConflictLogs.filter((log) =>
+          log.toLowerCase().includes(keyword.toLowerCase()),
+        );
+        console.log(`\n=== Search results for "${keyword}" ===\n`);
+        filtered.forEach((log) => console.log(log));
+        console.log(`\n=== Found: ${filtered.length} matching logs ===\n`);
+        return filtered;
+      };
+
+      console.log(
+        "✅ GROUP-CONFLICT logger initialized. Use: viewGroupConflictLogs(), searchGroupConflictLogs(keyword), clearGroupConflictLogs()",
+      );
+    }
   }
 
   /**
