@@ -5,10 +5,22 @@
  * Handles TensorFlow.js operations, genetic algorithms, and constraint validation.
  */
 
-// Import TensorFlow.js and other ML dependencies in worker
-importScripts(
-  "https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.15.0/dist/tf.min.js",
-);
+// Try to import TensorFlow.js - this is optional enhancement
+let tfAvailable = false;
+try {
+  importScripts(
+    "https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.15.0/dist/tf.min.js",
+  );
+  tfAvailable = true;
+  console.log("✅ TensorFlow.js loaded successfully in worker");
+} catch (error) {
+  console.warn(
+    "⚠️ TensorFlow.js not available in worker - using fallback methods:",
+    error.message,
+  );
+  // Worker will still function with rule-based predictions
+  tfAvailable = false;
+}
 
 // Worker state
 let isInitialized = false;
@@ -89,12 +101,16 @@ async function initializeWorker(config) {
       },
     });
 
-    // Initialize TensorFlow.js in worker thread
-    await tf.ready();
+    // Initialize TensorFlow.js in worker thread (if available)
+    if (tfAvailable) {
+      await tf.ready();
+    }
 
-    // Set memory management
-    tf.env().set("WEBGL_DELETE_TEXTURE_THRESHOLD", 0);
-    tf.env().set("WEBGL_FORCE_F16_TEXTURES", true);
+    // Set memory management (if TensorFlow available)
+    if (tfAvailable) {
+      tf.env().set("WEBGL_DELETE_TEXTURE_THRESHOLD", 0);
+      tf.env().set("WEBGL_FORCE_F16_TEXTURES", true);
+    }
 
     postMessage({
       type: "progress",
@@ -158,6 +174,11 @@ async function initializeWorker(config) {
  * Load optimized models for worker processing
  */
 async function loadWorkerModels(config) {
+  if (!tfAvailable) {
+    console.log("ℹ️ TensorFlow not available - skipping ML model loading");
+    return; // Worker will use rule-based fallbacks
+  }
+
   try {
     // Load lightweight neural network for predictions
     if (config.enableMLPredictions) {
@@ -179,7 +200,8 @@ async function loadWorkerModels(config) {
       mlModels.set("pattern", patternModel);
     }
   } catch (error) {
-    throw new Error(`Model loading failed: ${error.message}`);
+    console.warn(`Model loading failed (non-fatal): ${error.message}`);
+    // Don't throw - worker can still function without TensorFlow models
   }
 }
 
@@ -489,6 +511,11 @@ function generateFeatures(staff, date, scheduleData, options) {
  * Setup memory tracking and management
  */
 function setupMemoryTracking() {
+  if (!tfAvailable) {
+    console.log("ℹ️ TensorFlow not available - skipping memory tracking");
+    return;
+  }
+
   // Track tensor creation and cleanup
   const originalTensor = tf.tensor;
   tf.tensor = function (...args) {
@@ -515,6 +542,10 @@ function setupMemoryTracking() {
  * Perform memory cleanup
  */
 async function performMemoryCleanup() {
+  if (!tfAvailable) {
+    return; // Nothing to clean if TensorFlow not available
+  }
+
   const beforeMemory = tf.memory();
 
   // Dispose unreferenced tensors
@@ -545,12 +576,23 @@ async function performMemoryCleanup() {
  * Get current memory information
  */
 function getMemoryInfo() {
+  if (!tfAvailable) {
+    return {
+      totalBytes: 0,
+      numTensors: 0,
+      maxBytes: 0,
+      percentUsed: 0,
+      tensorflowAvailable: false,
+    };
+  }
+
   const memInfo = tf.memory();
   return {
     totalBytes: memInfo.numBytes,
     numTensors: memInfo.numTensors,
     maxBytes: tensorMemoryTracker.maxMemoryUsage,
     percentUsed: (memInfo.numBytes / tensorMemoryTracker.maxMemoryUsage) * 100,
+    tensorflowAvailable: true,
   };
 }
 
@@ -559,17 +601,25 @@ function getMemoryInfo() {
  */
 function getWorkerCapabilities() {
   return {
-    tensorflow: {
-      version: tf.version.tfjs,
-      backend: tf.getBackend(),
-      ready: true,
-    },
+    tensorflow: tfAvailable
+      ? {
+          version: tf.version.tfjs,
+          backend: tf.getBackend(),
+          ready: true,
+        }
+      : {
+          version: "N/A",
+          backend: "N/A",
+          ready: false,
+          reason: "TensorFlow.js not loaded (using rule-based fallbacks)",
+        },
     features: {
       mlPredictions: mlModels.has("prediction"),
       constraintValidation: mlModels.has("constraint"),
       patternRecognition: mlModels.has("pattern"),
+      ruleBasedFallback: !tfAvailable,
     },
-    memoryManagement: true,
+    memoryManagement: tfAvailable,
     progressiveProcessing: true,
   };
 }
@@ -1471,16 +1521,20 @@ self.onmessage = async function (event) {
 
 // Setup worker configurations
 function setupWorkerConfigurations(config) {
-  // Configure TensorFlow.js for worker environment
-  tf.env().set("WEBGL_MAX_TEXTURE_SIZE", 4096);
-  tf.env().set("WEBGL_PACK", true);
-  tf.env().set("WEBGL_FORCE_F16_TEXTURES", true);
+  // Configure TensorFlow.js for worker environment (if available)
+  if (tfAvailable) {
+    tf.env().set("WEBGL_MAX_TEXTURE_SIZE", 4096);
+    tf.env().set("WEBGL_PACK", true);
+    tf.env().set("WEBGL_FORCE_F16_TEXTURES", true);
 
-  // Set memory limits
-  if (config.memoryLimitMB) {
-    tensorMemoryTracker.maxMemoryUsage = config.memoryLimitMB * 1024 * 1024;
-    tensorMemoryTracker.cleanupThreshold = Math.floor(
-      tensorMemoryTracker.maxMemoryUsage * 0.8,
-    );
+    // Set memory limits
+    if (config.memoryLimitMB) {
+      tensorMemoryTracker.maxMemoryUsage = config.memoryLimitMB * 1024 * 1024;
+      tensorMemoryTracker.cleanupThreshold = Math.floor(
+        tensorMemoryTracker.maxMemoryUsage * 0.8,
+      );
+    }
+  } else {
+    console.log("ℹ️ TensorFlow not available - skipping TF configuration");
   }
 }
