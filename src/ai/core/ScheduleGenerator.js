@@ -39,6 +39,44 @@ import { PreGenerationConstraintLocker } from "./PreGenerationConstraintLocker";
 import { ViolationRepairEngine } from "./ViolationRepairEngine";
 
 /**
+ * GROUP-CONFLICT Logger
+ * Stores all group conflict logs to avoid browser performance issues
+ */
+const groupConflictLogs = [];
+
+function logGroupConflict(message) {
+  const timestamp = new Date().toLocaleTimeString();
+  const logEntry = `[${timestamp}] ${message}`;
+  groupConflictLogs.push(logEntry);
+  console.log(message); // Also log to console for real-time viewing
+}
+
+// Export to window for easy access
+if (typeof window !== "undefined") {
+  window.viewGroupConflictLogs = () => {
+    console.log("\n=== GROUP-CONFLICT LOGS ===\n");
+    groupConflictLogs.forEach((log) => console.log(log));
+    console.log(`\n=== Total: ${groupConflictLogs.length} logs ===\n`);
+    return groupConflictLogs;
+  };
+
+  window.clearGroupConflictLogs = () => {
+    groupConflictLogs.length = 0;
+    console.log("✅ Group conflict logs cleared");
+  };
+
+  window.searchGroupConflictLogs = (keyword) => {
+    const filtered = groupConflictLogs.filter((log) =>
+      log.toLowerCase().includes(keyword.toLowerCase()),
+    );
+    console.log(`\n=== Search results for "${keyword}" ===\n`);
+    filtered.forEach((log) => console.log(log));
+    console.log(`\n=== Found: ${filtered.length} matching logs ===\n`);
+    return filtered;
+  };
+}
+
+/**
  * Main ScheduleGenerator class
  */
 export class ScheduleGenerator {
@@ -2734,7 +2772,7 @@ export class ScheduleGenerator {
       }
 
       // ✅ DEBUG: Log function entry to verify it's being called
-      console.log(
+      logGroupConflict(
         `🔍 [GROUP-CONFLICT-CHECK] Checking ${staff.name} for "${proposedShift}" on ${dateKey} ` +
           `(in ${staffGroups_containing.length} group(s): ${staffGroups_containing.map((g) => g.name).join(", ")})`,
       );
@@ -2751,7 +2789,7 @@ export class ScheduleGenerator {
           const member = staffMembers.find((s) => s.name === memberName);
 
           if (!member) {
-            console.warn(
+            logGroupConflict(
               `⚠️ [GROUP-CONFLICT] Staff member "${memberName}" in group "${group.name}" not found in staffMembers list`,
             );
             continue;
@@ -2761,7 +2799,7 @@ export class ScheduleGenerator {
           const memberSchedule = schedule[member.id];
 
           if (!memberSchedule) {
-            console.warn(
+            logGroupConflict(
               `⚠️ [GROUP-CONFLICT] Schedule not found for staff ID: ${member.id} (${memberName})`,
             );
             continue;
@@ -2772,7 +2810,7 @@ export class ScheduleGenerator {
           // Check if member has conflict shift (× or △)
           if (memberShift === "×" || memberShift === "△") {
             conflictCount++;
-            console.log(
+            logGroupConflict(
               `📋 [GROUP-CONFLICT] ${memberName} has "${memberShift}" on ${dateKey} (checking against ${staff.name}'s proposed "${proposedShift}")`,
             );
           }
@@ -2780,7 +2818,7 @@ export class ScheduleGenerator {
 
         // If any group member already has conflict shift, proposing another would create violation
         if (conflictCount > 0) {
-          console.log(
+          logGroupConflict(
             `🚫 [GROUP-CONFLICT] BLOCKED: ${staff.name} cannot have "${proposedShift}" on ${dateKey}\n` +
               `   Reason: ${conflictCount} member(s) in group "${group.name}" already have × or △\n` +
               `   Group members: ${group.members.join(", ")}\n` +
@@ -2792,7 +2830,7 @@ export class ScheduleGenerator {
 
       return false; // No conflicts found
     } catch (error) {
-      console.warn("⚠️ Error checking group conflicts:", error);
+      logGroupConflict(`⚠️ Error checking group conflicts: ${error.message}`);
       return false; // Default to allowing shift if check fails
     }
   }
