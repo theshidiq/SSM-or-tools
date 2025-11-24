@@ -2733,6 +2733,12 @@ export class ScheduleGenerator {
         return false; // Staff not in any group
       }
 
+      // ✅ DEBUG: Log function entry to verify it's being called
+      console.log(
+        `🔍 [GROUP-CONFLICT-CHECK] Checking ${staff.name} for "${proposedShift}" on ${dateKey} ` +
+          `(in ${staffGroups_containing.length} group(s): ${staffGroups_containing.map((g) => g.name).join(", ")})`,
+      );
+
       // Check each group for conflicts
       for (const group of staffGroups_containing) {
         let conflictCount = 0;
