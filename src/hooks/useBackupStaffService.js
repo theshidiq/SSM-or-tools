@@ -74,9 +74,7 @@ export const useBackupStaffService = () => {
         }
 
         const newAssignment = {
-          id:
-            options.id ||
-            `backup-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+          id: options.id || crypto.randomUUID(), // ✅ FIX: Generate proper UUID for database compatibility
           staffId,
           groupId,
           assignmentType: options.assignmentType || "regular",
