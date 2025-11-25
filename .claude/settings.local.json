@@ -14,7 +14,9 @@
       "Bash(xargs kill:*)",
       "Bash(curl:*)",
       "Bash(killall:*)",
-      "Bash(git add:*)"
+      "Bash(git add:*)",
+      "Bash(git push:*)",
+      "Bash(cat:*)"
     ],
     "deny": [],
     "ask": []

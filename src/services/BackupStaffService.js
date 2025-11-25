@@ -667,7 +667,13 @@ export class BackupStaffService {
   async loadBackupAssignments() {
     try {
       // First try to load from ConfigurationService (database or localStorage)
+      console.log("🔍 [BackupStaffService] Loading backup assignments from ConfigurationService...");
       const assignments = configService.getBackupAssignments();
+      console.log("🔍 [BackupStaffService] getBackupAssignments() returned:", {
+        isArray: Array.isArray(assignments),
+        length: assignments?.length || 0,
+        assignments: assignments,
+      });
 
       // If no assignments in ConfigurationService, check for localStorage migration
       if (!assignments || assignments.length === 0) {
