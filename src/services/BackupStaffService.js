@@ -793,11 +793,18 @@ export class BackupStaffService {
     try {
       const startTime = Date.now();
 
-      // Load backup assignments if not provided
+      // ✅ FIX: Properly check for empty arrays, not just null
+      // An empty array [] is NOT null, so we need explicit length check
       const backupAssignments =
-        providedBackupAssignments !== null
+        Array.isArray(providedBackupAssignments) && providedBackupAssignments.length > 0
           ? providedBackupAssignments
           : await this.loadBackupAssignments();
+
+      console.log("🔍 [BackupStaffService] Backup assignments resolution:", {
+        providedLength: providedBackupAssignments?.length || 0,
+        willLoadFromConfig: !Array.isArray(providedBackupAssignments) || providedBackupAssignments.length === 0,
+        finalLength: backupAssignments.length,
+      });
 
       // Use the existing initialize method
       const success = await this.initialize(
