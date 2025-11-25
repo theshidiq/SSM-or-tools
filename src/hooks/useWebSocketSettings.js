@@ -33,6 +33,9 @@ const MESSAGE_TYPES = {
   SETTINGS_UPDATE_PRIORITY_RULES: "SETTINGS_UPDATE_PRIORITY_RULES",
   SETTINGS_DELETE_PRIORITY_RULE: "SETTINGS_DELETE_PRIORITY_RULE",
   SETTINGS_UPDATE_ML_CONFIG: "SETTINGS_UPDATE_ML_CONFIG",
+  SETTINGS_CREATE_BACKUP_ASSIGNMENT: "SETTINGS_CREATE_BACKUP_ASSIGNMENT",
+  SETTINGS_UPDATE_BACKUP_ASSIGNMENT: "SETTINGS_UPDATE_BACKUP_ASSIGNMENT",
+  SETTINGS_DELETE_BACKUP_ASSIGNMENT: "SETTINGS_DELETE_BACKUP_ASSIGNMENT",
 
   // Bulk operations
   SETTINGS_RESET: "SETTINGS_RESET",
@@ -901,6 +904,120 @@ export const useWebSocketSettings = (options = {}) => {
   );
 
   /**
+   * Create backup assignment (table-specific operation)
+   */
+  const createBackupAssignment = useCallback(
+    (assignmentData) => {
+      if (!enabled) {
+        const error = new Error("WebSocket disabled");
+        console.log(
+          "🚫 Phase 3 Settings: Backup assignment creation blocked - WebSocket disabled",
+        );
+        return Promise.reject(error);
+      }
+
+      if (wsRef.current?.readyState === WebSocket.OPEN) {
+        const message = {
+          type: MESSAGE_TYPES.SETTINGS_CREATE_BACKUP_ASSIGNMENT,
+          payload: { assignment: assignmentData },
+          timestamp: new Date().toISOString(),
+          clientId: clientIdRef.current,
+        };
+
+        wsRef.current.send(JSON.stringify(message));
+        console.log(
+          "📤 Phase 3 Settings: Sent backup assignment creation:",
+          assignmentData,
+        );
+
+        return Promise.resolve();
+      } else {
+        const error = new Error("WebSocket not connected");
+        console.error(
+          "❌ Phase 3 Settings: Failed to create backup assignment - not connected",
+        );
+        return Promise.reject(error);
+      }
+    },
+    [enabled],
+  );
+
+  /**
+   * Update backup assignment (table-specific operation)
+   */
+  const updateBackupAssignment = useCallback(
+    (assignmentData) => {
+      if (!enabled) {
+        const error = new Error("WebSocket disabled");
+        console.log(
+          "🚫 Phase 3 Settings: Backup assignment update blocked - WebSocket disabled",
+        );
+        return Promise.reject(error);
+      }
+
+      if (wsRef.current?.readyState === WebSocket.OPEN) {
+        const message = {
+          type: MESSAGE_TYPES.SETTINGS_UPDATE_BACKUP_ASSIGNMENT,
+          payload: { assignment: assignmentData },
+          timestamp: new Date().toISOString(),
+          clientId: clientIdRef.current,
+        };
+
+        wsRef.current.send(JSON.stringify(message));
+        console.log(
+          "📤 Phase 3 Settings: Sent backup assignment update:",
+          assignmentData,
+        );
+
+        return Promise.resolve();
+      } else {
+        const error = new Error("WebSocket not connected");
+        console.error(
+          "❌ Phase 3 Settings: Failed to update backup assignment - not connected",
+        );
+        return Promise.reject(error);
+      }
+    },
+    [enabled],
+  );
+
+  /**
+   * Delete backup assignment (table-specific operation)
+   */
+  const deleteBackupAssignment = useCallback(
+    (assignmentId) => {
+      if (!enabled) {
+        const error = new Error("WebSocket disabled");
+        console.log(
+          "🚫 Phase 3 Settings: Backup assignment deletion blocked - WebSocket disabled",
+        );
+        return Promise.reject(error);
+      }
+
+      if (wsRef.current?.readyState === WebSocket.OPEN) {
+        const message = {
+          type: MESSAGE_TYPES.SETTINGS_DELETE_BACKUP_ASSIGNMENT,
+          payload: { assignmentId },
+          timestamp: new Date().toISOString(),
+          clientId: clientIdRef.current,
+        };
+
+        wsRef.current.send(JSON.stringify(message));
+        console.log("📤 Phase 3 Settings: Sent backup assignment deletion:", assignmentId);
+
+        return Promise.resolve();
+      } else {
+        const error = new Error("WebSocket not connected");
+        console.error(
+          "❌ Phase 3 Settings: Failed to delete backup assignment - not connected",
+        );
+        return Promise.reject(error);
+      }
+    },
+    [enabled],
+  );
+
+  /**
    * Reset settings to defaults (multi-table reset)
    */
   const resetSettings = useCallback(() => {
@@ -1083,6 +1200,9 @@ export const useWebSocketSettings = (options = {}) => {
     updatePriorityRules,
     deletePriorityRule,
     updateMLConfig,
+    createBackupAssignment,
+    updateBackupAssignment,
+    deleteBackupAssignment,
 
     // Bulk operations
     resetSettings,

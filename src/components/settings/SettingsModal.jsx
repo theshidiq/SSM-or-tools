@@ -23,7 +23,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "../ui/card";
 // useConfigurationCache removed - hook was deleted as unused
 import { useSettings } from "../../contexts/SettingsContext";
 import StaffGroupsTab from "./tabs/StaffGroupsTab";
-import WeeklyLimitsTab from "./tabs/WeeklyLimitsTab";
+import LimitsTab from "./tabs/LimitsTab";
 import PriorityRulesTab from "./tabs/PriorityRulesTab";
 import MLParametersTab from "./tabs/MLParametersTab";
 import DataMigrationTab from "./tabs/DataMigrationTab";
@@ -38,7 +38,7 @@ import ConfirmationModal from "./shared/ConfirmationModal";
 
 const TABS = [
   { id: "staff-groups", label: "Staff Groups", icon: "👥" },
-  { id: "daily-limits", label: "Weekly Limits", icon: "📅" },
+  { id: "daily-limits", label: "Limits", icon: "📅" },
   { id: "priority-rules", label: "Priority Rules", icon: "⭐" },
   { id: "early-shift", label: "Early Shift", icon: "△" },
   { id: "ml-parameters", label: "ML Parameters", icon: "🤖" },
@@ -260,9 +260,9 @@ const SettingsModal = ({
           />
         );
       case "daily-limits":
-        // Phase 4.3: WeeklyLimitsTab now uses useSettings() hook
+        // Phase 4.3: LimitsTab now uses useSettings() hook and includes daily limits
         return (
-          <WeeklyLimitsTab
+          <LimitsTab
             staffMembers={staffMembers}
             validationErrors={validationErrors[activeTab] || {}}
             currentScheduleId={currentScheduleId}

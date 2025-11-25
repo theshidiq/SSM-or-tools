@@ -40,6 +40,9 @@ export const useSettingsData = (autosaveEnabled = true) => {
     updatePriorityRules: wsUpdatePriorityRules,
     deletePriorityRule: wsDeletePriorityRule,
     updateMLConfig: wsUpdateMLConfig,
+    createBackupAssignment: wsCreateBackupAssignment,
+    updateBackupAssignment: wsUpdateBackupAssignment,
+    deleteBackupAssignment: wsDeleteBackupAssignment,
     resetSettings: wsResetSettings,
     migrateSettings: wsMigrateSettings,
     isConnected: wsConnected,
@@ -62,6 +65,9 @@ export const useSettingsData = (autosaveEnabled = true) => {
     wsUpdatePriorityRules,
     wsDeletePriorityRule,
     wsUpdateMLConfig,
+    wsCreateBackupAssignment,
+    wsUpdateBackupAssignment,
+    wsDeleteBackupAssignment,
   });
 
   // Update refs when callbacks change
@@ -77,6 +83,9 @@ export const useSettingsData = (autosaveEnabled = true) => {
       wsUpdatePriorityRules,
       wsDeletePriorityRule,
       wsUpdateMLConfig,
+      wsCreateBackupAssignment,
+      wsUpdateBackupAssignment,
+      wsDeleteBackupAssignment,
     };
   }, [
     wsUpdateStaffGroups,
@@ -89,6 +98,9 @@ export const useSettingsData = (autosaveEnabled = true) => {
     wsUpdatePriorityRules,
     wsDeletePriorityRule,
     wsUpdateMLConfig,
+    wsCreateBackupAssignment,
+    wsUpdateBackupAssignment,
+    wsDeleteBackupAssignment,
   ]);
 
   // Determine active backend mode
@@ -173,7 +185,9 @@ export const useSettingsData = (autosaveEnabled = true) => {
         staffGroups: normalizedStaffGroups, // ✅ FIX #3: Use normalized groups with consistent field names
         weeklyLimits: wsSettings?.weeklyLimits ?? [],
         monthlyLimits: wsSettings?.monthlyLimits ?? [],
+        dailyLimits: wsSettings?.dailyLimits ?? { maxOffPerDay: 3, maxEarlyPerDay: 2, maxLatePerDay: 3 }, // Daily limits (per-date constraints)
         priorityRules: wsSettings?.priorityRules ?? [],
+        backupAssignments: wsSettings?.backupAssignments ?? [], // Backup staff assignments
         mlParameters: wsSettings?.mlModelConfigs?.[0] ?? {},
         version: wsVersion,
       };
@@ -240,6 +254,7 @@ export const useSettingsData = (autosaveEnabled = true) => {
         priorityRulesCount: settings.priorityRules?.length || 0,
         weeklyLimitsCount: settings.weeklyLimits?.length || 0,
         monthlyLimitsCount: settings.monthlyLimits?.length || 0,
+        hasDailyLimits: !!settings.dailyLimits,
       };
       return;
     }
@@ -249,6 +264,7 @@ export const useSettingsData = (autosaveEnabled = true) => {
       priorityRulesCount: settings.priorityRules?.length || 0,
       weeklyLimitsCount: settings.weeklyLimits?.length || 0,
       monthlyLimitsCount: settings.monthlyLimits?.length || 0,
+      hasDailyLimits: !!settings.dailyLimits,
     };
 
     // Detect wipe: populated → empty (N > 0 → 0)
@@ -702,6 +718,81 @@ export const useSettingsData = (autosaveEnabled = true) => {
         ) {
           console.log("  - Updating ml_model_configs table");
           callbacks.wsUpdateMLConfig(newSettings.mlParameters);
+        }
+
+        // Detect and update daily limits (localStorage-only for now)
+        // Note: dailyLimits are not stored in a separate WebSocket table
+        // They're part of the settings blob in localStorage
+        if (
+          JSON.stringify(oldSettings.dailyLimits) !==
+          JSON.stringify(newSettings.dailyLimits)
+        ) {
+          console.log("  - Daily limits changed (localStorage-only):", newSettings.dailyLimits);
+        }
+
+        // Detect and update backup assignments (differential update like staff groups & priority rules)
+        const oldBackupAssignments = oldSettings.backupAssignments || [];
+        const newBackupAssignments = newSettings.backupAssignments || [];
+
+        if (JSON.stringify(oldBackupAssignments) !== JSON.stringify(newBackupAssignments)) {
+          console.log("  - Detecting staff_backup_assignments table changes...");
+          console.log("🔍 [BACKUP DIFF] oldBackupAssignments:", oldBackupAssignments.map(a => ({ id: a.id, groupId: a.groupId, staffId: a.staffId })));
+          console.log("🔍 [BACKUP DIFF] newBackupAssignments:", newBackupAssignments.map(a => ({ id: a.id, groupId: a.groupId, staffId: a.staffId })));
+
+          const oldAssignmentIds = new Set(oldBackupAssignments.map((a) => a.id));
+          const newAssignmentIds = new Set(newBackupAssignments.map((a) => a.id));
+
+          // Detect CREATED assignments (exist in new but not in old)
+          const createdAssignments = newBackupAssignments.filter((a) => !oldAssignmentIds.has(a.id));
+          if (createdAssignments.length > 0) {
+            console.log(`    - ${createdAssignments.length} new backup assignment(s) created`);
+            createdAssignments.forEach((assignment) => {
+              console.log(`      - Creating backup assignment: ${assignment.groupId} → ${assignment.staffId}`);
+              callbacks.wsCreateBackupAssignment(assignment);
+            });
+          }
+
+          // Detect DELETED assignments (exist in old but not in new)
+          const deletedAssignmentIds = [...oldAssignmentIds].filter((id) => !newAssignmentIds.has(id));
+          if (deletedAssignmentIds.length > 0) {
+            console.log(`    - ${deletedAssignmentIds.length} backup assignment(s) deleted`);
+            deletedAssignmentIds.forEach((assignmentId) => {
+              const deletedAssignment = oldBackupAssignments.find((a) => a.id === assignmentId);
+              console.log(`      - Deleting backup assignment: ${deletedAssignment?.groupId} → ${deletedAssignment?.staffId} (${assignmentId})`);
+              callbacks.wsDeleteBackupAssignment(assignmentId);
+            });
+          }
+
+          // Detect UPDATED assignments (exist in both, but content changed)
+          const updatedAssignments = newBackupAssignments.filter((newAssignment) => {
+            if (!oldAssignmentIds.has(newAssignment.id)) return false; // Skip newly created
+
+            const oldAssignment = oldBackupAssignments.find((a) => a.id === newAssignment.id);
+            if (!oldAssignment) return false;
+
+            // Compare assignment content (normalize before comparison)
+            const normalizeAssignment = (a) => ({
+              id: a.id,
+              groupId: a.groupId,
+              staffId: a.staffId,
+              priority: a.priority || 0,
+              isActive: a.isActive ?? true,
+            });
+
+            return JSON.stringify(normalizeAssignment(oldAssignment)) !== JSON.stringify(normalizeAssignment(newAssignment));
+          });
+
+          if (updatedAssignments.length > 0) {
+            console.log(`    - ${updatedAssignments.length} backup assignment(s) updated`);
+            updatedAssignments.forEach((assignment) => {
+              console.log(`      - Updating backup assignment: ${assignment.groupId} → ${assignment.staffId} (${assignment.id})`);
+              callbacks.wsUpdateBackupAssignment(assignment);
+            });
+          }
+
+          console.log(
+            `  - Summary: ${createdAssignments.length} created, ${updatedAssignments.length} updated, ${deletedAssignmentIds.length} deleted`,
+          );
         }
 
         // ✅ OPTIMISTIC UPDATE: Update local state AFTER all change detection completes

@@ -14,19 +14,23 @@ import { ja } from "date-fns/locale";
  *
  * Props:
  * @param {boolean} isOpen - Whether modal is visible
- * @param {Function} onClose - Close handler
+ * @param {Function} onClose - Close handler (Cancel action)
+ * @param {Function} onAccept - Accept handler (Accept & Fix action) - optional
  * @param {Array} conflicts - List of conflicts/violations to display
  * @param {string} type - Type of conflicts ('staff_groups' or 'daily_limits')
  * @param {Array} staffMembers - Staff members for name lookup
  * @param {string} title - Modal title
+ * @param {string} description - Modal description - optional
  */
 const ConflictsModal = ({
   isOpen,
   onClose,
+  onAccept,
   conflicts = [],
   type = "staff_groups",
   staffMembers = [],
   title = "Schedule Conflicts",
+  description,
 }) => {
   // Helper: Get staff name by ID
   const getStaffName = useCallback(
@@ -122,25 +126,24 @@ const ConflictsModal = ({
 
   // Render daily limit violation details
   const renderDailyLimitViolation = (violation) => {
-    const {
-      limitName,
-      shiftType,
-      maxCount,
-      actualCount,
-      violatingStaff,
-      dayOfWeek,
-    } = violation;
+    // Support both formats: weekly limits format and daily limits format
+    const limitName = violation.limitName || violation.message || "Daily Limit Violation";
+    const shiftType = violation.shiftType || violation.details?.shiftType || "unknown";
+    const maxCount = violation.maxCount || violation.details?.limit || 0;
+    const actualCount = violation.actualCount || violation.details?.actual || 0;
+    const violatingStaff = violation.violatingStaff || [];
+    const dayOfWeek = violation.dayOfWeek || "";
 
     const shiftTypeLabel =
-      shiftType === "△"
-        ? "早番"
-        : shiftType === "○"
-          ? "通常勤務"
-          : shiftType === "early"
-            ? "早番"
-            : shiftType === "late"
-              ? "通常勤務"
-              : "Any";
+      shiftType === "△" || shiftType === "early"
+        ? "Early Shift (△)"
+        : shiftType === "○" || shiftType === "late"
+          ? "Late Shift (◇)"
+          : shiftType === "off"
+            ? "Off Day (×)"
+            : shiftType === "any"
+              ? "Any Shift"
+              : shiftType;
 
     return (
       <div className="bg-orange-50 border border-orange-200 rounded-lg p-4">
@@ -153,26 +156,28 @@ const ConflictsModal = ({
             <div className="space-y-2 mb-3">
               <div className="flex items-center gap-4 text-sm">
                 <div className="flex items-center gap-2">
-                  <span className="text-orange-800">Shift Type:</span>
+                  <span className="text-orange-800">Type:</span>
                   <span className="font-medium text-orange-900">
                     {shiftTypeLabel}
                   </span>
                 </div>
-                <div className="flex items-center gap-2">
-                  <span className="text-orange-800">Day:</span>
-                  <span className="font-medium text-orange-900">
-                    {dayOfWeek}
-                  </span>
-                </div>
+                {dayOfWeek && (
+                  <div className="flex items-center gap-2">
+                    <span className="text-orange-800">Day:</span>
+                    <span className="font-medium text-orange-900">
+                      {dayOfWeek}
+                    </span>
+                  </div>
+                )}
               </div>
               <div className="flex items-center gap-2 text-sm">
                 <span className="text-orange-800">Limit:</span>
                 <span className="font-medium text-orange-900">
-                  {maxCount} shifts
+                  {maxCount} {shiftType === "off" ? "staff off" : "shifts"}
                 </span>
                 <span className="text-orange-500">→</span>
                 <span className="font-medium text-red-600">
-                  Actual: {actualCount} shifts
+                  Actual: {actualCount} {shiftType === "off" ? "staff off" : "shifts"}
                 </span>
                 <span className="px-2 py-0.5 bg-red-100 text-red-700 rounded text-xs font-medium">
                   +{actualCount - maxCount} over limit
@@ -233,8 +238,12 @@ const ConflictsModal = ({
             <div>
               <h3 className="text-xl font-semibold text-gray-900">{title}</h3>
               <p className="text-sm text-gray-600">
-                {conflicts.length} conflict{conflicts.length !== 1 ? "s" : ""}{" "}
-                detected in current schedule
+                {description || (
+                  <>
+                    {conflicts.length} conflict{conflicts.length !== 1 ? "s" : ""}{" "}
+                    detected in current schedule
+                  </>
+                )}
               </p>
             </div>
           </div>
@@ -295,19 +304,46 @@ const ConflictsModal = ({
                 resolve conflicts.
               </p>
             )}
-            {type === "daily_limits" && (
+            {type === "daily_limits" && !onAccept && (
               <p>
                 💡 Tip: Increase the limits or adjust the schedule to comply
                 with new settings.
               </p>
             )}
+            {type === "daily_limits" && onAccept && (
+              <p>
+                💡 You can accept these changes and the system will automatically mark violations for fixing.
+              </p>
+            )}
           </div>
-          <button
-            onClick={handleCloseClick}
-            className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium"
-          >
-            Close
-          </button>
+          <div className="flex items-center gap-3">
+            {onAccept ? (
+              <>
+                <button
+                  onClick={handleCloseClick}
+                  className="px-6 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-colors font-medium"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onAccept();
+                  }}
+                  className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium"
+                >
+                  Accept & Fix
+                </button>
+              </>
+            ) : (
+              <button
+                onClick={handleCloseClick}
+                className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium"
+              >
+                Close
+              </button>
+            )}
+          </div>
         </div>
       </div>
     </div>,

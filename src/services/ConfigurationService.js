@@ -101,7 +101,7 @@ export class ConfigurationService {
     const migratedSettings = { ...settings };
 
     // Current migration version - increment this when adding new migrations
-    const CURRENT_MIGRATION_VERSION = 3;
+    const CURRENT_MIGRATION_VERSION = 4;
     const currentVersion = settings.migrationVersion || 0;
 
     // Migrate weeklyLimits from object to array format
@@ -294,6 +294,59 @@ export class ConfigurationService {
       needsMigration = true;
     }
 
+    // Migration v4: Extract daily limits from weeklyLimits array to dedicated dailyLimits object
+    if (currentVersion < 4) {
+      console.log(
+        "🔄 Running migration v4: Extract daily limits from weeklyLimits array",
+      );
+
+      // IDs of items that are actually daily limits (stored in wrong place)
+      const dailyLimitIds = [
+        "daily-limit-off",
+        "daily-limit-early",
+        "daily-limit-late",
+        "daily-limit-min-working",
+      ];
+
+      // Find existing daily limits in weeklyLimits array
+      const dailyLimitItems =
+        settings.weeklyLimits?.filter((limit) =>
+          dailyLimitIds.includes(limit.id),
+        ) || [];
+
+      // Create new dailyLimits object
+      migratedSettings.dailyLimits = {
+        maxOffPerDay:
+          dailyLimitItems.find((l) => l.id === "daily-limit-off")?.maxCount ||
+          3,
+        maxEarlyPerDay:
+          dailyLimitItems.find((l) => l.id === "daily-limit-early")
+            ?.maxCount || 2,
+        maxLatePerDay:
+          dailyLimitItems.find((l) => l.id === "daily-limit-late")?.maxCount ||
+          3,
+        minWorkingStaffPerDay:
+          dailyLimitItems.find((l) => l.id === "daily-limit-min-working")
+            ?.maxCount || 3,
+      };
+
+      // Remove daily limits from weeklyLimits array (they're in wrong place)
+      migratedSettings.weeklyLimits =
+        settings.weeklyLimits?.filter(
+          (limit) => !dailyLimitIds.includes(limit.id),
+        ) || [];
+
+      console.log(
+        "✅ Migration v4 complete: Daily limits extracted",
+        migratedSettings.dailyLimits,
+      );
+      console.log(
+        `   Removed ${dailyLimitItems.length} items from weeklyLimits array`,
+      );
+
+      needsMigration = true;
+    }
+
     // Update migration version if any migration ran or if version is outdated
     if (needsMigration || currentVersion < CURRENT_MIGRATION_VERSION) {
       migratedSettings.migrationVersion = CURRENT_MIGRATION_VERSION;
@@ -414,7 +467,7 @@ export class ConfigurationService {
   getDefaultSettings() {
     return {
       // Migration version
-      migrationVersion: 3,
+      migrationVersion: 4,
 
       // Staff Groups
       staffGroups: [
@@ -469,55 +522,16 @@ export class ConfigurationService {
       ],
 
       // Daily Limits
+      dailyLimits: {
+        maxOffPerDay: 3, // Default: 3, Max: 4
+        maxEarlyPerDay: 2, // Default: 2, Max: 2
+        maxLatePerDay: 3, // Default: 3, Max: 3
+        minWorkingStaffPerDay: 3, // Fixed - not configurable via UI
+      },
+
+      // Weekly Limits (for weekly patterns)
       weeklyLimits: [
-        {
-          id: "daily-limit-off",
-          name: "Maximum Off Days",
-          shiftType: "off",
-          maxCount: 4,
-          daysOfWeek: [0, 1, 2, 3, 4, 5, 6], // All days
-          scope: "all",
-          targetIds: [],
-          isHardConstraint: true,
-          penaltyWeight: 50,
-          description: "Maximum number of staff that can be off per day",
-        },
-        {
-          id: "daily-limit-early",
-          name: "Maximum Early Shifts",
-          shiftType: "early",
-          maxCount: 4,
-          daysOfWeek: [0, 1, 2, 3, 4, 5, 6], // All days
-          scope: "all",
-          targetIds: [],
-          isHardConstraint: false,
-          penaltyWeight: 30,
-          description: "Maximum number of staff on early shifts per day",
-        },
-        {
-          id: "daily-limit-late",
-          name: "Maximum Late Shifts",
-          shiftType: "late",
-          maxCount: 3,
-          daysOfWeek: [0, 1, 2, 3, 4, 5, 6], // All days
-          scope: "all",
-          targetIds: [],
-          isHardConstraint: false,
-          penaltyWeight: 30,
-          description: "Maximum number of staff on late shifts per day",
-        },
-        {
-          id: "daily-limit-min-working",
-          name: "Minimum Working Staff",
-          shiftType: "any",
-          maxCount: 3,
-          daysOfWeek: [0, 1, 2, 3, 4, 5, 6], // All days
-          scope: "all",
-          targetIds: [],
-          isHardConstraint: true,
-          penaltyWeight: 100,
-          description: "Minimum number of staff required to work per day",
-        },
+        // Weekly pattern limits will go here (not daily limits)
       ],
 
       // Priority Rules - using array format for consistency with UI components
@@ -590,7 +604,48 @@ export class ConfigurationService {
   }
 
   /**
-   * Get daily limits
+   * Get daily limits configuration
+   * @returns {Object} Daily limits object with maxOffPerDay, maxEarlyPerDay, maxLatePerDay
+   */
+  async getDailyLimits() {
+    await this.initialize();
+
+    if (!this.settings?.dailyLimits) {
+      console.warn("⚠️ dailyLimits not found in settings, using defaults");
+      return {
+        maxOffPerDay: 3,
+        maxEarlyPerDay: 2,
+        maxLatePerDay: 3,
+        minWorkingStaffPerDay: 3,
+      };
+    }
+
+    return this.settings.dailyLimits;
+  }
+
+  /**
+   * Update daily limits configuration
+   * @param {Object} dailyLimits - New daily limits
+   * @returns {Object} Updated daily limits
+   */
+  async updateDailyLimits(dailyLimits) {
+    await this.initialize();
+
+    console.log("💾 Updating daily limits:", dailyLimits);
+
+    this.settings.dailyLimits = {
+      ...this.settings.dailyLimits,
+      ...dailyLimits,
+    };
+
+    await this.saveSettings(this.settings);
+
+    console.log("✅ Daily limits updated successfully");
+    return this.settings.dailyLimits;
+  }
+
+  /**
+   * Get weekly limits
    */
   getWeeklyLimits() {
     const settings = this.settings || this.getDefaultSettings();

@@ -242,6 +242,8 @@ const STATIC_PRIORITY_RULES = [];
 
 /**
  * Static daily limits for different shift types
+ * NOTE: This is now loaded dynamically via getDailyLimits() from ConfigurationService
+ * Fallback values are only used when configuration cannot be loaded
  */
 const STATIC_DAILY_LIMITS = {
   maxOffPerDay: 4,

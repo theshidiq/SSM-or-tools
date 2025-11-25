@@ -20,14 +20,15 @@ import (
 // DATA STRUCTURES - Multi-Table Settings Architecture
 // ============================================================================
 
-// SettingsAggregate combines all 5 settings tables + version info
+// SettingsAggregate combines all 6 settings tables + version info
 type SettingsAggregate struct {
-	StaffGroups    []StaffGroup    `json:"staffGroups"`
-	WeeklyLimits   []WeeklyLimit   `json:"weeklyLimits"`
-	MonthlyLimits  []MonthlyLimit  `json:"monthlyLimits"`
-	PriorityRules  []PriorityRule  `json:"priorityRules"`
-	MLModelConfigs []MLModelConfig `json:"mlModelConfigs"`
-	Version        ConfigVersion   `json:"version"`
+	StaffGroups        []StaffGroup        `json:"staffGroups"`
+	WeeklyLimits       []WeeklyLimit       `json:"weeklyLimits"`
+	MonthlyLimits      []MonthlyLimit      `json:"monthlyLimits"`
+	PriorityRules      []PriorityRule      `json:"priorityRules"`
+	BackupAssignments  []BackupAssignment  `json:"backupAssignments"`
+	MLModelConfigs     []MLModelConfig     `json:"mlModelConfigs"`
+	Version            ConfigVersion       `json:"version"`
 }
 
 // MarshalJSON custom marshaler for SettingsAggregate
@@ -81,14 +82,21 @@ func (sa *SettingsAggregate) MarshalJSON() ([]byte, error) {
 		log.Printf("   daysOfWeek in result: %v", reactPriorityRules[i]["daysOfWeek"])
 	}
 
+	// Convert backup assignments to React format
+	reactBackupAssignments := make([]map[string]interface{}, len(sa.BackupAssignments))
+	for i, assignment := range sa.BackupAssignments {
+		reactBackupAssignments[i] = assignment.ToReactFormat()
+	}
+
 	// Create response structure with converted data
 	response := map[string]interface{}{
-		"staffGroups":    reactGroups,
-		"weeklyLimits":   reactWeeklyLimits,   // ✅ FIXED: Now using converted format
-		"monthlyLimits":  reactMonthlyLimits,  // ✅ FIXED: Now using converted format
-		"priorityRules":  reactPriorityRules,  // ← FIXED: Now using converted format
-		"mlModelConfigs": sa.MLModelConfigs,
-		"version":        sa.Version,
+		"staffGroups":        reactGroups,
+		"weeklyLimits":       reactWeeklyLimits,        // ✅ FIXED: Now using converted format
+		"monthlyLimits":      reactMonthlyLimits,       // ✅ FIXED: Now using converted format
+		"priorityRules":      reactPriorityRules,       // ← FIXED: Now using converted format
+		"backupAssignments":  reactBackupAssignments,   // Backup staff assignments
+		"mlModelConfigs":     sa.MLModelConfigs,
+		"version":            sa.Version,
 	}
 
 	return json.Marshal(response)
@@ -413,6 +421,44 @@ func (mc *MLModelConfig) ToReactFormat() map[string]interface{} {
 		"isActive":            mc.IsActive,
 		"createdAt":           mc.CreatedAt,
 		"updatedAt":           mc.UpdatedAt,
+	}
+}
+
+// BackupAssignment represents a backup staff assignment configuration
+type BackupAssignment struct {
+	ID             string     `json:"id"`
+	RestaurantID   string     `json:"restaurant_id"`
+	VersionID      string     `json:"version_id"`
+	StaffID        string     `json:"staff_id"`
+	GroupID        string     `json:"group_id"`
+	AssignmentType string     `json:"assignment_type"`
+	PriorityOrder  int        `json:"priority_order"`
+	EffectiveFrom  *time.Time `json:"effective_from"`
+	EffectiveUntil *time.Time `json:"effective_until"`
+	IsActive       bool       `json:"is_active"`
+	Notes          *string    `json:"notes"`
+	CreatedAt      time.Time  `json:"created_at"`
+	UpdatedAt      time.Time  `json:"updated_at"`
+	CreatedBy      *string    `json:"created_by"`
+}
+
+// ToReactFormat converts snake_case to camelCase for React
+func (ba *BackupAssignment) ToReactFormat() map[string]interface{} {
+	return map[string]interface{}{
+		"id":             ba.ID,
+		"restaurantId":   ba.RestaurantID,
+		"versionId":      ba.VersionID,
+		"staffId":        ba.StaffID,
+		"groupId":        ba.GroupID,
+		"assignmentType": ba.AssignmentType,
+		"priority":       ba.PriorityOrder,
+		"effectiveFrom":  ba.EffectiveFrom,
+		"effectiveUntil": ba.EffectiveUntil,
+		"isActive":       ba.IsActive,
+		"notes":          ba.Notes,
+		"createdAt":      ba.CreatedAt,
+		"updatedAt":      ba.UpdatedAt,
+		"createdBy":      ba.CreatedBy,
 	}
 }
 
@@ -756,6 +802,42 @@ func (s *StaffSyncServer) fetchMLModelConfigs(versionID string) ([]MLModelConfig
 	return configs, nil
 }
 
+// fetchBackupAssignments retrieves backup assignments for a specific version
+func (s *StaffSyncServer) fetchBackupAssignments(versionID string) ([]BackupAssignment, error) {
+	url := fmt.Sprintf("%s/rest/v1/staff_backup_assignments?version_id=eq.%s&select=*",
+		s.supabaseURL, versionID)
+
+	req, err := http.NewRequest("GET", url, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %w", err)
+	}
+
+	req.Header.Set("Authorization", "Bearer "+s.supabaseKey)
+	req.Header.Set("apikey", s.supabaseKey)
+	req.Header.Set("Content-Type", "application/json")
+
+	client := &http.Client{Timeout: 10 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch from Supabase: %w", err)
+	}
+	defer resp.Body.Close()
+
+	body, _ := io.ReadAll(resp.Body)
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("Supabase request failed with status %d: %s", resp.StatusCode, string(body))
+	}
+
+	var assignments []BackupAssignment
+	if err := json.Unmarshal(body, &assignments); err != nil {
+		return nil, fmt.Errorf("failed to parse response: %w", err)
+	}
+
+	log.Printf("📋 Fetched %d backup assignments from database", len(assignments))
+	return assignments, nil
+}
+
 // fetchAggregatedSettings fetches all settings tables for a specific version and aggregates them
 func (s *StaffSyncServer) fetchAggregatedSettings(versionID string) (*SettingsAggregate, error) {
 	// Fetch active version info
@@ -795,21 +877,29 @@ func (s *StaffSyncServer) fetchAggregatedSettings(versionID string) (*SettingsAg
 		mlConfigs = []MLModelConfig{}
 	}
 
+	backupAssignments, err := s.fetchBackupAssignments(versionID)
+	if err != nil {
+		log.Printf("⚠️ Failed to fetch backup assignments: %v", err)
+		backupAssignments = []BackupAssignment{}
+	}
+
 	// 🔍 DEBUG: Log aggregated settings summary
 	log.Printf("🔍 [fetchAggregatedSettings] Successfully aggregated settings for version %s:", versionID)
 	log.Printf("   - Staff Groups: %d", len(staffGroups))
 	log.Printf("   - Weekly Limits: %d", len(weeklyLimits))
 	log.Printf("   - Monthly Limits: %d", len(monthlyLimits))
 	log.Printf("   - Priority Rules: %d", len(priorityRules))
+	log.Printf("   - Backup Assignments: %d", len(backupAssignments))
 	log.Printf("   - ML Configs: %d", len(mlConfigs))
 
 	return &SettingsAggregate{
-		StaffGroups:    staffGroups,
-		WeeklyLimits:   weeklyLimits,
-		MonthlyLimits:  monthlyLimits,
-		PriorityRules:  priorityRules,
-		MLModelConfigs: mlConfigs,
-		Version:        *version,
+		StaffGroups:       staffGroups,
+		WeeklyLimits:      weeklyLimits,
+		MonthlyLimits:     monthlyLimits,
+		PriorityRules:     priorityRules,
+		BackupAssignments: backupAssignments,
+		MLModelConfigs:    mlConfigs,
+		Version:           *version,
 	}, nil
 }
 
@@ -2235,6 +2325,176 @@ func (s *StaffSyncServer) insertMLModelConfig(versionID string, configData map[s
 	return nil
 }
 
+// insertBackupAssignment inserts a new backup assignment into the database
+func (s *StaffSyncServer) insertBackupAssignment(versionID string, assignmentData map[string]interface{}) error {
+	log.Printf("📋 [insertBackupAssignment] Creating new backup assignment")
+
+	url := fmt.Sprintf("%s/rest/v1/staff_backup_assignments", s.supabaseURL)
+
+	insertData := make(map[string]interface{})
+	insertData["version_id"] = versionID
+	insertData["restaurant_id"] = s.getRestaurantID()
+	insertData["is_active"] = true
+	insertData["created_at"] = time.Now().UTC().Format(time.RFC3339)
+	insertData["updated_at"] = time.Now().UTC().Format(time.RFC3339)
+
+	// Copy data (camelCase → snake_case)
+	if id, ok := assignmentData["id"]; ok {
+		insertData["id"] = id
+	}
+	if staffId, ok := assignmentData["staffId"]; ok {
+		insertData["staff_id"] = staffId
+	}
+	if groupId, ok := assignmentData["groupId"]; ok {
+		insertData["group_id"] = groupId
+	}
+	if assignmentType, ok := assignmentData["assignmentType"]; ok {
+		insertData["assignment_type"] = assignmentType
+	} else {
+		insertData["assignment_type"] = "regular"
+	}
+	if priority, ok := assignmentData["priority"]; ok {
+		insertData["priority_order"] = priority
+	} else {
+		insertData["priority_order"] = 1
+	}
+	if effectiveFrom, ok := assignmentData["effectiveFrom"]; ok && effectiveFrom != nil {
+		insertData["effective_from"] = effectiveFrom
+	}
+	if effectiveUntil, ok := assignmentData["effectiveUntil"]; ok && effectiveUntil != nil {
+		insertData["effective_until"] = effectiveUntil
+	}
+	if notes, ok := assignmentData["notes"]; ok {
+		insertData["notes"] = notes
+	}
+
+	jsonData, _ := json.Marshal(insertData)
+	req, err := http.NewRequest("POST", url, bytes.NewBuffer(jsonData))
+	if err != nil {
+		return fmt.Errorf("failed to create request: %w", err)
+	}
+
+	req.Header.Set("Authorization", "Bearer "+s.supabaseKey)
+	req.Header.Set("apikey", s.supabaseKey)
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Prefer", "return=representation")
+
+	client := &http.Client{Timeout: 10 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		return fmt.Errorf("failed to insert backup assignment: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusCreated && resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("insert failed with status %d: %s", resp.StatusCode, string(body))
+	}
+
+	log.Printf("✅ [insertBackupAssignment] Successfully created backup assignment")
+	return nil
+}
+
+// updateBackupAssignment updates an existing backup assignment in the database
+func (s *StaffSyncServer) updateBackupAssignment(versionID string, assignmentData map[string]interface{}) error {
+	assignmentID, ok := assignmentData["id"].(string)
+	if !ok {
+		return fmt.Errorf("missing or invalid assignment ID")
+	}
+
+	log.Printf("📋 [updateBackupAssignment] Updating backup assignment: %s", assignmentID)
+
+	url := fmt.Sprintf("%s/rest/v1/staff_backup_assignments?id=eq.%s&version_id=eq.%s",
+		s.supabaseURL, assignmentID, versionID)
+
+	updateData := make(map[string]interface{})
+	updateData["updated_at"] = time.Now().UTC().Format(time.RFC3339)
+
+	// Copy updatable fields (camelCase → snake_case)
+	if staffId, ok := assignmentData["staffId"]; ok {
+		updateData["staff_id"] = staffId
+	}
+	if groupId, ok := assignmentData["groupId"]; ok {
+		updateData["group_id"] = groupId
+	}
+	if assignmentType, ok := assignmentData["assignmentType"]; ok {
+		updateData["assignment_type"] = assignmentType
+	}
+	if priority, ok := assignmentData["priority"]; ok {
+		updateData["priority_order"] = priority
+	}
+	if effectiveFrom, ok := assignmentData["effectiveFrom"]; ok {
+		updateData["effective_from"] = effectiveFrom
+	}
+	if effectiveUntil, ok := assignmentData["effectiveUntil"]; ok {
+		updateData["effective_until"] = effectiveUntil
+	}
+	if isActive, ok := assignmentData["isActive"]; ok {
+		updateData["is_active"] = isActive
+	}
+	if notes, ok := assignmentData["notes"]; ok {
+		updateData["notes"] = notes
+	}
+
+	jsonData, _ := json.Marshal(updateData)
+	req, err := http.NewRequest("PATCH", url, bytes.NewBuffer(jsonData))
+	if err != nil {
+		return fmt.Errorf("failed to create request: %w", err)
+	}
+
+	req.Header.Set("Authorization", "Bearer "+s.supabaseKey)
+	req.Header.Set("apikey", s.supabaseKey)
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Prefer", "return=representation")
+
+	client := &http.Client{Timeout: 10 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		return fmt.Errorf("failed to update backup assignment: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("update failed with status %d: %s", resp.StatusCode, string(body))
+	}
+
+	log.Printf("✅ [updateBackupAssignment] Successfully updated backup assignment")
+	return nil
+}
+
+// deleteBackupAssignment deletes a backup assignment from the database
+func (s *StaffSyncServer) deleteBackupAssignment(versionID string, assignmentID string) error {
+	log.Printf("🗑️ [deleteBackupAssignment] Deleting backup assignment: %s", assignmentID)
+
+	url := fmt.Sprintf("%s/rest/v1/staff_backup_assignments?id=eq.%s&version_id=eq.%s",
+		s.supabaseURL, assignmentID, versionID)
+
+	req, err := http.NewRequest("DELETE", url, nil)
+	if err != nil {
+		return fmt.Errorf("failed to create request: %w", err)
+	}
+
+	req.Header.Set("Authorization", "Bearer "+s.supabaseKey)
+	req.Header.Set("apikey", s.supabaseKey)
+	req.Header.Set("Content-Type", "application/json")
+
+	client := &http.Client{Timeout: 10 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		return fmt.Errorf("failed to delete backup assignment: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusNoContent {
+		body, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("delete failed with status %d: %s", resp.StatusCode, string(body))
+	}
+
+	log.Printf("✅ [deleteBackupAssignment] Successfully deleted backup assignment")
+	return nil
+}
+
 // ============================================================================
 // AUDIT TRAIL - Config Changes Logging
 // ============================================================================
@@ -3615,6 +3875,187 @@ func (s *StaffSyncServer) insertDefaultSettings(versionID string) error {
 
 	log.Printf("✅ Successfully inserted all default settings")
 	return nil
+}
+
+// ============================================================================
+// BACKUP ASSIGNMENT HANDLERS - WebSocket Message Handlers
+// ============================================================================
+
+// handleBackupAssignmentCreate creates a new backup assignment and broadcasts changes
+func (s *StaffSyncServer) handleBackupAssignmentCreate(client *Client, msg *Message) {
+	log.Printf("📋 Processing SETTINGS_CREATE_BACKUP_ASSIGNMENT from client %s", client.clientId)
+
+	payload, ok := msg.Payload.(map[string]interface{})
+	if !ok {
+		log.Printf("❌ Invalid payload format")
+		return
+	}
+
+	assignmentData, ok := payload["assignment"].(map[string]interface{})
+	if !ok {
+		log.Printf("❌ Missing assignment data")
+		return
+	}
+
+	version, err := s.fetchActiveConfigVersion()
+	if err != nil {
+		s.sendErrorResponse(client, "Failed to fetch active version", err)
+		return
+	}
+
+	if version.IsLocked {
+		s.sendErrorResponse(client, "Cannot modify locked version", nil)
+		return
+	}
+
+	if err := s.insertBackupAssignment(version.ID, assignmentData); err != nil {
+		s.sendErrorResponse(client, "Failed to create backup assignment", err)
+		return
+	}
+
+	if err := s.logConfigChange(version.ID, "staff_backup_assignments", "INSERT", assignmentData); err != nil {
+		log.Printf("⚠️ Failed to log config change: %v", err)
+	}
+
+	log.Printf("✅ Successfully created backup assignment")
+
+	settings, err := s.fetchAggregatedSettings(version.ID)
+	if err != nil {
+		log.Printf("⚠️ Failed to fetch updated settings: %v", err)
+		return
+	}
+
+	freshMsg := Message{
+		Type: "SETTINGS_SYNC_RESPONSE",
+		Payload: map[string]interface{}{
+			"settings": settings,
+			"updated":  "staff_backup_assignments",
+		},
+		Timestamp: time.Now(),
+		ClientID:  msg.ClientID,
+	}
+
+	s.broadcastToAll(&freshMsg)
+	log.Printf("📡 Broadcasted new backup assignment to all clients")
+}
+
+// handleBackupAssignmentUpdate updates an existing backup assignment and broadcasts changes
+func (s *StaffSyncServer) handleBackupAssignmentUpdate(client *Client, msg *Message) {
+	log.Printf("📋 Processing SETTINGS_UPDATE_BACKUP_ASSIGNMENT from client %s", client.clientId)
+
+	payload, ok := msg.Payload.(map[string]interface{})
+	if !ok {
+		log.Printf("❌ Invalid payload format")
+		return
+	}
+
+	assignmentData, ok := payload["assignment"].(map[string]interface{})
+	if !ok {
+		log.Printf("❌ Missing assignment data")
+		return
+	}
+
+	version, err := s.fetchActiveConfigVersion()
+	if err != nil {
+		s.sendErrorResponse(client, "Failed to fetch active version", err)
+		return
+	}
+
+	if version.IsLocked {
+		s.sendErrorResponse(client, "Cannot modify locked version", nil)
+		return
+	}
+
+	if err := s.updateBackupAssignment(version.ID, assignmentData); err != nil {
+		s.sendErrorResponse(client, "Failed to update backup assignment", err)
+		return
+	}
+
+	if err := s.logConfigChange(version.ID, "staff_backup_assignments", "UPDATE", assignmentData); err != nil {
+		log.Printf("⚠️ Failed to log config change: %v", err)
+	}
+
+	log.Printf("✅ Successfully updated backup assignment")
+
+	settings, err := s.fetchAggregatedSettings(version.ID)
+	if err != nil {
+		log.Printf("⚠️ Failed to fetch updated settings: %v", err)
+		return
+	}
+
+	freshMsg := Message{
+		Type: "SETTINGS_SYNC_RESPONSE",
+		Payload: map[string]interface{}{
+			"settings": settings,
+			"updated":  "staff_backup_assignments",
+		},
+		Timestamp: time.Now(),
+		ClientID:  msg.ClientID,
+	}
+
+	s.broadcastToAll(&freshMsg)
+	log.Printf("📡 Broadcasted updated backup assignment to all clients")
+}
+
+// handleBackupAssignmentDelete deletes a backup assignment and broadcasts changes
+func (s *StaffSyncServer) handleBackupAssignmentDelete(client *Client, msg *Message) {
+	log.Printf("🗑️ Processing SETTINGS_DELETE_BACKUP_ASSIGNMENT from client %s", client.clientId)
+
+	payload, ok := msg.Payload.(map[string]interface{})
+	if !ok {
+		log.Printf("❌ Invalid payload format")
+		return
+	}
+
+	assignmentID, ok := payload["assignmentId"].(string)
+	if !ok {
+		log.Printf("❌ Missing assignment ID")
+		return
+	}
+
+	version, err := s.fetchActiveConfigVersion()
+	if err != nil {
+		s.sendErrorResponse(client, "Failed to fetch active version", err)
+		return
+	}
+
+	if version.IsLocked {
+		s.sendErrorResponse(client, "Cannot modify locked version", nil)
+		return
+	}
+
+	if err := s.deleteBackupAssignment(version.ID, assignmentID); err != nil {
+		s.sendErrorResponse(client, "Failed to delete backup assignment", err)
+		return
+	}
+
+	logData := map[string]interface{}{
+		"assignmentId": assignmentID,
+	}
+	if err := s.logConfigChange(version.ID, "staff_backup_assignments", "DELETE", logData); err != nil {
+		log.Printf("⚠️ Failed to log config change: %v", err)
+	}
+
+	log.Printf("✅ Successfully deleted backup assignment")
+
+	settings, err := s.fetchAggregatedSettings(version.ID)
+	if err != nil {
+		log.Printf("⚠️ Failed to fetch updated settings: %v", err)
+		return
+	}
+
+	freshMsg := Message{
+		Type: "SETTINGS_SYNC_RESPONSE",
+		Payload: map[string]interface{}{
+			"settings": settings,
+			"updated":  "staff_backup_assignments",
+		},
+		Timestamp: time.Now(),
+		ClientID:  msg.ClientID,
+	}
+
+	s.broadcastToAll(&freshMsg)
+	log.Printf("📡 Broadcasted updated backup assignments to all clients after deletion")
 }
 
 // sendErrorResponse sends an error message to a specific client

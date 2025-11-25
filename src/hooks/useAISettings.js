@@ -74,13 +74,97 @@ export const useAISettings = () => {
 
   /**
    * Transform daily limits from database format to AI format
-   * Database: [{ id, name, limitConfig: {...} }] or flat format
-   * AI: [{ id, name, shiftType, maxCount, constraints: {...} }]
+   * NEW FORMAT (object): { maxOffPerDay: 3, maxEarlyPerDay: 2, maxLatePerDay: 3 }
+   * OLD FORMAT (array): [{ id, name, limitConfig: {...} }]
+   * AI FORMAT (array): [{ id, name, shiftType, maxCount, constraints: {...} }]
    */
   const dailyLimits = useMemo(() => {
     if (!settings?.dailyLimits) return [];
 
-    return settings.dailyLimits.map((limit) => ({
+    const limits = settings.dailyLimits;
+
+    // NEW FORMAT: Object with maxOffPerDay, maxEarlyPerDay, maxLatePerDay
+    // Transform to array format for AI compatibility
+    if (!Array.isArray(limits)) {
+      const dailyLimitsArray = [];
+
+      // Add off days limit
+      if (limits.maxOffPerDay !== undefined) {
+        dailyLimitsArray.push({
+          id: 'daily-limit-off',
+          name: 'Maximum Off Days Per Day',
+          shiftType: 'off',
+          maxCount: limits.maxOffPerDay,
+          constraints: {
+            daysOfWeek: [0, 1, 2, 3, 4, 5, 6],
+            scope: 'all',
+            targetIds: [],
+            isHardConstraint: true,
+            penaltyWeight: 50,
+          },
+          description: 'Maximum number of staff that can be off per day',
+        });
+      }
+
+      // Add early shifts limit
+      if (limits.maxEarlyPerDay !== undefined) {
+        dailyLimitsArray.push({
+          id: 'daily-limit-early',
+          name: 'Maximum Early Shifts Per Day',
+          shiftType: 'early',
+          maxCount: limits.maxEarlyPerDay,
+          constraints: {
+            daysOfWeek: [0, 1, 2, 3, 4, 5, 6],
+            scope: 'all',
+            targetIds: [],
+            isHardConstraint: false,
+            penaltyWeight: 30,
+          },
+          description: 'Maximum number of staff on early shifts per day',
+        });
+      }
+
+      // Add late shifts limit
+      if (limits.maxLatePerDay !== undefined) {
+        dailyLimitsArray.push({
+          id: 'daily-limit-late',
+          name: 'Maximum Late Shifts Per Day',
+          shiftType: 'late',
+          maxCount: limits.maxLatePerDay,
+          constraints: {
+            daysOfWeek: [0, 1, 2, 3, 4, 5, 6],
+            scope: 'all',
+            targetIds: [],
+            isHardConstraint: false,
+            penaltyWeight: 30,
+          },
+          description: 'Maximum number of staff on late shifts per day',
+        });
+      }
+
+      // Add minimum working staff limit
+      if (limits.minWorkingStaffPerDay !== undefined) {
+        dailyLimitsArray.push({
+          id: 'daily-limit-min-working',
+          name: 'Minimum Working Staff Per Day',
+          shiftType: 'any',
+          maxCount: limits.minWorkingStaffPerDay,
+          constraints: {
+            daysOfWeek: [0, 1, 2, 3, 4, 5, 6],
+            scope: 'all',
+            targetIds: [],
+            isHardConstraint: true,
+            penaltyWeight: 100,
+          },
+          description: 'Minimum number of staff required to work per day',
+        });
+      }
+
+      return dailyLimitsArray;
+    }
+
+    // OLD FORMAT: Array - transform for backward compatibility
+    return limits.map((limit) => ({
       id: limit.id,
       name: limit.name,
       shiftType: limit.shiftType || limit.shift_type || "any",
