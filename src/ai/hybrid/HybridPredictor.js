@@ -11,6 +11,7 @@ import { validateAllConstraints } from "../constraints/ConstraintEngine";
 import { extractAllDataForAI } from "../utils/DataExtractor";
 import { BusinessRuleValidator } from "./BusinessRuleValidator";
 import { calculatePatternStability } from "../core/PatternRecognizer";
+import BackupStaffService from "../../services/BackupStaffService";
 
 export class HybridPredictor {
   constructor() {
@@ -18,6 +19,7 @@ export class HybridPredictor {
     this.status = "idle";
     this.mlEngine = null;
     this.ruleValidator = null;
+    this.backupStaffService = new BackupStaffService(); // Backup staff service integration
     this.predictionHistory = [];
     this.settingsProvider = null; // Real-time settings provider
     this.metrics = {
@@ -69,6 +71,21 @@ export class HybridPredictor {
         maxCorrectionAttempts: 5, // More attempts to fix violations
         settingsProvider: this.settingsProvider, // Pass settings provider
       });
+
+      // Initialize backup staff service with configuration
+      console.log("🔧 Initializing BackupStaffService...");
+      const {
+        staffMembers = [],
+        staffGroups = [],
+        backupAssignments = [],
+      } = options;
+
+      await this.backupStaffService.initializeWithConfiguration(
+        staffMembers,
+        staffGroups,
+        backupAssignments, // Will auto-load from config if null/undefined
+      );
+      console.log("✅ BackupStaffService initialized in HybridPredictor");
 
       this.options = {
         // ML prediction settings - UPDATED for high-accuracy ML system
@@ -451,6 +468,14 @@ export class HybridPredictor {
         method: predictionMethod,
         breakdown: `${perfBreakdown.settingsLoad.toFixed(0)}ms settings + ${perfBreakdown.mlPrediction.toFixed(0)}ms ML + ${perfBreakdown.ruleValidation.toFixed(0)}ms validation + ${perfBreakdown.correction.toFixed(0)}ms correction + ${perfBreakdown.finalValidation.toFixed(0)}ms final = ${perfBreakdown.total.toFixed(0)}ms total`
       });
+
+      // Step 5: Apply backup staff assignments to final schedule
+      console.log("🔄 [HybridPredictor] Applying backup staff assignments to final schedule...");
+      finalSchedule = await this.applyBackupStaffAssignments(
+        finalSchedule,
+        staffMembers,
+        dateRange,
+      );
 
       // 🎯 Build result object with comprehensive metadata
       console.log(`📊 [RESULT] Building result object for ${predictionMethod} schedule`);
@@ -1617,6 +1642,65 @@ export class HybridPredictor {
         );
         console.log("🔧 Adaptive thresholds lowered due to ML errors");
       }
+    }
+  }
+
+  /**
+   * Apply backup staff assignments to generated schedule
+   * Automatically assigns backup staff when group members are off
+   * @param {Object} schedule - Generated schedule
+   * @param {Array} staffMembers - Staff member data
+   * @param {Array} dateRange - Date range for schedule
+   * @returns {Object} Schedule with backup assignments applied
+   */
+  async applyBackupStaffAssignments(schedule, staffMembers, dateRange) {
+    if (!this.backupStaffService.initialized) {
+      console.warn(
+        "⚠️ Backup staff service not initialized, skipping backup assignments",
+      );
+      return schedule;
+    }
+
+    try {
+      console.log("🔄 [HybridPredictor] Applying backup coverage...");
+
+      // Get staff groups from settings provider
+      let staffGroups = [];
+      if (this.settingsProvider) {
+        try {
+          const settings = this.settingsProvider.getSettings();
+          staffGroups = settings?.staffGroups || [];
+          console.log(`📋 [HybridPredictor] Loaded ${staffGroups.length} staff groups from settings`);
+        } catch (error) {
+          console.warn("⚠️ Failed to get staff groups from settings:", error.message);
+        }
+      }
+
+      // If no staff groups from settings, try importing getStaffConflictGroups
+      if (!staffGroups || staffGroups.length === 0) {
+        try {
+          const { getStaffConflictGroups } = await import("../../services/staffGroupUtils");
+          staffGroups = await getStaffConflictGroups();
+          console.log(`📋 [HybridPredictor] Loaded ${staffGroups.length} staff groups from utility`);
+        } catch (error) {
+          console.warn("⚠️ Failed to import getStaffConflictGroups:", error.message);
+        }
+      }
+
+      // Process backup assignments for the full schedule
+      const updatedSchedule =
+        this.backupStaffService.processFullScheduleBackups(
+          schedule,
+          staffMembers,
+          staffGroups,
+          dateRange,
+        );
+
+      console.log("✅ [HybridPredictor] Backup coverage applied successfully");
+      return updatedSchedule;
+    } catch (error) {
+      console.error("❌ [HybridPredictor] Error applying backup staff assignments:", error);
+      return schedule; // Return original schedule on error
     }
   }
 }

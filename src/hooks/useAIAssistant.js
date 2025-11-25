@@ -288,6 +288,11 @@ export const useAIAssistant = (
           hybridPredictor.setSettingsProvider(aiSettings);
         }
 
+        // Get settings data for BackupStaffService initialization
+        const settings = aiSettings.isConnected && !aiSettings.isLoading
+          ? aiSettings.getSettings()
+          : {};
+
         await hybridPredictor.initialize({
           mlConfidenceThreshold: 0.8,
           useMLPredictions: true,
@@ -296,6 +301,10 @@ export const useAIAssistant = (
           allowRuleOverrides: false, // Never allow rule overrides
           enableIntelligentDecisionEngine: true,
           maxCorrectionAttempts: 3,
+          // ✅ FIX: Pass data required for BackupStaffService initialization
+          staffMembers: staffMembers || [],
+          staffGroups: settings?.staffGroups || [],
+          backupAssignments: settings?.backupAssignments || [],
         });
 
         aiSystemRef.current = {
