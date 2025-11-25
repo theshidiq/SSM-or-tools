@@ -87,6 +87,15 @@ export class HybridPredictor {
       );
       console.log("✅ BackupStaffService initialized in HybridPredictor");
 
+      // ✅ NEW: Link BackupStaffService to BusinessRuleValidator
+      // This allows the rule validator to detect and skip backup-only staff during off-day distribution
+      if (this.backupStaffService && this.backupStaffService.initialized) {
+        this.ruleValidator.setBackupStaffService(this.backupStaffService);
+        console.log("✅ HybridPredictor: BackupStaffService linked to BusinessRuleValidator");
+      } else {
+        console.warn("⚠️ HybridPredictor: BackupStaffService not initialized, backup staff may receive day offs");
+      }
+
       this.options = {
         // ML prediction settings - UPDATED for high-accuracy ML system
         mlConfidenceThreshold: 0.85, // High confidence for 90%+ accuracy system

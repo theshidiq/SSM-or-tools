@@ -111,6 +111,9 @@ export class BusinessRuleValidator {
     this.lastConfigRefresh = 0;
     this.configRefreshInterval = 5 * 60 * 1000; // 5 minutes
 
+    // ✅ NEW: Backup staff service for backup-only staff detection
+    this.backupStaffService = null;
+
     // Initialize correction strategies
     this.initializeCorrectionStrategies();
   }
@@ -127,6 +130,19 @@ export class BusinessRuleValidator {
     }
     this.settingsProvider = provider;
     console.log("✅ BusinessRuleValidator: Settings provider configured");
+  }
+
+  /**
+   * Set backup staff service for backup-only staff detection
+   * @param {Object} service - BackupStaffService instance
+   */
+  setBackupStaffService(service) {
+    if (!service) {
+      console.warn("⚠️ BusinessRuleValidator: No backup staff service provided");
+      return;
+    }
+    this.backupStaffService = service;
+    console.log("✅ BusinessRuleValidator: Backup staff service configured");
   }
 
   /**
@@ -1087,6 +1103,30 @@ export class BusinessRuleValidator {
         });
       });
 
+      // ✅ NEW: Apply calendar must_day_off rules FIRST (highest priority - overrides everything)
+      // This ensures mandatory day offs from calendar are applied before any other rules
+      if (hasPhase3Integration && calendarRules && Object.keys(calendarRules).length > 0) {
+        console.log("🔄 [PRE-PHASE] Applying must_day_off calendar rules (EARLY OVERRIDE)...");
+
+        let mustDayOffCount = 0;
+        Object.keys(calendarRules).forEach((dateKey) => {
+          const rule = calendarRules[dateKey];
+
+          if (rule.must_day_off) {
+            // Apply to ALL staff (including backup staff - calendar rules override everything)
+            staffMembers.forEach((staff) => {
+              schedule[staff.id][dateKey] = "×"; // Force day off
+            });
+            mustDayOffCount++;
+            console.log(`✅ [PRE-PHASE] All staff: × on ${dateKey} (must_day_off)`);
+          }
+        });
+
+        if (mustDayOffCount > 0) {
+          console.log(`✅ [PRE-PHASE] Applied ${mustDayOffCount} must_day_off rules to ${staffMembers.length} staff members`);
+        }
+      }
+
       // Apply priority rules first
       await this.applyPriorityRules(schedule, staffMembers, dateRange);
 
@@ -1095,8 +1135,8 @@ export class BusinessRuleValidator {
       // ✅ Re-enforce priority rules (prevent overwrites)
       await this.applyPriorityRules(schedule, staffMembers, dateRange);
 
-      // Distribute off days evenly
-      await this.distributeOffDays(schedule, staffMembers, dateRange);
+      // Distribute off days evenly (pass calendar rules to skip must_day_off dates)
+      await this.distributeOffDays(schedule, staffMembers, dateRange, calendarRules);
       // ✅ Re-enforce priority rules (prevent overwrites)
       await this.applyPriorityRules(schedule, staffMembers, dateRange);
 
@@ -1634,9 +1674,15 @@ export class BusinessRuleValidator {
    * @param {Array} staffMembers - Staff member data
    * @param {Array} dateRange - Date range
    */
-  async distributeOffDays(schedule, staffMembers, dateRange) {
+  async distributeOffDays(schedule, staffMembers, dateRange, calendarRules = {}) {
     console.log("🎯🎯🎯 [PHASE-1] ========== RANDOMIZATION ACTIVE ========== 🎯🎯🎯");
     console.log("📅 [RULE-GEN] Distributing off days...");
+
+    // Log calendar rules if provided
+    const mustDayOffDates = Object.keys(calendarRules).filter(date => calendarRules[date]?.must_day_off);
+    if (mustDayOffDates.length > 0) {
+      console.log(`📅 [RULE-GEN] Calendar rules: ${mustDayOffDates.length} must_day_off dates will be skipped`);
+    }
 
     // Use live settings
     const liveSettings = this.getLiveSettings();
@@ -1721,6 +1767,15 @@ export class BusinessRuleValidator {
     for (const staff of staffMembers) {
       if (!schedule[staff.id]) continue;
 
+      // ✅ NEW: Skip backup-only staff from automatic off-day distribution
+      // Backup staff are managed by BackupStaffService and should only get ○ (normal shift) assignments
+      if (this.backupStaffService && this.backupStaffService.isBackupStaff(staff.id)) {
+        console.log(
+          `⏭️ [BACKUP-SKIP] ${staff.name}: Skipping off-day distribution (backup-only staff, managed by BackupStaffService)`
+        );
+        continue;
+      }
+
       let offDaysSet = 0;
       const targetOffDays = Math.min(maxOffPerMonth - 1, 6); // Conservative target
 
@@ -1733,6 +1788,12 @@ export class BusinessRuleValidator {
       dateRange.forEach((date, index) => {
         const dateKey = date.toISOString().split("T")[0];
         const dayOfWeek = date.getDay(); // 0=Sunday, 6=Saturday
+
+        // ✅ NEW: Skip dates with calendar must_day_off (already set to × in PRE-PHASE)
+        if (calendarRules && calendarRules[dateKey]?.must_day_off) {
+          console.log(`⏭️ [CALENDAR-SKIP] ${staff.name}: Skipping ${dateKey} (must_day_off already applied)`);
+          return; // Skip this date
+        }
 
         if (schedule[staff.id][dateKey] === "") {
           // Not already set by priority rules
