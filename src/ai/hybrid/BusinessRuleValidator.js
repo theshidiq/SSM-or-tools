@@ -1678,6 +1678,35 @@ export class BusinessRuleValidator {
     console.log("🎯🎯🎯 [PHASE-1] ========== RANDOMIZATION ACTIVE ========== 🎯🎯🎯");
     console.log("📅 [RULE-GEN] Distributing off days...");
 
+    // 🔍 DIAGNOSTIC: Log staffMembers array to check if 中田 is included
+    console.log(`🔍 [DISTRIBUTE-OFF] Processing ${staffMembers.length} staff members`);
+    const nakataInList = staffMembers.find(s => s.name === "中田" || s.name.includes("中田"));
+    if (nakataInList) {
+      console.log(`🔍 [DISTRIBUTE-OFF] Found 中田 in staffMembers:`, {
+        id: nakataInList.id,
+        name: nakataInList.name,
+        hasSchedule: !!schedule[nakataInList.id]
+      });
+
+      // Check what 中田's schedule looks like BEFORE distributeOffDays modifies it
+      if (schedule[nakataInList.id]) {
+        const nakataSchedule = schedule[nakataInList.id];
+        const offDays = Object.values(nakataSchedule).filter(v => v === "×").length;
+        const normalShifts = Object.values(nakataSchedule).filter(v => v === "○").length;
+        const blank = Object.values(nakataSchedule).filter(v => !v || v === "").length;
+        console.log(`🔍 [DISTRIBUTE-OFF] 中田's schedule BEFORE distributeOffDays:`, {
+          totalDates: Object.keys(nakataSchedule).length,
+          offDays: offDays,
+          normalShifts: normalShifts,
+          blank: blank,
+          sample: Object.entries(nakataSchedule).slice(0, 5).map(([date, shift]) => `${date}:${shift || 'blank'}`)
+        });
+      }
+    } else {
+      console.warn(`⚠️ [DISTRIBUTE-OFF] 中田 NOT FOUND in staffMembers array!`);
+      console.log(`🔍 [DISTRIBUTE-OFF] Staff in array:`, staffMembers.map(s => s.name).join(", "));
+    }
+
     // Log calendar rules if provided
     const mustDayOffDates = Object.keys(calendarRules).filter(date => calendarRules[date]?.must_day_off);
     if (mustDayOffDates.length > 0) {
