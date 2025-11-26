@@ -1769,7 +1769,21 @@ export class BusinessRuleValidator {
 
       // ✅ NEW: Skip backup-only staff from automatic off-day distribution
       // Backup staff are managed by BackupStaffService and should only get ○ (normal shift) assignments
-      if (this.backupStaffService && this.backupStaffService.isBackupStaff(staff.id)) {
+
+      // 🔍 DIAGNOSTIC: Log backup staff check details
+      const hasBackupService = !!this.backupStaffService;
+      const isBackup = hasBackupService && this.backupStaffService.isBackupStaff(staff.id);
+
+      if (staff.name === "中田" || isBackup) {
+        console.log(`🔍 [BACKUP-CHECK] ${staff.name} (${staff.id}):`, {
+          hasBackupService,
+          isBackup,
+          backupServiceInitialized: hasBackupService ? this.backupStaffService.initialized : false,
+          backupAssignmentsSize: hasBackupService ? this.backupStaffService.backupAssignments.size : 0
+        });
+      }
+
+      if (isBackup) {
         console.log(
           `⏭️ [BACKUP-SKIP] ${staff.name}: Skipping off-day distribution (backup-only staff, managed by BackupStaffService)`
         );
