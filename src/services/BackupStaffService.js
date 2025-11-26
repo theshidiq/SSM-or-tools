@@ -877,9 +877,40 @@ export class BackupStaffService {
         finalLength: backupAssignments.length,
       });
 
-      // Use the existing initialize method
+      // ✅ FIX: Load ALL staff members from database if backup assignments reference missing staff
+      // This ensures backup staff are included even if they're not in the provided staffMembers array
+      let effectiveStaffMembers = staffMembers;
+
+      if (backupAssignments.length > 0) {
+        const providedStaffIds = new Set(staffMembers.map(s => s.id));
+        const missingStaffIds = backupAssignments
+          .map(assignment => assignment.staffId)
+          .filter(staffId => !providedStaffIds.has(staffId));
+
+        if (missingStaffIds.length > 0) {
+          console.warn(`⚠️ [BackupStaffService] ${missingStaffIds.length} backup staff not in provided staffMembers array`);
+          console.log(`🔄 [BackupStaffService] Loading ALL staff from database to include backup staff...`);
+
+          try {
+            // Load all staff from ConfigurationService
+            const configService = (await import('./ConfigurationService')).default;
+            const allStaff = configService.getStaffMembers();
+
+            if (allStaff && allStaff.length > 0) {
+              effectiveStaffMembers = allStaff;
+              console.log(`✅ [BackupStaffService] Loaded ${allStaff.length} staff members from database (including ${missingStaffIds.length} missing backup staff)`);
+            } else {
+              console.warn(`⚠️ [BackupStaffService] Failed to load staff from database, using provided array`);
+            }
+          } catch (error) {
+            console.error(`❌ [BackupStaffService] Error loading staff from database:`, error);
+          }
+        }
+      }
+
+      // Use the existing initialize method with effective staff members
       const success = await this.initialize(
-        staffMembers,
+        effectiveStaffMembers,
         staffGroups,
         backupAssignments,
       );
@@ -890,7 +921,7 @@ export class BackupStaffService {
           `✅ Backup Staff Service initialized with configuration in ${initTime}ms`,
         );
         console.log(
-          `📊 Loaded ${backupAssignments.length} backup assignments with auto-persistence`,
+          `📊 Loaded ${backupAssignments.length} backup assignments with ${effectiveStaffMembers.length} staff members`,
         );
       }
 
