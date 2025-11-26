@@ -889,21 +889,31 @@ export class BackupStaffService {
 
         if (missingStaffIds.length > 0) {
           console.warn(`⚠️ [BackupStaffService] ${missingStaffIds.length} backup staff not in provided staffMembers array`);
-          console.log(`🔄 [BackupStaffService] Loading ALL staff from database to include backup staff...`);
+          console.log(`🔄 [BackupStaffService] Loading ALL staff from Supabase to include backup staff...`);
 
           try {
-            // Load all staff from ConfigurationService
-            const configService = (await import('./ConfigurationService')).default;
-            const allStaff = configService.getStaffMembers();
+            // Load all staff directly from Supabase
+            const { createClient } = await import('@supabase/supabase-js');
+            const supabase = createClient(
+              process.env.REACT_APP_SUPABASE_URL,
+              process.env.REACT_APP_SUPABASE_ANON_KEY
+            );
 
-            if (allStaff && allStaff.length > 0) {
+            const { data: allStaff, error } = await supabase
+              .from('staff_members')
+              .select('*')
+              .order('name');
+
+            if (error) {
+              console.error(`❌ [BackupStaffService] Supabase error loading staff:`, error);
+            } else if (allStaff && allStaff.length > 0) {
               effectiveStaffMembers = allStaff;
-              console.log(`✅ [BackupStaffService] Loaded ${allStaff.length} staff members from database (including ${missingStaffIds.length} missing backup staff)`);
+              console.log(`✅ [BackupStaffService] Loaded ${allStaff.length} staff members from Supabase (including ${missingStaffIds.length} missing backup staff)`);
             } else {
-              console.warn(`⚠️ [BackupStaffService] Failed to load staff from database, using provided array`);
+              console.warn(`⚠️ [BackupStaffService] No staff found in database, using provided array`);
             }
           } catch (error) {
-            console.error(`❌ [BackupStaffService] Error loading staff from database:`, error);
+            console.error(`❌ [BackupStaffService] Error loading staff from Supabase:`, error);
           }
         }
       }
