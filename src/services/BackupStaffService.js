@@ -900,7 +900,7 @@ export class BackupStaffService {
             );
 
             const { data: allStaff, error } = await supabase
-              .from('staff_members')
+              .from('staff')
               .select('*')
               .order('name');
 
