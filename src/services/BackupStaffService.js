@@ -262,25 +262,47 @@ export class BackupStaffService {
       dateKey,
     );
 
+    console.log(`🔍 [BackupStaffService] Group "${group.name}" on ${dateKey}:`, {
+      membersOffCount: membersOff.length,
+      membersOffNames: membersOff.map(m => m.name).join(", ") || "none"
+    });
+
     if (membersOff.length === 0) {
       return { schedule: updatedSchedule, assignmentsApplied: 0 };
     }
 
     // Get backup staff for this group
     const backupStaffIds = this.groupBackups.get(group.id) || [];
+    console.log(`🔍 [BackupStaffService] Backup staff for "${group.name}":`, {
+      backupStaffCount: backupStaffIds.length,
+      backupStaffIds: backupStaffIds
+    });
 
     // Process each backup staff member
     backupStaffIds.forEach((backupStaffId) => {
       const backupStaff = staffMembers.find((s) => s.id === backupStaffId);
 
-      if (!backupStaff || this.isStaffInactive(backupStaff)) {
+      if (!backupStaff) {
+        console.warn(`⚠️ [BackupStaffService] Backup staff ID ${backupStaffId} not found in staffMembers`);
+        return;
+      }
+
+      if (this.isStaffInactive(backupStaff)) {
+        console.log(`⏭️ [BackupStaffService] Skipping inactive backup staff: ${backupStaff.name}`);
         return; // Skip inactive backup staff
       }
 
       // Check if backup staff is available (not already assigned to work)
       const currentAssignment = updatedSchedule[backupStaffId]?.[dateKey];
+      const isAvailable = this.isBackupStaffAvailable(currentAssignment);
 
-      if (this.isBackupStaffAvailable(currentAssignment)) {
+      console.log(`🔍 [BackupStaffService] Backup staff ${backupStaff.name}:`, {
+        currentAssignment: currentAssignment || "blank",
+        isAvailable,
+        willAssign: isAvailable
+      });
+
+      if (isAvailable) {
         // Assign backup staff to normal shift
         if (!updatedSchedule[backupStaffId]) {
           updatedSchedule[backupStaffId] = {};
@@ -290,7 +312,7 @@ export class BackupStaffService {
         assignmentsApplied++;
 
         console.log(
-          `🔄 Backup assignment: ${backupStaff.name} covering for ${group.name} on ${dateKey}`,
+          `✅ [BackupStaffService] Backup assignment applied: ${backupStaff.name} → ○ covering for ${group.name} on ${dateKey}`,
         );
       }
     });
@@ -386,20 +408,30 @@ export class BackupStaffService {
    * @returns {Object} Updated schedule with all backup assignments
    */
   processFullScheduleBackups(schedule, staffMembers, staffGroups, dateRange) {
+    console.log("🔍 [BackupStaffService] processFullScheduleBackups called", {
+      initialized: this.initialized,
+      staffMembersCount: staffMembers?.length,
+      staffGroupsCount: staffGroups?.length,
+      dateRangeLength: dateRange?.length,
+      scheduleKeys: Object.keys(schedule || {}).length
+    });
+
     if (!this.initialized) {
-      console.warn("⚠️ Backup Staff Service not initialized");
+      console.warn("⚠️ [BackupStaffService] Service NOT initialized, returning original schedule");
       return schedule;
     }
 
-    console.log("🔄 Processing backup assignments for full schedule...");
+    console.log("🔄 [BackupStaffService] Processing backup assignments for full schedule...");
     const startTime = Date.now();
 
     let updatedSchedule = JSON.parse(JSON.stringify(schedule));
-    const totalAssignments = 0;
+    let totalAssignments = 0;
 
     // Process each date
-    dateRange.forEach((date) => {
+    dateRange.forEach((date, index) => {
       const dateKey = date.toISOString().split("T")[0];
+      console.log(`🔍 [BackupStaffService] Processing date ${index + 1}/${dateRange.length}: ${dateKey}`);
+
       const dateResult = this.processBackupAssignments(
         updatedSchedule,
         staffMembers,
@@ -412,7 +444,7 @@ export class BackupStaffService {
 
     const processingTime = Date.now() - startTime;
     console.log(
-      `✅ Full schedule backup processing completed in ${processingTime}ms`,
+      `✅ [BackupStaffService] Full schedule backup processing completed in ${processingTime}ms (${totalAssignments} assignments applied)`,
     );
 
     return updatedSchedule;
