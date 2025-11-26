@@ -478,7 +478,39 @@ export class HybridPredictor {
         breakdown: `${perfBreakdown.settingsLoad.toFixed(0)}ms settings + ${perfBreakdown.mlPrediction.toFixed(0)}ms ML + ${perfBreakdown.ruleValidation.toFixed(0)}ms validation + ${perfBreakdown.correction.toFixed(0)}ms correction + ${perfBreakdown.finalValidation.toFixed(0)}ms final = ${perfBreakdown.total.toFixed(0)}ms total`
       });
 
-      // Step 5: Apply backup staff assignments to final schedule
+      // Step 5: Clean up backup staff schedules (remove × assignments from ML predictions)
+      // Backup staff should only receive ○ (backup coverage) or blank (no assignment), never ×
+      if (this.backupStaffService && this.backupStaffService.initialized) {
+        console.log("🧹 [HybridPredictor] Cleaning up backup staff schedules (removing × assignments)...");
+        let removedCount = 0;
+
+        // Iterate through all staff in the schedule
+        Object.keys(finalSchedule).forEach(staffId => {
+          // Check if this staff member is a backup staff
+          if (this.backupStaffService.isBackupStaff(staffId)) {
+            const staffMember = staffMembers.find(s => s.id === staffId);
+            const staffName = staffMember?.name || staffId;
+
+            // Remove all × assignments for this backup staff
+            Object.keys(finalSchedule[staffId]).forEach(dateKey => {
+              if (finalSchedule[staffId][dateKey] === "×") {
+                finalSchedule[staffId][dateKey] = ""; // Replace × with blank
+                removedCount++;
+              }
+            });
+
+            console.log(`✅ [BACKUP-CLEANUP] ${staffName}: Removed × assignments, keeping only backup coverage`);
+          }
+        });
+
+        if (removedCount > 0) {
+          console.log(`✅ [BACKUP-CLEANUP] Removed ${removedCount} × assignments from backup staff (backup-only policy enforced)`);
+        } else {
+          console.log(`✅ [BACKUP-CLEANUP] No × assignments found on backup staff (already clean)`);
+        }
+      }
+
+      // Step 6: Apply backup staff assignments to final schedule
       console.log("🔄 [HybridPredictor] Applying backup staff assignments to final schedule...");
       finalSchedule = await this.applyBackupStaffAssignments(
         finalSchedule,
