@@ -239,7 +239,11 @@ export class BackupStaffService {
     // Update performance metrics
     this.updatePerformanceMetrics(startTime, assignmentsTriggered);
 
-    return updatedSchedule;
+    // ✅ FIX: Return both schedule and count so processFullScheduleBackups can track total
+    return {
+      schedule: updatedSchedule,
+      assignmentsApplied: assignmentsTriggered
+    };
   }
 
   /**
@@ -439,7 +443,9 @@ export class BackupStaffService {
         dateKey,
       );
 
-      updatedSchedule = dateResult;
+      // ✅ FIX: Extract schedule and track assignments count
+      updatedSchedule = dateResult.schedule;
+      totalAssignments += dateResult.assignmentsApplied;
     });
 
     const processingTime = Date.now() - startTime;
