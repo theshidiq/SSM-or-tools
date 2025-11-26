@@ -149,12 +149,37 @@ export class BackupStaffService {
     // Check for inactive backup staff
     const inactiveBackups = backupAssignments.filter((assignment) => {
       const staff = staffMembers.find((s) => s.id === assignment.staffId);
-      return !staff || this.isStaffInactive(staff);
+
+      // ✅ DIAGNOSTIC: Log detailed information about each backup assignment
+      console.log("🔍 [DIAGNOSTIC] Checking backup assignment:", {
+        assignmentId: assignment.id,
+        staffId: assignment.staffId,
+        staffFound: !!staff,
+        staffName: staff?.name || "NOT FOUND",
+        hasEndPeriod: staff?.endPeriod ? true : false,
+        endPeriod: staff?.endPeriod,
+        isInactive: staff ? this.isStaffInactive(staff) : "N/A (staff not found)"
+      });
+
+      if (!staff) {
+        console.warn(`⚠️ [DIAGNOSTIC] Backup assignment ${assignment.id} references staff ID ${assignment.staffId} which was NOT FOUND in staffMembers array`);
+        return true; // Flag as inactive because staff not found
+      }
+
+      const inactive = this.isStaffInactive(staff);
+      if (inactive) {
+        console.warn(`⚠️ [DIAGNOSTIC] Staff ${staff.name} (${staff.id}) is flagged as INACTIVE due to endPeriod:`, staff.endPeriod);
+      }
+
+      return inactive;
     });
 
     if (inactiveBackups.length > 0) {
       issues.push(
         `Inactive backup staff assignments: ${inactiveBackups.length}`,
+      );
+      console.warn(`⚠️ [DIAGNOSTIC] ${inactiveBackups.length} inactive backup assignment(s) detected:`,
+        inactiveBackups.map(a => ({ id: a.id, staffId: a.staffId }))
       );
     }
 
@@ -325,7 +350,10 @@ export class BackupStaffService {
    * @returns {boolean} True if inactive
    */
   isStaffInactive(staff) {
-    if (!staff.endPeriod) return false;
+    if (!staff.endPeriod) {
+      console.log(`🔍 [isStaffInactive] ${staff.name}: No endPeriod → ACTIVE`);
+      return false;
+    }
 
     const endDate = new Date(
       Date.UTC(
@@ -335,7 +363,18 @@ export class BackupStaffService {
       ),
     );
 
-    return endDate < new Date();
+    const now = new Date();
+    const isInactive = endDate < now;
+
+    console.log(`🔍 [isStaffInactive] ${staff.name}:`, {
+      endPeriod: staff.endPeriod,
+      endDate: endDate.toISOString(),
+      currentDate: now.toISOString(),
+      comparison: `${endDate.toISOString()} < ${now.toISOString()}`,
+      result: isInactive ? "INACTIVE ❌" : "ACTIVE ✅"
+    });
+
+    return isInactive;
   }
 
   /**
