@@ -18,7 +18,8 @@
       "Bash(git push:*)",
       "Bash(cat:*)",
       "mcp__supabase__execute_sql",
-      "Skill(coding-agents)"
+      "Skill(coding-agents)",
+      "Bash(npm test:*)"
     ],
     "deny": [],
     "ask": []
