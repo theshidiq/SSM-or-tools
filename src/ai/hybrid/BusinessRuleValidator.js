@@ -1272,16 +1272,17 @@ export class BusinessRuleValidator {
       const rules = priorityRules[staffIdentifier];
       const preferredShifts = rules.preferredShifts || [];
       const avoidedShifts = rules.avoidedShifts || [];
+      const exceptionsAllowed = rules.exceptionsAllowed || [];
 
-      if (preferredShifts.length === 0 && avoidedShifts.length === 0) {
+      if (preferredShifts.length === 0 && avoidedShifts.length === 0 && exceptionsAllowed.length === 0) {
         console.log(
-          `⚠️ [PRIORITY] ${staff.name}: No preferredShifts or avoidedShifts defined`,
+          `⚠️ [PRIORITY] ${staff.name}: No preferredShifts, avoidedShifts, or exceptionsAllowed defined`,
         );
         return;
       }
 
       console.log(
-        `🎯 [PRIORITY] ${staff.name}: Processing ${preferredShifts.length} preferred shift(s) and ${avoidedShifts.length} avoided shift(s)`,
+        `🎯 [PRIORITY] ${staff.name}: Processing ${preferredShifts.length} preferred shift(s), ${avoidedShifts.length} avoided shift(s), and ${exceptionsAllowed.length} exception rule(s)`,
       );
 
       let staffRulesApplied = 0;
@@ -1290,7 +1291,7 @@ export class BusinessRuleValidator {
         const dateKey = date.toISOString().split("T")[0];
         const dayOfWeek = getDayOfWeek(dateKey);
 
-        // ✅ STEP 1: Process avoidedShifts FIRST (clear avoided shifts)
+        // ✅ STEP 1: Process avoidedShifts FIRST (clear avoided shifts or replace with exceptions)
         avoidedShifts.forEach((rule) => {
           if (rule.day === dayOfWeek) {
             let avoidedShiftValue = "";
@@ -1312,12 +1313,44 @@ export class BusinessRuleValidator {
             // Check if current schedule has the avoided shift
             const currentShift = schedule[staff.id][dateKey] || "";
             if (currentShift === avoidedShiftValue) {
-              // Clear the avoided shift (set to blank/normal)
-              schedule[staff.id][dateKey] = "";
-              staffRulesApplied++;
-              console.log(
-                `🚫 [PRIORITY]   → ${staff.name}: CLEARED "${avoidedShiftValue}" on ${date.toLocaleDateString('ja-JP')} (${dayOfWeek}) - keeping blank/normal`,
+              // ✅ NEW: Check if there's an exception rule for this day
+              const exceptionRule = exceptionsAllowed.find(
+                (ex) => ex.day === dayOfWeek && ex.avoidedShift === rule.shift
               );
+
+              if (exceptionRule && exceptionRule.allowedShifts && exceptionRule.allowedShifts.length > 0) {
+                // Replace with a random allowed exception shift
+                const randomIndex = Math.floor(Math.random() * exceptionRule.allowedShifts.length);
+                const exceptionShift = exceptionRule.allowedShifts[randomIndex];
+
+                let exceptionShiftValue = "";
+                switch (exceptionShift) {
+                  case "early":
+                    exceptionShiftValue = "△";
+                    break;
+                  case "off":
+                    exceptionShiftValue = "×";
+                    break;
+                  case "late":
+                    exceptionShiftValue = "◇";
+                    break;
+                  default:
+                    exceptionShiftValue = "";
+                }
+
+                schedule[staff.id][dateKey] = exceptionShiftValue;
+                staffRulesApplied++;
+                console.log(
+                  `🚫✅ [PRIORITY]   → ${staff.name}: REPLACED "${avoidedShiftValue}" with EXCEPTION "${exceptionShiftValue}" on ${date.toLocaleDateString('ja-JP')} (${dayOfWeek})`,
+                );
+              } else {
+                // No exception rule, clear the avoided shift (set to blank/normal)
+                schedule[staff.id][dateKey] = "";
+                staffRulesApplied++;
+                console.log(
+                  `🚫 [PRIORITY]   → ${staff.name}: CLEARED "${avoidedShiftValue}" on ${date.toLocaleDateString('ja-JP')} (${dayOfWeek}) - keeping blank/normal`,
+                );
+              }
             }
           }
         });
@@ -1439,7 +1472,8 @@ export class BusinessRuleValidator {
       if (!rulesObject[staffKey]) {
         rulesObject[staffKey] = {
           preferredShifts: [],  // For preferred_shift rules
-          avoidedShifts: []     // For avoid_shift rules
+          avoidedShifts: [],    // For avoid_shift rules
+          exceptionsAllowed: [] // For avoid_shift_with_exceptions rules
         };
       }
 
@@ -1486,6 +1520,35 @@ export class BusinessRuleValidator {
           console.log(
             `🚫 [PRIORITY-TRANSFORM]   → ${staff.name}: dayNum=${dayNum} → AVOID ${shiftType} on ${dayNames[dayNum]}`,
           );
+        } else if (rule.ruleType === 'avoid_shift_with_exceptions') {
+          // ✅ NEW: Handle avoid_shift_with_exceptions rule type
+          // Add to avoidedShifts (to prevent assignment)
+          rulesObject[staffKey].avoidedShifts.push(shiftRule);
+          console.log(
+            `🚫 [PRIORITY-TRANSFORM]   → ${staff.name}: dayNum=${dayNum} → AVOID ${shiftType} on ${dayNames[dayNum]} (with exceptions)`,
+          );
+
+          // Also store allowed exceptions (defensive extraction)
+          const allowedShifts =
+            rule.allowedShifts ||
+            rule.allowed_shifts ||
+            rule.ruleDefinition?.allowedShifts ||
+            rule.ruleDefinition?.allowed_shifts ||
+            [];
+
+          if (allowedShifts && allowedShifts.length > 0) {
+            const exceptionRule = {
+              day: dayNames[dayNum] || dayNum,
+              avoidedShift: shiftType,
+              allowedShifts: allowedShifts,
+              priority: rule.priorityLevel || rule.priority_level || 4
+            };
+
+            rulesObject[staffKey].exceptionsAllowed.push(exceptionRule);
+            console.log(
+              `✅ [PRIORITY-TRANSFORM]   → ${staff.name}: dayNum=${dayNum} → ALLOW ${allowedShifts.join(', ')} as exceptions to ${shiftType} on ${dayNames[dayNum]}`,
+            );
+          }
         } else {
           // preferred_shift (default)
           rulesObject[staffKey].preferredShifts.push(shiftRule);
