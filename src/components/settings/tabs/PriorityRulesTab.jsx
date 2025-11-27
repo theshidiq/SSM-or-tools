@@ -38,18 +38,29 @@ const RULE_TYPES = [
     label: "Preferred Shift",
     icon: "⭐",
     description: "Staff member prefers specific shifts on certain days",
+    supportsExceptions: false,
   },
   {
     id: "avoid_shift",
     label: "Avoid Shift",
     icon: "❌",
     description: "Staff member wants to avoid specific shifts on certain days",
+    supportsExceptions: false,
   },
   {
     id: "required_off",
     label: "Required Off",
     icon: "🏠",
     description: "Staff member must be off on specific days",
+    supportsExceptions: false,
+  },
+  {
+    id: "avoid_shift_with_exceptions",
+    label: "Avoid Shift (with Exceptions)",
+    icon: "🚫✅",
+    description: "Avoid specific shift but allow certain exceptions",
+    helpText: "Example: Avoid off days (×) but allow early shifts (△) on weekends",
+    supportsExceptions: true,
   },
 ];
 
@@ -97,6 +108,8 @@ const PriorityRulesTab = ({ staffMembers = [], validationErrors = {} }) => {
       targetIds: rule.targetIds || rule.ruleConfig?.targetIds || [],
       shiftType: rule.shiftType || rule.ruleDefinition?.conditions?.shift_type || rule.ruleDefinition?.shiftType || rule.ruleConfig?.shiftType || "early",
       ruleType: rule.ruleType || rule.ruleDefinition?.type || rule.ruleDefinition?.ruleType || rule.ruleConfig?.ruleType || "preferred_shift",
+      // ✅ NEW: Support allowedShifts for avoid_shift_with_exceptions rule type
+      allowedShifts: rule.allowedShifts || rule.ruleDefinition?.allowedShifts || rule.ruleConfig?.allowedShifts || [],
       // ✅ Support both single staffId (legacy) and staffIds array (new)
       staffIds: rule.staffIds || rule.ruleDefinition?.staff_ids || (rule.staffId || rule.ruleDefinition?.staff_id ? [rule.staffId || rule.ruleDefinition?.staff_id] : []),
       // Keep legacy staffId for backward compatibility (will be undefined if using staffIds)
@@ -366,6 +379,7 @@ const PriorityRulesTab = ({ staffMembers = [], validationErrors = {} }) => {
       ruleType: "preferred_shift",
       staffIds: [], // Empty array for multiple staff members
       shiftType: "early",
+      allowedShifts: [], // ✅ NEW: Exception shifts for avoid_shift_with_exceptions
       daysOfWeek: [], // ⚠️ Empty - rule is incomplete, will NOT be synced to server
       // Set high priority defaults (hidden from UI)
       priorityLevel: 4, // High Priority
@@ -870,6 +884,47 @@ const PriorityRulesTab = ({ staffMembers = [], validationErrors = {} }) => {
               </div>
             </FormField>
 
+            {/* ✅ NEW: Exception Shift Selector (only for avoid_shift_with_exceptions) */}
+            {rule.ruleType === "avoid_shift_with_exceptions" && (
+              <FormField label="Allowed Exceptions (Optional)">
+                <p className="text-sm text-gray-600 mb-3">
+                  Select shifts that ARE allowed on these days (despite avoidance rule)
+                </p>
+                <div className="flex flex-wrap gap-2">
+                  {SHIFT_TYPES.filter((shift) => shift.id !== rule.shiftType).map((shift) => {
+                    const isAllowed = (rule.allowedShifts || []).includes(shift.id);
+                    return (
+                      <button
+                        key={shift.id}
+                        onClick={() => {
+                          const currentAllowed = rule.allowedShifts || [];
+                          const updatedAllowed = isAllowed
+                            ? currentAllowed.filter((id) => id !== shift.id)
+                            : [...currentAllowed, shift.id];
+                          updateRule(rule.id, { allowedShifts: updatedAllowed });
+                        }}
+                        className={`flex items-center gap-2 px-4 py-3 border-2 rounded-lg transition-all ${
+                          isAllowed
+                            ? "border-green-300 bg-green-50 text-green-700"
+                            : "border-gray-200 hover:border-gray-300 text-gray-600"
+                        }`}
+                      >
+                        <span className="text-lg">{shift.icon}</span>
+                        <span className="text-sm font-medium">{shift.label}</span>
+                        {isAllowed && <Check size={16} className="text-green-600" />}
+                      </button>
+                    );
+                  })}
+                </div>
+                {(!rule.allowedShifts || rule.allowedShifts.length === 0) && (
+                  <p className="text-xs text-amber-600 flex items-center gap-1 mt-2">
+                    <AlertTriangle size={12} />
+                    No exceptions selected - rule will behave like "Avoid Shift"
+                  </p>
+                )}
+              </FormField>
+            )}
+
             {/* Days of Week */}
             {renderDaySelector(rule)}
           </div>
@@ -901,6 +956,32 @@ const PriorityRulesTab = ({ staffMembers = [], validationErrors = {} }) => {
                 </div>
               </div>
             )}
+
+            {/* ✅ NEW: Exception Shifts Display (for avoid_shift_with_exceptions) */}
+            {rule.ruleType === "avoid_shift_with_exceptions" &&
+              Array.isArray(rule.allowedShifts) &&
+              rule.allowedShifts.length > 0 && (
+                <div className="flex items-center gap-2">
+                  <span className="text-gray-500 text-xs font-medium">
+                    Exceptions:
+                  </span>
+                  <div className="flex gap-1">
+                    {rule.allowedShifts.map((shiftId) => {
+                      const shift = SHIFT_TYPES.find((s) => s.id === shiftId);
+                      return (
+                        <span
+                          key={shiftId}
+                          className="px-2 py-1 bg-green-100 text-green-700 text-xs rounded flex items-center gap-1"
+                          title={`${shift?.label} is allowed as exception`}
+                        >
+                          <span>{shift?.icon}</span>
+                          <span>{shift?.label}</span>
+                        </span>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
 
             {/* Rule Details */}
             <div className="flex items-center gap-4 text-sm text-gray-600">
