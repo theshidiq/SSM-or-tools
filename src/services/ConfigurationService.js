@@ -1493,6 +1493,70 @@ export class ConfigurationService {
     this.currentVersionId = null; // Force new version creation
     return await this.syncToDatabase();
   }
+
+  /**
+   * Validate a priority rule
+   * @param {Object} rule - The priority rule to validate
+   * @returns {Object} Validation result with {valid, errors, warnings}
+   */
+  static validatePriorityRule(rule) {
+    const errors = [];
+    const warnings = [];
+
+    // Basic field validation
+    if (!rule.name || rule.name.trim() === "") {
+      errors.push("Rule name is required");
+    }
+
+    if (!rule.ruleType) {
+      errors.push("Rule type is required");
+    }
+
+    if (!rule.shiftType) {
+      errors.push("Shift type is required");
+    }
+
+    if (!rule.staffIds || rule.staffIds.length === 0) {
+      errors.push("At least one staff member is required");
+    }
+
+    if (!rule.daysOfWeek || rule.daysOfWeek.length === 0) {
+      errors.push("At least one day of week is required");
+    }
+
+    // ✅ NEW: Validate exceptions for avoid_shift_with_exceptions rule type
+    if (rule.ruleType === "avoid_shift_with_exceptions") {
+      if (!rule.allowedShifts || rule.allowedShifts.length === 0) {
+        warnings.push(
+          `Rule "${rule.name}": avoid_shift_with_exceptions should have at least one allowedShift, treating as simple avoid_shift`
+        );
+      }
+
+      // Ensure allowed shifts don't include the avoided shift
+      if (rule.allowedShifts?.includes(rule.shiftType)) {
+        errors.push(
+          `Rule "${rule.name}": Cannot allow the same shift you're avoiding (${rule.shiftType})`
+        );
+      }
+
+      // Validate that allowed shifts are valid shift types
+      const validShiftTypes = ["early", "late", "off"];
+      rule.allowedShifts?.forEach((shift) => {
+        if (!validShiftTypes.includes(shift)) {
+          errors.push(`Invalid shift type in allowedShifts: ${shift}`);
+        }
+      });
+    }
+
+    // Log warnings
+    warnings.forEach((warning) => console.warn(`⚠️ ${warning}`));
+
+    return {
+      valid: errors.length === 0,
+      errors,
+      warnings,
+    };
+  }
 }
 
 // Create a singleton instance
