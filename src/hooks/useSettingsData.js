@@ -26,6 +26,10 @@ export const useSettingsData = (autosaveEnabled = true) => {
   const syncCounterRef = useRef(0);
   const hasCompletedInitialLoadRef = useRef(false); // ✅ FIX #5 CORRECTION: Track if initial load completed
 
+  // 🔧 FIX #6: Prevent duplicate priority rule CREATE operations
+  // Track rule IDs currently being created to prevent broadcast loop duplicates
+  const inFlightPriorityRulesRef = useRef(new Set());
+
   // WebSocket multi-table integration
   const {
     settings: wsSettings,
@@ -642,8 +646,20 @@ export const useSettingsData = (autosaveEnabled = true) => {
           if (createdRules.length > 0) {
             console.log(`    - ${createdRules.length} new rule(s) created`);
             createdRules.forEach((rule) => {
+              // 🔧 FIX #6: Skip if already creating this rule (prevent broadcast loop duplicates)
+              if (inFlightPriorityRulesRef.current.has(rule.id)) {
+                console.log(`⏭️ [FIX #6] Skipping duplicate CREATE for rule "${rule.name}" (${rule.id}) - already in flight`);
+                return;
+              }
+
               console.log(`      - Creating rule "${rule.name}" (${rule.id})`);
+              inFlightPriorityRulesRef.current.add(rule.id); // Mark as in-flight
               callbacks.wsCreatePriorityRule(rule);
+
+              // Clear after 5 seconds (safety timeout to prevent memory leak)
+              setTimeout(() => {
+                inFlightPriorityRulesRef.current.delete(rule.id);
+              }, 5000);
             });
           }
 

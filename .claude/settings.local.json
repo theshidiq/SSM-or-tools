@@ -16,7 +16,8 @@
       "Bash(killall:*)",
       "Bash(git add:*)",
       "Bash(git push:*)",
-      "Bash(cat:*)"
+      "Bash(cat:*)",
+      "mcp__supabase__execute_sql"
     ],
     "deny": [],
     "ask": []
