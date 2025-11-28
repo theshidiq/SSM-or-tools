@@ -35,6 +35,7 @@ import {
 import { ConfigurationService } from "../../services/ConfigurationService.js";
 import { analyzeShiftMomentum } from "../core/PatternRecognizer";
 import { CalendarEarlyShiftIntegrator } from "../utils/CalendarEarlyShiftIntegrator";
+import { ViolationRepairEngine } from "../core/ViolationRepairEngine";
 
 /**
  * Check if previous days have conflicting shift patterns
@@ -531,7 +532,7 @@ export class BusinessRuleValidator {
     dateRange,
     violations,
   ) {
-    const MAX_CONSECUTIVE_WORK_DAYS = 6; // Japanese labor standard
+    const MAX_CONSECUTIVE_WORK_DAYS = 5; // User requirement: max 5 consecutive work days
 
     staffMembers.forEach((staff) => {
       if (!schedule[staff.id]) return;
@@ -1137,11 +1138,15 @@ export class BusinessRuleValidator {
 
       // Distribute off days evenly (pass calendar rules to skip must_day_off dates)
       await this.distributeOffDays(schedule, staffMembers, dateRange, calendarRules);
+      // ✅ Re-enforce staff group constraints (distributeOffDays may have broken them)
+      await this.applyStaffGroupConstraints(schedule, staffMembers, dateRange);
       // ✅ Re-enforce priority rules (prevent overwrites)
       await this.applyPriorityRules(schedule, staffMembers, dateRange);
 
       // ✅ NEW: Enforce 5-day rest constraint across entire schedule
       await this.enforce5DayRestConstraint(schedule, staffMembers, dateRange);
+      // ✅ Re-enforce staff group constraints (rest enforcement may have broken them)
+      await this.applyStaffGroupConstraints(schedule, staffMembers, dateRange);
       // ✅ Re-enforce priority rules (prevent overwrites from rest enforcement)
       await this.applyPriorityRules(schedule, staffMembers, dateRange);
 
@@ -1183,16 +1188,50 @@ export class BusinessRuleValidator {
 
       console.log("✅ Rule-based schedule generated");
 
+      // ✅ FINAL VALIDATION: Check for violations and attempt repair before returning
+      console.log("🔍 [FINAL-VALIDATION] Checking schedule for violations...");
+      const repairEngine = new ViolationRepairEngine();
+
+      const repairContext = {
+        calendarRules: calendarRules || {},
+        earlyShiftPreferences: earlyShiftPreferences || {},
+        staffMembers: staffMembers,
+        dateRange: dateRange
+      };
+
+      const { schedule: repairedSchedule, summary } = await repairEngine.repairSchedule(
+        schedule,
+        repairContext
+      );
+
+      // Log comprehensive repair summary
+      console.log("📊 [FINAL-VALIDATION] Repair Summary:", {
+        totalAttempts: summary.totalAttempts,
+        repairedCount: summary.repairedCount,
+        remainingCount: summary.remainingCount,
+        passesUsed: summary.passesUsed,
+        success: summary.success
+      });
+
+      if (summary.remainingCount > 0) {
+        console.warn(`⚠️ [FINAL-VALIDATION] ${summary.remainingCount} violations remain after repair:`);
+        summary.remainingViolations.slice(0, 5).forEach(v => {
+          console.warn(`  - ${v.type}: ${v.staffName} on ${v.date} - ${v.reason}`);
+        });
+      } else {
+        console.log("✅ [FINAL-VALIDATION] All violations repaired successfully!");
+      }
+
       // 🎯 DEBUG: Log final schedule to verify randomization
       console.log("🔍 [DEBUG] Final schedule being returned:");
       staffMembers.slice(0, 3).forEach(staff => {
         const offDays = dateRange
-          .filter(date => schedule[staff.id]?.[date.toISOString().split("T")[0]] === "×")
+          .filter(date => repairedSchedule[staff.id]?.[date.toISOString().split("T")[0]] === "×")
           .map(date => date.toISOString().split("T")[0]);
         console.log(`🔍 [DEBUG] ${staff.name}: ${offDays.length} off-days on: ${offDays.join(", ")}`);
       });
 
-      return schedule;
+      return repairedSchedule;
     } catch (error) {
       console.error("❌ Rule-based schedule generation failed:", error);
       throw error;
@@ -1853,7 +1892,19 @@ export class BusinessRuleValidator {
     const globalOffDayCount = {};
     dateRange.forEach((date) => {
       const dateKey = date.toISOString().split("T")[0];
-      globalOffDayCount[dateKey] = 0;
+
+      // ✅ FIX: Count off-days ALREADY SET by earlier rules (calendar, priority, staff groups)
+      const currentOffCount = staffMembers.filter(staff =>
+        schedule[staff.id]?.[dateKey] === "×"
+      ).length;
+
+      globalOffDayCount[dateKey] = currentOffCount;
+
+      if (currentOffCount > 0) {
+        console.log(
+          `📊 [DAILY-LIMIT-INIT] ${dateKey}: ${currentOffCount} staff already off (from earlier rules)`
+        );
+      }
     });
 
     for (const staff of staffMembers) {
@@ -2019,7 +2070,26 @@ export class BusinessRuleValidator {
               );
 
             if (!wouldViolateWeeklyLimit) {
-              // Safe to assign × without violating weekly limit
+              // ✅ DAILY LIMIT CHECK: Count actual current off-staff before assigning
+              const actualOffCount = staffMembers.filter(s =>
+                schedule[s.id]?.[bestCandidate.dateKey] === "×"
+              ).length;
+
+              if (actualOffCount >= maxOffPerDay) {
+                console.log(
+                  `⚠️ [DAILY-LIMIT] ${staff.name}: Cannot assign × on ${bestCandidate.date.toLocaleDateString('ja-JP')} - ` +
+                  `already ${actualOffCount}/${maxOffPerDay} staff off`,
+                );
+                // Skip this date and try next
+                shuffledDays.splice(bestCandidate.arrayIndex, 1);
+                const jitter = Math.floor(Math.random() * 2);
+                nextOffDayIndex =
+                  (bestCandidate.arrayIndex + interval + jitter) %
+                  Math.max(shuffledDays.length, 1);
+                continue;
+              }
+
+              // Safe to assign × without violating weekly limit or daily limit
               schedule[staff.id][bestCandidate.dateKey] = "×";
               globalOffDayCount[bestCandidate.dateKey]++;
               offDaysSet++;
@@ -2117,7 +2187,24 @@ export class BusinessRuleValidator {
             continue;
           }
 
-          // Assign off day (no consecutive pattern detected)
+          // ✅ DAILY LIMIT CHECK: Count actual current off-staff before assigning
+          const actualOffCount = staffMembers.filter(s =>
+            schedule[s.id]?.[bestCandidate.dateKey] === "×"
+          ).length;
+
+          if (actualOffCount >= maxOffPerDay) {
+            console.log(
+              `⚠️ [DAILY-LIMIT] ${staff.name}: Cannot assign × on ${bestCandidate.date.toLocaleDateString('ja-JP')} - ` +
+              `already ${actualOffCount}/${maxOffPerDay} staff off`,
+            );
+            // Skip this date and try next
+            shuffledDays.splice(bestCandidate.arrayIndex, 1);
+            nextOffDayIndex =
+              bestCandidate.arrayIndex % Math.max(shuffledDays.length, 1);
+            continue;
+          }
+
+          // Assign off day (no consecutive pattern detected, within daily limit)
           schedule[staff.id][bestCandidate.dateKey] = "×";
           globalOffDayCount[bestCandidate.dateKey]++;
           offDaysSet++;

@@ -2541,7 +2541,7 @@ export class ScheduleGenerator {
 
       // ✅ PHASE 1: Check consecutive work day limits (Tier 1 constraint - Labor Law)
       if (proposedShift !== "×" && dateRange && dateRange.length > 0) {
-        const MAX_CONSECUTIVE_WORK_DAYS = 6; // Japanese labor standard
+        const MAX_CONSECUTIVE_WORK_DAYS = 5; // User requirement: max 5 consecutive work days
 
         // Find the index of the proposed date
         const dateIndex = dateRange.findIndex(

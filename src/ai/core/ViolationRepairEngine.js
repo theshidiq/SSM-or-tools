@@ -230,7 +230,7 @@ export class ViolationRepairEngine {
   detectConsecutiveWorkViolations(schedule, context) {
     const { staffMembers = [], dateRange = [] } = context;
     const violations = [];
-    const MAX_CONSECUTIVE_WORK_DAYS = 6;
+    const MAX_CONSECUTIVE_WORK_DAYS = 5; // User requirement: max 5 consecutive work days
 
     staffMembers.forEach(staff => {
       const staffSchedule = schedule[staff.id] || {};

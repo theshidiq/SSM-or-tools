@@ -66,7 +66,7 @@ export const CONSTRAINT_REGISTRY = {
     name: 'Consecutive Work Day Limit',
     tier: CONSTRAINT_TIERS.TIER_1_MUST,
     priority: 4,
-    description: 'Staff cannot work more than 6 consecutive days (labor law)',
+    description: 'Staff cannot work more than 5 consecutive days (user requirement)',
     category: 'labor_law',
     isHardConstraint: true,
     canOverride: false,
@@ -137,13 +137,13 @@ export const CONSTRAINT_REGISTRY = {
   FIVE_DAY_REST_RULE: {
     id: 'five_day_rest',
     name: 'Five Day Rest Rule',
-    tier: CONSTRAINT_TIERS.TIER_2_SHOULD,
-    priority: 10,
-    description: 'Staff should have at least 1 day off every 5 days',
+    tier: CONSTRAINT_TIERS.TIER_1_MUST,
+    priority: 8,
+    description: 'Staff MUST have at least 1 day off every 5 days (enforces 5-day work limit)',
     category: 'rest',
-    isHardConstraint: false,
-    canOverride: true,
-    violationSeverity: 'medium'
+    isHardConstraint: true,
+    canOverride: false,
+    violationSeverity: 'critical'
   },
 
   PRIORITY_RULES: {
