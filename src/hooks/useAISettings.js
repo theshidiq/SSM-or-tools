@@ -286,6 +286,15 @@ export const useAISettings = () => {
         rule.preferences?.daysOfWeek ||
         [];
 
+      // ✅ NEW: Extract allowedShifts for avoid_shift_with_exceptions rule type
+      const allowedShifts =
+        rule.allowedShifts ||        // ← TOP LEVEL (UI creates this)
+        rule.allowed_shifts ||       // ← TOP LEVEL (snake_case variant)
+        rule.ruleDefinition?.allowedShifts ||  // ← Nested JSONB
+        rule.ruleDefinition?.allowed_shifts ||
+        rule.preferences?.allowedShifts ||
+        [];
+
       // Debug: Log extraction results for first 2 rules
       if (settings.priorityRules.indexOf(rule) < 2) {
         console.log(`🔍 [useAISettings] Rule "${rule.name}" extraction:`, {
@@ -293,15 +302,18 @@ export const useAISettings = () => {
           staffIds, // ✅ NEW: Log multi-staff array
           shiftType,
           daysOfWeek,
+          allowedShifts, // ✅ NEW: Log exception shifts
           sources: {
             topLevel_staffId: rule.staffId,
             topLevel_staffIds: rule.staffIds, // ✅ NEW
             topLevel_shiftType: rule.shiftType,
             topLevel_daysOfWeek: rule.daysOfWeek,
+            topLevel_allowedShifts: rule.allowedShifts, // ✅ NEW
             nested_staffId: rule.ruleDefinition?.staff_id,
             nested_staffIds: rule.ruleDefinition?.staff_ids, // ✅ NEW
             nested_shiftType: rule.ruleDefinition?.conditions?.shift_type,
-            nested_daysOfWeek: rule.ruleDefinition?.conditions?.day_of_week
+            nested_daysOfWeek: rule.ruleDefinition?.conditions?.day_of_week,
+            nested_allowedShifts: rule.ruleDefinition?.allowedShifts // ✅ NEW
           }
         });
       }
@@ -313,6 +325,7 @@ export const useAISettings = () => {
         ruleType: rule.ruleType || rule.rule_type || "preferred_shift",
         staffId: staffId,  // Legacy single-staff support
         staffIds: staffIds, // ✅ NEW: Multi-staff support
+        allowedShifts: allowedShifts, // ✅ NEW: Exception shifts for avoid_shift_with_exceptions
         preferences: {
           shiftType: shiftType,
           daysOfWeek: daysOfWeek,
