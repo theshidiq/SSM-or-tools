@@ -354,9 +354,18 @@ func (pr *PriorityRule) ToReactFormat() map[string]interface{} {
 		if daysOfWeek, exists := defMap["daysOfWeek"]; exists {
 			result["daysOfWeek"] = daysOfWeek
 			log.Printf("✅ [ToReactFormat] Extracted daysOfWeek from flat structure: %v", daysOfWeek)
-		} else if daysOfWeek, exists := defMap["day_of_week"]; exists {
+		} else if daysOfWeek, exists := defMap["days_of_week"]; exists {
 			result["daysOfWeek"] = daysOfWeek
-			log.Printf("✅ [ToReactFormat] Extracted daysOfWeek from flat snake_case: %v", daysOfWeek)
+			log.Printf("✅ [ToReactFormat] Extracted daysOfWeek from flat snake_case (days_of_week): %v", daysOfWeek)
+		}
+
+		// ✅ NEW: Extract allowedShifts for avoid_shift_with_exceptions rule type
+		if allowedShifts, exists := defMap["allowedShifts"]; exists {
+			result["allowedShifts"] = allowedShifts
+			log.Printf("✅ [ToReactFormat] Extracted allowedShifts from flat structure: %v", allowedShifts)
+		} else if allowedShifts, exists := defMap["allowed_shifts"]; exists {
+			result["allowedShifts"] = allowedShifts
+			log.Printf("✅ [ToReactFormat] Extracted allowedShifts from flat snake_case (allowed_shifts): %v", allowedShifts)
 		}
 
 		// Also try nested conditions object (for backward compatibility with old data format)
@@ -383,8 +392,10 @@ func (pr *PriorityRule) ToReactFormat() map[string]interface{} {
 	// 🔍 DEBUG: Log final result to see what's being returned
 	log.Printf("🔍 [ToReactFormat] Final result for rule '%s':", pr.Name)
 	log.Printf("   staffId: %v", result["staffId"])
+	log.Printf("   staffIds: %v", result["staffIds"])
 	log.Printf("   shiftType: %v", result["shiftType"])
 	log.Printf("   daysOfWeek: %v", result["daysOfWeek"])
+	log.Printf("   allowedShifts: %v", result["allowedShifts"])
 	log.Printf("   ruleType: %v", result["ruleType"])
 
 	return result
