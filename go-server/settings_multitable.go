@@ -1548,27 +1548,23 @@ func (s *StaffSyncServer) updatePriorityRule(versionID string, ruleData map[stri
 		log.Printf("🔍 [updatePriorityRule] Merging legacy staffId to rule_definition: %v", staffIdValue)
 	}
 
-	// Preserve existing conditions object, then merge new fields
-	conditions := make(map[string]interface{})
-	if existingConditions, ok := ruleDefinition["conditions"].(map[string]interface{}); ok {
-		// Start with existing conditions from database
-		conditions = existingConditions
-		log.Printf("🔍 [updatePriorityRule] Preserving existing conditions: %+v", conditions)
-	}
-
-	// Merge new shift_type and day_of_week fields (if provided)
+	// ✅ FIX: Use FLAT format (not nested conditions) for avoid_shift_with_exceptions
+	// Store shift_type, days_of_week, and allowed_shifts directly in rule_definition
+	// This matches the frontend format and INTEGRATION_BUG_FIX.md specification
 	if shiftType, ok := ruleData["shiftType"]; ok {
-		conditions["shift_type"] = shiftType
+		ruleDefinition["shift_type"] = shiftType
 		log.Printf("🔍 [updatePriorityRule] Merging shiftType: %v", shiftType)
 	}
 	if daysOfWeek, ok := ruleData["daysOfWeek"]; ok {
-		conditions["day_of_week"] = daysOfWeek
+		ruleDefinition["days_of_week"] = daysOfWeek
 		log.Printf("🔍 [updatePriorityRule] Merging daysOfWeek: %+v", daysOfWeek)
 	}
 
-	// Update conditions in ruleDefinition if we have any
-	if len(conditions) > 0 {
-		ruleDefinition["conditions"] = conditions
+	// ✅ NEW: Handle allowedShifts for avoid_shift_with_exceptions rule type
+	// This field stores exception shifts that ARE allowed despite avoiding the main shift
+	if allowedShifts, ok := ruleData["allowedShifts"]; ok {
+		ruleDefinition["allowed_shifts"] = allowedShifts
+		log.Printf("🔍 [updatePriorityRule] Merging allowedShifts: %+v", allowedShifts)
 	}
 
 	// Add other optional fields
@@ -1709,20 +1705,23 @@ func (s *StaffSyncServer) insertPriorityRule(versionID string, ruleData map[stri
 		log.Printf("🔍 [insertPriorityRule] Adding legacy staffId: %v", staffIdForDB)
 	}
 
-	// Create conditions object for shift_type and day_of_week
-	conditions := make(map[string]interface{})
+	// ✅ FIX: Use FLAT format (not nested conditions) for avoid_shift_with_exceptions
+	// Store shift_type, days_of_week, and allowed_shifts directly in rule_definition
+	// This matches the frontend format and INTEGRATION_BUG_FIX.md specification
 	if shiftType, ok := ruleData["shiftType"]; ok {
-		conditions["shift_type"] = shiftType
+		ruleDefinition["shift_type"] = shiftType
 		log.Printf("🔍 [insertPriorityRule] Adding shiftType: %v", shiftType)
 	}
 	if daysOfWeek, ok := ruleData["daysOfWeek"]; ok {
-		conditions["day_of_week"] = daysOfWeek
+		ruleDefinition["days_of_week"] = daysOfWeek
 		log.Printf("🔍 [insertPriorityRule] Adding daysOfWeek: %+v", daysOfWeek)
 	}
 
-	// Add conditions to ruleDefinition if we have any
-	if len(conditions) > 0 {
-		ruleDefinition["conditions"] = conditions
+	// ✅ NEW: Handle allowedShifts for avoid_shift_with_exceptions rule type
+	// This field stores exception shifts that ARE allowed despite avoiding the main shift
+	if allowedShifts, ok := ruleData["allowedShifts"]; ok {
+		ruleDefinition["allowed_shifts"] = allowedShifts
+		log.Printf("🔍 [insertPriorityRule] Adding allowedShifts: %+v", allowedShifts)
 	}
 
 	// Add other optional fields
