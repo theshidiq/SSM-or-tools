@@ -68,6 +68,7 @@ export const usePriorityRulesData = () => {
                   undefined,
           ruleType: rule.rule_definition?.type || rule.rule_definition?.rule_type || 'preferred_shift',
           shiftType: rule.rule_definition?.conditions?.shift_type || rule.rule_definition?.shift_type || 'early',
+          allowedShifts: rule.rule_definition?.allowed_shifts || rule.rule_definition?.allowedShifts || [], // ✅ NEW: Exception shifts
           daysOfWeek: rule.rule_definition?.conditions?.day_of_week || rule.rule_definition?.days_of_week || [],
           priorityLevel: rule.priority_level ?? 4, // ✅ FIX: Read from top-level column, not JSONB
           preferenceStrength: rule.rule_definition?.preference_strength ?? 1.0,
@@ -139,6 +140,7 @@ export const usePriorityRulesData = () => {
           rule_definition: {
             rule_type: ruleData.ruleType,
             shift_type: ruleData.shiftType,
+            allowed_shifts: ruleData.allowedShifts || [], // ✅ NEW: Exception shifts for avoid_shift_with_exceptions
             days_of_week: ruleData.daysOfWeek || [],
             // ✅ SINGLE SOURCE OF TRUTH: Staff IDs stored here in JSONB
             staff_ids: staffIds,
@@ -209,6 +211,7 @@ export const usePriorityRulesData = () => {
       // JSONB rule_definition - only update if any JSONB field is provided
       if (updates.ruleType !== undefined ||
           updates.shiftType !== undefined ||
+          updates.allowedShifts !== undefined ||
           updates.daysOfWeek !== undefined ||
           updates.staffIds !== undefined ||
           updates.staffId !== undefined ||
@@ -221,6 +224,7 @@ export const usePriorityRulesData = () => {
 
         if (updates.ruleType !== undefined) ruleDefinition.rule_type = updates.ruleType;
         if (updates.shiftType !== undefined) ruleDefinition.shift_type = updates.shiftType;
+        if (updates.allowedShifts !== undefined) ruleDefinition.allowed_shifts = updates.allowedShifts; // ✅ NEW: Exception shifts
         if (updates.daysOfWeek !== undefined) ruleDefinition.days_of_week = updates.daysOfWeek;
         // ✅ NEW: Store staffIds array in JSONB
         if (updates.staffIds !== undefined) {
