@@ -632,6 +632,57 @@ export const migrationUtils = {
   },
 
   /**
+   * Clean up malformed cache keys caused by missing periodIndex parameter
+   * Fixes issue where saveScheduleData() was called without periodIndex,
+   * creating keys like "schedule-[object Object]" instead of "schedule-0"
+   */
+  cleanupMalformedCacheKeys() {
+    const malformedPatterns = [
+      "schedule-[object Object]",
+      "staff-[object Object]",
+      "schedule-undefined",
+      "staff-undefined",
+      "schedule-null",
+      "staff-null",
+    ];
+
+    let removedCount = 0;
+    const removedKeys = [];
+
+    malformedPatterns.forEach((key) => {
+      if (rawStorage.remove(key)) {
+        removedCount++;
+        removedKeys.push(key);
+      }
+    });
+
+    // Also scan for any keys that might have similar issues
+    try {
+      const allKeys = Object.keys(localStorage);
+      allKeys.forEach((key) => {
+        // Check for keys with [object in them (malformed serialization)
+        if (key.includes("[object") || key.includes("undefined") || key.includes("null")) {
+          // Only remove if it looks like one of our cache keys
+          if (key.startsWith("schedule-") || key.startsWith("staff-")) {
+            if (rawStorage.remove(key)) {
+              removedCount++;
+              removedKeys.push(key);
+            }
+          }
+        }
+      });
+    } catch (error) {
+      console.warn("⚠️ Could not scan localStorage for malformed keys:", error.message);
+    }
+
+    if (removedCount > 0) {
+      console.log(`🧹 Cleaned up ${removedCount} malformed cache key(s):`, removedKeys);
+    }
+
+    return { removedCount, removedKeys };
+  },
+
+  /**
    * Verify migration integrity
    */
   verifyMigration() {

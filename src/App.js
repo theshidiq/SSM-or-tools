@@ -11,6 +11,7 @@ import { useStaffGroupsData } from "./hooks/useStaffGroupsData.js";
 import { RestaurantProvider } from "./contexts/RestaurantContext";
 import { SettingsProvider } from "./contexts/SettingsContext";
 import { supabase } from "./utils/supabase";
+import { migrationUtils } from "./utils/storageUtils";
 import { useEffect } from "react";
 
 function AppContent() {
@@ -47,6 +48,9 @@ function AppContent() {
   useEffect(() => {
     const populateLocalStorage = async () => {
       try {
+        // 🧹 Clean up any malformed cache keys on app startup
+        migrationUtils.cleanupMalformedCacheKeys();
+
         console.log('🔄 [Simple Bridge] Populating localStorage for ML training...');
 
         // Fetch schedules and staff assignments

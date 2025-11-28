@@ -493,7 +493,7 @@ export const useAIAssistantLazy = (
 
             // Save to localStorage as backup cache
             console.log("💾 [AI] Saving to localStorage as backup...");
-            optimizedStorage.saveScheduleData(result.schedule);
+            optimizedStorage.saveScheduleData(currentMonthIndex, result.schedule);
           } else {
             console.error("❌ [AI-LAZY] Schedule save skipped - conditions not met:", {
               success: result?.success,
