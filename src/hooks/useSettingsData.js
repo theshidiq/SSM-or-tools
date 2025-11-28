@@ -705,6 +705,7 @@ export const useSettingsData = (autosaveEnabled = true) => {
               staffId: r.staffId, // Legacy single staff
               staffIds: r.staffIds || [], // ✅ FIX: Include staffIds array for comparison!
               shiftType: r.shiftType,
+              allowedShifts: r.allowedShifts || [], // ✅ FIX: Include allowedShifts for avoid_shift_with_exceptions!
               daysOfWeek: r.daysOfWeek || [],
               ruleType: r.ruleType,
               priorityLevel: r.priorityLevel,

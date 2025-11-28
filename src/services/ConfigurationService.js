@@ -1377,6 +1377,7 @@ export class ConfigurationService {
             ruleType: rule.ruleType,
             staffId: rule.staffId,
             shiftType: rule.shiftType,
+            allowedShifts: rule.allowedShifts || [], // ✅ FIX: Include exception shifts for avoid_shift_with_exceptions
             daysOfWeek: rule.daysOfWeek,
             priorityLevel: rule.priorityLevel,
             preferenceStrength: rule.preferenceStrength,
