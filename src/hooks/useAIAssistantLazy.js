@@ -422,6 +422,9 @@ export const useAIAssistantLazy = (
             console.warn("⚠️ [AI-LAZY] Failed to load early shift preferences:", err);
             // Continue without preferences - AI will work without early shift constraints
           }
+        } else {
+          console.warn("⚠️ [AI-LAZY] No restaurant ID available - skipping early shift preferences loading");
+          console.warn("⚠️ [AI-LAZY] Restaurant context:", { hasRestaurant: !!restaurant, restaurantId: restaurant?.id });
         }
 
         // Load calendar rules (must_work, must_day_off) for AI constraint processing
@@ -450,6 +453,9 @@ export const useAIAssistantLazy = (
             console.warn("⚠️ [AI-LAZY] Failed to load calendar rules:", err);
             // Continue without calendar rules - AI will work without calendar constraints
           }
+        } else {
+          console.warn("⚠️ [AI-LAZY] No restaurant ID available - skipping calendar rules loading");
+          console.warn("⚠️ [AI-LAZY] Restaurant context:", { hasRestaurant: !!restaurant, restaurantId: restaurant?.id });
         }
 
         // Generating predictions using AI system
