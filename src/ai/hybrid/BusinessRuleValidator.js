@@ -1162,61 +1162,23 @@ export class BusinessRuleValidator {
       if (hasPhase3Integration && calendarRules && Object.keys(calendarRules).length > 0) {
         console.log("🔄 [PRE-PHASE] Applying must_day_off calendar rules (EARLY OVERRIDE)...");
 
-        // Get daily limits configuration
-        const liveSettings = this.getLiveSettings();
-        const dailyLimits = liveSettings.dailyLimits;
-        let maxOffPerDay = 3; // Default: max 3 staff off per day
-
-        if (Array.isArray(dailyLimits)) {
-          const offDayLimit = dailyLimits.find((l) =>
-            l.shiftType === "off" || l.name?.toLowerCase().includes("off")
-          );
-          maxOffPerDay = offDayLimit?.maxCount || 3;
-        } else if (dailyLimits && typeof dailyLimits === "object") {
-          maxOffPerDay = dailyLimits.maxOffPerDay || 3;
-        }
-
-        console.log(`📅 [CALENDAR-LIMIT] Using maxOffPerDay = ${maxOffPerDay}`);
-
         let mustDayOffCount = 0;
         Object.keys(calendarRules).forEach((dateKey) => {
           const rule = calendarRules[dateKey];
 
           if (rule.must_day_off) {
-            // ✅ FIX: Don't assign × to ALL staff - respect daily limit
-            // Assign × only up to maxOffPerDay
-            let offDaysAssigned = 0;
-
-            for (const staff of staffMembers) {
-              // Check daily limit before each assignment
-              if (canAssignOffDay(schedule, dateKey, staffMembers, maxOffPerDay)) {
-                schedule[staff.id][dateKey] = "×";
-                offDaysAssigned++;
-                console.log(
-                  `✅ [CALENDAR] ${staff.name}: × on ${dateKey} ` +
-                  `(must_day_off ${offDaysAssigned}/${maxOffPerDay})`
-                );
-              } else {
-                // Daily limit reached, stop assigning
-                console.log(
-                  `⏭️ [CALENDAR] Daily limit reached for ${dateKey} ` +
-                  `(${maxOffPerDay} staff), skipping remaining staff`
-                );
-                break;
-              }
-            }
-
+            // Apply to ALL staff (calendar rules override everything - no exceptions)
+            staffMembers.forEach((staff) => {
+              schedule[staff.id][dateKey] = "×"; // Force day off
+            });
             mustDayOffCount++;
-            console.log(
-              `✅ [CALENDAR] ${dateKey}: Assigned ${offDaysAssigned}/${maxOffPerDay} off days (must_day_off)`
-            );
+            console.log(`✅ [PRE-PHASE] All staff: × on ${dateKey} (must_day_off)`);
           }
         });
 
         if (mustDayOffCount > 0) {
           console.log(
-            `✅ [PRE-PHASE] Applied ${mustDayOffCount} must_day_off rule(s) ` +
-            `with daily limit respect (max ${maxOffPerDay} staff/day)`
+            `✅ [PRE-PHASE] Applied ${mustDayOffCount} must_day_off rule(s) (ALL staff get ×)`
           );
         }
       }
