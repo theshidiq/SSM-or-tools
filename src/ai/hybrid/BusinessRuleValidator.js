@@ -1311,8 +1311,10 @@ export class BusinessRuleValidator {
           // Find staff who are working and can take off
           const eligibleStaff = staffMembers.filter(staff => {
             const shift = schedule[staff.id]?.[dateKey];
+            // Check if backup-only staff (if backup service exists)
+            const isBackup = this.backupStaffService && this.backupStaffService.isBackupStaff(staff.id);
             // Eligible if currently working (not ×, not △) and not backup-only
-            return shift !== "×" && shift !== "△" && !this.isBackupOnlyStaff(staff);
+            return shift !== "×" && shift !== "△" && !isBackup;
           });
 
           // Assign × to eligible staff until we reach minimum
