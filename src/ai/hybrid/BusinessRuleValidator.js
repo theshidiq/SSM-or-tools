@@ -35,7 +35,6 @@ import {
 import { ConfigurationService } from "../../services/ConfigurationService.js";
 import { analyzeShiftMomentum } from "../core/PatternRecognizer";
 import { CalendarEarlyShiftIntegrator } from "../utils/CalendarEarlyShiftIntegrator";
-import { ViolationRepairEngine } from "../core/ViolationRepairEngine";
 
 /**
  * Check if previous days have conflicting shift patterns
@@ -1188,50 +1187,16 @@ export class BusinessRuleValidator {
 
       console.log("✅ Rule-based schedule generated");
 
-      // ✅ FINAL VALIDATION: Check for violations and attempt repair before returning
-      console.log("🔍 [FINAL-VALIDATION] Checking schedule for violations...");
-      const repairEngine = new ViolationRepairEngine();
-
-      const repairContext = {
-        calendarRules: calendarRules || {},
-        earlyShiftPreferences: earlyShiftPreferences || {},
-        staffMembers: staffMembers,
-        dateRange: dateRange
-      };
-
-      const { schedule: repairedSchedule, summary } = await repairEngine.repairSchedule(
-        schedule,
-        repairContext
-      );
-
-      // Log comprehensive repair summary
-      console.log("📊 [FINAL-VALIDATION] Repair Summary:", {
-        totalAttempts: summary.totalAttempts,
-        repairedCount: summary.repairedCount,
-        remainingCount: summary.remainingCount,
-        passesUsed: summary.passesUsed,
-        success: summary.success
-      });
-
-      if (summary.remainingCount > 0) {
-        console.warn(`⚠️ [FINAL-VALIDATION] ${summary.remainingCount} violations remain after repair:`);
-        summary.remainingViolations.slice(0, 5).forEach(v => {
-          console.warn(`  - ${v.type}: ${v.staffName} on ${v.date} - ${v.reason}`);
-        });
-      } else {
-        console.log("✅ [FINAL-VALIDATION] All violations repaired successfully!");
-      }
-
       // 🎯 DEBUG: Log final schedule to verify randomization
       console.log("🔍 [DEBUG] Final schedule being returned:");
       staffMembers.slice(0, 3).forEach(staff => {
         const offDays = dateRange
-          .filter(date => repairedSchedule[staff.id]?.[date.toISOString().split("T")[0]] === "×")
+          .filter(date => schedule[staff.id]?.[date.toISOString().split("T")[0]] === "×")
           .map(date => date.toISOString().split("T")[0]);
         console.log(`🔍 [DEBUG] ${staff.name}: ${offDays.length} off-days on: ${offDays.join(", ")}`);
       });
 
-      return repairedSchedule;
+      return schedule;
     } catch (error) {
       console.error("❌ Rule-based schedule generation failed:", error);
       throw error;
