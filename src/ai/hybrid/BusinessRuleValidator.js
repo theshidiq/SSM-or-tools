@@ -90,6 +90,60 @@ function hasAdjacentConflict(staff, currentDate, proposedShift, schedule) {
   }
 }
 
+/**
+ * Check if we can assign an off-day (×) on a specific date without exceeding daily limit
+ * @param {Object} schedule - Current schedule
+ * @param {string} dateKey - Date to check (YYYY-MM-DD)
+ * @param {Array} staffMembers - All staff members
+ * @param {number} maxOffPerDay - Maximum off days allowed per day
+ * @returns {boolean} True if we can assign ×, false if limit would be exceeded
+ */
+function canAssignOffDay(schedule, dateKey, staffMembers, maxOffPerDay) {
+  const currentOffCount = staffMembers.filter(s =>
+    schedule[s.id]?.[dateKey] === "×"
+  ).length;
+
+  const canAssign = currentOffCount < maxOffPerDay;
+
+  if (!canAssign) {
+    console.log(
+      `⏭️ [DAILY-LIMIT-MAX] Cannot assign × on ${dateKey} - ` +
+      `already ${currentOffCount}/${maxOffPerDay} staff off (MAX LIMIT)`
+    );
+  }
+
+  return canAssign;
+}
+
+/**
+ * Check if a date needs more off-days to meet minimum requirement
+ * @param {Object} schedule - Current schedule
+ * @param {string} dateKey - Date to check (YYYY-MM-DD)
+ * @param {Array} staffMembers - All staff members
+ * @param {number} minOffPerDay - Minimum off days required per day
+ * @returns {boolean} True if needs more off days, false if minimum is met
+ */
+function needsMoreOffDays(schedule, dateKey, staffMembers, minOffPerDay) {
+  const currentOffCount = staffMembers.filter(s =>
+    schedule[s.id]?.[dateKey] === "×"
+  ).length;
+
+  return currentOffCount < minOffPerDay;
+}
+
+/**
+ * Count off-days on a specific date
+ * @param {Object} schedule - Current schedule
+ * @param {string} dateKey - Date to check (YYYY-MM-DD)
+ * @param {Array} staffMembers - All staff members
+ * @returns {number} Number of staff with off-days on this date
+ */
+function countOffDaysOnDate(schedule, dateKey, staffMembers) {
+  return staffMembers.filter(s =>
+    schedule[s.id]?.[dateKey] === "×"
+  ).length;
+}
+
 export class BusinessRuleValidator {
   constructor() {
     this.initialized = false;
@@ -1108,22 +1162,62 @@ export class BusinessRuleValidator {
       if (hasPhase3Integration && calendarRules && Object.keys(calendarRules).length > 0) {
         console.log("🔄 [PRE-PHASE] Applying must_day_off calendar rules (EARLY OVERRIDE)...");
 
+        // Get daily limits configuration
+        const liveSettings = this.getLiveSettings();
+        const dailyLimits = liveSettings.dailyLimits;
+        let maxOffPerDay = 3; // Default: max 3 staff off per day
+
+        if (Array.isArray(dailyLimits)) {
+          const offDayLimit = dailyLimits.find((l) =>
+            l.shiftType === "off" || l.name?.toLowerCase().includes("off")
+          );
+          maxOffPerDay = offDayLimit?.maxCount || 3;
+        } else if (dailyLimits && typeof dailyLimits === "object") {
+          maxOffPerDay = dailyLimits.maxOffPerDay || 3;
+        }
+
+        console.log(`📅 [CALENDAR-LIMIT] Using maxOffPerDay = ${maxOffPerDay}`);
+
         let mustDayOffCount = 0;
         Object.keys(calendarRules).forEach((dateKey) => {
           const rule = calendarRules[dateKey];
 
           if (rule.must_day_off) {
-            // Apply to ALL staff (including backup staff - calendar rules override everything)
-            staffMembers.forEach((staff) => {
-              schedule[staff.id][dateKey] = "×"; // Force day off
-            });
+            // ✅ FIX: Don't assign × to ALL staff - respect daily limit
+            // Assign × only up to maxOffPerDay
+            let offDaysAssigned = 0;
+
+            for (const staff of staffMembers) {
+              // Check daily limit before each assignment
+              if (canAssignOffDay(schedule, dateKey, staffMembers, maxOffPerDay)) {
+                schedule[staff.id][dateKey] = "×";
+                offDaysAssigned++;
+                console.log(
+                  `✅ [CALENDAR] ${staff.name}: × on ${dateKey} ` +
+                  `(must_day_off ${offDaysAssigned}/${maxOffPerDay})`
+                );
+              } else {
+                // Daily limit reached, stop assigning
+                console.log(
+                  `⏭️ [CALENDAR] Daily limit reached for ${dateKey} ` +
+                  `(${maxOffPerDay} staff), skipping remaining staff`
+                );
+                break;
+              }
+            }
+
             mustDayOffCount++;
-            console.log(`✅ [PRE-PHASE] All staff: × on ${dateKey} (must_day_off)`);
+            console.log(
+              `✅ [CALENDAR] ${dateKey}: Assigned ${offDaysAssigned}/${maxOffPerDay} off days (must_day_off)`
+            );
           }
         });
 
         if (mustDayOffCount > 0) {
-          console.log(`✅ [PRE-PHASE] Applied ${mustDayOffCount} must_day_off rules to ${staffMembers.length} staff members`);
+          console.log(
+            `✅ [PRE-PHASE] Applied ${mustDayOffCount} must_day_off rule(s) ` +
+            `with daily limit respect (max ${maxOffPerDay} staff/day)`
+          );
         }
       }
 
@@ -1196,6 +1290,85 @@ export class BusinessRuleValidator {
         console.log(`🔍 [DEBUG] ${staff.name}: ${offDays.length} off-days on: ${offDays.join(", ")}`);
       });
 
+      // ✅ POST-GENERATION BALANCING: Ensure min 2 and max 3 staff off per day
+      console.log("⚖️ [BALANCE] Starting daily limit balancing (min: 2, max: 3)...");
+
+      const minOffPerDay = 2;
+      const maxOffPerDay = 3;
+      let balancingChanges = 0;
+
+      dateRange.forEach(date => {
+        const dateKey = date.toISOString().split("T")[0];
+        const currentOffCount = countOffDaysOnDate(schedule, dateKey, staffMembers);
+
+        // Case 1: Too few off days (< 2)
+        if (currentOffCount < minOffPerDay) {
+          const needed = minOffPerDay - currentOffCount;
+          console.log(
+            `⚠️ [BALANCE] ${dateKey}: Only ${currentOffCount} staff off, need ${needed} more (min: ${minOffPerDay})`
+          );
+
+          // Find staff who are working and can take off
+          const eligibleStaff = staffMembers.filter(staff => {
+            const shift = schedule[staff.id]?.[dateKey];
+            // Eligible if currently working (not ×, not △) and not backup-only
+            return shift !== "×" && shift !== "△" && !this.isBackupOnlyStaff(staff);
+          });
+
+          // Assign × to eligible staff until we reach minimum
+          let assigned = 0;
+          for (const staff of eligibleStaff) {
+            if (assigned >= needed) break;
+
+            // Check if this would create adjacent conflict
+            const adjacentConflict = hasAdjacentConflict(staff, dateKey, "×", schedule);
+            if (!adjacentConflict) {
+              schedule[staff.id][dateKey] = "×";
+              assigned++;
+              balancingChanges++;
+              console.log(
+                `  ✅ [BALANCE] ${staff.name}: Added × on ${dateKey} (balancing to min ${minOffPerDay})`
+              );
+            }
+          }
+
+          const finalCount = countOffDaysOnDate(schedule, dateKey, staffMembers);
+          console.log(
+            `  📊 [BALANCE] ${dateKey}: Final count ${finalCount}/${minOffPerDay} (added ${assigned})`
+          );
+        }
+
+        // Case 2: Too many off days (> 3) - This should be prevented by earlier checks, but double-check
+        else if (currentOffCount > maxOffPerDay) {
+          const excess = currentOffCount - maxOffPerDay;
+          console.log(
+            `⚠️ [BALANCE] ${dateKey}: ${currentOffCount} staff off, ${excess} over limit (max: ${maxOffPerDay})`
+          );
+
+          // Find staff with × and change to working
+          const staffWithOffDays = staffMembers.filter(staff =>
+            schedule[staff.id]?.[dateKey] === "×"
+          );
+
+          // Remove excess × (starting from end)
+          for (let i = 0; i < excess && i < staffWithOffDays.length; i++) {
+            const staff = staffWithOffDays[staffWithOffDays.length - 1 - i];
+            const staffInfo = staffMembers.find(s => s.id === staff.id);
+            const workingShift = staffInfo && staffInfo.status === "パート" ? "○" : "";
+
+            schedule[staff.id][dateKey] = workingShift;
+            balancingChanges++;
+            console.log(
+              `  ✅ [BALANCE] ${staff.name}: Changed × to "${workingShift}" (reducing to max ${maxOffPerDay})`
+            );
+          }
+        }
+      });
+
+      console.log(
+        `✅ [BALANCE] Balancing complete: ${balancingChanges} change(s) made to ensure ${minOffPerDay}-${maxOffPerDay} staff off per day`
+      );
+
       return schedule;
     } catch (error) {
       console.error("❌ Rule-based schedule generation failed:", error);
@@ -1215,6 +1388,21 @@ export class BusinessRuleValidator {
     // Get priority rules from live settings
     const liveSettings = this.getLiveSettings();
     let priorityRules = liveSettings.priorityRules;
+
+    // Get daily limits configuration for × assignment checks
+    const dailyLimits = liveSettings.dailyLimits;
+    let maxOffPerDay = 3; // Default: max 3 staff off per day
+
+    if (Array.isArray(dailyLimits)) {
+      const offDayLimit = dailyLimits.find((l) =>
+        l.shiftType === "off" || l.name?.toLowerCase().includes("off")
+      );
+      maxOffPerDay = offDayLimit?.maxCount || 3;
+    } else if (dailyLimits && typeof dailyLimits === "object") {
+      maxOffPerDay = dailyLimits.maxOffPerDay || 3;
+    }
+
+    console.log(`📅 [PRIORITY-LIMIT] Using maxOffPerDay = ${maxOffPerDay}`);
 
     if (!priorityRules) {
       console.log("⚠️ [PRIORITY] No priority rules configured");
@@ -1344,9 +1532,16 @@ export class BusinessRuleValidator {
 
                 // ✅ CHECK: Adjacent conflict prevention for exception shifts
                 const adjacentConflict = hasAdjacentConflict(staff, dateKey, exceptionShiftValue, schedule);
+                // ✅ CHECK: Daily limit for × assignments
+                const dailyLimitExceeded = exceptionShiftValue === "×" && !canAssignOffDay(schedule, dateKey, staffMembers, maxOffPerDay);
+
                 if (adjacentConflict) {
                   console.log(
                     `⏭️ [PRIORITY]   → ${staff.name}: Cannot replace with EXCEPTION "${exceptionShiftValue}" on ${date.toLocaleDateString('ja-JP')}, blocked by adjacent conflict`
+                  );
+                } else if (dailyLimitExceeded) {
+                  console.log(
+                    `⏭️ [PRIORITY]   → ${staff.name}: Cannot replace with EXCEPTION "×" on ${date.toLocaleDateString('ja-JP')}, daily limit reached`
                   );
                 } else {
                   schedule[staff.id][dateKey] = exceptionShiftValue;
@@ -1388,9 +1583,16 @@ export class BusinessRuleValidator {
 
             // ✅ CHECK: Adjacent conflict prevention for preferred shifts
             const adjacentConflict = hasAdjacentConflict(staff, dateKey, shiftValue, schedule);
+            // ✅ CHECK: Daily limit for × assignments
+            const dailyLimitExceeded = shiftValue === "×" && !canAssignOffDay(schedule, dateKey, staffMembers, maxOffPerDay);
+
             if (adjacentConflict) {
               console.log(
                 `⏭️ [PRIORITY]   → ${staff.name}: Cannot assign preferred "${shiftValue}" on ${date.toLocaleDateString('ja-JP')}, blocked by adjacent conflict`
+              );
+            } else if (dailyLimitExceeded) {
+              console.log(
+                `⏭️ [PRIORITY]   → ${staff.name}: Cannot assign preferred "×" on ${date.toLocaleDateString('ja-JP')}, daily limit reached`
               );
             } else {
               schedule[staff.id][dateKey] = shiftValue;
