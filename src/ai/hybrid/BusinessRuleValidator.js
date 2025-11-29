@@ -1342,11 +1342,19 @@ export class BusinessRuleValidator {
                     exceptionShiftValue = "";
                 }
 
-                schedule[staff.id][dateKey] = exceptionShiftValue;
-                staffRulesApplied++;
-                console.log(
-                  `🚫✅ [PRIORITY]   → ${staff.name}: REPLACED "${avoidedShiftValue}" with EXCEPTION "${exceptionShiftValue}" on ${date.toLocaleDateString('ja-JP')} (${dayOfWeek})`,
-                );
+                // ✅ CHECK: Adjacent conflict prevention for exception shifts
+                const adjacentConflict = hasAdjacentConflict(staff, dateKey, exceptionShiftValue, schedule);
+                if (adjacentConflict) {
+                  console.log(
+                    `⏭️ [PRIORITY]   → ${staff.name}: Cannot replace with EXCEPTION "${exceptionShiftValue}" on ${date.toLocaleDateString('ja-JP')}, blocked by adjacent conflict`
+                  );
+                } else {
+                  schedule[staff.id][dateKey] = exceptionShiftValue;
+                  staffRulesApplied++;
+                  console.log(
+                    `🚫✅ [PRIORITY]   → ${staff.name}: REPLACED "${avoidedShiftValue}" with EXCEPTION "${exceptionShiftValue}" on ${date.toLocaleDateString('ja-JP')} (${dayOfWeek})`,
+                  );
+                }
               } else {
                 // No exception rule, clear the avoided shift (set to blank/normal)
                 schedule[staff.id][dateKey] = "";
@@ -1378,11 +1386,19 @@ export class BusinessRuleValidator {
                 shiftValue = "";
             }
 
-            schedule[staff.id][dateKey] = shiftValue;
-            staffRulesApplied++;
-            console.log(
-              `✅ [PRIORITY]   → ${staff.name}: SET "${shiftValue}" on ${date.toLocaleDateString('ja-JP')} (${dayOfWeek}) - preferred shift applied`,
-            );
+            // ✅ CHECK: Adjacent conflict prevention for preferred shifts
+            const adjacentConflict = hasAdjacentConflict(staff, dateKey, shiftValue, schedule);
+            if (adjacentConflict) {
+              console.log(
+                `⏭️ [PRIORITY]   → ${staff.name}: Cannot assign preferred "${shiftValue}" on ${date.toLocaleDateString('ja-JP')}, blocked by adjacent conflict`
+              );
+            } else {
+              schedule[staff.id][dateKey] = shiftValue;
+              staffRulesApplied++;
+              console.log(
+                `✅ [PRIORITY]   → ${staff.name}: SET "${shiftValue}" on ${date.toLocaleDateString('ja-JP')} (${dayOfWeek}) - preferred shift applied`,
+              );
+            }
           }
         });
       });
