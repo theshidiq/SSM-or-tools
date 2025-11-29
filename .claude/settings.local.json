@@ -20,7 +20,9 @@
       "mcp__supabase__execute_sql",
       "Skill(coding-agents)",
       "Bash(npm test:*)",
-      "mcp__supabase__list_projects"
+      "mcp__supabase__list_projects",
+      "Bash(ls:*)",
+      "Bash(awk '{print $9, \"\"\"\"(\"\"\"\" $5 \"\"\"\")\"\"\"\"}')"
     ],
     "deny": [],
     "ask": []

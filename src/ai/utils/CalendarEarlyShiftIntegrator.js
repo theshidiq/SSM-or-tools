@@ -48,18 +48,36 @@ export class CalendarEarlyShiftIntegrator {
       );
 
       console.log(
-        `📅 [CalendarEarlyShift] ${dateKey}: ${eligibleStaff.length}/${staffMembers.length} staff eligible for early shift`
+        `📅 [CalendarEarlyShift] ${dateKey}: ${eligibleStaff.length}/${staffMembers.length} staff eligible for early shift (must_day_off)`
       );
 
-      // Assign early shifts to eligible staff
-      eligibleStaff.forEach((staff) => {
+      // ✅ STEP 1: Assign × to ALL staff first (calendar must_day_off baseline)
+      staffMembers.forEach((staff) => {
         if (!modifiedSchedule[staff.id]) {
           modifiedSchedule[staff.id] = {};
         }
 
         const currentShift = modifiedSchedule[staff.id][dateKey];
 
-        // Assign early shift (△)
+        // Assign day off to all staff on must_day_off dates
+        modifiedSchedule[staff.id][dateKey] = "×";
+        changesApplied++;
+
+        changeLog.push({
+          date: dateKey,
+          staffId: staff.id,
+          staffName: staff.name,
+          previousShift: currentShift,
+          newShift: "×",
+          reason: "must_day_off date (calendar rule baseline)",
+        });
+      });
+
+      // ✅ STEP 2: OVERWRITE × with △ for eligible staff (early shift preference overrides)
+      eligibleStaff.forEach((staff) => {
+        const currentShift = modifiedSchedule[staff.id][dateKey];
+
+        // Overwrite × with △ for eligible staff
         modifiedSchedule[staff.id][dateKey] = "△";
         changesApplied++;
 
@@ -69,37 +87,13 @@ export class CalendarEarlyShiftIntegrator {
           staffName: staff.name,
           previousShift: currentShift,
           newShift: "△",
-          reason: "must_day_off date + early shift preference",
+          reason: "must_day_off + early shift preference (△ overrides ×)",
         });
       });
 
-      // Assign day off (×) to non-eligible staff on must_day_off dates
-      const nonEligibleStaff = staffMembers.filter(
-        (s) => !eligibleStaff.find((e) => e.id === s.id)
+      console.log(
+        `✅ [CalendarEarlyShift] ${dateKey}: ${eligibleStaff.length} staff with △, ${staffMembers.length - eligibleStaff.length} staff with ×`
       );
-
-      nonEligibleStaff.forEach((staff) => {
-        if (!modifiedSchedule[staff.id]) {
-          modifiedSchedule[staff.id] = {};
-        }
-
-        const currentShift = modifiedSchedule[staff.id][dateKey];
-
-        // Only change if not already day off
-        if (currentShift !== "×") {
-          modifiedSchedule[staff.id][dateKey] = "×";
-          changesApplied++;
-
-          changeLog.push({
-            date: dateKey,
-            staffId: staff.id,
-            staffName: staff.name,
-            previousShift: currentShift,
-            newShift: "×",
-            reason: "must_day_off date (not eligible for early shift)",
-          });
-        }
-      });
     });
 
     // Get must_work dates and ensure all staff work normal shifts

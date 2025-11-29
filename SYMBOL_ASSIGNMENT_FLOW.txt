@@ -1,0 +1,212 @@
+════════════════════════════════════════════════════════════════════════════════
+                    SHIFT SYMBOL ASSIGNMENT DATA FLOW
+                  (Root Cause of ○ Symbol Bug for 社員)
+════════════════════════════════════════════════════════════════════════════════
+
+┌──────────────────────────────────────────────────────────────────────────────┐
+│  USER ACTION: Click "AI自動生成" (AI Auto-Generate)                          │
+└───────────────────────────────┬──────────────────────────────────────────────┘
+                                │
+                                ▼
+┌──────────────────────────────────────────────────────────────────────────────┐
+│  ENTRY POINT: BusinessRuleValidator.js or ScheduleGenerator.js              │
+│  - Loads staff data (including staff.status: "社員" or "パート")             │
+│  - Prepares constraints and date range                                      │
+│  - Calls generation algorithm                                               │
+└───────────────────────────────┬──────────────────────────────────────────────┘
+                                │
+                                ▼
+┌──────────────────────────────────────────────────────────────────────────────┐
+│  ❌ BUG ZONE 1: GeneticAlgorithm.generateInitialPopulation()                │
+│  Location: src/ai/algorithms/GeneticAlgorithm.js Lines 480-543              │
+│                                                                              │
+│  ┌────────────────────────────────────────────────────────────────────────┐ │
+│  │ FOR EACH staff member (安井, 古藤, 小池, 中田, etc.):                   │ │
+│  │   FOR EACH date in range:                                              │ │
+│  │                                                                          │ │
+│  │     ❌ PROBLEM: NO CHECK OF staff.status BEFORE ASSIGNMENT             │ │
+│  │                                                                          │ │
+│  │     Switch (strategy):                                                 │ │
+│  │       Case 'random':                                                   │ │
+│  │         if (random < 0.30):                                            │ │
+│  │           shift = "○"  ← Line 488: ASSIGNS ○ TO ANYONE               │ │
+│  │                                                                          │ │
+│  │       Case 'constraint':                                               │ │
+│  │         if (weekend):                                                  │ │
+│  │           shift = ... or "○"  ← Line 502: ○ FOR ALL STAFF            │ │
+│  │         else:                                                          │ │
+│  │           shift = ... or "○"  ← Line 504: ○ FOR ALL STAFF            │ │
+│  │                                                                          │ │
+│  │       Case 'pattern':                                                  │ │
+│  │         if (mid-week):                                                 │ │
+│  │           shift = "○"  ← Line 515: ○ FOR MID-WEEK (ALL STAFF)        │ │
+│  │                                                                          │ │
+│  │       Default:                                                         │ │
+│  │         shift = "○"  ← Line 543: DEFAULT IS ○ (ALL STAFF)            │ │
+│  │                                                                          │ │
+│  │     schedule[staff.id][date] = shift                                   │ │
+│  │     └─→ RESULT: 安井 (社員) gets ○ on some dates                      │ │
+│  │         └─→ RESULT: 古藤 (社員) gets ○ on some dates                  │ │
+│  │             └─→ RESULT: 小池 (社員) gets ○ on some dates              │ │
+│  │                 └─→ RESULT: 中田 (パート) gets ○ ✓ (correct)         │ │
+│  └────────────────────────────────────────────────────────────────────────┘ │
+└───────────────────────────────┬──────────────────────────────────────────────┘
+                                │
+                                ▼
+┌──────────────────────────────────────────────────────────────────────────────┐
+│  ❌ BUG ZONE 2: GeneticAlgorithm.repairConsecutivePatterns()                │
+│  Location: src/ai/algorithms/GeneticAlgorithm.js Lines 578-627              │
+│                                                                              │
+│  ┌────────────────────────────────────────────────────────────────────────┐ │
+│  │ FOR EACH staff member:                                                 │ │
+│  │   IF (found consecutive off-days ××):                                 │ │
+│  │     schedule[staff.id][middle] = "○"  ← Line 596: NO STATUS CHECK    │ │
+│  │                                                                          │ │
+│  │   IF (found consecutive early △△):                                    │ │
+│  │     schedule[staff.id][middle] = "○"  ← Line 609: NO STATUS CHECK    │ │
+│  │                                                                          │ │
+│  │   (End-of-period repairs also use ○ - Lines 619, 624)                 │ │
+│  │                                                                          │ │
+│  │   └─→ ADDS MORE ○ TO 社員 SCHEDULES!                                  │ │
+│  └────────────────────────────────────────────────────────────────────────┘ │
+└───────────────────────────────┬──────────────────────────────────────────────┘
+                                │
+                                ▼
+┌──────────────────────────────────────────────────────────────────────────────┐
+│  EVOLUTION LOOP (Generations 1-300)                                         │
+│  - Crossover: May mix ○ symbols between staff schedules                    │
+│  - Mutation: May change shifts to/from ○                                   │
+│  - Selection: Preserves "best" schedules (which include bad ○)             │
+│  - NO VALIDATION OF SYMBOL CORRECTNESS                                     │
+│                                                                              │
+│  └─→ ○ symbols propagate through generations                               │
+│      └─→ "Fittest" schedule may have many ○ for 社員                       │
+└───────────────────────────────┬──────────────────────────────────────────────┘
+                                │
+                                ▼
+┌──────────────────────────────────────────────────────────────────────────────┐
+│  FALLBACK CHECKS (Too Late!)                                                │
+│                                                                              │
+│  ✓ HybridPredictor.getPatternAwareFallback()  ← CORRECT logic              │
+│    └─→ Only called if main algorithm fails                                 │
+│        └─→ GeneticAlgorithm already succeeded with bad data                │
+│                                                                              │
+│  ✓ WorkerManager.js emergency fill            ← CORRECT logic              │
+│    └─→ Only fills EMPTY cells                                              │
+│        └─→ Never overwrites existing ○ from GeneticAlgorithm               │
+│                                                                              │
+│  ✓ CalendarEarlyShiftIntegrator                ← Doesn't handle ○          │
+│    └─→ Only manages △ and × on special dates                               │
+│        └─→ Never touches ○ symbols                                         │
+└───────────────────────────────┬──────────────────────────────────────────────┘
+                                │
+                                ▼
+┌──────────────────────────────────────────────────────────────────────────────┐
+│  ❌ FINAL SCHEDULE OUTPUT                                                   │
+│                                                                              │
+│  安井 (社員): [△, △, ○, ×, △, ○, ...]  ← ❌ HAS ○ SYMBOLS               │
+│  古藤 (社員): [△, ○, ×, △, △, ○, ...]  ← ❌ HAS ○ SYMBOLS               │
+│  小池 (社員): [△, △, ×, ○, △, ○, ...]  ← ❌ HAS ○ SYMBOLS               │
+│  中田 (パート): [○, ○, ×, ○, △, ○, ...]  ← ✓ CORRECT (can have ○)        │
+│                                                                              │
+│  NO POST-GENERATION VALIDATION TO CATCH THIS BUG!                           │
+└───────────────────────────────┬──────────────────────────────────────────────┘
+                                │
+                                ▼
+┌──────────────────────────────────────────────────────────────────────────────┐
+│  UI DISPLAY: ScheduleTable.jsx                                              │
+│  - Renders schedule with incorrect ○ symbols for 社員                       │
+│  - User sees broken schedule                                                │
+│  - Manual correction required                                               │
+└──────────────────────────────────────────────────────────────────────────────┘
+
+════════════════════════════════════════════════════════════════════════════════
+                                THE FIX
+════════════════════════════════════════════════════════════════════════════════
+
+┌──────────────────────────────────────────────────────────────────────────────┐
+│  LAYER 1: PREVENTION AT SOURCE (GeneticAlgorithm.js)                       │
+│                                                                              │
+│  Add helper function:                                                       │
+│    const getNormalShift = (staff) => {                                      │
+│      return staff.status === "パート" ? "○" : "";                          │
+│    };                                                                        │
+│                                                                              │
+│  Replace ALL ○ assignments:                                                │
+│    BEFORE: shift = "○"                                                      │
+│    AFTER:  shift = getNormalShift(staff)  ✓                                │
+│                                                                              │
+│  Result: IMPOSSIBLE to assign ○ to 社員                                     │
+└──────────────────────────────────────────────────────────────────────────────┘
+
+┌──────────────────────────────────────────────────────────────────────────────┐
+│  LAYER 2: POST-GENERATION VALIDATION                                        │
+│                                                                              │
+│  Create: src/ai/utils/ShiftSymbolValidator.js                              │
+│                                                                              │
+│  After generation:                                                          │
+│    validation = ShiftSymbolValidator.validateSchedule(schedule, staff)     │
+│    if (!validation.isValid):                                                │
+│      console.error("Found violations:", validation.violations)             │
+│      schedule = validation.correctedSchedule  // Auto-fix                  │
+│                                                                              │
+│  Result: Catch ANY violations that slip through                             │
+└──────────────────────────────────────────────────────────────────────────────┘
+
+┌──────────────────────────────────────────────────────────────────────────────┐
+│  LAYER 3: UI VALIDATION                                                     │
+│                                                                              │
+│  Before display:                                                            │
+│    - Validate schedule one final time                                       │
+│    - Show warning banner if violations found                                │
+│    - Offer "Fix Symbols" button to auto-correct                             │
+│                                                                              │
+│  Result: User never sees incorrect symbols                                  │
+└──────────────────────────────────────────────────────────────────────────────┘
+
+════════════════════════════════════════════════════════════════════════════════
+                              CORRECT FLOW
+════════════════════════════════════════════════════════════════════════════════
+
+┌──────────────────────────────────────────────────────────────────────────────┐
+│  USER ACTION: Click "AI自動生成"                                            │
+└───────────────────────────────┬──────────────────────────────────────────────┘
+                                │
+                                ▼
+┌──────────────────────────────────────────────────────────────────────────────┐
+│  ENTRY POINT: BusinessRuleValidator.js                                      │
+└───────────────────────────────┬──────────────────────────────────────────────┘
+                                │
+                                ▼
+┌──────────────────────────────────────────────────────────────────────────────┐
+│  ✅ FIXED: GeneticAlgorithm.generateInitialPopulation()                     │
+│                                                                              │
+│  FOR EACH staff, FOR EACH date:                                             │
+│    ✅ CHECK: staff.status === "パート" ?                                    │
+│       ├─ YES → Can assign ○                                                │
+│       └─ NO  → Use "" instead (社員 normal shift)                           │
+│                                                                              │
+│  Result: 安井, 古藤, 小池 → NO ○ SYMBOLS                                    │
+│          中田 (パート) → CAN have ○ ✓                                       │
+└───────────────────────────────┬──────────────────────────────────────────────┘
+                                │
+                                ▼
+┌──────────────────────────────────────────────────────────────────────────────┐
+│  ✅ POST-VALIDATION: ShiftSymbolValidator                                   │
+│  - Scans entire schedule                                                    │
+│  - 0 violations found ✓                                                     │
+└───────────────────────────────┬──────────────────────────────────────────────┘
+                                │
+                                ▼
+┌──────────────────────────────────────────────────────────────────────────────┐
+│  ✅ CORRECT SCHEDULE OUTPUT                                                 │
+│                                                                              │
+│  安井 (社員): [△, △, "", ×, △, "", ...]  ← ✅ NO ○ (using "")             │
+│  古藤 (社員): [△, "", ×, △, △, "", ...]  ← ✅ NO ○ (using "")             │
+│  小池 (社員): [△, △, ×, "", △, "", ...]  ← ✅ NO ○ (using "")             │
+│  中田 (パート): [○, ○, ×, ○, △, ○, ...]  ← ✅ CAN have ○                  │
+│                                                                              │
+│  ALL SYMBOLS CORRECT! ✅                                                    │
+└──────────────────────────────────────────────────────────────────────────────┘
+
+════════════════════════════════════════════════════════════════════════════════
