@@ -1657,11 +1657,15 @@ export class BusinessRuleValidator {
           offOrEarlyMembers.slice(1).forEach((member) => {
             const previousShift = schedule[member.staffId][dateKey];
 
-            // Change to working shift (normal shift = empty string or ○)
-            schedule[member.staffId][dateKey] = "○"; // Normal working shift
+            // ✅ CRITICAL FIX: Check staff status before assigning ○
+            // ○ is ONLY for part-time staff (パート), regular staff (社員) should get empty string
+            const staffMember = staffMembers.find(s => s.id === member.staffId);
+            const workingShift = staffMember && staffMember.status === "パート" ? "○" : "";
+
+            schedule[member.staffId][dateKey] = workingShift;
 
             console.log(
-              `  ✏️ [AI] Changed ${member.staffName}: "${previousShift}" → "○" (working shift)`
+              `  ✏️ [AI] Changed ${member.staffName} (${staffMember?.status}): "${previousShift}" → "${workingShift}" (working shift)`
             );
             totalConflictsFixed++;
           });
