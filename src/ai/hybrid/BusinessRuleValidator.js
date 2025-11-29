@@ -1261,6 +1261,21 @@ export class BusinessRuleValidator {
 
       dateRange.forEach(date => {
         const dateKey = date.toISOString().split("T")[0];
+
+        // ✅ CRITICAL FIX: Skip balancing on calendar rule dates (calendar rules override everything)
+        if (calendarRules[dateKey]?.must_day_off) {
+          console.log(
+            `⏭️ [BALANCE] ${dateKey}: Skipping balancing (must_day_off rule - calendar rules override daily limits)`
+          );
+          return;
+        }
+        if (calendarRules[dateKey]?.must_work) {
+          console.log(
+            `⏭️ [BALANCE] ${dateKey}: Skipping balancing (must_work rule - calendar rules override daily limits)`
+          );
+          return;
+        }
+
         const currentOffCount = countOffDaysOnDate(schedule, dateKey, staffMembers);
 
         // Case 1: Too few off days (< 2)
