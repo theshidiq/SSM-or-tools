@@ -661,7 +661,26 @@ export class ConfigurationService {
 
   /**
    * Update daily limits configuration
-   * @param {Object} dailyLimits - New daily limits
+   *
+   * **WebSocket Integration:**
+   * - In WebSocket mode (REACT_APP_WEBSOCKET_SETTINGS=true), this method updates localStorage only
+   * - The actual database update is handled by useSettingsData.js via wsUpdateDailyLimits()
+   * - Change detection in useSettingsData compares old vs new dailyLimits and sends WebSocket message
+   * - Go server receives SETTINGS_UPDATE_DAILY_LIMITS message and updates daily_limits table
+   * - Server broadcasts changes to all connected clients for real-time sync
+   *
+   * **localStorage mode:**
+   * - When WebSocket is disabled, this method saves directly to localStorage via saveSettings()
+   * - No database sync occurs
+   *
+   * @param {Object} dailyLimits - New daily limits object with MIN/MAX constraints
+   * @param {number} dailyLimits.minOffPerDay - Minimum staff off per day (0-4)
+   * @param {number} dailyLimits.maxOffPerDay - Maximum staff off per day (0-4)
+   * @param {number} dailyLimits.minEarlyPerDay - Minimum early shifts per day (0-2)
+   * @param {number} dailyLimits.maxEarlyPerDay - Maximum early shifts per day (0-2)
+   * @param {number} dailyLimits.minLatePerDay - Minimum late shifts per day (0-3)
+   * @param {number} dailyLimits.maxLatePerDay - Maximum late shifts per day (0-3)
+   * @param {number} dailyLimits.minWorkingStaffPerDay - Minimum working staff per day (fixed)
    * @returns {Object} Updated daily limits
    */
   async updateDailyLimits(dailyLimits) {

@@ -54,32 +54,33 @@ const (
 	MESSAGE_STAFF_DELETE              = "STAFF_DELETE"
 
 	// Settings management messages (multi-table architecture)
-	MESSAGE_SETTINGS_SYNC_REQUEST          = "SETTINGS_SYNC_REQUEST"
-	MESSAGE_SETTINGS_SYNC_RESPONSE         = "SETTINGS_SYNC_RESPONSE"
-	MESSAGE_SETTINGS_UPDATE_STAFF_GROUPS     = "SETTINGS_UPDATE_STAFF_GROUPS"
-	MESSAGE_SETTINGS_CREATE_STAFF_GROUP      = "SETTINGS_CREATE_STAFF_GROUP"
-	MESSAGE_SETTINGS_DELETE_STAFF_GROUP      = "SETTINGS_DELETE_STAFF_GROUP"
-	MESSAGE_SETTINGS_HARD_DELETE_STAFF_GROUP = "SETTINGS_HARD_DELETE_STAFF_GROUP"
+	MESSAGE_SETTINGS_SYNC_REQUEST             = "SETTINGS_SYNC_REQUEST"
+	MESSAGE_SETTINGS_SYNC_RESPONSE            = "SETTINGS_SYNC_RESPONSE"
+	MESSAGE_SETTINGS_UPDATE_STAFF_GROUPS      = "SETTINGS_UPDATE_STAFF_GROUPS"
+	MESSAGE_SETTINGS_CREATE_STAFF_GROUP       = "SETTINGS_CREATE_STAFF_GROUP"
+	MESSAGE_SETTINGS_DELETE_STAFF_GROUP       = "SETTINGS_DELETE_STAFF_GROUP"
+	MESSAGE_SETTINGS_HARD_DELETE_STAFF_GROUP  = "SETTINGS_HARD_DELETE_STAFF_GROUP"
+	MESSAGE_SETTINGS_UPDATE_DAILY_LIMITS      = "SETTINGS_UPDATE_DAILY_LIMITS"
 	MESSAGE_SETTINGS_UPDATE_WEEKLY_LIMITS     = "SETTINGS_UPDATE_WEEKLY_LIMITS"
-	MESSAGE_SETTINGS_UPDATE_MONTHLY_LIMITS = "SETTINGS_UPDATE_MONTHLY_LIMITS"
-	MESSAGE_SETTINGS_CREATE_PRIORITY_RULE  = "SETTINGS_CREATE_PRIORITY_RULE"
-	MESSAGE_SETTINGS_UPDATE_PRIORITY_RULES = "SETTINGS_UPDATE_PRIORITY_RULES"
-	MESSAGE_SETTINGS_DELETE_PRIORITY_RULE  = "SETTINGS_DELETE_PRIORITY_RULE"
-	MESSAGE_SETTINGS_UPDATE_ML_CONFIG        = "SETTINGS_UPDATE_ML_CONFIG"
+	MESSAGE_SETTINGS_UPDATE_MONTHLY_LIMITS    = "SETTINGS_UPDATE_MONTHLY_LIMITS"
+	MESSAGE_SETTINGS_CREATE_PRIORITY_RULE     = "SETTINGS_CREATE_PRIORITY_RULE"
+	MESSAGE_SETTINGS_UPDATE_PRIORITY_RULES    = "SETTINGS_UPDATE_PRIORITY_RULES"
+	MESSAGE_SETTINGS_DELETE_PRIORITY_RULE     = "SETTINGS_DELETE_PRIORITY_RULE"
+	MESSAGE_SETTINGS_UPDATE_ML_CONFIG         = "SETTINGS_UPDATE_ML_CONFIG"
 	MESSAGE_SETTINGS_CREATE_BACKUP_ASSIGNMENT = "SETTINGS_CREATE_BACKUP_ASSIGNMENT"
 	MESSAGE_SETTINGS_UPDATE_BACKUP_ASSIGNMENT = "SETTINGS_UPDATE_BACKUP_ASSIGNMENT"
 	MESSAGE_SETTINGS_DELETE_BACKUP_ASSIGNMENT = "SETTINGS_DELETE_BACKUP_ASSIGNMENT"
-	MESSAGE_SETTINGS_MIGRATE                 = "SETTINGS_MIGRATE"
-	MESSAGE_SETTINGS_RESET                   = "SETTINGS_RESET"
-	MESSAGE_SETTINGS_CREATE_VERSION        = "SETTINGS_CREATE_VERSION"
-	MESSAGE_SETTINGS_ACTIVATE_VERSION      = "SETTINGS_ACTIVATE_VERSION"
+	MESSAGE_SETTINGS_MIGRATE                  = "SETTINGS_MIGRATE"
+	MESSAGE_SETTINGS_RESET                    = "SETTINGS_RESET"
+	MESSAGE_SETTINGS_CREATE_VERSION           = "SETTINGS_CREATE_VERSION"
+	MESSAGE_SETTINGS_ACTIVATE_VERSION         = "SETTINGS_ACTIVATE_VERSION"
 
 	// Shift management messages (real-time schedule updates)
-	MESSAGE_SHIFT_UPDATE         = "SHIFT_UPDATE"
-	MESSAGE_SHIFT_SYNC_REQUEST   = "SHIFT_SYNC_REQUEST"
-	MESSAGE_SHIFT_SYNC_RESPONSE  = "SHIFT_SYNC_RESPONSE"
-	MESSAGE_SHIFT_BROADCAST      = "SHIFT_BROADCAST"
-	MESSAGE_SHIFT_BULK_UPDATE    = "SHIFT_BULK_UPDATE"
+	MESSAGE_SHIFT_UPDATE        = "SHIFT_UPDATE"
+	MESSAGE_SHIFT_SYNC_REQUEST  = "SHIFT_SYNC_REQUEST"
+	MESSAGE_SHIFT_SYNC_RESPONSE = "SHIFT_SYNC_RESPONSE"
+	MESSAGE_SHIFT_BROADCAST     = "SHIFT_BROADCAST"
+	MESSAGE_SHIFT_BULK_UPDATE   = "SHIFT_BULK_UPDATE"
 
 	// Common messages
 	MESSAGE_CONNECTION_ACK = "CONNECTION_ACK"
@@ -122,11 +123,11 @@ func (s *StaffMember) ToReactFormat() map[string]interface{} {
 		"type":        s.Type,
 		"status":      s.Status,
 		"period":      s.Period,
-		"staffOrder":  s.StaffOrder,    // camelCase for React
-		"startPeriod": s.StartPeriod,   // camelCase for React
-		"endPeriod":   s.EndPeriod,     // camelCase for React
-		"createdAt":   s.CreatedAt,     // camelCase for React
-		"updatedAt":   s.UpdatedAt,     // camelCase for React
+		"staffOrder":  s.StaffOrder,  // camelCase for React
+		"startPeriod": s.StartPeriod, // camelCase for React
+		"endPeriod":   s.EndPeriod,   // camelCase for React
+		"createdAt":   s.CreatedAt,   // camelCase for React
+		"updatedAt":   s.UpdatedAt,   // camelCase for React
 	}
 }
 
@@ -297,6 +298,8 @@ func (s *StaffSyncServer) handleStaffSync(w http.ResponseWriter, r *http.Request
 			s.handleStaffGroupDelete(client, &msg)
 		case MESSAGE_SETTINGS_HARD_DELETE_STAFF_GROUP:
 			s.handleStaffGroupHardDelete(client, &msg)
+		case MESSAGE_SETTINGS_UPDATE_DAILY_LIMITS:
+			s.handleDailyLimitsUpdate(client, &msg)
 		case MESSAGE_SETTINGS_UPDATE_WEEKLY_LIMITS:
 			s.handleWeeklyLimitsUpdate(client, &msg)
 		case MESSAGE_SETTINGS_UPDATE_MONTHLY_LIMITS:
@@ -1166,7 +1169,7 @@ func (s *StaffSyncServer) createStaffInSupabase(staffData map[string]interface{}
 			createData["type"] = "regular" // Default fallback
 		}
 	} else {
-		createData["status"] = "社員" // Default status
+		createData["status"] = "社員"    // Default status
 		createData["type"] = "regular" // Default type
 	}
 	// Allow explicit type override if provided
@@ -1340,8 +1343,8 @@ func (s *StaffSyncServer) handleHealth(w http.ResponseWriter, r *http.Request) {
 		"clients":   len(s.clients),
 		"endpoint":  "/staff-sync",
 		"timestamp": time.Now(),
-		"supabase":  map[string]string{
-			"url": s.supabaseURL,
+		"supabase": map[string]string{
+			"url":    s.supabaseURL,
 			"status": "configured",
 		},
 	}

@@ -22,7 +22,9 @@
       "Bash(npm test:*)",
       "mcp__supabase__list_projects",
       "Bash(ls:*)",
-      "Bash(awk '{print $9, \"\"\"\"(\"\"\"\" $5 \"\"\"\")\"\"\"\"}')"
+      "Bash(awk '{print $9, \"\"\"\"(\"\"\"\" $5 \"\"\"\")\"\"\"\"}')",
+      "Bash(git log:*)",
+      "Bash(go fmt:*)"
     ],
     "deny": [],
     "ask": []

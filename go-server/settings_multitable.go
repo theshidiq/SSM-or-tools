@@ -22,13 +22,13 @@ import (
 
 // SettingsAggregate combines all 6 settings tables + version info
 type SettingsAggregate struct {
-	StaffGroups        []StaffGroup        `json:"staffGroups"`
-	WeeklyLimits       []WeeklyLimit       `json:"weeklyLimits"`
-	MonthlyLimits      []MonthlyLimit      `json:"monthlyLimits"`
-	PriorityRules      []PriorityRule      `json:"priorityRules"`
-	BackupAssignments  []BackupAssignment  `json:"backupAssignments"`
-	MLModelConfigs     []MLModelConfig     `json:"mlModelConfigs"`
-	Version            ConfigVersion       `json:"version"`
+	StaffGroups       []StaffGroup       `json:"staffGroups"`
+	WeeklyLimits      []WeeklyLimit      `json:"weeklyLimits"`
+	MonthlyLimits     []MonthlyLimit     `json:"monthlyLimits"`
+	PriorityRules     []PriorityRule     `json:"priorityRules"`
+	BackupAssignments []BackupAssignment `json:"backupAssignments"`
+	MLModelConfigs    []MLModelConfig    `json:"mlModelConfigs"`
+	Version           ConfigVersion      `json:"version"`
 }
 
 // MarshalJSON custom marshaler for SettingsAggregate
@@ -90,13 +90,13 @@ func (sa *SettingsAggregate) MarshalJSON() ([]byte, error) {
 
 	// Create response structure with converted data
 	response := map[string]interface{}{
-		"staffGroups":        reactGroups,
-		"weeklyLimits":       reactWeeklyLimits,        // ✅ FIXED: Now using converted format
-		"monthlyLimits":      reactMonthlyLimits,       // ✅ FIXED: Now using converted format
-		"priorityRules":      reactPriorityRules,       // ← FIXED: Now using converted format
-		"backupAssignments":  reactBackupAssignments,   // Backup staff assignments
-		"mlModelConfigs":     sa.MLModelConfigs,
-		"version":            sa.Version,
+		"staffGroups":       reactGroups,
+		"weeklyLimits":      reactWeeklyLimits,      // ✅ FIXED: Now using converted format
+		"monthlyLimits":     reactMonthlyLimits,     // ✅ FIXED: Now using converted format
+		"priorityRules":     reactPriorityRules,     // ← FIXED: Now using converted format
+		"backupAssignments": reactBackupAssignments, // Backup staff assignments
+		"mlModelConfigs":    sa.MLModelConfigs,
+		"version":           sa.Version,
 	}
 
 	return json.Marshal(response)
@@ -110,10 +110,10 @@ type StaffGroup struct {
 	Name         string                 `json:"name"`
 	Description  string                 `json:"description"`
 	Color        string                 `json:"color"`
-	GroupConfig  map[string]interface{} `json:"group_config"`  // ✅ FIX: Changed from groupConfig to group_config
-	CreatedAt    time.Time              `json:"created_at"`    // Changed: Supabase uses snake_case
-	UpdatedAt    time.Time              `json:"updated_at"`    // Changed: Supabase uses snake_case
-	IsActive     bool                   `json:"is_active"`     // Changed: Supabase uses snake_case
+	GroupConfig  map[string]interface{} `json:"group_config"` // ✅ FIX: Changed from groupConfig to group_config
+	CreatedAt    time.Time              `json:"created_at"`   // Changed: Supabase uses snake_case
+	UpdatedAt    time.Time              `json:"updated_at"`   // Changed: Supabase uses snake_case
+	IsActive     bool                   `json:"is_active"`    // Changed: Supabase uses snake_case
 }
 
 // ToReactFormat converts snake_case to camelCase for React
@@ -156,14 +156,14 @@ type WeeklyLimit struct {
 	RestaurantID     string                 `json:"restaurant_id"` // Changed: Supabase uses snake_case
 	VersionID        string                 `json:"version_id"`    // Changed: Supabase uses snake_case
 	Name             string                 `json:"name"`
-	LimitConfig      map[string]interface{} `json:"limit_config"`      // Changed: Supabase uses snake_case
-	PenaltyWeight    float64                `json:"penalty_weight"`    // Changed: Supabase uses snake_case
+	LimitConfig      map[string]interface{} `json:"limit_config"`       // Changed: Supabase uses snake_case
+	PenaltyWeight    float64                `json:"penalty_weight"`     // Changed: Supabase uses snake_case
 	IsHardConstraint bool                   `json:"is_hard_constraint"` // Changed: Supabase uses snake_case
-	EffectiveFrom    *time.Time             `json:"effective_from"`    // Changed: Supabase uses snake_case
-	EffectiveUntil   *time.Time             `json:"effective_until"`   // Changed: Supabase uses snake_case
-	IsActive         bool                   `json:"is_active"`         // Changed: Supabase uses snake_case
-	CreatedAt        time.Time              `json:"created_at"`        // Changed: Supabase uses snake_case
-	UpdatedAt        time.Time              `json:"updated_at"`        // Changed: Supabase uses snake_case
+	EffectiveFrom    *time.Time             `json:"effective_from"`     // Changed: Supabase uses snake_case
+	EffectiveUntil   *time.Time             `json:"effective_until"`    // Changed: Supabase uses snake_case
+	IsActive         bool                   `json:"is_active"`          // Changed: Supabase uses snake_case
+	CreatedAt        time.Time              `json:"created_at"`         // Changed: Supabase uses snake_case
+	UpdatedAt        time.Time              `json:"updated_at"`         // Changed: Supabase uses snake_case
 }
 
 // ToReactFormat converts snake_case to camelCase for React
@@ -244,21 +244,21 @@ func (ml *MonthlyLimit) ToReactFormat() map[string]interface{} {
 // PriorityRule represents scheduling priority rules
 type PriorityRule struct {
 	ID               string                 `json:"id"`
-	RestaurantID     string                 `json:"restaurant_id"`     // Fixed: Match Supabase snake_case
-	VersionID        string                 `json:"version_id"`        // Fixed: Match Supabase snake_case
-	StaffID          *string                `json:"staff_id"`          // ✅ FIX: Added to read from database column
+	RestaurantID     string                 `json:"restaurant_id"` // Fixed: Match Supabase snake_case
+	VersionID        string                 `json:"version_id"`    // Fixed: Match Supabase snake_case
+	StaffID          *string                `json:"staff_id"`      // ✅ FIX: Added to read from database column
 	Name             string                 `json:"name"`
 	Description      string                 `json:"description"`
-	PriorityLevel    int                    `json:"priority_level"`    // Fixed: Match Supabase snake_case
-	RuleDefinition   map[string]interface{} `json:"rule_definition"`   // Fixed: Match Supabase snake_case (CRITICAL!)
-	RuleConfig       map[string]interface{} `json:"rule_config"`       // Fixed: Match Supabase snake_case
-	PenaltyWeight    float64                `json:"penalty_weight"`    // Fixed: Match Supabase snake_case
+	PriorityLevel    int                    `json:"priority_level"`     // Fixed: Match Supabase snake_case
+	RuleDefinition   map[string]interface{} `json:"rule_definition"`    // Fixed: Match Supabase snake_case (CRITICAL!)
+	RuleConfig       map[string]interface{} `json:"rule_config"`        // Fixed: Match Supabase snake_case
+	PenaltyWeight    float64                `json:"penalty_weight"`     // Fixed: Match Supabase snake_case
 	IsHardConstraint bool                   `json:"is_hard_constraint"` // Fixed: Match Supabase snake_case
-	EffectiveFrom    *time.Time             `json:"effective_from"`    // Fixed: Match Supabase snake_case
-	EffectiveUntil   *time.Time             `json:"effective_until"`   // Fixed: Match Supabase snake_case
-	IsActive         bool                   `json:"is_active"`         // Fixed: Match Supabase snake_case
-	CreatedAt        time.Time              `json:"created_at"`        // Fixed: Match Supabase snake_case
-	UpdatedAt        time.Time              `json:"updated_at"`        // Fixed: Match Supabase snake_case
+	EffectiveFrom    *time.Time             `json:"effective_from"`     // Fixed: Match Supabase snake_case
+	EffectiveUntil   *time.Time             `json:"effective_until"`    // Fixed: Match Supabase snake_case
+	IsActive         bool                   `json:"is_active"`          // Fixed: Match Supabase snake_case
+	CreatedAt        time.Time              `json:"created_at"`         // Fixed: Match Supabase snake_case
+	UpdatedAt        time.Time              `json:"updated_at"`         // Fixed: Match Supabase snake_case
 }
 
 // ToReactFormat converts snake_case to camelCase for React
@@ -475,15 +475,15 @@ func (ba *BackupAssignment) ToReactFormat() map[string]interface{} {
 
 // ConfigVersion represents a configuration version
 type ConfigVersion struct {
-	ID            string     `json:"id"`
-	RestaurantID  string     `json:"restaurantId"`
-	VersionNumber int        `json:"versionNumber"`
-	Name          string     `json:"name"`
-	Description   string     `json:"description"`
-	CreatedBy     *string    `json:"createdBy"`
-	CreatedAt     time.Time  `json:"createdAt"`
-	IsActive      bool       `json:"isActive"`
-	IsLocked      bool       `json:"isLocked"`
+	ID            string    `json:"id"`
+	RestaurantID  string    `json:"restaurantId"`
+	VersionNumber int       `json:"versionNumber"`
+	Name          string    `json:"name"`
+	Description   string    `json:"description"`
+	CreatedBy     *string   `json:"createdBy"`
+	CreatedAt     time.Time `json:"createdAt"`
+	IsActive      bool      `json:"isActive"`
+	IsLocked      bool      `json:"isLocked"`
 }
 
 // ToReactFormat converts snake_case to camelCase for React
@@ -1392,6 +1392,91 @@ func (s *StaffSyncServer) createWeeklyLimit(versionID string, limitData map[stri
 	return nil
 }
 
+// upsertDailyLimits upserts daily limits (singleton per version_id)
+// Daily limits are a singleton configuration - one row per version
+func (s *StaffSyncServer) upsertDailyLimits(versionID string, limitData map[string]interface{}) error {
+	log.Printf("🔧 [upsertDailyLimits] Upserting daily limits for version: %s", versionID)
+	log.Printf("🔍 [upsertDailyLimits] Received limitData: %+v", limitData)
+
+	url := fmt.Sprintf("%s/rest/v1/daily_limits", s.supabaseURL)
+
+	// Prepare upsert data with snake_case field names
+	upsertData := make(map[string]interface{})
+	upsertData["version_id"] = versionID
+	upsertData["restaurant_id"] = s.getRestaurantID()
+
+	// Map camelCase to snake_case for all daily limit fields
+	if minOffPerDay, ok := limitData["minOffPerDay"]; ok {
+		upsertData["min_off_per_day"] = minOffPerDay
+	}
+	if maxOffPerDay, ok := limitData["maxOffPerDay"]; ok {
+		upsertData["max_off_per_day"] = maxOffPerDay
+	}
+	if minEarlyPerDay, ok := limitData["minEarlyPerDay"]; ok {
+		upsertData["min_early_per_day"] = minEarlyPerDay
+	}
+	if maxEarlyPerDay, ok := limitData["maxEarlyPerDay"]; ok {
+		upsertData["max_early_per_day"] = maxEarlyPerDay
+	}
+	if minLatePerDay, ok := limitData["minLatePerDay"]; ok {
+		upsertData["min_late_per_day"] = minLatePerDay
+	}
+	if maxLatePerDay, ok := limitData["maxLatePerDay"]; ok {
+		upsertData["max_late_per_day"] = maxLatePerDay
+	}
+	if minWorkingStaffPerDay, ok := limitData["minWorkingStaffPerDay"]; ok {
+		upsertData["min_working_staff_per_day"] = minWorkingStaffPerDay
+	}
+
+	// Optional fields
+	if penaltyWeight, ok := limitData["penaltyWeight"]; ok {
+		upsertData["penalty_weight"] = penaltyWeight
+	}
+	if isHardConstraint, ok := limitData["isHardConstraint"]; ok {
+		upsertData["is_hard_constraint"] = isHardConstraint
+	}
+	if effectiveFrom, ok := limitData["effectiveFrom"]; ok {
+		upsertData["effective_from"] = effectiveFrom
+	}
+	if effectiveUntil, ok := limitData["effectiveUntil"]; ok {
+		upsertData["effective_until"] = effectiveUntil
+	}
+
+	upsertData["is_active"] = true
+	upsertData["updated_at"] = time.Now().UTC().Format(time.RFC3339)
+
+	jsonData, _ := json.Marshal(upsertData)
+	log.Printf("🔍 [upsertDailyLimits] Upsert data: %s", string(jsonData))
+
+	req, err := http.NewRequest("POST", url, bytes.NewBuffer(jsonData))
+	if err != nil {
+		return fmt.Errorf("failed to create request: %w", err)
+	}
+
+	req.Header.Set("apikey", s.supabaseKey)
+	req.Header.Set("Authorization", "Bearer "+s.supabaseKey)
+	req.Header.Set("Content-Type", "application/json")
+	// Use upsert resolution on version_id conflict (since it's unique per version)
+	req.Header.Set("Prefer", "resolution=merge-duplicates,return=representation")
+
+	client := &http.Client{Timeout: 10 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		return fmt.Errorf("failed to upsert daily limits: %w", err)
+	}
+	defer resp.Body.Close()
+
+	body, _ := io.ReadAll(resp.Body)
+	log.Printf("🔍 [upsertDailyLimits] Response status: %d, body: %s", resp.StatusCode, string(body))
+
+	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusCreated {
+		return fmt.Errorf("upsert failed with status %d: %s", resp.StatusCode, string(body))
+	}
+
+	log.Printf("✅ [upsertDailyLimits] Successfully upserted daily limits")
+	return nil
+}
+
 // updateMonthlyLimit updates a monthly limit in the database
 func (s *StaffSyncServer) updateMonthlyLimit(versionID string, limitData map[string]interface{}) error {
 	limitID, ok := limitData["id"].(string)
@@ -1751,11 +1836,11 @@ func (s *StaffSyncServer) insertPriorityRule(versionID string, ruleData map[stri
 	// ✅ FIX: Removed staff_id - database schema doesn't have this column
 	// Staff IDs are stored in rule_definition.staff_ids JSONB array
 	insertData := map[string]interface{}{
-		"restaurant_id":  "e1661c71-b24f-4ee1-9e8b-7290a43c9575", // Hardcoded from env
-		"version_id":     versionID,
-		"name":           ruleData["name"],
-		"description":    ruleData["description"],
-		"is_active":      true, // Always active for new rules
+		"restaurant_id": "e1661c71-b24f-4ee1-9e8b-7290a43c9575", // Hardcoded from env
+		"version_id":    versionID,
+		"name":          ruleData["name"],
+		"description":   ruleData["description"],
+		"is_active":     true, // Always active for new rules
 	}
 
 	// Add optional fields with safe type assertions and defaults
@@ -3087,6 +3172,66 @@ func (s *StaffSyncServer) handleStaffGroupHardDelete(client *Client, msg *Messag
 
 	s.broadcastToAll(&freshMsg)
 	log.Printf("📡 Broadcasted hard group deletion to all clients (containing %d groups)", len(settings.StaffGroups))
+}
+
+// handleDailyLimitsUpdate updates daily limits and broadcasts changes
+// Daily limits are a singleton configuration constraining min/max shifts per day
+func (s *StaffSyncServer) handleDailyLimitsUpdate(client *Client, msg *Message) {
+	log.Printf("📊 Processing SETTINGS_UPDATE_DAILY_LIMITS from client %s", client.clientId)
+
+	payload, ok := msg.Payload.(map[string]interface{})
+	if !ok {
+		log.Printf("❌ Invalid payload format")
+		return
+	}
+
+	limitData, ok := payload["limit"].(map[string]interface{})
+	if !ok {
+		log.Printf("❌ Missing limit data")
+		return
+	}
+
+	version, err := s.fetchActiveConfigVersion()
+	if err != nil {
+		s.sendErrorResponse(client, "Failed to fetch active version", err)
+		return
+	}
+
+	if version.IsLocked {
+		s.sendErrorResponse(client, "Cannot modify locked version", nil)
+		return
+	}
+
+	// UPSERT daily limits (singleton per version)
+	if err := s.upsertDailyLimits(version.ID, limitData); err != nil {
+		s.sendErrorResponse(client, "Failed to upsert daily limits", err)
+		return
+	}
+
+	if err := s.logConfigChange(version.ID, "daily_limits", "UPDATE", limitData); err != nil {
+		log.Printf("⚠️ Failed to log config change: %v", err)
+	}
+
+	log.Printf("✅ Successfully updated daily limits")
+
+	settings, err := s.fetchAggregatedSettings(version.ID)
+	if err != nil {
+		log.Printf("⚠️ Failed to fetch updated settings: %v", err)
+		return
+	}
+
+	freshMsg := Message{
+		Type: "SETTINGS_SYNC_RESPONSE",
+		Payload: map[string]interface{}{
+			"settings": settings,
+			"updated":  "daily_limits",
+		},
+		Timestamp: time.Now(),
+		ClientID:  msg.ClientID,
+	}
+
+	s.broadcastToAll(&freshMsg)
+	log.Printf("📡 Broadcasted updated daily limits to all clients")
 }
 
 // handleWeeklyLimitsUpdate updates a weekly limit and broadcasts changes

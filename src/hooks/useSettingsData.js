@@ -38,6 +38,7 @@ export const useSettingsData = (autosaveEnabled = true) => {
     createStaffGroup: wsCreateStaffGroup,
     deleteStaffGroup: wsDeleteStaffGroup,
     hardDeleteStaffGroup: wsHardDeleteStaffGroup,
+    updateDailyLimits: wsUpdateDailyLimits,
     updateWeeklyLimits: wsUpdateWeeklyLimits,
     updateMonthlyLimits: wsUpdateMonthlyLimits,
     createPriorityRule: wsCreatePriorityRule,
@@ -63,6 +64,7 @@ export const useSettingsData = (autosaveEnabled = true) => {
     wsCreateStaffGroup,
     wsDeleteStaffGroup,
     wsHardDeleteStaffGroup,
+    wsUpdateDailyLimits,
     wsUpdateWeeklyLimits,
     wsUpdateMonthlyLimits,
     wsCreatePriorityRule,
@@ -81,6 +83,7 @@ export const useSettingsData = (autosaveEnabled = true) => {
       wsCreateStaffGroup,
       wsDeleteStaffGroup,
       wsHardDeleteStaffGroup,
+      wsUpdateDailyLimits,
       wsUpdateWeeklyLimits,
       wsUpdateMonthlyLimits,
       wsCreatePriorityRule,
@@ -96,6 +99,7 @@ export const useSettingsData = (autosaveEnabled = true) => {
     wsCreateStaffGroup,
     wsDeleteStaffGroup,
     wsHardDeleteStaffGroup,
+    wsUpdateDailyLimits,
     wsUpdateWeeklyLimits,
     wsUpdateMonthlyLimits,
     wsCreatePriorityRule,
@@ -737,14 +741,15 @@ export const useSettingsData = (autosaveEnabled = true) => {
           callbacks.wsUpdateMLConfig(newSettings.mlParameters);
         }
 
-        // Detect and update daily limits (localStorage-only for now)
-        // Note: dailyLimits are not stored in a separate WebSocket table
-        // They're part of the settings blob in localStorage
-        if (
-          JSON.stringify(oldSettings.dailyLimits) !==
-          JSON.stringify(newSettings.dailyLimits)
-        ) {
-          console.log("  - Daily limits changed (localStorage-only):", newSettings.dailyLimits);
+        // Detect and update daily limits
+        const oldDailyLimits = oldSettings.dailyLimits || {};
+        const newDailyLimits = newSettings.dailyLimits || {};
+
+        if (JSON.stringify(oldDailyLimits) !== JSON.stringify(newDailyLimits)) {
+          console.log("  - Updating daily_limits table");
+          console.log("    Old limits:", oldDailyLimits);
+          console.log("    New limits:", newDailyLimits);
+          callbacks.wsUpdateDailyLimits(newDailyLimits);
         }
 
         // Detect and update backup assignments (differential update like staff groups & priority rules)
