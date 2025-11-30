@@ -1,5 +1,15 @@
 ================================================================================
-CALENDAR RULES & EARLY SHIFT PREFERENCES INTEGRATION - DATA FLOW DIAGRAM
+CALENDAR RULES, EARLY SHIFT PREFERENCES & ADJACENT CONFLICTS - DATA FLOW
+================================================================================
+
+TABLE OF CONTENTS:
+1. Calendar Rules & Early Shift Integration Flow
+2. Adjacent Conflict Prevention System
+3. Interaction Between Constraints
+4. Complete Generation Flow with All Constraints
+
+================================================================================
+PART 1: CALENDAR RULES & EARLY SHIFT PREFERENCES INTEGRATION
 ================================================================================
 
 HOW IT SHOULD WORK (Commit 679caf8 - CORRECT):
@@ -163,5 +173,294 @@ THE SOLUTION:
 │ 3. Pass restaurant ID directly to the hook as a parameter                   │
 │                                                                              │
 │ Once restaurant?.id is available, the whole chain works perfectly!          │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+
+================================================================================
+PART 2: ADJACENT CONFLICT PREVENTION SYSTEM
+================================================================================
+
+WHAT ARE ADJACENT CONFLICTS?
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ Adjacent conflicts occur when the SAME shift type appears on consecutive    │
+│ days for a single staff member.                                             │
+│                                                                              │
+│ FORBIDDEN PATTERNS:                                                         │
+│   ×× (two consecutive day offs)                                             │
+│   △△ (two consecutive early shifts)                                         │
+│   ◇◇ (two consecutive late shifts)                                          │
+│   ○○ (for part-time: two consecutive normal shifts)                         │
+│                                                                              │
+│ ALLOWED PATTERNS:                                                           │
+│   ×△ (day off followed by early shift) ✅                                   │
+│   △× (early shift followed by day off) ✅                                   │
+│   △  (early shift followed by normal shift) ✅                              │
+│   ×  (day off followed by normal shift) ✅                                  │
+│                                                                              │
+│ WHY: Prevents fatigue patterns and ensures schedule variety                 │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+
+WHERE ADJACENT CONFLICT CHECKS ARE APPLIED:
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                                                                              │
+│ FILE: src/ai/constraints/ConstraintEngine.js                                │
+│ FUNCTION: hasAdjacentConflict(staff, dateKey, shiftValue, schedule)         │
+│ LINE: ~49                                                                    │
+│                                                                              │
+│ CALLED FROM:                                                                │
+│ ┌──────────────────────────────────────────────────────────────────┐        │
+│ │ 1. Priority Rules (BusinessRuleValidator.js:1346, 1390)          │        │
+│ │    ✅ FIXED in commit 4a40903                                    │        │
+│ │    - Checks BEFORE assigning preferred/avoided shifts            │        │
+│ │    - Skips assignment if would create adjacent conflict          │        │
+│ │                                                                   │        │
+│ │ 2. Priority Rules Exception Shifts (Line 1346)                   │        │
+│ │    ✅ FIXED in commit 4a40903                                    │        │
+│ │    - Checks exception shift assignments                          │        │
+│ │                                                                   │        │
+│ │ 3. 5-Day Rest Constraint (Line 2082)                             │        │
+│ │    ✅ Already had check                                          │        │
+│ │    - Ensures rest days don't create adjacent conflicts           │        │
+│ │                                                                   │        │
+│ │ 4. Rest Constraint Enforcement (Line 2298)                       │        │
+│ │    ✅ Already had check                                          │        │
+│ │                                                                   │        │
+│ │ 5. Post-Generation Balancing (Line 1288)                         │        │
+│ │    ✅ Has check                                                  │        │
+│ │    - When adding × to meet minOffPerDay requirement             │        │
+│ └──────────────────────────────────────────────────────────────────┘        │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+
+THE ADJACENT CONFLICT BUG (FIXED):
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ PROBLEM REPORT (2025-11-29):                                                │
+│ - User reported: 料理長 had 4 consecutive △ (dates 22-23-24-25)            │
+│ - Also had 2 consecutive △ (dates 13-14)                                    │
+│ - This violated adjacent conflict prevention rule                           │
+│                                                                              │
+│ ROOT CAUSE:                                                                 │
+│ - Priority rules (applyPriorityRules) assigned preferred shifts            │
+│ - NO adjacent conflict check before assignment                             │
+│ - Priority rules are re-applied 5 times during generation:                 │
+│   • After calendar rules                                                   │
+│   • After preferred shifts                                                 │
+│   • After early shift enforcement                                          │
+│   • After 5-day rest constraint                                            │
+│   • After off-day distribution                                             │
+│   • After staff group constraints                                          │
+│ - Each re-application could create consecutive patterns                    │
+│                                                                              │
+│ THE FIX (Commit 4a40903):                                                  │
+│ Added hasAdjacentConflict() check to TWO locations:                        │
+│                                                                              │
+│ 1. Exception Shift Assignment (Line 1346):                                 │
+│    const adjacentConflict = hasAdjacentConflict(                           │
+│      staff, dateKey, exceptionShiftValue, schedule                         │
+│    );                                                                       │
+│    if (adjacentConflict) {                                                 │
+│      console.log(`⏭️ [PRIORITY] Cannot assign exception...`);              │
+│    } else {                                                                │
+│      schedule[staff.id][dateKey] = exceptionShiftValue;                    │
+│    }                                                                        │
+│                                                                              │
+│ 2. Preferred Shift Assignment (Line 1390):                                 │
+│    const adjacentConflict = hasAdjacentConflict(                           │
+│      staff, dateKey, shiftValue, schedule                                  │
+│    );                                                                       │
+│    if (adjacentConflict) {                                                 │
+│      console.log(`⏭️ [PRIORITY] Cannot assign preferred...`);              │
+│    } else {                                                                │
+│      schedule[staff.id][dateKey] = shiftValue;                             │
+│    }                                                                        │
+│                                                                              │
+│ RESULT: ✅ No more consecutive △△, ××, or ◇◇ patterns                      │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+
+================================================================================
+PART 3: INTERACTION BETWEEN CALENDAR RULES & ADJACENT CONFLICTS
+================================================================================
+
+HIERARCHY (What Overrides What):
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                                                                              │
+│ TIER 0 (Database/Calendar) - ABSOLUTE PRIORITY                              │
+│ ┌──────────────────────────────────────────────────────────────┐            │
+│ │ • Calendar must_day_off rules                                │            │
+│ │ • Calendar must_work rules                                   │            │
+│ │ • Early shift preferences on must_day_off dates              │            │
+│ │                                                               │            │
+│ │ OVERRIDES: Everything (including adjacent conflicts!)        │            │
+│ └──────────────────────────────────────────────────────────────┘            │
+│          ↓ overrides                                                        │
+│                                                                              │
+│ TIER 1 (Must) - HARD CONSTRAINTS                                            │
+│ ┌──────────────────────────────────────────────────────────────┐            │
+│ │ • Adjacent conflict prevention (no ××, △△, ◇◇)               │            │
+│ │ • Staff group constraints (who can work together)            │            │
+│ │ • Consecutive work limit (max 5 days)                        │            │
+│ │                                                               │            │
+│ │ OVERRIDES: Priority rules, daily limits (except calendar)    │            │
+│ └──────────────────────────────────────────────────────────────┘            │
+│          ↓ overrides                                                        │
+│                                                                              │
+│ TIER 2 (Should) - SOFT CONSTRAINTS                                          │
+│ ┌──────────────────────────────────────────────────────────────┐            │
+│ │ • Priority rules (preferred/avoided shifts)                  │            │
+│ │ • Daily limits (2-3 staff off per day)                       │            │
+│ │ • Weekly limits                                              │            │
+│ └──────────────────────────────────────────────────────────────┘            │
+│          ↓ overrides                                                        │
+│                                                                              │
+│ TIER 3 (Optimize) - BALANCING                                               │
+│ ┌──────────────────────────────────────────────────────────────┐            │
+│ │ • Post-generation balancing                                  │            │
+│ │ • Optimization algorithms                                    │            │
+│ └──────────────────────────────────────────────────────────────┘            │
+│                                                                              │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+
+SPECIAL CASE: Adjacent Conflicts on Calendar Rule Dates
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                                                                              │
+│ SCENARIO: must_day_off on Dec 1, 2, 3 (three consecutive days)             │
+│                                                                              │
+│ QUESTION: Can staff have △△△ on these dates?                               │
+│                                                                              │
+│ ANSWER: YES! ✅ Calendar rules override adjacent conflicts                  │
+│                                                                              │
+│ WHY:                                                                        │
+│ - Calendar rules are TIER 0 (highest priority)                             │
+│ - Adjacent conflicts are TIER 1                                             │
+│ - On must_day_off dates, EVERYONE gets × or △                               │
+│ - Early shift preferences determine who gets △                              │
+│ - If staff has early shift permission for all 3 days → △△△ is allowed      │
+│                                                                              │
+│ IMPLEMENTATION:                                                             │
+│ - CalendarEarlyShiftIntegrator.applyCombinedRules() runs in Phase 3        │
+│ - It assigns × or △ WITHOUT checking adjacent conflicts                     │
+│ - This is CORRECT behavior (calendar rules override everything)             │
+│                                                                              │
+│ EXAMPLE SCHEDULE (Dec 1-3 all must_day_off):                               │
+│   Dec 1: △△△△△△△×××  (7 early, 3 off)                                     │
+│   Dec 2: △△△△△△△×××  (7 early, 3 off) ← △△ is allowed!                    │
+│   Dec 3: △△△△△△△×××  (7 early, 3 off) ← △△△ is allowed!                   │
+│                                                                              │
+│ On other dates (non-calendar), adjacent conflicts ARE enforced:            │
+│   Dec 4: △ △  △   ×   (mix of shifts, no ××, no △△)                        │
+│   Dec 5:  ×  △   ×△   (no consecutive same shifts)                         │
+│                                                                              │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+
+================================================================================
+PART 4: COMPLETE GENERATION FLOW WITH ALL CONSTRAINTS
+================================================================================
+
+FULL EXECUTION ORDER:
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                                                                              │
+│ PRE-PHASE: Calendar Rules (TIER 0)                                          │
+│ ┌──────────────────────────────────────────────────────────────┐            │
+│ │ • Apply must_day_off: ALL staff get ×                        │            │
+│ │ • Apply must_work: ALL staff get "" (normal shift)           │            │
+│ │ • NO adjacent conflict checks (calendar overrides)           │            │
+│ └──────────────────────────────────────────────────────────────┘            │
+│                    ↓                                                        │
+│                                                                              │
+│ PHASE 1: Priority Rules (TIER 2) - 1st Application                         │
+│ ┌──────────────────────────────────────────────────────────────┐            │
+│ │ • Apply preferred/avoided shifts                             │            │
+│ │ • ✅ CHECK adjacent conflicts before assigning               │            │
+│ │ • Skip if would create ××, △△, ◇◇                            │            │
+│ └──────────────────────────────────────────────────────────────┘            │
+│                    ↓                                                        │
+│                                                                              │
+│ PHASE 2: Early Shift Enforcement (TIER 1)                                  │
+│ ┌──────────────────────────────────────────────────────────────┐            │
+│ │ • Assign △ to staff with early shift requirements            │            │
+│ │ • May create △△ if unavoidable (TIER 1 priority)             │            │
+│ └──────────────────────────────────────────────────────────────┘            │
+│                    ↓                                                        │
+│                                                                              │
+│ PHASE 3: 5-Day Rest Constraint (TIER 1)                                    │
+│ ┌──────────────────────────────────────────────────────────────┐            │
+│ │ • Ensure staff don't work >5 consecutive days                │            │
+│ │ • ✅ CHECK adjacent conflicts when assigning rest days       │            │
+│ └──────────────────────────────────────────────────────────────┘            │
+│                    ↓                                                        │
+│                                                                              │
+│ PHASE 4: Off-Day Distribution (TIER 2)                                     │
+│ ┌──────────────────────────────────────────────────────────────┐            │
+│ │ • Distribute × across dates                                  │            │
+│ │ • Respect daily limits (2-3 staff off per day)               │            │
+│ │ • Check adjacent conflicts implicitly                        │            │
+│ └──────────────────────────────────────────────────────────────┘            │
+│                    ↓                                                        │
+│                                                                              │
+│ PHASE 5: Staff Group Constraints (TIER 1)                                  │
+│ ┌──────────────────────────────────────────────────────────────┐            │
+│ │ • Ensure at least one group member works each day            │            │
+│ │ • Prevent all members having same shift                      │            │
+│ └──────────────────────────────────────────────────────────────┘            │
+│                    ↓                                                        │
+│                                                                              │
+│ PHASE 6: Priority Rules - Re-applications (TIER 2)                         │
+│ ┌──────────────────────────────────────────────────────────────┐            │
+│ │ • Applied 5 more times after each phase                      │            │
+│ │ • ✅ CHECK adjacent conflicts EVERY TIME                     │            │
+│ │ • Skip if would create ××, △△, ◇◇                            │            │
+│ └──────────────────────────────────────────────────────────────┘            │
+│                    ↓                                                        │
+│                                                                              │
+│ PHASE 7 (FINAL): Calendar + Early Shift Integration (TIER 0)               │
+│ ┌──────────────────────────────────────────────────────────────┐            │
+│ │ • CalendarEarlyShiftIntegrator.applyCombinedRules()          │            │
+│ │ • STEP 1: Assign × to ALL staff on must_day_off dates        │            │
+│ │ • STEP 2: Overwrite × with △ for eligible staff              │            │
+│ │ • NO adjacent conflict checks (calendar overrides!)          │            │
+│ │ • This is the FINAL OVERRIDE of all previous assignments     │            │
+│ └──────────────────────────────────────────────────────────────┘            │
+│                    ↓                                                        │
+│                                                                              │
+│ PHASE 8: Post-Generation Balancing (TIER 3)                                │
+│ ┌──────────────────────────────────────────────────────────────┐            │
+│ │ • Ensure 2-3 staff off per day                               │            │
+│ │ • ✅ SKIP calendar rule dates (must_day_off, must_work)      │            │
+│ │ • ✅ CHECK adjacent conflicts before adding ×                │            │
+│ │ • Only modifies non-calendar dates                           │            │
+│ └──────────────────────────────────────────────────────────────┘            │
+│                    ↓                                                        │
+│                                                                              │
+│ FINAL SCHEDULE READY ✅                                                     │
+│                                                                              │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+
+KEY TAKEAWAYS:
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                                                                              │
+│ 1. Calendar rules (TIER 0) override EVERYTHING, including adjacent          │
+│    conflicts. On must_day_off dates, consecutive △△△ is allowed.           │
+│                                                                              │
+│ 2. Adjacent conflicts (TIER 1) are checked in 5 places:                    │
+│    • Priority rules (2 locations)                                           │
+│    • 5-day rest constraint                                                 │
+│    • Rest constraint enforcement                                            │
+│    • Post-generation balancing                                              │
+│                                                                              │
+│ 3. Post-generation balancing SKIPS calendar rule dates to prevent           │
+│    overwriting must_day_off and must_work rules.                            │
+│                                                                              │
+│ 4. Priority rules are applied 6 times total (initial + 5 re-applications),  │
+│    and EVERY application checks for adjacent conflicts.                     │
+│                                                                              │
+│ 5. The system is designed so calendar rules have absolute control on        │
+│    special dates, while other dates follow all constraints including        │
+│    adjacent conflict prevention.                                            │
+│                                                                              │
 └─────────────────────────────────────────────────────────────────────────────┘
 
