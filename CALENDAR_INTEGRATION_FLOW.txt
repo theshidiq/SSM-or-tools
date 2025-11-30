@@ -1,0 +1,167 @@
+================================================================================
+CALENDAR RULES & EARLY SHIFT PREFERENCES INTEGRATION - DATA FLOW DIAGRAM
+================================================================================
+
+HOW IT SHOULD WORK (Commit 679caf8 - CORRECT):
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ User Clicks "AI Generate"                                                   │
+│                    ↓                                                         │
+│ useAIAssistantLazy.generateAIPredictions()                                  │
+│  ├─ const { restaurant } = useRestaurant()  [✅ Has value]                  │
+│  ├─ if (restaurant?.id) {  [✅ TRUE]                                        │
+│  │   earlyShiftPreferences = await loadPreferences(restaurant.id)           │
+│  │   [✅ Loaded with actual data]                                           │
+│  │ }                                                                         │
+│  ├─ if (restaurant?.id) {  [✅ TRUE]                                        │
+│  │   calendarRules = await loadRules(restaurant.id)                         │
+│  │   [✅ Loaded with actual data]                                           │
+│  │ }                                                                         │
+│  └─ system.generateSchedule({                                               │
+│      earlyShiftPreferences,  [✅ Has data]                                  │
+│      calendarRules           [✅ Has data]                                  │
+│    })                                                                        │
+│                    ↓                                                         │
+│ HybridPredictor.predictSchedule(inputData)                                  │
+│  └─ ruleValidator.generateRuleBasedSchedule(inputData)                      │
+│                    ↓                                                         │
+│ BusinessRuleValidator.generateRuleBasedSchedule()                           │
+│  ├─ const hasPhase3Integration =                                            │
+│  │   Object.keys(earlyShiftPreferences).length > 0 ||                       │
+│  │   Object.keys(calendarRules).length > 0                                  │
+│  │   [✅ true (objects have keys)]                                          │
+│  │                                                                           │
+│  ├─ if (hasPhase3Integration) {  [✅ TRUE]                                  │
+│  │   const combinedResult =                                                 │
+│  │     CalendarEarlyShiftIntegrator.applyCombinedRules(                     │
+│  │       schedule,                                                          │
+│  │       calendarRules,        [✅ Has data]                                │
+│  │       earlyShiftPreferences, [✅ Has data]                               │
+│  │       staffMembers                                                       │
+│  │     )                                                                     │
+│  │   [✅ CALLED AND EXECUTES]                                               │
+│  │                                                                           │
+│  │   Object.assign(schedule, combinedResult.schedule)                       │
+│  │   [✅ Rules applied to schedule]                                         │
+│  │ }                                                                         │
+│                    ↓                                                         │
+│ [✅ Calendar rules APPLIED]                                                 │
+│ [✅ Early shift preferences APPLIED]                                        │
+│ [✅ Result: × and △ properly assigned]                                      │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+
+HOW IT ACTUALLY WORKS NOW (Commit 4ef1af2 - BROKEN):
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ User Clicks "AI Generate"                                                   │
+│                    ↓                                                         │
+│ useAIAssistantLazy.generateAIPredictions()                                  │
+│  ├─ const { restaurant } = useRestaurant()  [❌ undefined/null]             │
+│  ├─ if (restaurant?.id) {  [❌ FALSE]                                       │
+│  │   earlyShiftPreferences = await loadPreferences(restaurant.id)           │
+│  │   [SKIPPED]                                                              │
+│  │ } else {                                                                  │
+│  │   earlyShiftPreferences = {}  [❌ Empty object]                          │
+│  │   console.warn("⚠️ No restaurant ID available")  [DEBUG MESSAGE]         │
+│  │ }                                                                         │
+│  │                                                                           │
+│  ├─ if (restaurant?.id) {  [❌ FALSE]                                       │
+│  │   calendarRules = await loadRules(restaurant.id)                         │
+│  │   [SKIPPED]                                                              │
+│  │ } else {                                                                  │
+│  │   calendarRules = {}  [❌ Empty object]                                  │
+│  │   console.warn("⚠️ No restaurant ID available")  [DEBUG MESSAGE]         │
+│  │ }                                                                         │
+│  │                                                                           │
+│  └─ system.generateSchedule({                                               │
+│      earlyShiftPreferences,  [❌ {} (empty)]                                │
+│      calendarRules           [❌ {} (empty)]                                │
+│    })                                                                        │
+│                    ↓                                                         │
+│ HybridPredictor.predictSchedule(inputData)                                  │
+│  └─ ruleValidator.generateRuleBasedSchedule(inputData)                      │
+│                    ↓                                                         │
+│ BusinessRuleValidator.generateRuleBasedSchedule()                           │
+│  ├─ const hasPhase3Integration =                                            │
+│  │   Object.keys({}).length > 0 ||                                          │
+│  │   Object.keys({}).length > 0                                             │
+│  │   [❌ false (0 > 0 || 0 > 0 = false)]                                    │
+│  │                                                                           │
+│  ├─ if (hasPhase3Integration) {  [❌ FALSE]                                 │
+│  │   // THIS BLOCK IS SKIPPED ❌                                            │
+│  │   CalendarEarlyShiftIntegrator.applyCombinedRules(...)                   │
+│  │   [❌ NEVER CALLED]                                                      │
+│  │ }                                                                         │
+│                    ↓                                                         │
+│ [❌ Calendar rules NOT applied]                                             │
+│ [❌ Early shift preferences NOT applied]                                    │
+│ [❌ Result: × and △ NOT assigned]                                           │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+
+THE BLOCKING CONDITION - Line 97 of useAIAssistantLazy.js:
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ const { restaurant } = useRestaurant();                                      │
+│                                                                              │
+│ If this evaluates to:                                                       │
+│   ✅ { id: "restaurant-123" }  → Everything works                           │
+│   ❌ { id: undefined }         → Breaks the chain                           │
+│   ❌ { id: null }              → Breaks the chain                           │
+│   ❌ undefined                 → Breaks the chain                           │
+│   ❌ null                       → Breaks the chain                           │
+│                                                                              │
+│ Then the condition:                                                         │
+│   if (restaurant?.id) {  ← This evaluates to false                          │
+│     // Load preferences/rules                                               │
+│   } else {                                                                   │
+│     // Objects stay as {}  ← THIS IS THE PROBLEM                            │
+│   }                                                                          │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+
+DIAGNOSTIC STEPS:
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ 1. Open browser DevTools (F12)                                              │
+│ 2. Go to Console tab                                                        │
+│ 3. Click "AI Generate" button                                               │
+│ 4. Look for this message:                                                   │
+│    "⚠️ [AI-LAZY] No restaurant ID available - skipping early shift..."      │
+│                                                                              │
+│ If you see it:                                                              │
+│   → restaurant?.id is falsy                                                 │
+│   → earlyShiftPreferences = {}                                              │
+│   → calendarRules = {}                                                      │
+│   → hasPhase3Integration = false                                            │
+│   → CalendarEarlyShiftIntegrator NEVER CALLED                               │
+│   → Calendar rules NOT applied                                              │
+│   → Early shift preferences NOT applied                                     │
+│                                                                              │
+│ THIS IS THE ROOT CAUSE! ✅                                                  │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+
+WHY COMMIT 679caf8 WORKED:
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ Commit 679caf8 was created when the restaurant context WAS available and     │
+│ working correctly. So the conditional checks at lines 402 and 432 both      │
+│ evaluated to true, allowing preferences and rules to be loaded.             │
+│                                                                              │
+│ Later, something changed and restaurant context became unavailable.         │
+│ The code paths are still there (commit 4ef1af2 confirms this),              │
+│ but they're not being executed because restaurant?.id is missing.           │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+
+THE SOLUTION:
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ Ensure restaurant context is available and has an id property before        │
+│ generateAIPredictions() is called.                                          │
+│                                                                              │
+│ Options:                                                                    │
+│ 1. Fix RestaurantContext provider (ensure it wraps the component)           │
+│ 2. Add fallback: const restaurantId = restaurant?.id ||                     │
+│                  localStorage.getItem("restaurantId")                       │
+│ 3. Pass restaurant ID directly to the hook as a parameter                   │
+│                                                                              │
+│ Once restaurant?.id is available, the whole chain works perfectly!          │
+└─────────────────────────────────────────────────────────────────────────────┘
+
