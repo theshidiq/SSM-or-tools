@@ -101,7 +101,7 @@ export class ConfigurationService {
     const migratedSettings = { ...settings };
 
     // Current migration version - increment this when adding new migrations
-    const CURRENT_MIGRATION_VERSION = 4;
+    const CURRENT_MIGRATION_VERSION = 5;
     const currentVersion = settings.migrationVersion || 0;
 
     // Migrate weeklyLimits from object to array format
@@ -347,6 +347,36 @@ export class ConfigurationService {
       needsMigration = true;
     }
 
+    // Migration v5: Add MIN constraints to dailyLimits
+    if (currentVersion < 5) {
+      console.log("🔄 Running migration v5: Add MIN constraints to dailyLimits");
+
+      // Ensure dailyLimits object exists (from v4)
+      if (!migratedSettings.dailyLimits) {
+        migratedSettings.dailyLimits = {
+          maxOffPerDay: 3,
+          maxEarlyPerDay: 2,
+          maxLatePerDay: 3,
+          minWorkingStaffPerDay: 3,
+        };
+      }
+
+      // Add MIN fields with default value of 0 (no minimum enforced by default)
+      migratedSettings.dailyLimits = {
+        ...migratedSettings.dailyLimits,
+        minOffPerDay: migratedSettings.dailyLimits?.minOffPerDay ?? 0,
+        minEarlyPerDay: migratedSettings.dailyLimits?.minEarlyPerDay ?? 0,
+        minLatePerDay: migratedSettings.dailyLimits?.minLatePerDay ?? 0,
+      };
+
+      console.log(
+        "✅ Migration v5 complete: MIN constraints added",
+        migratedSettings.dailyLimits,
+      );
+
+      needsMigration = true;
+    }
+
     // Update migration version if any migration ran or if version is outdated
     if (needsMigration || currentVersion < CURRENT_MIGRATION_VERSION) {
       migratedSettings.migrationVersion = CURRENT_MIGRATION_VERSION;
@@ -523,9 +553,12 @@ export class ConfigurationService {
 
       // Daily Limits
       dailyLimits: {
-        maxOffPerDay: 3, // Default: 3, Max: 4
-        maxEarlyPerDay: 2, // Default: 2, Max: 2
-        maxLatePerDay: 3, // Default: 3, Max: 3
+        minOffPerDay: 0, // Default: 0 (no minimum enforced), Range: 0-4
+        maxOffPerDay: 3, // Default: 3, Range: 0-4
+        minEarlyPerDay: 0, // Default: 0 (no minimum enforced), Range: 0-2
+        maxEarlyPerDay: 2, // Default: 2, Range: 0-2
+        minLatePerDay: 0, // Default: 0 (no minimum enforced), Range: 0-3
+        maxLatePerDay: 3, // Default: 3, Range: 0-3
         minWorkingStaffPerDay: 3, // Fixed - not configurable via UI
       },
 
@@ -613,8 +646,11 @@ export class ConfigurationService {
     if (!this.settings?.dailyLimits) {
       console.warn("⚠️ dailyLimits not found in settings, using defaults");
       return {
+        minOffPerDay: 0,
         maxOffPerDay: 3,
+        minEarlyPerDay: 0,
         maxEarlyPerDay: 2,
+        minLatePerDay: 0,
         maxLatePerDay: 3,
         minWorkingStaffPerDay: 3,
       };

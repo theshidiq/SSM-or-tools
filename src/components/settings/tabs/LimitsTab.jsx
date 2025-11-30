@@ -62,8 +62,11 @@ const DailyLimitsSection = ({
   currentScheduleId,
 }) => {
   const [localLimits, setLocalLimits] = useState(dailyLimits || {
+    minOffPerDay: 0,
     maxOffPerDay: 3,
+    minEarlyPerDay: 0,
     maxEarlyPerDay: 2,
+    minLatePerDay: 0,
     maxLatePerDay: 3,
   });
   const [hasChanges, setHasChanges] = useState(false);
@@ -73,8 +76,11 @@ const DailyLimitsSection = ({
   useEffect(() => {
     if (dailyLimits) {
       setLocalLimits({
+        minOffPerDay: dailyLimits.minOffPerDay ?? 0,
         maxOffPerDay: dailyLimits.maxOffPerDay ?? 3,
+        minEarlyPerDay: dailyLimits.minEarlyPerDay ?? 0,
         maxEarlyPerDay: dailyLimits.maxEarlyPerDay ?? 2,
+        minLatePerDay: dailyLimits.minLatePerDay ?? 0,
         maxLatePerDay: dailyLimits.maxLatePerDay ?? 3,
       });
       setHasChanges(false);
@@ -82,7 +88,35 @@ const DailyLimitsSection = ({
   }, [dailyLimits]);
 
   const handleSliderChange = (field, value) => {
-    setLocalLimits({ ...localLimits, [field]: value });
+    const updated = { ...localLimits, [field]: value };
+
+    // Validation: Ensure MIN doesn't exceed MAX for each shift type
+    if (field === "minOffPerDay" && value > updated.maxOffPerDay) {
+      toast.error("Minimum cannot exceed maximum");
+      return;
+    }
+    if (field === "maxOffPerDay" && value < updated.minOffPerDay) {
+      toast.error("Maximum cannot be less than minimum");
+      return;
+    }
+    if (field === "minEarlyPerDay" && value > updated.maxEarlyPerDay) {
+      toast.error("Minimum cannot exceed maximum");
+      return;
+    }
+    if (field === "maxEarlyPerDay" && value < updated.minEarlyPerDay) {
+      toast.error("Maximum cannot be less than minimum");
+      return;
+    }
+    if (field === "minLatePerDay" && value > updated.maxLatePerDay) {
+      toast.error("Minimum cannot exceed maximum");
+      return;
+    }
+    if (field === "maxLatePerDay" && value < updated.minLatePerDay) {
+      toast.error("Maximum cannot be less than minimum");
+      return;
+    }
+
+    setLocalLimits(updated);
     setHasChanges(true);
   };
 
@@ -136,8 +170,11 @@ const DailyLimitsSection = ({
 
   const handleReset = () => {
     const defaults = {
+      minOffPerDay: 0,
       maxOffPerDay: 3,
+      minEarlyPerDay: 0,
       maxEarlyPerDay: 2,
+      minLatePerDay: 0,
       maxLatePerDay: 3,
     };
     setLocalLimits(defaults);
@@ -153,7 +190,7 @@ const DailyLimitsSection = ({
             📅 Daily Limits (Per Date)
           </h3>
           <p className="text-sm text-gray-600 mt-1">
-            Configure maximum number of staff per shift type on any single day
+            Configure minimum and maximum number of staff per shift type on any single day
           </p>
         </div>
 
@@ -188,47 +225,98 @@ const DailyLimitsSection = ({
 
       {/* Sliders */}
       <div className="space-y-6 bg-white p-6 rounded-lg shadow-sm">
-        {/* Max Off Days Slider */}
-        <Slider
-          label="Max Staff Off Per Day"
-          value={localLimits.maxOffPerDay}
-          min={0}
-          max={4}
-          step={1}
-          onChange={(value) => handleSliderChange("maxOffPerDay", value)}
-          colorScheme="red"
-          showValue={true}
-          unit=" staff"
-          description="Maximum number of staff that can be off (×) on any single day"
-        />
+        {/* Off Days (×) Group */}
+        <div className="space-y-3 p-4 bg-red-50 rounded-lg border border-red-200">
+          <h4 className="font-semibold text-gray-800 flex items-center gap-2">
+            🔴 Staff Off Days (×)
+          </h4>
+          <Slider
+            label="Minimum Staff Off Per Day"
+            value={localLimits.minOffPerDay}
+            min={0}
+            max={4}
+            step={1}
+            onChange={(value) => handleSliderChange("minOffPerDay", value)}
+            colorScheme="red"
+            showValue={true}
+            unit=" staff"
+            description="Minimum number of staff that must be off (×) on any single day"
+          />
+          <Slider
+            label="Maximum Staff Off Per Day"
+            value={localLimits.maxOffPerDay}
+            min={0}
+            max={4}
+            step={1}
+            onChange={(value) => handleSliderChange("maxOffPerDay", value)}
+            colorScheme="red"
+            showValue={true}
+            unit=" staff"
+            description="Maximum number of staff that can be off (×) on any single day"
+          />
+        </div>
 
-        {/* Max Early Shifts Slider */}
-        <Slider
-          label="Max Early Shifts Per Day"
-          value={localLimits.maxEarlyPerDay}
-          min={0}
-          max={2}
-          step={1}
-          onChange={(value) => handleSliderChange("maxEarlyPerDay", value)}
-          colorScheme="orange"
-          showValue={true}
-          unit=" staff"
-          description="Maximum number of staff on early shifts (△) on any single day"
-        />
+        {/* Early Shifts (△) Group */}
+        <div className="space-y-3 p-4 bg-orange-50 rounded-lg border border-orange-200">
+          <h4 className="font-semibold text-gray-800 flex items-center gap-2">
+            🟠 Early Shifts (△)
+          </h4>
+          <Slider
+            label="Minimum Early Shifts Per Day"
+            value={localLimits.minEarlyPerDay}
+            min={0}
+            max={2}
+            step={1}
+            onChange={(value) => handleSliderChange("minEarlyPerDay", value)}
+            colorScheme="orange"
+            showValue={true}
+            unit=" staff"
+            description="Minimum number of staff on early shifts (△) on any single day"
+          />
+          <Slider
+            label="Maximum Early Shifts Per Day"
+            value={localLimits.maxEarlyPerDay}
+            min={0}
+            max={2}
+            step={1}
+            onChange={(value) => handleSliderChange("maxEarlyPerDay", value)}
+            colorScheme="orange"
+            showValue={true}
+            unit=" staff"
+            description="Maximum number of staff on early shifts (△) on any single day"
+          />
+        </div>
 
-        {/* Max Late Shifts Slider */}
-        <Slider
-          label="Max Late Shifts Per Day"
-          value={localLimits.maxLatePerDay}
-          min={0}
-          max={3}
-          step={1}
-          onChange={(value) => handleSliderChange("maxLatePerDay", value)}
-          colorScheme="purple"
-          showValue={true}
-          unit=" staff"
-          description="Maximum number of staff on late shifts (◇) on any single day"
-        />
+        {/* Late Shifts (◇) Group */}
+        <div className="space-y-3 p-4 bg-purple-50 rounded-lg border border-purple-200">
+          <h4 className="font-semibold text-gray-800 flex items-center gap-2">
+            🟣 Late Shifts (◇)
+          </h4>
+          <Slider
+            label="Minimum Late Shifts Per Day"
+            value={localLimits.minLatePerDay}
+            min={0}
+            max={3}
+            step={1}
+            onChange={(value) => handleSliderChange("minLatePerDay", value)}
+            colorScheme="purple"
+            showValue={true}
+            unit=" staff"
+            description="Minimum number of staff on late shifts (◇) on any single day"
+          />
+          <Slider
+            label="Maximum Late Shifts Per Day"
+            value={localLimits.maxLatePerDay}
+            min={0}
+            max={3}
+            step={1}
+            onChange={(value) => handleSliderChange("maxLatePerDay", value)}
+            colorScheme="purple"
+            showValue={true}
+            unit=" staff"
+            description="Maximum number of staff on late shifts (◇) on any single day"
+          />
+        </div>
       </div>
     </div>
   );

@@ -1252,11 +1252,13 @@ export class BusinessRuleValidator {
         console.log(`🔍 [DEBUG] ${staff.name}: ${offDays.length} off-days on: ${offDays.join(", ")}`);
       });
 
-      // ✅ POST-GENERATION BALANCING: Ensure min 2 and max 3 staff off per day
-      console.log("⚖️ [BALANCE] Starting daily limit balancing (min: 2, max: 3)...");
+      // ✅ POST-GENERATION BALANCING: Ensure min/max daily limits from configuration
+      const liveSettings = this.getLiveSettings();
+      const dailyLimits = liveSettings.dailyLimits || {};
+      const minOffPerDay = dailyLimits.minOffPerDay ?? 0;
+      const maxOffPerDay = dailyLimits.maxOffPerDay ?? 3;
 
-      const minOffPerDay = 2;
-      const maxOffPerDay = 3;
+      console.log(`⚖️ [BALANCE] Starting daily limit balancing (min: ${minOffPerDay}, max: ${maxOffPerDay})...`);
       let balancingChanges = 0;
 
       dateRange.forEach(date => {
@@ -1278,8 +1280,8 @@ export class BusinessRuleValidator {
 
         const currentOffCount = countOffDaysOnDate(schedule, dateKey, staffMembers);
 
-        // Case 1: Too few off days (< 2)
-        if (currentOffCount < minOffPerDay) {
+        // Case 1: Too few off days (< minOffPerDay) - only enforce if minOffPerDay > 0
+        if (minOffPerDay > 0 && currentOffCount < minOffPerDay) {
           const needed = minOffPerDay - currentOffCount;
           console.log(
             `⚠️ [BALANCE] ${dateKey}: Only ${currentOffCount} staff off, need ${needed} more (min: ${minOffPerDay})`

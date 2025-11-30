@@ -246,8 +246,11 @@ const STATIC_PRIORITY_RULES = [];
  * Fallback values are only used when configuration cannot be loaded
  */
 const STATIC_DAILY_LIMITS = {
+  minOffPerDay: 0,
   maxOffPerDay: 4,
+  minEarlyPerDay: 0,
   maxEarlyPerDay: 4,
+  minLatePerDay: 0,
   maxLatePerDay: 3,
   minWorkingStaffPerDay: 3,
 };
@@ -583,7 +586,7 @@ export const validateDailyLimits = async (
     }
   });
 
-  // Check daily off limit
+  // Check daily off limit (MAX)
   const maxOffPerDay = dailyLimits.maxOffPerDay || 4;
   if (offCount > maxOffPerDay) {
     violations.push({
@@ -600,7 +603,24 @@ export const validateDailyLimits = async (
     });
   }
 
-  // Check daily early shift limit
+  // Check daily off limit (MIN)
+  const minOffPerDay = dailyLimits.minOffPerDay || 0;
+  if (minOffPerDay > 0 && offCount < minOffPerDay) {
+    violations.push({
+      type: "min_off_per_day",
+      date: dateKey,
+      message: `Too few staff off on ${dateKey}: ${offCount} is below minimum of ${minOffPerDay}`,
+      severity: "medium",
+      details: {
+        offCount,
+        limit: minOffPerDay,
+        staffOff: dayData.off,
+        deficit: minOffPerDay - offCount,
+      },
+    });
+  }
+
+  // Check daily early shift limit (MAX)
   const maxEarlyPerDay = dailyLimits.maxEarlyPerDay || 3;
   if (earlyCount > maxEarlyPerDay) {
     violations.push({
@@ -613,6 +633,57 @@ export const validateDailyLimits = async (
         limit: maxEarlyPerDay,
         staffEarly: dayData.early,
         excess: earlyCount - maxEarlyPerDay,
+      },
+    });
+  }
+
+  // Check daily early shift limit (MIN)
+  const minEarlyPerDay = dailyLimits.minEarlyPerDay || 0;
+  if (minEarlyPerDay > 0 && earlyCount < minEarlyPerDay) {
+    violations.push({
+      type: "min_early_per_day",
+      date: dateKey,
+      message: `Too few early shifts on ${dateKey}: ${earlyCount} is below minimum of ${minEarlyPerDay}`,
+      severity: "medium",
+      details: {
+        earlyCount,
+        limit: minEarlyPerDay,
+        staffEarly: dayData.early,
+        deficit: minEarlyPerDay - earlyCount,
+      },
+    });
+  }
+
+  // Check daily late shift limit (MAX)
+  const maxLatePerDay = dailyLimits.maxLatePerDay || 3;
+  if (lateCount > maxLatePerDay) {
+    violations.push({
+      type: "max_late_per_day",
+      date: dateKey,
+      message: `Too many late shifts on ${dateKey}: ${lateCount} exceeds limit of ${maxLatePerDay}`,
+      severity: "medium",
+      details: {
+        lateCount,
+        limit: maxLatePerDay,
+        staffLate: dayData.late,
+        excess: lateCount - maxLatePerDay,
+      },
+    });
+  }
+
+  // Check daily late shift limit (MIN)
+  const minLatePerDay = dailyLimits.minLatePerDay || 0;
+  if (minLatePerDay > 0 && lateCount < minLatePerDay) {
+    violations.push({
+      type: "min_late_per_day",
+      date: dateKey,
+      message: `Too few late shifts on ${dateKey}: ${lateCount} is below minimum of ${minLatePerDay}`,
+      severity: "medium",
+      details: {
+        lateCount,
+        limit: minLatePerDay,
+        staffLate: dayData.late,
+        deficit: minLatePerDay - lateCount,
       },
     });
   }
