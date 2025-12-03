@@ -20,11 +20,12 @@ import (
 // DATA STRUCTURES - Multi-Table Settings Architecture
 // ============================================================================
 
-// SettingsAggregate combines all 6 settings tables + version info
+// SettingsAggregate combines all 7 settings tables + version info
 type SettingsAggregate struct {
 	StaffGroups       []StaffGroup       `json:"staffGroups"`
 	WeeklyLimits      []WeeklyLimit      `json:"weeklyLimits"`
 	MonthlyLimits     []MonthlyLimit     `json:"monthlyLimits"`
+	DailyLimits       map[string]interface{} `json:"dailyLimits"` // Daily limits stored as JSONB
 	PriorityRules     []PriorityRule     `json:"priorityRules"`
 	BackupAssignments []BackupAssignment `json:"backupAssignments"`
 	MLModelConfigs    []MLModelConfig    `json:"mlModelConfigs"`
@@ -93,6 +94,7 @@ func (sa *SettingsAggregate) MarshalJSON() ([]byte, error) {
 		"staffGroups":       reactGroups,
 		"weeklyLimits":      reactWeeklyLimits,      // ✅ FIXED: Now using converted format
 		"monthlyLimits":     reactMonthlyLimits,     // ✅ FIXED: Now using converted format
+		"dailyLimits":       sa.DailyLimits,         // ✅ FIXED: Added daily limits from database
 		"priorityRules":     reactPriorityRules,     // ← FIXED: Now using converted format
 		"backupAssignments": reactBackupAssignments, // Backup staff assignments
 		"mlModelConfigs":    sa.MLModelConfigs,
@@ -686,6 +688,61 @@ func (s *StaffSyncServer) fetchMonthlyLimits(versionID string) ([]MonthlyLimit, 
 	return limits, nil
 }
 
+// fetchDailyLimits retrieves active daily limits for a specific version
+// Returns the limit_config JSONB as a map for direct use by React
+func (s *StaffSyncServer) fetchDailyLimits(versionID string) (map[string]interface{}, error) {
+	url := fmt.Sprintf("%s/rest/v1/daily_limits?version_id=eq.%s&is_active=eq.true&select=limit_config",
+		s.supabaseURL, versionID)
+
+	req, err := http.NewRequest("GET", url, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %w", err)
+	}
+
+	req.Header.Set("Authorization", "Bearer "+s.supabaseKey)
+	req.Header.Set("apikey", s.supabaseKey)
+	req.Header.Set("Content-Type", "application/json")
+
+	client := &http.Client{Timeout: 10 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch from Supabase: %w", err)
+	}
+	defer resp.Body.Close()
+
+	body, _ := io.ReadAll(resp.Body)
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("Supabase request failed with status %d: %s", resp.StatusCode, string(body))
+	}
+
+	// Parse response - expecting array with single object
+	var results []map[string]interface{}
+	if err := json.Unmarshal(body, &results); err != nil {
+		return nil, fmt.Errorf("failed to parse response: %w", err)
+	}
+
+	// Return limit_config from first result, or empty map if no results
+	if len(results) > 0 {
+		if limitConfig, ok := results[0]["limit_config"].(map[string]interface{}); ok {
+			log.Printf("✅ [fetchDailyLimits] Fetched daily limits: %+v", limitConfig)
+			return limitConfig, nil
+		}
+	}
+
+	// Return default values if no daily limits found
+	log.Printf("⚠️ [fetchDailyLimits] No daily limits found, returning defaults")
+	return map[string]interface{}{
+		"minOffPerDay":           0,
+		"maxOffPerDay":           3,
+		"minEarlyPerDay":         0,
+		"maxEarlyPerDay":         2,
+		"minLatePerDay":          0,
+		"maxLatePerDay":          3,
+		"minWorkingStaffPerDay":  3,
+	}, nil
+}
+
 // fetchPriorityRules retrieves priority rules for a specific version
 func (s *StaffSyncServer) fetchPriorityRules(versionID string) ([]PriorityRule, error) {
 	// 🔧 FIX: Removed is_active filter to include soft-deleted items in client state
@@ -876,6 +933,20 @@ func (s *StaffSyncServer) fetchAggregatedSettings(versionID string) (*SettingsAg
 		monthlyLimits = []MonthlyLimit{}
 	}
 
+	dailyLimits, err := s.fetchDailyLimits(versionID)
+	if err != nil {
+		log.Printf("⚠️ Failed to fetch daily limits: %v", err)
+		dailyLimits = map[string]interface{}{
+			"minOffPerDay":          0,
+			"maxOffPerDay":          3,
+			"minEarlyPerDay":        0,
+			"maxEarlyPerDay":        2,
+			"minLatePerDay":         0,
+			"maxLatePerDay":         3,
+			"minWorkingStaffPerDay": 3,
+		}
+	}
+
 	priorityRules, err := s.fetchPriorityRules(versionID)
 	if err != nil {
 		log.Printf("⚠️ Failed to fetch priority rules: %v", err)
@@ -899,6 +970,7 @@ func (s *StaffSyncServer) fetchAggregatedSettings(versionID string) (*SettingsAg
 	log.Printf("   - Staff Groups: %d", len(staffGroups))
 	log.Printf("   - Weekly Limits: %d", len(weeklyLimits))
 	log.Printf("   - Monthly Limits: %d", len(monthlyLimits))
+	log.Printf("   - Daily Limits: %+v", dailyLimits)
 	log.Printf("   - Priority Rules: %d", len(priorityRules))
 	log.Printf("   - Backup Assignments: %d", len(backupAssignments))
 	log.Printf("   - ML Configs: %d", len(mlConfigs))
@@ -907,6 +979,7 @@ func (s *StaffSyncServer) fetchAggregatedSettings(versionID string) (*SettingsAg
 		StaffGroups:       staffGroups,
 		WeeklyLimits:      weeklyLimits,
 		MonthlyLimits:     monthlyLimits,
+		DailyLimits:       dailyLimits,
 		PriorityRules:     priorityRules,
 		BackupAssignments: backupAssignments,
 		MLModelConfigs:    mlConfigs,
@@ -1394,46 +1467,56 @@ func (s *StaffSyncServer) createWeeklyLimit(versionID string, limitData map[stri
 
 // upsertDailyLimits upserts daily limits (singleton per version_id)
 // Daily limits are a singleton configuration - one row per version
+// Uses JSONB limit_config column to store all daily limit values
 func (s *StaffSyncServer) upsertDailyLimits(versionID string, limitData map[string]interface{}) error {
 	log.Printf("🔧 [upsertDailyLimits] Upserting daily limits for version: %s", versionID)
 	log.Printf("🔍 [upsertDailyLimits] Received limitData: %+v", limitData)
 
 	url := fmt.Sprintf("%s/rest/v1/daily_limits", s.supabaseURL)
 
-	// Prepare upsert data with snake_case field names
+	// Prepare upsert data - daily limits uses JSONB limit_config column
 	upsertData := make(map[string]interface{})
 	upsertData["version_id"] = versionID
 	upsertData["restaurant_id"] = s.getRestaurantID()
+	upsertData["name"] = "Default Daily Limits"
 
-	// Map camelCase to snake_case for all daily limit fields
+	// Store all daily limit values in the limit_config JSONB column
+	// Keep camelCase for React compatibility
+	limitConfig := make(map[string]interface{})
 	if minOffPerDay, ok := limitData["minOffPerDay"]; ok {
-		upsertData["min_off_per_day"] = minOffPerDay
+		limitConfig["minOffPerDay"] = minOffPerDay
 	}
 	if maxOffPerDay, ok := limitData["maxOffPerDay"]; ok {
-		upsertData["max_off_per_day"] = maxOffPerDay
+		limitConfig["maxOffPerDay"] = maxOffPerDay
 	}
 	if minEarlyPerDay, ok := limitData["minEarlyPerDay"]; ok {
-		upsertData["min_early_per_day"] = minEarlyPerDay
+		limitConfig["minEarlyPerDay"] = minEarlyPerDay
 	}
 	if maxEarlyPerDay, ok := limitData["maxEarlyPerDay"]; ok {
-		upsertData["max_early_per_day"] = maxEarlyPerDay
+		limitConfig["maxEarlyPerDay"] = maxEarlyPerDay
 	}
 	if minLatePerDay, ok := limitData["minLatePerDay"]; ok {
-		upsertData["min_late_per_day"] = minLatePerDay
+		limitConfig["minLatePerDay"] = minLatePerDay
 	}
 	if maxLatePerDay, ok := limitData["maxLatePerDay"]; ok {
-		upsertData["max_late_per_day"] = maxLatePerDay
+		limitConfig["maxLatePerDay"] = maxLatePerDay
 	}
 	if minWorkingStaffPerDay, ok := limitData["minWorkingStaffPerDay"]; ok {
-		upsertData["min_working_staff_per_day"] = minWorkingStaffPerDay
+		limitConfig["minWorkingStaffPerDay"] = minWorkingStaffPerDay
 	}
 
-	// Optional fields
+	upsertData["limit_config"] = limitConfig
+
+	// Optional metadata fields
 	if penaltyWeight, ok := limitData["penaltyWeight"]; ok {
 		upsertData["penalty_weight"] = penaltyWeight
+	} else {
+		upsertData["penalty_weight"] = 1.0
 	}
 	if isHardConstraint, ok := limitData["isHardConstraint"]; ok {
 		upsertData["is_hard_constraint"] = isHardConstraint
+	} else {
+		upsertData["is_hard_constraint"] = false
 	}
 	if effectiveFrom, ok := limitData["effectiveFrom"]; ok {
 		upsertData["effective_from"] = effectiveFrom
@@ -1448,32 +1531,63 @@ func (s *StaffSyncServer) upsertDailyLimits(versionID string, limitData map[stri
 	jsonData, _ := json.Marshal(upsertData)
 	log.Printf("🔍 [upsertDailyLimits] Upsert data: %s", string(jsonData))
 
-	req, err := http.NewRequest("POST", url, bytes.NewBuffer(jsonData))
+	// Strategy: First try to UPDATE existing row with matching version_id
+	// If no rows updated, then INSERT new row
+
+	// Step 1: Try to update existing row
+	updateURL := fmt.Sprintf("%s?version_id=eq.%s", url, versionID)
+	updateReq, err := http.NewRequest("PATCH", updateURL, bytes.NewBuffer(jsonData))
 	if err != nil {
-		return fmt.Errorf("failed to create request: %w", err)
+		return fmt.Errorf("failed to create update request: %w", err)
 	}
 
-	req.Header.Set("apikey", s.supabaseKey)
-	req.Header.Set("Authorization", "Bearer "+s.supabaseKey)
-	req.Header.Set("Content-Type", "application/json")
-	// Use upsert resolution on version_id conflict (since it's unique per version)
-	req.Header.Set("Prefer", "resolution=merge-duplicates,return=representation")
+	updateReq.Header.Set("apikey", s.supabaseKey)
+	updateReq.Header.Set("Authorization", "Bearer "+s.supabaseKey)
+	updateReq.Header.Set("Content-Type", "application/json")
+	updateReq.Header.Set("Prefer", "return=representation")
 
 	client := &http.Client{Timeout: 10 * time.Second}
-	resp, err := client.Do(req)
+	updateResp, err := client.Do(updateReq)
 	if err != nil {
-		return fmt.Errorf("failed to upsert daily limits: %w", err)
+		return fmt.Errorf("failed to update daily limits: %w", err)
 	}
-	defer resp.Body.Close()
+	defer updateResp.Body.Close()
 
-	body, _ := io.ReadAll(resp.Body)
-	log.Printf("🔍 [upsertDailyLimits] Response status: %d, body: %s", resp.StatusCode, string(body))
+	updateBody, _ := io.ReadAll(updateResp.Body)
+	log.Printf("🔍 [upsertDailyLimits] UPDATE response status: %d, body: %s", updateResp.StatusCode, string(updateBody))
 
-	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusCreated {
-		return fmt.Errorf("upsert failed with status %d: %s", resp.StatusCode, string(body))
+	// If update was successful and affected rows, we're done
+	if updateResp.StatusCode == http.StatusOK && len(updateBody) > 2 && string(updateBody) != "[]" {
+		log.Printf("✅ [upsertDailyLimits] Successfully updated existing daily limits")
+		return nil
 	}
 
-	log.Printf("✅ [upsertDailyLimits] Successfully upserted daily limits")
+	// Step 2: If no rows were updated, insert a new row
+	log.Printf("🔍 [upsertDailyLimits] No existing row found, inserting new row")
+	insertReq, err := http.NewRequest("POST", url, bytes.NewBuffer(jsonData))
+	if err != nil {
+		return fmt.Errorf("failed to create insert request: %w", err)
+	}
+
+	insertReq.Header.Set("apikey", s.supabaseKey)
+	insertReq.Header.Set("Authorization", "Bearer "+s.supabaseKey)
+	insertReq.Header.Set("Content-Type", "application/json")
+	insertReq.Header.Set("Prefer", "return=representation")
+
+	insertResp, err := client.Do(insertReq)
+	if err != nil {
+		return fmt.Errorf("failed to insert daily limits: %w", err)
+	}
+	defer insertResp.Body.Close()
+
+	insertBody, _ := io.ReadAll(insertResp.Body)
+	log.Printf("🔍 [upsertDailyLimits] INSERT response status: %d, body: %s", insertResp.StatusCode, string(insertBody))
+
+	if insertResp.StatusCode != http.StatusOK && insertResp.StatusCode != http.StatusCreated {
+		return fmt.Errorf("insert failed with status %d: %s", insertResp.StatusCode, string(insertBody))
+	}
+
+	log.Printf("✅ [upsertDailyLimits] Successfully inserted new daily limits")
 	return nil
 }
 

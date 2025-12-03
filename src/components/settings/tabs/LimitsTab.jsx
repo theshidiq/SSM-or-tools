@@ -68,6 +68,7 @@ const DailyLimitsSection = ({
     maxEarlyPerDay: 2,
     minLatePerDay: 0,
     maxLatePerDay: 3,
+    minWorkingStaffPerDay: 3,
   });
   const [hasChanges, setHasChanges] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
@@ -82,6 +83,7 @@ const DailyLimitsSection = ({
         maxEarlyPerDay: dailyLimits.maxEarlyPerDay ?? 2,
         minLatePerDay: dailyLimits.minLatePerDay ?? 0,
         maxLatePerDay: dailyLimits.maxLatePerDay ?? 3,
+        minWorkingStaffPerDay: dailyLimits.minWorkingStaffPerDay ?? 3,
       });
       setHasChanges(false);
     }
@@ -399,9 +401,13 @@ const LimitsTab = ({
       try {
         setIsLoadingDailyLimits(true);
         const limits = settings?.dailyLimits || {
+          minOffPerDay: 0,
           maxOffPerDay: 3,
+          minEarlyPerDay: 0,
           maxEarlyPerDay: 2,
+          minLatePerDay: 0,
           maxLatePerDay: 3,
+          minWorkingStaffPerDay: 3,
         };
         setDailyLimits(limits);
       } catch (error) {
