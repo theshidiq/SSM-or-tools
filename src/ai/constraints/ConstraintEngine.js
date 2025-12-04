@@ -20,6 +20,10 @@ const CACHE_DURATION = 30 * 1000; // 30 seconds (was 5 minutes)
 const cacheInvalidationCallbacks = new Set();
 let settingsChangeWatcher = null;
 
+// ✅ NEW (Phase 2): Dynamic daily limits from useAISettings
+// This allows real-time database values to override static/cached values
+let _dynamicDailyLimits = null;
+
 /**
  * Initialize configuration service with real-time cache invalidation
  * @param {string} restaurantId - Restaurant ID for configuration
@@ -294,7 +298,58 @@ export const getPriorityRules = async () => {
 };
 
 export const getDailyLimits = async () => {
+  // ✅ Phase 2: Prioritize dynamic limits from useAISettings (database values)
+  if (_dynamicDailyLimits) {
+    console.log('[ConstraintEngine] Using dynamic daily limits from database:', _dynamicDailyLimits);
+    return _dynamicDailyLimits;
+  }
   return await getCachedConfig("daily_limits");
+};
+
+/**
+ * ✅ NEW (Phase 2): Set dynamic daily limits from useAISettings
+ * This allows the AI generator to pass real-time database values
+ * @param {Object} limits - Daily limits object from useAISettings.dailyLimitsRaw
+ */
+export const setDynamicDailyLimits = (limits) => {
+  if (limits && typeof limits === 'object') {
+    _dynamicDailyLimits = {
+      minOffPerDay: limits.minOffPerDay ?? 0,
+      maxOffPerDay: limits.maxOffPerDay ?? 3,
+      minEarlyPerDay: limits.minEarlyPerDay ?? 0,
+      maxEarlyPerDay: limits.maxEarlyPerDay ?? 2,
+      minLatePerDay: limits.minLatePerDay ?? 0,
+      maxLatePerDay: limits.maxLatePerDay ?? 3,
+      minWorkingStaffPerDay: limits.minWorkingStaffPerDay ?? 3,
+    };
+    console.log('[ConstraintEngine] ✅ Dynamic daily limits set:', _dynamicDailyLimits);
+    console.log(`[ConstraintEngine] Source: ${limits._source || 'unknown'}`);
+  } else {
+    console.warn('[ConstraintEngine] ⚠️ Invalid limits provided to setDynamicDailyLimits:', limits);
+  }
+};
+
+/**
+ * ✅ NEW (Phase 2): Clear dynamic daily limits (reset to cached/static)
+ * Call this when disconnecting from WebSocket or resetting settings
+ */
+export const clearDynamicDailyLimits = () => {
+  _dynamicDailyLimits = null;
+  console.log('[ConstraintEngine] Dynamic daily limits cleared, reverting to cached values');
+};
+
+/**
+ * ✅ NEW (Phase 2): Synchronous getter for daily limits
+ * Use when async is not possible (e.g., in synchronous validation loops)
+ * Returns dynamic limits if set, otherwise static fallback
+ * @returns {Object} Daily limits object
+ */
+export const getDailyLimitsSync = () => {
+  if (_dynamicDailyLimits) {
+    return _dynamicDailyLimits;
+  }
+  // Return static fallback for synchronous access
+  return STATIC_DAILY_LIMITS;
 };
 
 /**
@@ -373,6 +428,11 @@ export const VIOLATION_TYPES = {
   MONTHLY_OFF_LIMIT: "monthly_off_limit",
   DAILY_OFF_LIMIT: "daily_off_limit",
   DAILY_EARLY_LIMIT: "daily_early_limit",
+  DAILY_LATE_LIMIT: "daily_late_limit", // ✅ Phase 2: Added for consistency
+  // ✅ Phase 2: MIN constraint violation types
+  MIN_OFF_PER_DAY: "min_off_per_day",
+  MIN_EARLY_PER_DAY: "min_early_per_day",
+  MIN_LATE_PER_DAY: "min_late_per_day",
   WEEKLY_OFF_LIMIT: "weekly_off_limit", // ✅ NEW: Rolling 7-day window off day limit
   WEEKLY_EARLY_LIMIT: "weekly_early_limit", // ✅ NEW: Rolling 7-day window early shift limit
   WEEKLY_LATE_LIMIT: "weekly_late_limit", // ✅ NEW: Rolling 7-day window late shift limit
@@ -528,18 +588,22 @@ export const validateMonthlyOffLimits = async (
 
 /**
  * Validate daily limits for a specific date
+ * ✅ Phase 2: Enhanced to accept optional customLimits from useAISettings
  * @param {Object} scheduleData - Complete schedule data for all staff
  * @param {string} dateKey - Date in YYYY-MM-DD format
  * @param {Array} staffMembers - Array of staff member objects
+ * @param {Object} customLimits - Optional custom limits (from useAISettings.dailyLimitsRaw)
  * @returns {Object} Validation result
  */
 export const validateDailyLimits = async (
   scheduleData,
   dateKey,
   staffMembers,
+  customLimits = null,
 ) => {
   const violations = [];
-  const dailyLimits = await getDailyLimits();
+  // ✅ Phase 2: Use customLimits if provided, otherwise fetch from cache/static
+  const dailyLimits = customLimits || await getDailyLimits();
 
   let offCount = 0;
   let earlyCount = 0;
@@ -603,11 +667,11 @@ export const validateDailyLimits = async (
     });
   }
 
-  // Check daily off limit (MIN)
+  // Check daily off limit (MIN) - ✅ Phase 2: Using VIOLATION_TYPES constant
   const minOffPerDay = dailyLimits.minOffPerDay || 0;
   if (minOffPerDay > 0 && offCount < minOffPerDay) {
     violations.push({
-      type: "min_off_per_day",
+      type: VIOLATION_TYPES.MIN_OFF_PER_DAY,
       date: dateKey,
       message: `Too few staff off on ${dateKey}: ${offCount} is below minimum of ${minOffPerDay}`,
       severity: "medium",
@@ -637,11 +701,11 @@ export const validateDailyLimits = async (
     });
   }
 
-  // Check daily early shift limit (MIN)
+  // Check daily early shift limit (MIN) - ✅ Phase 2: Using VIOLATION_TYPES constant
   const minEarlyPerDay = dailyLimits.minEarlyPerDay || 0;
   if (minEarlyPerDay > 0 && earlyCount < minEarlyPerDay) {
     violations.push({
-      type: "min_early_per_day",
+      type: VIOLATION_TYPES.MIN_EARLY_PER_DAY,
       date: dateKey,
       message: `Too few early shifts on ${dateKey}: ${earlyCount} is below minimum of ${minEarlyPerDay}`,
       severity: "medium",
@@ -654,11 +718,11 @@ export const validateDailyLimits = async (
     });
   }
 
-  // Check daily late shift limit (MAX)
+  // Check daily late shift limit (MAX) - ✅ Phase 2: Using VIOLATION_TYPES constant
   const maxLatePerDay = dailyLimits.maxLatePerDay || 3;
   if (lateCount > maxLatePerDay) {
     violations.push({
-      type: "max_late_per_day",
+      type: VIOLATION_TYPES.DAILY_LATE_LIMIT,
       date: dateKey,
       message: `Too many late shifts on ${dateKey}: ${lateCount} exceeds limit of ${maxLatePerDay}`,
       severity: "medium",
@@ -671,11 +735,11 @@ export const validateDailyLimits = async (
     });
   }
 
-  // Check daily late shift limit (MIN)
+  // Check daily late shift limit (MIN) - ✅ Phase 2: Using VIOLATION_TYPES constant
   const minLatePerDay = dailyLimits.minLatePerDay || 0;
   if (minLatePerDay > 0 && lateCount < minLatePerDay) {
     violations.push({
-      type: "min_late_per_day",
+      type: VIOLATION_TYPES.MIN_LATE_PER_DAY,
       date: dateKey,
       message: `Too few late shifts on ${dateKey}: ${lateCount} is below minimum of ${minLatePerDay}`,
       severity: "medium",
