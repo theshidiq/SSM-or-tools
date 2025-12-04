@@ -7,7 +7,10 @@
  */
 
 import { TensorFlowScheduler } from "../ml/TensorFlowScheduler";
-import { validateAllConstraints } from "../constraints/ConstraintEngine";
+import {
+  validateAllConstraints,
+  getDailyLimitsSync, // ✅ Phase 5: Import sync getter for dynamic limits fallback
+} from "../constraints/ConstraintEngine";
 import { extractAllDataForAI } from "../utils/DataExtractor";
 import { BusinessRuleValidator } from "./BusinessRuleValidator";
 import { calculatePatternStability } from "../core/PatternRecognizer";
@@ -277,9 +280,10 @@ export class HybridPredictor {
             dateRange,
             onProgress, // Forward progress callback to ML engine
             // ✅ Pass priority rules and constraints to ML engine
+            // ✅ Phase 5: Use getDailyLimitsSync() as fallback for dynamic limits
             {
               priorityRules: liveSettings?.priorityRules || [],
-              dailyLimits: liveSettings?.dailyLimits || [],
+              dailyLimits: liveSettings?.dailyLimits || getDailyLimitsSync(),
               monthlyLimits: liveSettings?.monthlyLimits || [],
               staffGroups: liveSettings?.staffGroups || [],
               settingsProvider: this.settingsProvider, // Pass settings provider for real-time access
