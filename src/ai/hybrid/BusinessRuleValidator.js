@@ -19,6 +19,7 @@ import {
   VIOLATION_TYPES,
   PRIORITY_RULES,
   DAILY_LIMITS,
+  getDailyLimitsSync, // ✅ Phase 4: Import sync getter for dynamic limits
   getMonthlyLimits,
   getDailyLimits,
   getPriorityRules,
@@ -290,9 +291,10 @@ export class BusinessRuleValidator {
           weeklyLimitsLength: settings.weeklyLimits?.length || 0,
         });
 
+        // ✅ Phase 4: Prefer dynamic limits over static DAILY_LIMITS
         const result = {
           staffGroups: settings.staffGroups || [],
-          dailyLimits: settings.dailyLimits || DAILY_LIMITS,
+          dailyLimits: settings.dailyLimits || getDailyLimitsSync(),
           weeklyLimits: settings.weeklyLimits || [],
           monthlyLimits: settings.monthlyLimits || {},
           priorityRules: settings.priorityRules || PRIORITY_RULES,
@@ -312,10 +314,10 @@ export class BusinessRuleValidator {
     console.log("🔍 [getLiveSettings] No settingsProvider, using cached config");
 
     // Fallback to cached configuration (legacy path)
-    // ✅ CLEANED: No static staff groups fallback - database-only
+    // ✅ Phase 4: Prefer dynamic limits over static DAILY_LIMITS
     return {
       staffGroups: this.configurationCache.get("staffGroups") || [],
-      dailyLimits: this.configurationCache.get("dailyLimits") || DAILY_LIMITS,
+      dailyLimits: this.configurationCache.get("dailyLimits") || getDailyLimitsSync(),
       weeklyLimits: this.configurationCache.get("weeklyLimits") || [],
       monthlyLimits: this.configurationCache.get("monthlyLimits") || {},
       priorityRules:
