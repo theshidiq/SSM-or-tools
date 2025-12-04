@@ -73,82 +73,159 @@ export const useAISettings = () => {
   }, [settings?.staffGroups]);
 
   /**
-   * Transform daily limits from database format to AI format
-   * NEW FORMAT (object): { maxOffPerDay: 3, maxEarlyPerDay: 2, maxLatePerDay: 3 }
+   * ✅ NEW: Raw daily limits object for direct use by ConstraintEngine
+   * This provides the flat object format that ConstraintEngine.validateDailyLimits() expects
+   * Includes both MIN and MAX constraints from database
+   *
+   * Format: {
+   *   minOffPerDay: 0, maxOffPerDay: 3,
+   *   minEarlyPerDay: 0, maxEarlyPerDay: 2,
+   *   minLatePerDay: 0, maxLatePerDay: 3,
+   *   minWorkingStaffPerDay: 3,
+   *   _source: 'database' | 'default'
+   * }
+   */
+  const dailyLimitsRaw = useMemo(() => {
+    const dbLimits = settings?.dailyLimits;
+
+    // Default values if no database limits
+    const defaults = {
+      minOffPerDay: 0,
+      maxOffPerDay: 3,
+      minEarlyPerDay: 0,
+      maxEarlyPerDay: 2,
+      minLatePerDay: 0,
+      maxLatePerDay: 3,
+      minWorkingStaffPerDay: 3,
+    };
+
+    if (!dbLimits || (typeof dbLimits === 'object' && Object.keys(dbLimits).length === 0)) {
+      console.log('[useAISettings] No dailyLimits from database, using defaults');
+      return {
+        ...defaults,
+        _source: 'default',
+      };
+    }
+
+    // If it's an array (old format), extract first item or use defaults
+    if (Array.isArray(dbLimits)) {
+      console.log('[useAISettings] dailyLimits is array format (legacy), using defaults');
+      return {
+        ...defaults,
+        _source: 'default',
+      };
+    }
+
+    // Validate min <= max constraints
+    const validated = {
+      minOffPerDay: dbLimits.minOffPerDay ?? defaults.minOffPerDay,
+      maxOffPerDay: dbLimits.maxOffPerDay ?? defaults.maxOffPerDay,
+      minEarlyPerDay: dbLimits.minEarlyPerDay ?? defaults.minEarlyPerDay,
+      maxEarlyPerDay: dbLimits.maxEarlyPerDay ?? defaults.maxEarlyPerDay,
+      minLatePerDay: dbLimits.minLatePerDay ?? defaults.minLatePerDay,
+      maxLatePerDay: dbLimits.maxLatePerDay ?? defaults.maxLatePerDay,
+      minWorkingStaffPerDay: dbLimits.minWorkingStaffPerDay ?? defaults.minWorkingStaffPerDay,
+    };
+
+    // Ensure min <= max for each constraint type
+    if (validated.minOffPerDay > validated.maxOffPerDay) {
+      console.warn('[useAISettings] minOffPerDay > maxOffPerDay, adjusting');
+      validated.minOffPerDay = validated.maxOffPerDay;
+    }
+    if (validated.minEarlyPerDay > validated.maxEarlyPerDay) {
+      console.warn('[useAISettings] minEarlyPerDay > maxEarlyPerDay, adjusting');
+      validated.minEarlyPerDay = validated.maxEarlyPerDay;
+    }
+    if (validated.minLatePerDay > validated.maxLatePerDay) {
+      console.warn('[useAISettings] minLatePerDay > maxLatePerDay, adjusting');
+      validated.minLatePerDay = validated.maxLatePerDay;
+    }
+
+    console.log('[useAISettings] ✅ Daily limits loaded from database:', validated);
+
+    return {
+      ...validated,
+      _source: 'database',
+    };
+  }, [settings?.dailyLimits]);
+
+  /**
+   * Transform daily limits from database format to AI format (array)
+   * NEW FORMAT (object): { maxOffPerDay: 3, maxEarlyPerDay: 2, maxLatePerDay: 3, minOffPerDay: 0, ... }
    * OLD FORMAT (array): [{ id, name, limitConfig: {...} }]
-   * AI FORMAT (array): [{ id, name, shiftType, maxCount, constraints: {...} }]
+   * AI FORMAT (array): [{ id, name, shiftType, minCount, maxCount, constraints: {...} }]
+   *
+   * ✅ ENHANCED: Now includes MIN constraints for better schedule distribution
    */
   const dailyLimits = useMemo(() => {
     if (!settings?.dailyLimits) return [];
 
     const limits = settings.dailyLimits;
 
-    // NEW FORMAT: Object with maxOffPerDay, maxEarlyPerDay, maxLatePerDay
+    // NEW FORMAT: Object with minOffPerDay, maxOffPerDay, minEarlyPerDay, maxEarlyPerDay, etc.
     // Transform to array format for AI compatibility
     if (!Array.isArray(limits)) {
       const dailyLimitsArray = [];
 
-      // Add off days limit
-      if (limits.maxOffPerDay !== undefined) {
-        dailyLimitsArray.push({
-          id: 'daily-limit-off',
-          name: 'Maximum Off Days Per Day',
-          shiftType: 'off',
-          maxCount: limits.maxOffPerDay,
-          constraints: {
-            daysOfWeek: [0, 1, 2, 3, 4, 5, 6],
-            scope: 'all',
-            targetIds: [],
-            isHardConstraint: true,
-            penaltyWeight: 50,
-          },
-          description: 'Maximum number of staff that can be off per day',
-        });
-      }
+      // Add off days limit (includes both MIN and MAX)
+      dailyLimitsArray.push({
+        id: 'daily-limit-off',
+        name: 'Staff Off Days Per Day',
+        shiftType: 'off',
+        minCount: limits.minOffPerDay ?? 0,      // ✅ NEW: MIN constraint
+        maxCount: limits.maxOffPerDay ?? 3,
+        constraints: {
+          daysOfWeek: [0, 1, 2, 3, 4, 5, 6],
+          scope: 'all',
+          targetIds: [],
+          isHardConstraint: true,
+          penaltyWeight: 50,
+        },
+        description: `${limits.minOffPerDay ?? 0}-${limits.maxOffPerDay ?? 3} staff should be off per day`,
+      });
 
-      // Add early shifts limit
-      if (limits.maxEarlyPerDay !== undefined) {
-        dailyLimitsArray.push({
-          id: 'daily-limit-early',
-          name: 'Maximum Early Shifts Per Day',
-          shiftType: 'early',
-          maxCount: limits.maxEarlyPerDay,
-          constraints: {
-            daysOfWeek: [0, 1, 2, 3, 4, 5, 6],
-            scope: 'all',
-            targetIds: [],
-            isHardConstraint: false,
-            penaltyWeight: 30,
-          },
-          description: 'Maximum number of staff on early shifts per day',
-        });
-      }
+      // Add early shifts limit (includes both MIN and MAX)
+      dailyLimitsArray.push({
+        id: 'daily-limit-early',
+        name: 'Early Shifts Per Day',
+        shiftType: 'early',
+        minCount: limits.minEarlyPerDay ?? 0,    // ✅ NEW: MIN constraint
+        maxCount: limits.maxEarlyPerDay ?? 2,
+        constraints: {
+          daysOfWeek: [0, 1, 2, 3, 4, 5, 6],
+          scope: 'all',
+          targetIds: [],
+          isHardConstraint: false,
+          penaltyWeight: 30,
+        },
+        description: `${limits.minEarlyPerDay ?? 0}-${limits.maxEarlyPerDay ?? 2} staff on early shifts per day`,
+      });
 
-      // Add late shifts limit
-      if (limits.maxLatePerDay !== undefined) {
-        dailyLimitsArray.push({
-          id: 'daily-limit-late',
-          name: 'Maximum Late Shifts Per Day',
-          shiftType: 'late',
-          maxCount: limits.maxLatePerDay,
-          constraints: {
-            daysOfWeek: [0, 1, 2, 3, 4, 5, 6],
-            scope: 'all',
-            targetIds: [],
-            isHardConstraint: false,
-            penaltyWeight: 30,
-          },
-          description: 'Maximum number of staff on late shifts per day',
-        });
-      }
+      // Add late shifts limit (includes both MIN and MAX)
+      dailyLimitsArray.push({
+        id: 'daily-limit-late',
+        name: 'Late Shifts Per Day',
+        shiftType: 'late',
+        minCount: limits.minLatePerDay ?? 0,     // ✅ NEW: MIN constraint
+        maxCount: limits.maxLatePerDay ?? 3,
+        constraints: {
+          daysOfWeek: [0, 1, 2, 3, 4, 5, 6],
+          scope: 'all',
+          targetIds: [],
+          isHardConstraint: false,
+          penaltyWeight: 30,
+        },
+        description: `${limits.minLatePerDay ?? 0}-${limits.maxLatePerDay ?? 3} staff on late shifts per day`,
+      });
 
       // Add minimum working staff limit
       if (limits.minWorkingStaffPerDay !== undefined) {
         dailyLimitsArray.push({
           id: 'daily-limit-min-working',
           name: 'Minimum Working Staff Per Day',
-          shiftType: 'any',
-          maxCount: limits.minWorkingStaffPerDay,
+          shiftType: 'working',
+          minCount: limits.minWorkingStaffPerDay,  // This IS a minimum
+          maxCount: 999,  // No upper limit for working staff
           constraints: {
             daysOfWeek: [0, 1, 2, 3, 4, 5, 6],
             scope: 'all',
@@ -156,7 +233,7 @@ export const useAISettings = () => {
             isHardConstraint: true,
             penaltyWeight: 100,
           },
-          description: 'Minimum number of staff required to work per day',
+          description: `At least ${limits.minWorkingStaffPerDay} staff must work per day`,
         });
       }
 
@@ -168,6 +245,7 @@ export const useAISettings = () => {
       id: limit.id,
       name: limit.name,
       shiftType: limit.shiftType || limit.shift_type || "any",
+      minCount: limit.minCount || limit.min_count || 0,  // ✅ NEW: MIN constraint
       maxCount: limit.maxCount || limit.max_count || 0,
       constraints: {
         daysOfWeek: limit.daysOfWeek || limit.days_of_week || [0, 1, 2, 3, 4, 5, 6],
@@ -393,11 +471,12 @@ export const useAISettings = () => {
   const allConstraints = useMemo(() => {
     return {
       daily: dailyLimits,
+      dailyRaw: dailyLimitsRaw, // ✅ NEW: Raw object format for ConstraintEngine
       weekly: weeklyLimits, // ✅ NEW: Rolling 7-day window constraints
       monthly: monthlyLimits,
       priority: priorityRules.filter(rule => rule.validity.isActive),
     };
-  }, [dailyLimits, weeklyLimits, monthlyLimits, priorityRules]);
+  }, [dailyLimits, dailyLimitsRaw, weeklyLimits, monthlyLimits, priorityRules]);
 
   /**
    * Get constraint weights for AI optimization
@@ -523,8 +602,16 @@ export const useAISettings = () => {
       mlModel: mlConfig.modelName,
       hardConstraints: constraintWeights.hardConstraints.length,
       softConstraints: constraintWeights.softConstraints.length,
+      // ✅ NEW: Daily limits summary for AI debugging
+      dailyLimitsSource: dailyLimitsRaw._source,
+      dailyLimitsConfig: {
+        off: `${dailyLimitsRaw.minOffPerDay}-${dailyLimitsRaw.maxOffPerDay}`,
+        early: `${dailyLimitsRaw.minEarlyPerDay}-${dailyLimitsRaw.maxEarlyPerDay}`,
+        late: `${dailyLimitsRaw.minLatePerDay}-${dailyLimitsRaw.maxLatePerDay}`,
+        minWorking: dailyLimitsRaw.minWorkingStaffPerDay,
+      },
     };
-  }, [version, backendMode, staffGroups, dailyLimits, monthlyLimits,
+  }, [version, backendMode, staffGroups, dailyLimits, dailyLimitsRaw, monthlyLimits,
       priorityRules, mlConfig, constraintWeights]);
 
   // Return AI-friendly interface
@@ -569,6 +656,7 @@ export const useAISettings = () => {
     const settingsData = {
       staffGroups,
       dailyLimits,
+      dailyLimitsRaw, // ✅ NEW: Raw object format for ConstraintEngine
       weeklyLimits, // ✅ FIX: Include weekly limits in getSettings() return value
       monthlyLimits,
       priorityRules,
@@ -584,6 +672,7 @@ export const useAISettings = () => {
       // Properties for direct access (backward compatibility)
       staffGroups,
       dailyLimits,
+      dailyLimitsRaw, // ✅ NEW: Raw object format for ConstraintEngine
       weeklyLimits, // ✅ NEW: Rolling 7-day window limits
       monthlyLimits,
       priorityRules,
@@ -621,6 +710,7 @@ export const useAISettings = () => {
     settings,
     staffGroups,
     dailyLimits,
+    dailyLimitsRaw, // ✅ NEW: Raw object format
     weeklyLimits, // ✅ NEW
     monthlyLimits,
     priorityRules,
