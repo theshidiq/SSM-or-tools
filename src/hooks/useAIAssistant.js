@@ -16,6 +16,10 @@ const loadConstraintEngine = async () => {
   return {
     onConfigurationCacheInvalidated: module.onConfigurationCacheInvalidated,
     refreshAllConfigurations: module.refreshAllConfigurations,
+    // ✅ Phase 6: Export dynamic daily limits functions
+    setDynamicDailyLimits: module.setDynamicDailyLimits,
+    clearDynamicDailyLimits: module.clearDynamicDailyLimits,
+    getDailyLimitsSync: module.getDailyLimitsSync,
   };
 };
 
@@ -269,6 +273,26 @@ export const useAIAssistant = (
     };
   }, []);
 
+  // ✅ Phase 6: Sync daily limits to ConstraintEngine when aiSettings change
+  useEffect(() => {
+    const syncDailyLimits = async () => {
+      if (!aiSettings.isConnected || aiSettings.isLoading) return;
+
+      try {
+        const settings = aiSettings.getSettings();
+        if (settings?.dailyLimits) {
+          const constraintEngine = await loadConstraintEngine();
+          constraintEngine.setDynamicDailyLimits(settings.dailyLimits);
+          console.log('[useAIAssistant] Daily limits re-synced on settings change');
+        }
+      } catch (error) {
+        console.warn('[useAIAssistant] Failed to sync daily limits on change:', error.message);
+      }
+    };
+
+    syncDailyLimits();
+  }, [aiSettings.isConnected, aiSettings.isLoading]);
+
   // Initialize main-thread AI system with business rule compliance
   const initializeAI = useCallback(async () => {
     if (isInitialized || aiSystemRef.current) return;
@@ -292,6 +316,17 @@ export const useAIAssistant = (
         const settings = aiSettings.isConnected && !aiSettings.isLoading
           ? aiSettings.getSettings()
           : {};
+
+        // ✅ Phase 6: Sync daily limits to ConstraintEngine for global access
+        if (settings?.dailyLimits) {
+          try {
+            const constraintEngine = await loadConstraintEngine();
+            constraintEngine.setDynamicDailyLimits(settings.dailyLimits);
+            console.log('[useAIAssistant] Daily limits synced to ConstraintEngine:', settings.dailyLimits);
+          } catch (error) {
+            console.warn('[useAIAssistant] Failed to sync daily limits:', error.message);
+          }
+        }
 
         await hybridPredictor.initialize({
           mlConfidenceThreshold: 0.8,
