@@ -11,7 +11,7 @@ import {
   isWorkingShift,
   getDayOfWeek,
   PRIORITY_RULES,
-  DAILY_LIMITS,
+  getDailyLimitsSync, // ✅ Phase 3: Import sync getter for dynamic limits
   getMonthlyLimits,
   getStaffConflictGroups,
 } from "../constraints/ConstraintEngine";
@@ -20,11 +20,13 @@ import {
  * CSP Solver for shift scheduling
  */
 export class CSPSolver {
-  constructor() {
+  constructor(options = {}) {
     this.initialized = false;
     this.domain = ["", "△", "◇", "×"]; // Possible shift values
     this.constraints = [];
     this.staffGroups = []; // ✅ Database-only staff groups
+    // ✅ Phase 3: Daily limits from options or dynamic getter
+    this.dailyLimits = options.dailyLimits || getDailyLimitsSync();
     this.heuristics = {
       variableOrdering: "most_constrained_first",
       valueOrdering: "least_constraining_first",
@@ -38,6 +40,13 @@ export class CSPSolver {
       averageBacktracks: 0,
       constraintChecks: 0,
     };
+
+    // ✅ Phase 3: Log daily limits source
+    if (options.dailyLimits) {
+      console.log('[CSPSolver] Using provided daily limits:', this.dailyLimits);
+    } else {
+      console.log('[CSPSolver] Using dynamic/static daily limits:', this.dailyLimits);
+    }
   }
 
   /**
@@ -607,32 +616,35 @@ export class CSPSolver {
 
   checkDailyLimits(problem, assignments, variable, value) {
     const dateKey = variable.dateKey;
+    // ✅ Phase 3: Use instance daily limits (dynamic from database)
+    const limits = this.dailyLimits;
 
     // Count assignments for this date
     let offCount = 0;
     let earlyCount = 0;
-    let _workingCount = 0;
+    let lateCount = 0;
+    let workingCount = 0;
 
     problem.variables.forEach((v) => {
       if (v.dateKey === dateKey && assignments.has(v.id)) {
         const assignedValue = assignments.get(v.id);
         if (isOffDay(assignedValue)) offCount++;
         else if (isEarlyShift(assignedValue)) earlyCount++;
-        if (isWorkingShift(assignedValue)) _workingCount++;
+        else if (assignedValue === '◇') lateCount++; // Late shift
+        if (isWorkingShift(assignedValue)) workingCount++;
       }
     });
 
-    // Check limits
-    if (isOffDay(value) && offCount >= DAILY_LIMITS.maxOffPerDay) return false;
-    if (isEarlyShift(value) && earlyCount >= DAILY_LIMITS.maxEarlyPerDay)
-      return false;
+    // ✅ Phase 3: Check MAX limits using dynamic daily limits
+    if (isOffDay(value) && offCount >= limits.maxOffPerDay) return false;
+    if (isEarlyShift(value) && earlyCount >= limits.maxEarlyPerDay) return false;
+    if (value === '◇' && lateCount >= limits.maxLatePerDay) return false;
 
-    // Check minimum working staff
+    // ✅ Phase 3: Check minimum working staff using dynamic limits
     const totalStaffForDate = problem.variables.filter(
       (v) => v.dateKey === dateKey,
     ).length;
-    const maxOffAllowed =
-      totalStaffForDate - DAILY_LIMITS.minWorkingStaffPerDay;
+    const maxOffAllowed = totalStaffForDate - limits.minWorkingStaffPerDay;
     if (isOffDay(value) && offCount >= maxOffAllowed) return false;
 
     return true;
@@ -884,6 +896,8 @@ export class CSPSolver {
       })),
       heuristics: { ...this.heuristics },
       statistics: { ...this.solutionStats },
+      // ✅ Phase 3: Include daily limits in status
+      dailyLimits: { ...this.dailyLimits },
       successRate:
         this.solutionStats.totalSolutions > 0
           ? (this.solutionStats.successfulSolutions /
@@ -891,5 +905,16 @@ export class CSPSolver {
             100
           : 0,
     };
+  }
+
+  /**
+   * ✅ Phase 3: Update daily limits at runtime
+   * @param {Object} newLimits - New daily limits to use
+   */
+  updateDailyLimits(newLimits) {
+    if (newLimits && typeof newLimits === 'object') {
+      this.dailyLimits = { ...this.dailyLimits, ...newLimits };
+      console.log('[CSPSolver] Daily limits updated:', this.dailyLimits);
+    }
   }
 }

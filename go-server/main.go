@@ -142,13 +142,20 @@ func main() {
 
 	// Get Supabase configuration from environment
 	supabaseURL := os.Getenv("REACT_APP_SUPABASE_URL")
-	supabaseKey := os.Getenv("REACT_APP_SUPABASE_ANON_KEY")
+	supabaseKey := os.Getenv("SUPABASE_SERVICE_KEY") // Use SERVICE_ROLE key to bypass RLS
 
 	if supabaseURL == "" {
 		supabaseURL = "https://ymdyejrljmvajqjbejvh.supabase.co"
 	}
 	if supabaseKey == "" {
-		supabaseKey = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InltZHllanJsam12YWpxamJlanZoIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTI3MjE1NDMsImV4cCI6MjA2ODI5NzU0M30.wFirIfjnpkgRqDhECW6XZKkzWg_Q-pvs7jX_FIAMYfE"
+		// Fallback to ANON key if SERVICE_ROLE not set
+		supabaseKey = os.Getenv("REACT_APP_SUPABASE_ANON_KEY")
+		if supabaseKey == "" {
+			supabaseKey = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InltZHllanJsam12YWpxamJlanZoIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTI3MjE1NDMsImV4cCI6MjA2ODI5NzU0M30.wFirIfjnpkgRqDhECW6XZKkzWg_Q-pvs7jX_FIAMYfE"
+		}
+		log.Println("⚠️ WARNING: Using ANON key - some operations may be restricted by RLS policies")
+	} else {
+		log.Println("✅ Using SERVICE_ROLE key - RLS policies will be bypassed")
 	}
 
 	server := &StaffSyncServer{
@@ -176,8 +183,8 @@ func main() {
 	log.Printf("Supported message types:")
 	log.Printf("  Staff: %s, %s, %s, %s",
 		MESSAGE_SYNC_REQUEST, MESSAGE_STAFF_UPDATE, MESSAGE_STAFF_CREATE, MESSAGE_STAFF_DELETE)
-	log.Printf("  Settings: %s, %s, %s, %s",
-		MESSAGE_SETTINGS_SYNC_REQUEST, MESSAGE_SETTINGS_UPDATE_STAFF_GROUPS, MESSAGE_SETTINGS_UPDATE_WEEKLY_LIMITS, MESSAGE_SETTINGS_MIGRATE)
+	log.Printf("  Settings: %s, %s, %s, %s, %s",
+		MESSAGE_SETTINGS_SYNC_REQUEST, MESSAGE_SETTINGS_UPDATE_STAFF_GROUPS, MESSAGE_SETTINGS_UPDATE_DAILY_LIMITS, MESSAGE_SETTINGS_UPDATE_WEEKLY_LIMITS, MESSAGE_SETTINGS_MIGRATE)
 	log.Printf("  Shifts: %s, %s, %s",
 		MESSAGE_SHIFT_UPDATE, MESSAGE_SHIFT_SYNC_REQUEST, MESSAGE_SHIFT_BULK_UPDATE)
 	log.Printf("  Common: %s, %s", MESSAGE_CONNECTION_ACK, MESSAGE_ERROR)
