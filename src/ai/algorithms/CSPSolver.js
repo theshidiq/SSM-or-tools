@@ -298,6 +298,11 @@ export class CSPSolver {
     // Start backtracking
     const result = await this.backtrack(problem, stats, timeLimit);
 
+    // ✅ Phase 3: Post-process to enforce MINIMUM constraints
+    if (result.success) {
+      this.enforceMinimumConstraints(problem);
+    }
+
     return {
       success: result.success,
       schedule: result.success
@@ -312,6 +317,95 @@ export class CSPSolver {
       completeness: this.calculateCompleteness(problem),
       feasible: result.feasible !== false,
     };
+  }
+
+  /**
+   * ✅ Phase 3: Enforce minimum constraints after CSP solution
+   * CSP can only enforce MAX constraints during backtracking.
+   * MIN constraints require post-processing to add necessary assignments.
+   * @param {Object} problem - CSP problem with completed assignments
+   */
+  enforceMinimumConstraints(problem) {
+    const limits = this.dailyLimits;
+    const dateGroups = new Map();
+
+    // Group variables by date
+    problem.variables.forEach((v) => {
+      if (!dateGroups.has(v.dateKey)) {
+        dateGroups.set(v.dateKey, []);
+      }
+      dateGroups.get(v.dateKey).push(v);
+    });
+
+    // Process each date to enforce minimums
+    dateGroups.forEach((variables, dateKey) => {
+      // Count current assignments
+      let offCount = 0;
+      let earlyCount = 0;
+      let lateCount = 0;
+
+      const workingStaff = []; // Staff currently working (not off)
+
+      variables.forEach((v) => {
+        const value = problem.assignments.get(v.id);
+        if (isOffDay(value)) {
+          offCount++;
+        } else if (isEarlyShift(value)) {
+          earlyCount++;
+          workingStaff.push(v);
+        } else if (value === '◇') {
+          lateCount++;
+          workingStaff.push(v);
+        } else if (isWorkingShift(value)) {
+          workingStaff.push(v);
+        }
+      });
+
+      // Enforce minOffPerDay - convert working staff to off if needed
+      const minOff = limits.minOffPerDay || 0;
+      if (offCount < minOff && workingStaff.length > 0) {
+        const neededOff = minOff - offCount;
+        console.log(`[CSPSolver] Date ${dateKey}: Need ${neededOff} more off days (current: ${offCount}, min: ${minOff})`);
+
+        // Sort working staff by preference (avoid early/late shift holders, prefer normal shifts)
+        const candidates = workingStaff
+          .filter(v => {
+            const value = problem.assignments.get(v.id);
+            // Prefer converting normal shifts (○ or empty) to off, not early/late
+            return !isEarlyShift(value) && value !== '◇';
+          })
+          .slice(0, neededOff);
+
+        // If not enough normal shift candidates, use any working staff
+        if (candidates.length < neededOff) {
+          const remaining = neededOff - candidates.length;
+          const otherCandidates = workingStaff
+            .filter(v => !candidates.includes(v))
+            .slice(0, remaining);
+          candidates.push(...otherCandidates);
+        }
+
+        // Convert selected staff to off day
+        candidates.forEach(v => {
+          console.log(`[CSPSolver] Converting ${v.staffName} on ${dateKey} from "${problem.assignments.get(v.id)}" to "×" (off)`);
+          problem.assignments.set(v.id, '×');
+        });
+      }
+
+      // Enforce minEarlyPerDay
+      const minEarly = limits.minEarlyPerDay || 0;
+      if (earlyCount < minEarly) {
+        // This is harder - would need to convert other shifts to early
+        // For now, log a warning
+        console.log(`[CSPSolver] Warning: Date ${dateKey} has ${earlyCount} early shifts, min required: ${minEarly}`);
+      }
+
+      // Enforce minLatePerDay
+      const minLate = limits.minLatePerDay || 0;
+      if (lateCount < minLate) {
+        console.log(`[CSPSolver] Warning: Date ${dateKey} has ${lateCount} late shifts, min required: ${minLate}`);
+      }
+    });
   }
 
   /**

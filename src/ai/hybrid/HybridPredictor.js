@@ -522,6 +522,13 @@ export class HybridPredictor {
         dateRange,
       );
 
+      // Step 7: ✅ REMOVED - Post-processing MIN enforcement moved to BusinessRuleValidator BALANCE phase
+      // The post-processing was causing constraint violations because it ran AFTER all constraint checking.
+      // MIN enforcement now happens DURING generation in BusinessRuleValidator's BALANCE phase,
+      // which properly checks staff groups, 5-day rest, adjacent conflicts, and monthly limits.
+      // See: BusinessRuleValidator.js lines 1257-1352 (BALANCE phase)
+      console.log("⚖️ [HybridPredictor] MIN enforcement handled by BusinessRuleValidator BALANCE phase (no post-processing)");
+
       // 🎯 Build result object with comprehensive metadata
       console.log(`📊 [RESULT] Building result object for ${predictionMethod} schedule`);
       console.log(`📊 [RESULT] Schedule has ${Object.keys(finalSchedule || {}).length} staff members`);
@@ -1745,6 +1752,110 @@ export class HybridPredictor {
       return updatedSchedule;
     } catch (error) {
       console.error("❌ [HybridPredictor] Error applying backup staff assignments:", error);
+      return schedule; // Return original schedule on error
+    }
+  }
+
+  /**
+   * ✅ CRITICAL: Post-process final schedule to enforce MIN daily limits
+   * This ensures MIN constraints are applied AFTER all merging/processing is complete.
+   * Unlike the balancing in generateRuleBasedSchedule (which only applies to fresh schedules),
+   * this applies to the FINAL schedule that will be saved.
+   *
+   * @param {Object} schedule - Final schedule after all processing
+   * @param {Array} staffMembers - Staff member data
+   * @param {Array} dateRange - Date range for schedule
+   * @param {Object} liveSettings - Live settings from settings provider
+   * @returns {Object} Schedule with MIN limits enforced
+   */
+  async enforceMinDailyLimitsPostProcess(schedule, staffMembers, dateRange, liveSettings) {
+    try {
+      // Get daily limits from settings (prefer dailyLimitsRaw which has the correct format)
+      // liveSettings.dailyLimits is an array format for AI, dailyLimitsRaw is the object format
+      const dailyLimits = liveSettings?.dailyLimitsRaw || liveSettings?.dailyLimits || {};
+      const minOffPerDay = dailyLimits.minOffPerDay ?? 0;
+      const maxOffPerDay = dailyLimits.maxOffPerDay ?? 3;
+
+      console.log(`⚖️ [MIN-ENFORCE] Post-processing schedule for MIN limits (minOffPerDay: ${minOffPerDay}, maxOffPerDay: ${maxOffPerDay})`);
+
+      // Skip if no MIN constraint configured
+      if (minOffPerDay <= 0) {
+        console.log(`⚖️ [MIN-ENFORCE] No MIN constraint configured (minOffPerDay: ${minOffPerDay}), skipping`);
+        return schedule;
+      }
+
+      let changesCount = 0;
+
+      // Helper function to count off days on a specific date
+      const countOffDaysOnDate = (sched, dateKey, staff) => {
+        return staff.filter(s => sched[s.id]?.[dateKey] === "×").length;
+      };
+
+      // Helper function to check for adjacent day conflicts
+      const hasAdjacentConflict = (staffId, dateKey, sched) => {
+        const date = new Date(dateKey);
+        const prevDate = new Date(date);
+        prevDate.setDate(prevDate.getDate() - 1);
+        const nextDate = new Date(date);
+        nextDate.setDate(nextDate.getDate() + 1);
+
+        const prevKey = prevDate.toISOString().split("T")[0];
+        const nextKey = nextDate.toISOString().split("T")[0];
+
+        // Check if assigning × would create 3+ consecutive off days
+        const prevOff = sched[staffId]?.[prevKey] === "×";
+        const nextOff = sched[staffId]?.[nextKey] === "×";
+
+        return prevOff && nextOff; // Would create 3 consecutive off days
+      };
+
+      // Process each date in range
+      for (const date of dateRange) {
+        const dateKey = date.toISOString().split("T")[0];
+        const currentOffCount = countOffDaysOnDate(schedule, dateKey, staffMembers);
+
+        // Only enforce MIN if below minimum
+        if (currentOffCount < minOffPerDay) {
+          const needed = minOffPerDay - currentOffCount;
+          console.log(`⚠️ [MIN-ENFORCE] ${dateKey}: Only ${currentOffCount} staff off, need ${needed} more (min: ${minOffPerDay})`);
+
+          // Find eligible staff to assign × (not already off, not on early shift, not backup-only)
+          const eligibleStaff = staffMembers.filter(staff => {
+            const shift = schedule[staff.id]?.[dateKey];
+            // Skip if already off or on early shift
+            if (shift === "×" || shift === "△") return false;
+            // Skip backup staff
+            if (this.backupStaffService?.isBackupStaff?.(staff.id)) return false;
+            // Skip if would create adjacent conflict
+            if (hasAdjacentConflict(staff.id, dateKey, schedule)) return false;
+            return true;
+          });
+
+          // Assign × to eligible staff until we reach minimum
+          let assigned = 0;
+          for (const staff of eligibleStaff) {
+            if (assigned >= needed) break;
+
+            // Initialize staff schedule if needed
+            if (!schedule[staff.id]) {
+              schedule[staff.id] = {};
+            }
+
+            schedule[staff.id][dateKey] = "×";
+            assigned++;
+            changesCount++;
+            console.log(`  ✅ [MIN-ENFORCE] ${staff.name}: Added × on ${dateKey} (enforcing min ${minOffPerDay})`);
+          }
+
+          const finalCount = countOffDaysOnDate(schedule, dateKey, staffMembers);
+          console.log(`  📊 [MIN-ENFORCE] ${dateKey}: Final count ${finalCount}/${minOffPerDay} (added ${assigned})`);
+        }
+      }
+
+      console.log(`✅ [MIN-ENFORCE] Post-processing complete: ${changesCount} change(s) made to enforce MIN daily limits`);
+      return schedule;
+    } catch (error) {
+      console.error("❌ [MIN-ENFORCE] Error enforcing MIN daily limits:", error);
       return schedule; // Return original schedule on error
     }
   }

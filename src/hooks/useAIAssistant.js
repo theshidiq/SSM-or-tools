@@ -279,11 +279,13 @@ export const useAIAssistant = (
       if (!aiSettings.isConnected || aiSettings.isLoading) return;
 
       try {
-        const settings = aiSettings.getSettings();
-        if (settings?.dailyLimits) {
+        // ✅ FIX: Use dailyLimitsRaw directly from aiSettings (object format)
+        // ✅ FIX: Only sync when data comes from database, not defaults
+        const dailyLimitsRaw = aiSettings.dailyLimitsRaw;
+        if (dailyLimitsRaw && dailyLimitsRaw._source === 'database') {
           const constraintEngine = await loadConstraintEngine();
-          constraintEngine.setDynamicDailyLimits(settings.dailyLimits);
-          console.log('[useAIAssistant] Daily limits re-synced on settings change');
+          constraintEngine.setDynamicDailyLimits(dailyLimitsRaw);
+          console.log('[useAIAssistant] Daily limits re-synced on settings change:', dailyLimitsRaw);
         }
       } catch (error) {
         console.warn('[useAIAssistant] Failed to sync daily limits on change:', error.message);
@@ -291,7 +293,8 @@ export const useAIAssistant = (
     };
 
     syncDailyLimits();
-  }, [aiSettings.isConnected, aiSettings.isLoading]);
+  // ✅ FIX: Add dailyLimitsRaw to dependency array to re-run when data changes
+  }, [aiSettings.isConnected, aiSettings.isLoading, aiSettings.dailyLimitsRaw]);
 
   // Initialize main-thread AI system with business rule compliance
   const initializeAI = useCallback(async () => {
@@ -318,11 +321,13 @@ export const useAIAssistant = (
           : {};
 
         // ✅ Phase 6: Sync daily limits to ConstraintEngine for global access
-        if (settings?.dailyLimits) {
+        // ✅ FIX: Use dailyLimitsRaw (object format) not dailyLimits (array format)
+        // ✅ FIX: Only sync when data comes from database, not defaults
+        if (settings?.dailyLimitsRaw && settings.dailyLimitsRaw._source === 'database') {
           try {
             const constraintEngine = await loadConstraintEngine();
-            constraintEngine.setDynamicDailyLimits(settings.dailyLimits);
-            console.log('[useAIAssistant] Daily limits synced to ConstraintEngine:', settings.dailyLimits);
+            constraintEngine.setDynamicDailyLimits(settings.dailyLimitsRaw);
+            console.log('[useAIAssistant] Daily limits synced to ConstraintEngine:', settings.dailyLimitsRaw);
           } catch (error) {
             console.warn('[useAIAssistant] Failed to sync daily limits:', error.message);
           }

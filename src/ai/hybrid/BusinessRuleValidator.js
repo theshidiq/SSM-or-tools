@@ -145,6 +145,80 @@ function countOffDaysOnDate(schedule, dateKey, staffMembers) {
   ).length;
 }
 
+/**
+ * Check if assigning × to a staff member would create consecutive off days (2+)
+ * @param {Object} staff - Staff member to check
+ * @param {string} dateKey - Date to check (YYYY-MM-DD)
+ * @param {Object} schedule - Current schedule
+ * @returns {boolean} True if assignment would create consecutive × pattern
+ */
+function wouldCreateConsecutiveOff(staff, dateKey, schedule) {
+  const staffSchedule = schedule[staff.id];
+  if (!staffSchedule) return false;
+
+  const currentDate = new Date(dateKey);
+
+  // Check previous day
+  const prevDate = new Date(currentDate);
+  prevDate.setDate(prevDate.getDate() - 1);
+  const prevKey = prevDate.toISOString().split("T")[0];
+  const prevShift = staffSchedule[prevKey];
+
+  // Check next day
+  const nextDate = new Date(currentDate);
+  nextDate.setDate(nextDate.getDate() + 1);
+  const nextKey = nextDate.toISOString().split("T")[0];
+  const nextShift = staffSchedule[nextKey];
+
+  // Would create consecutive if either adjacent day is already ×
+  if (prevShift === "×" || nextShift === "×") {
+    return true;
+  }
+
+  return false;
+}
+
+/**
+ * Check if assigning × to a staff member would violate staff group constraints
+ * Staff groups enforce: only 1 member can be off per group per day
+ * @param {Object} staff - Staff member to check
+ * @param {string} dateKey - Date to check (YYYY-MM-DD)
+ * @param {Object} schedule - Current schedule
+ * @param {Array} staffGroups - Staff group configurations
+ * @param {Array} staffMembers - All staff members
+ * @returns {boolean} True if assignment would violate group constraint
+ */
+function wouldViolateStaffGroup(staff, dateKey, schedule, staffGroups, staffMembers) {
+  if (!staffGroups || staffGroups.length === 0) return false;
+
+  // Find which group this staff belongs to
+  const staffGroup = staffGroups.find(group => {
+    const members = group.members || [];
+    return members.includes(staff.id) || members.includes(staff.name);
+  });
+
+  if (!staffGroup) return false; // Staff not in any group
+
+  // Check if any other member in this group already has × on this date
+  const otherMembers = (staffGroup.members || []).filter(memberId =>
+    memberId !== staff.id && memberId !== staff.name
+  );
+
+  for (const memberId of otherMembers) {
+    // Find the actual staff member (by ID or name)
+    const otherStaff = staffMembers.find(s => s.id === memberId || s.name === memberId);
+    if (!otherStaff) continue;
+
+    const otherShift = schedule[otherStaff.id]?.[dateKey];
+    if (otherShift === "×" || otherShift === "△") {
+      // Another group member already has off/early shift
+      return true;
+    }
+  }
+
+  return false;
+}
+
 export class BusinessRuleValidator {
   constructor() {
     this.initialized = false;
@@ -292,15 +366,18 @@ export class BusinessRuleValidator {
         });
 
         // ✅ Phase 4: Prefer dynamic limits over static DAILY_LIMITS
+        // ✅ Phase 6: Include dailyLimitsRaw for MIN/MAX enforcement in BALANCE phase
         const result = {
           staffGroups: settings.staffGroups || [],
           dailyLimits: settings.dailyLimits || getDailyLimitsSync(),
+          dailyLimitsRaw: settings.dailyLimitsRaw || null, // Object format: {minOffPerDay, maxOffPerDay, ...}
           weeklyLimits: settings.weeklyLimits || [],
           monthlyLimits: settings.monthlyLimits || {},
           priorityRules: settings.priorityRules || PRIORITY_RULES,
         };
 
         console.log("🔍 [getLiveSettings] Returning weeklyLimits:", result.weeklyLimits);
+        console.log("🔍 [getLiveSettings] dailyLimitsRaw:", result.dailyLimitsRaw);
 
         return result;
       } catch (error) {
@@ -315,9 +392,11 @@ export class BusinessRuleValidator {
 
     // Fallback to cached configuration (legacy path)
     // ✅ Phase 4: Prefer dynamic limits over static DAILY_LIMITS
+    // ✅ Phase 6: Include dailyLimitsRaw for MIN/MAX enforcement in BALANCE phase
     return {
       staffGroups: this.configurationCache.get("staffGroups") || [],
       dailyLimits: this.configurationCache.get("dailyLimits") || getDailyLimitsSync(),
+      dailyLimitsRaw: this.configurationCache.get("dailyLimitsRaw") || null, // Object format: {minOffPerDay, maxOffPerDay, ...}
       weeklyLimits: this.configurationCache.get("weeklyLimits") || [],
       monthlyLimits: this.configurationCache.get("monthlyLimits") || {},
       priorityRules:
@@ -1217,8 +1296,8 @@ export class BusinessRuleValidator {
       // ✅ Final priority rules enforcement (ensure no overwrites)
       await this.applyPriorityRules(schedule, staffMembers, dateRange);
 
-      // 🔧 FIX: Post-generation repair to eliminate any consecutive off-days
-      await this.repairConsecutiveOffDays(schedule, staffMembers, dateRange);
+      // NOTE: repairConsecutiveOffDays moved to run AFTER BALANCE phase (see below)
+      // This ensures consecutive × patterns created by Phase 3 or BALANCE are also repaired
 
       // ✅ NEW (Phase 3): Apply combined calendar rules + early shift preferences
       // IMPORTANT: This runs LAST to ensure calendar rules override all other business rules
@@ -1255,12 +1334,19 @@ export class BusinessRuleValidator {
       });
 
       // ✅ POST-GENERATION BALANCING: Ensure min/max daily limits from configuration
+      // ✅ Phase 6: Use dailyLimitsRaw (object format) instead of dailyLimits (array format)
       const liveSettings = this.getLiveSettings();
-      const dailyLimits = liveSettings.dailyLimits || {};
-      const minOffPerDay = dailyLimits.minOffPerDay ?? 0;
-      const maxOffPerDay = dailyLimits.maxOffPerDay ?? 3;
+      const dailyLimitsRaw = liveSettings.dailyLimitsRaw || {};
+      const staffGroups = liveSettings.staffGroups || [];
+      const minOffPerDay = dailyLimitsRaw.minOffPerDay ?? 0;
+      const maxOffPerDay = dailyLimitsRaw.maxOffPerDay ?? 3;
 
       console.log(`⚖️ [BALANCE] Starting daily limit balancing (min: ${minOffPerDay}, max: ${maxOffPerDay})...`);
+      console.log(`⚖️ [BALANCE] dailyLimitsRaw source: ${dailyLimitsRaw._source || 'fallback'}, raw values:`, {
+        minOffPerDay: dailyLimitsRaw.minOffPerDay,
+        maxOffPerDay: dailyLimitsRaw.maxOffPerDay,
+      });
+      console.log(`⚖️ [BALANCE] Staff groups configured: ${staffGroups.length}`);
       let balancingChanges = 0;
 
       dateRange.forEach(date => {
@@ -1299,26 +1385,57 @@ export class BusinessRuleValidator {
           });
 
           // Assign × to eligible staff until we reach minimum
+          // ✅ Phase 6: Enhanced constraint checking - staff groups + adjacent conflicts
           let assigned = 0;
           for (const staff of eligibleStaff) {
             if (assigned >= needed) break;
 
-            // Check if this would create adjacent conflict
+            // Check 1: Adjacent conflict prevention (no ××, △×, ×△ patterns)
             const adjacentConflict = hasAdjacentConflict(staff, dateKey, "×", schedule);
-            if (!adjacentConflict) {
-              schedule[staff.id][dateKey] = "×";
-              assigned++;
-              balancingChanges++;
+            if (adjacentConflict) {
               console.log(
-                `  ✅ [BALANCE] ${staff.name}: Added × on ${dateKey} (balancing to min ${minOffPerDay})`
+                `  ⏭️ [BALANCE] ${staff.name}: Skip × on ${dateKey} (adjacent conflict)`
               );
+              continue;
             }
+
+            // Check 2: Staff group constraint (only 1 member off per group per day)
+            const groupConflict = wouldViolateStaffGroup(staff, dateKey, schedule, staffGroups, staffMembers);
+            if (groupConflict) {
+              console.log(
+                `  ⏭️ [BALANCE] ${staff.name}: Skip × on ${dateKey} (staff group conflict)`
+              );
+              continue;
+            }
+
+            // Check 3: Consecutive × prevention (no 2+ consecutive off days)
+            const consecutiveConflict = wouldCreateConsecutiveOff(staff, dateKey, schedule);
+            if (consecutiveConflict) {
+              console.log(
+                `  ⏭️ [BALANCE] ${staff.name}: Skip × on ${dateKey} (would create consecutive ×)`
+              );
+              continue;
+            }
+
+            // All checks passed - assign ×
+            schedule[staff.id][dateKey] = "×";
+            assigned++;
+            balancingChanges++;
+            console.log(
+              `  ✅ [BALANCE] ${staff.name}: Added × on ${dateKey} (balancing to min ${minOffPerDay})`
+            );
           }
 
           const finalCount = countOffDaysOnDate(schedule, dateKey, staffMembers);
           console.log(
             `  📊 [BALANCE] ${dateKey}: Final count ${finalCount}/${minOffPerDay} (added ${assigned})`
           );
+
+          // ⚠️ Phase 6.2: Warn if MIN couldn't be met (accept under-minimum per user decision)
+          if (finalCount < minOffPerDay) {
+            console.warn(`⚠️ [BALANCE] ${dateKey}: Could NOT meet minimum! Final: ${finalCount}/${minOffPerDay}`);
+            console.warn(`  → All ${eligibleStaff.length} candidates had conflicts (adjacent/group/consecutive)`);
+          }
         }
 
         // Case 2: Too many off days (> 3) - This should be prevented by earlier checks, but double-check
@@ -1351,6 +1468,14 @@ export class BusinessRuleValidator {
       console.log(
         `✅ [BALANCE] Balancing complete: ${balancingChanges} change(s) made to ensure ${minOffPerDay}-${maxOffPerDay} staff off per day`
       );
+
+      // 🔧 Phase 6.2: Enforce 5-day rest constraint (labor law compliance)
+      // This ensures no staff works more than 5 consecutive days
+      await this.enforce5DayRestAfterBalance(schedule, staffMembers, dateRange);
+
+      // 🔧 FINAL FIX: Post-BALANCE repair to eliminate any consecutive off-days
+      // This runs LAST after Phase 3, BALANCE, and 5-day rest to catch all consecutive × patterns
+      await this.repairConsecutiveOffDays(schedule, staffMembers, dateRange);
 
       return schedule;
     } catch (error) {
@@ -2057,6 +2182,12 @@ export class BusinessRuleValidator {
       `📅 [RULE-GEN] Final limits: maxOffPerMonth=${maxOffPerMonth}, maxOffPerDay=${maxOffPerDay}`,
     );
 
+    // ✅ Phase 6.3: Get MIN daily limit from dailyLimitsRaw for early enforcement
+    const liveSettingsForMin = this.getLiveSettings();
+    const dailyLimitsRaw = liveSettingsForMin.dailyLimitsRaw || {};
+    const minOffPerDay = dailyLimitsRaw.minOffPerDay ?? 0;
+    console.log(`📅 [RULE-GEN] MIN daily limit: ${minOffPerDay} (from dailyLimitsRaw)`);
+
     // ✅ PHASE 1: Randomized distribution to prevent clustering
     // Track global off-day distribution across all staff
     const globalOffDayCount = {};
@@ -2076,6 +2207,83 @@ export class BusinessRuleValidator {
         );
       }
     });
+
+    // ✅ Phase 6.3: PRE-PASS - Enforce MIN daily limits EARLY (before random distribution)
+    // This ensures dates below MIN get × assigned first, before △ assignments in later phases
+    if (minOffPerDay > 0) {
+      console.log(`🎯 [MIN-ENFORCE-EARLY] Starting early MIN enforcement (min: ${minOffPerDay})...`);
+      let earlyMinChanges = 0;
+
+      // Sort dates by current off count (prioritize dates with fewer offs)
+      const sortedDates = [...dateRange].sort((a, b) => {
+        const aKey = a.toISOString().split("T")[0];
+        const bKey = b.toISOString().split("T")[0];
+        return (globalOffDayCount[aKey] || 0) - (globalOffDayCount[bKey] || 0);
+      });
+
+      for (const date of sortedDates) {
+        const dateKey = date.toISOString().split("T")[0];
+
+        // Skip calendar rule dates
+        if (calendarRules && calendarRules[dateKey]?.must_day_off) continue;
+        if (calendarRules && calendarRules[dateKey]?.must_work) continue;
+
+        const currentOffCount = globalOffDayCount[dateKey] || 0;
+        if (currentOffCount >= minOffPerDay) continue; // Already meets MIN
+
+        const needed = minOffPerDay - currentOffCount;
+        console.log(`🎯 [MIN-ENFORCE-EARLY] ${dateKey}: Need ${needed} more × (current: ${currentOffCount})`);
+
+        // Find eligible staff for this date
+        const eligibleStaff = staffMembers.filter(staff => {
+          if (!schedule[staff.id]) return false;
+          const shift = schedule[staff.id][dateKey];
+          // Eligible if not already × or △
+          if (shift === "×" || shift === "△") return false;
+          // Skip backup staff
+          const isBackup = this.backupStaffService && this.backupStaffService.isBackupStaff(staff.id);
+          if (isBackup) return false;
+          return true;
+        });
+
+        // Shuffle eligible staff to avoid always picking same ones
+        const shuffledEligible = [...eligibleStaff].sort(() => Math.random() - 0.5);
+
+        let assigned = 0;
+        for (const staff of shuffledEligible) {
+          if (assigned >= needed) break;
+
+          // Check: Would create consecutive × (only check ×× pattern, not △×)
+          const prevDate = new Date(date);
+          prevDate.setDate(prevDate.getDate() - 1);
+          const prevKey = prevDate.toISOString().split("T")[0];
+          const nextDate = new Date(date);
+          nextDate.setDate(nextDate.getDate() + 1);
+          const nextKey = nextDate.toISOString().split("T")[0];
+
+          const prevShift = schedule[staff.id]?.[prevKey];
+          const nextShift = schedule[staff.id]?.[nextKey];
+
+          if (prevShift === "×" || nextShift === "×") {
+            console.log(`  ⏭️ [MIN-ENFORCE-EARLY] ${staff.name}: Skip (would create consecutive ×)`);
+            continue;
+          }
+
+          // Assign ×
+          schedule[staff.id][dateKey] = "×";
+          globalOffDayCount[dateKey] = (globalOffDayCount[dateKey] || 0) + 1;
+          assigned++;
+          earlyMinChanges++;
+          console.log(`  ✅ [MIN-ENFORCE-EARLY] ${staff.name}: Added × on ${dateKey}`);
+        }
+
+        if (assigned < needed) {
+          console.warn(`  ⚠️ [MIN-ENFORCE-EARLY] ${dateKey}: Only added ${assigned}/${needed} (some conflicts)`);
+        }
+      }
+
+      console.log(`✅ [MIN-ENFORCE-EARLY] Early MIN enforcement complete: ${earlyMinChanges} × assigned`);
+    }
 
     for (const staff of staffMembers) {
       if (!schedule[staff.id]) continue;
@@ -2818,6 +3026,77 @@ export class BusinessRuleValidator {
     });
 
     console.log(`✅ [REPAIR] Repair complete: ${repairsApplied} consecutive patterns eliminated`);
+  }
+
+  /**
+   * 🔧 Phase 6.2: Enforce 5-day rest constraint after BALANCE phase
+   * This ensures no staff works more than 5 consecutive days (labor law compliance)
+   * @param {Object} schedule - Current schedule
+   * @param {Array} staffMembers - Staff member data
+   * @param {Array} dateRange - Date range
+   */
+  async enforce5DayRestAfterBalance(schedule, staffMembers, dateRange) {
+    console.log("⚖️ [5-DAY-REST] Enforcing 5-day rest constraint (labor law compliance)...");
+
+    const MAX_CONSECUTIVE_WORK_DAYS = 5;
+    let fixesApplied = 0;
+
+    staffMembers.forEach((staff) => {
+      if (!schedule[staff.id]) return;
+
+      // Scan for consecutive work days
+      let consecutiveWorkDays = [];
+
+      dateRange.forEach((date, index) => {
+        const dateKey = date.toISOString().split("T")[0];
+        const shift = schedule[staff.id][dateKey];
+
+        // Working = not × and not △ (early shift still counts as working for labor law)
+        const isWorking = shift !== "×" && shift !== "△";
+
+        if (isWorking) {
+          consecutiveWorkDays.push({ dateKey, index, date });
+        } else {
+          // Check if streak exceeds 5 days
+          if (consecutiveWorkDays.length > MAX_CONSECUTIVE_WORK_DAYS) {
+            this.breakWorkStreak(schedule, staff, consecutiveWorkDays, MAX_CONSECUTIVE_WORK_DAYS);
+            fixesApplied++;
+          }
+          consecutiveWorkDays = [];
+        }
+      });
+
+      // Check final streak at end of period
+      if (consecutiveWorkDays.length > MAX_CONSECUTIVE_WORK_DAYS) {
+        this.breakWorkStreak(schedule, staff, consecutiveWorkDays, MAX_CONSECUTIVE_WORK_DAYS);
+        fixesApplied++;
+      }
+    });
+
+    console.log(`✅ [5-DAY-REST] Enforcement complete: ${fixesApplied} violation(s) fixed`);
+  }
+
+  /**
+   * Helper: Break a work streak by inserting × at the best position
+   * @param {Object} schedule - Current schedule
+   * @param {Object} staff - Staff member
+   * @param {Array} workDays - Array of consecutive work days
+   * @param {number} maxDays - Maximum allowed consecutive days
+   */
+  breakWorkStreak(schedule, staff, workDays, maxDays) {
+    // Find the best position to insert rest day (around day 5 or 6)
+    const breakIndex = Math.min(maxDays, workDays.length - 1);
+    const breakDate = workDays[breakIndex].dateKey;
+
+    console.log(
+      `🔧 [5-DAY-REST]   → ${staff.name}: ${workDays.length} consecutive work days detected`
+    );
+    console.log(
+      `🔧 [5-DAY-REST]   → Inserting × on ${breakDate} to break streak (labor law compliance)`
+    );
+
+    // Force assign × (ignore other constraints for labor law)
+    schedule[staff.id][breakDate] = "×";
   }
 
   /**

@@ -1,9 +1,35 @@
 # AI Schedule Generation Flow: Complete Documentation
 
-**Document Version:** 1.0  
-**Last Updated:** 2025-11-30  
-**Status:** Complete Reference Guide  
-**Investigation Level:** Very Thorough  
+**Document Version:** 1.4
+**Last Updated:** 2025-12-06
+**Status:** Complete Reference Guide (Phase 6.3 Enhanced)
+**Investigation Level:** Very Thorough
+
+**Phase 6.3 Changes (Latest):**
+- Added `MIN-ENFORCE-EARLY` pre-pass in `distributeOffDays()` to enforce MIN daily limits EARLY
+- MIN enforcement now runs BEFORE random distribution and BEFORE △ assignments
+- Only checks `××` consecutive pattern (not `△×`) to avoid blocking × after △
+- Prioritizes dates with fewer offs, shuffles eligible staff for fair distribution
+- This fixes the issue where BALANCE phase couldn't meet MIN because all staff had △ on previous day
+
+**Phase 6.2 Changes:**
+- Added `enforce5DayRestAfterBalance()` method to fix >5 consecutive work days violations
+- Added `breakWorkStreak()` helper to insert × in middle of long work streaks
+- Execution order: BALANCE → enforce5DayRestAfterBalance → repairConsecutiveOffDays
+- Added warning logs when BALANCE cannot meet MIN daily limits (all candidates have conflicts)
+- User decisions: Keep △ for early shift on must_day_off, accept under-MIN with warning
+
+**Phase 6.1 Changes:**
+- Added `wouldCreateConsecutiveOff()` helper function to prevent consecutive × during BALANCE
+- BALANCE phase now has 3 constraint checks: adjacent conflict, staff group, consecutive ×
+- Moved `repairConsecutiveOffDays` to run AFTER BALANCE phase (was running before Phase 3)
+- This ensures all consecutive × patterns are caught, including those created by Phase 3 or BALANCE
+
+**Phase 6.0 Changes:**
+- MIN daily limit enforcement moved from HybridPredictor post-processing to BusinessRuleValidator BALANCE phase
+- Uses `dailyLimitsRaw` object format instead of `dailyLimits` array format for proper database integration
+- Added staff group constraint checking during MIN enforcement
+- Added `wouldViolateStaffGroup()` helper function for constraint validation
 
 ---
 
@@ -645,18 +671,26 @@ static applyCombinedRules(schedule, calendarRules, earlyShiftPreferences, staffM
 - Eligible staff with early shift preference: Get △ instead
 - must_work dates: All shifts become normal (empty string or ○)
 
-### 3.11 POST-GENERATION: Daily Limit Balancing
+### 3.11 POST-GENERATION: Daily Limit Balancing (Phase 6 Enhanced)
 
-**Lines 1255-1350**
+**Lines 1303-1400** (Updated in Phase 6)
+
+**Key Change (Phase 6):** Uses `dailyLimitsRaw` object format instead of `dailyLimits` array format, and includes staff group constraint checking.
 
 ```javascript
-// Final validation: Ensure min 2, max 3 staff off per day
-const minOffPerDay = 2;
-const maxOffPerDay = 3;
+// ✅ Phase 6: Use dailyLimitsRaw (object format) for dynamic database values
+const liveSettings = this.getLiveSettings();
+const dailyLimitsRaw = liveSettings.dailyLimitsRaw || {};
+const staffGroups = liveSettings.staffGroups || [];
+const minOffPerDay = dailyLimitsRaw.minOffPerDay ?? 0;
+const maxOffPerDay = dailyLimitsRaw.maxOffPerDay ?? 3;
+
+console.log(`⚖️ [BALANCE] Starting daily limit balancing (min: ${minOffPerDay}, max: ${maxOffPerDay})...`);
+console.log(`⚖️ [BALANCE] dailyLimitsRaw source: ${dailyLimitsRaw._source || 'fallback'}`);
 
 dateRange.forEach(date => {
   const dateKey = date.toISOString().split("T")[0];
-  
+
   // Skip if calendar rule dates (calendar rules override daily limits)
   if (calendarRules[dateKey]?.must_day_off) {
     console.log(`⏭️ [BALANCE] ${dateKey}: Skipping (must_day_off override)`);
@@ -666,29 +700,61 @@ dateRange.forEach(date => {
     console.log(`⏭️ [BALANCE] ${dateKey}: Skipping (must_work override)`);
     return;
   }
-  
+
   const currentOffCount = countOffDaysOnDate(schedule, dateKey, staffMembers);
-  
-  // Case 1: Too few off days
-  if (currentOffCount < minOffPerDay) {
-    // Find eligible staff and assign ×
+
+  // Case 1: Too few off days (MIN enforcement)
+  if (minOffPerDay > 0 && currentOffCount < minOffPerDay) {
     const needed = minOffPerDay - currentOffCount;
-    // ... assign × to eligible staff
+
+    for (const staff of eligibleStaff) {
+      if (assigned >= needed) break;
+
+      // Check 1: Adjacent conflict prevention (no ××, △×, ×△ patterns)
+      const adjacentConflict = hasAdjacentConflict(staff, dateKey, "×", schedule);
+      if (adjacentConflict) continue;
+
+      // Check 2: Staff group constraint (only 1 member off per group per day)
+      const groupConflict = wouldViolateStaffGroup(staff, dateKey, schedule, staffGroups, staffMembers);
+      if (groupConflict) continue;
+
+      // Check 3 (Phase 6.1): Consecutive × prevention
+      const consecutiveConflict = wouldCreateConsecutiveOff(staff, dateKey, schedule);
+      if (consecutiveConflict) continue;
+
+      // All checks passed - assign ×
+      schedule[staff.id][dateKey] = "×";
+      assigned++;
+    }
   }
-  
-  // Case 2: Too many off days
+
+  // Case 2: Too many off days (MAX enforcement)
   if (currentOffCount > maxOffPerDay) {
     // Convert excess × to working shifts
     // ... restore working shifts
   }
 });
+
+// 🔧 FINAL: Repair any remaining consecutive × patterns
+await this.repairConsecutiveOffDays(schedule, staffMembers, dateRange);
 ```
 
-**Critical Logic:**
-- Respects calendar rules (skips if must_day_off or must_work)
-- Checks adjacent conflicts before assigning ×
-- Doesn't assign × to backup-only staff
-- Ensures final schedule has exactly 2-3 staff off per day
+**Critical Logic (Phase 6.1 Enhanced):**
+- ✅ **Uses `dailyLimitsRaw`** - Object format from database with `minOffPerDay`, `maxOffPerDay`
+- ✅ **Respects calendar rules** - Skips if must_day_off or must_work
+- ✅ **Adjacent conflict check** - Prevents ××, △×, ×△ patterns
+- ✅ **Staff group constraint** - Only 1 member off per group per day
+- ✅ **Consecutive × check (NEW)** - Prevents 2+ consecutive off days when adding ×
+- ✅ **Backup staff exclusion** - Doesn't assign × to backup-only staff
+- ✅ **Dynamic limits** - Reads from database, not hardcoded values
+- ✅ **Final repair** - `repairConsecutiveOffDays` runs AFTER BALANCE to catch all patterns
+
+**Important Notes (Phase 6.1):**
+- MIN enforcement was previously done in HybridPredictor post-processing, but this caused constraint violations
+- MIN enforcement is now handled entirely in BusinessRuleValidator BALANCE phase with proper constraint checking
+- The BALANCE phase runs DURING generation (after all other phases) to ensure constraints are respected
+- `repairConsecutiveOffDays` was moved from BEFORE Phase 3 to AFTER BALANCE (final step)
+- This ensures consecutive × patterns created by Phase 3 or BALANCE are also repaired
 
 ---
 
@@ -1222,6 +1288,7 @@ if (calendarRules[dateKey]?.must_day_off) {
 | PHASE 4 | BusinessRuleValidator.js | enforce5DayRestConstraint | 2417-2537 | Prevent 5+ consecutive work |
 | PHASE 5 | BusinessRuleValidator.js | applyCoverageCompensation | 2666+ | Backup staff coverage |
 | PHASE 6 | BusinessRuleValidator.js | applyFinalAdjustments | 2706+ | Final tweaks |
+| 5-DAY REST (Phase 6.2) | BusinessRuleValidator.js | enforce5DayRestAfterBalance | 2951-2990 | Fix >5 consecutive work days |
 | POST-REPAIR | BusinessRuleValidator.js | repairConsecutiveOffDays | 2750+ | Fix consecutive off days |
 | Phase 3 Integration | BusinessRuleValidator.js | (inline) | 1221-1242 | Apply calendar + early shift |
 | Daily balancing | BusinessRuleValidator.js | (inline) | 1255-1350 | Ensure min-max per day |
@@ -1260,6 +1327,9 @@ if (calendarRules[dateKey]?.must_day_off) {
 | isWorkingShift() | ConstraintEngine.js | Check if shift is any working shift |
 | getDayOfWeek() | ConstraintEngine.js | Get day name from date |
 | transformPriorityRulesArrayToObject() | BusinessRuleValidator.js | Convert UI format to AI format |
+| wouldCreateConsecutiveOff() | BusinessRuleValidator.js | Check if assignment creates consecutive × |
+| wouldViolateStaffGroup() | BusinessRuleValidator.js | Check if assignment violates staff group constraint |
+| breakWorkStreak() | BusinessRuleValidator.js | Insert × to break >5 consecutive work days |
 
 ---
 
@@ -1493,16 +1563,37 @@ for (let i = 0; i < offDaysToAssign; i++) {
 - Early shift rotations break down
 - Staff get fatigued from clustering
 
-### 9.5 Daily Limit Balancing (Lines 1255-1350)
+### 9.5 Daily Limit Balancing (Lines 1336-1470) - Phase 6.1 Enhanced
 
 **DO NOT:** Modify min/max thresholds without updating tests.
 
 **Why:** Daily limits are a hard operational constraint.
 
+**Phase 6.1 Critical Notes:**
+- MIN enforcement now uses `dailyLimitsRaw` from database (not hardcoded values)
+- Staff group constraints are checked before assigning × during balancing
+- Adjacent conflict patterns are validated (no ××, △×, ×△)
+- **Consecutive × check added** - Prevents 2+ consecutive off days when adding ×
+- MIN enforcement was moved FROM HybridPredictor post-processing TO here
+- **`repairConsecutiveOffDays` now runs AFTER BALANCE** (was before Phase 3)
+- This prevents constraint violations that occurred with post-processing approach
+
+**Execution Order (Phase 6.3):**
+1. Priority rules → Staff groups
+2. **`MIN-ENFORCE-EARLY`** in distributeOffDays (NEW - ensures MIN before △)
+3. Random off-day distribution → 5-day rest → Coverage → Final adjustments
+4. Phase 3 calendar integration (must_day_off + early shift)
+5. BALANCE phase (backup MIN/MAX enforcement with warning logs)
+6. `enforce5DayRestAfterBalance()` (fix >5 consecutive work days)
+7. `repairConsecutiveOffDays` (FINAL cleanup)
+
 **Impact if changed:**
 - Too few staff working on some days (insufficient coverage)
 - Too many staff off (overstaffed operations)
 - Unpredictable staffing levels
+- Staff group violations (if constraint check removed)
+- Adjacent pattern violations (if conflict check removed)
+- Consecutive × patterns (if consecutive check removed or repair moved earlier)
 
 ### 9.6 Backup Staff Check (Lines 2079-2093)
 
@@ -1633,18 +1724,34 @@ When adding a new constraint:
 
 ### Issue: Schedule has ×× (consecutive off days)
 
-**Cause:** Adjacent conflict check not running or output not respecting it.
+**Cause:** Adjacent conflict check not running, or `repairConsecutiveOffDays` running too early.
 
 **Debug Steps:**
-1. Check if `hasAdjacentConflict()` is being called (search logs for "ADJACENT-CONFLICT")
-2. Verify schedule is being built sequentially (not random order)
-3. Check if balancing is overwriting constraints
-4. Check if Phase 3 is creating adjacent conflicts
+1. Check if `hasAdjacentConflict()` is being called (search logs for "adjacent conflict")
+2. Check if `wouldCreateConsecutiveOff()` is being called in BALANCE (search for "consecutive ×")
+3. Check if `repairConsecutiveOffDays` runs AFTER BALANCE (search for "[REPAIR]")
+4. Verify repair is finding and fixing patterns (search for "Breaking up")
 
-**Solution:**
-- If during generation: Add adjacent conflict check before assignment
-- If after balancing: Add check during balancing phase
-- If Phase 3: Ensure Phase 3 doesn't violate adjacent rules for non-calendar dates
+**Console Commands to Debug:**
+```js
+// Check BALANCE logs
+window.consoleLogger.getLogs().filter(l => l.message.includes('[BALANCE]')).forEach(l => console.log(l.message))
+
+// Check REPAIR logs
+window.consoleLogger.getLogs().filter(l => l.message.includes('[REPAIR]')).forEach(l => console.log(l.message))
+
+// Check 5-DAY-REST logs
+window.consoleLogger.getLogs().filter(l => l.message.includes('[5-DAY-REST]')).forEach(l => console.log(l.message))
+
+// Check specific staff
+window.consoleLogger.getLogs().filter(l => l.message.includes('古藤')).forEach(l => console.log(l.message))
+```
+
+**Solution (Phase 6.2):**
+- `repairConsecutiveOffDays` was moved to run AFTER BALANCE phase
+- BALANCE phase now has `wouldCreateConsecutiveOff()` check
+- `enforce5DayRestAfterBalance()` runs between BALANCE and repairConsecutiveOffDays
+- If still happening: Check if Phase 3 calendar integration is creating the pattern
 
 ### Issue: Calendar rules not being applied
 
@@ -1678,18 +1785,36 @@ When adding a new constraint:
 
 ### Issue: Daily limits not balanced (not exactly 2-3 staff off per day)
 
-**Cause:** Balancing not running, or calendar dates not being skipped.
+**Cause:** Balancing not running, `dailyLimitsRaw` not loaded, or all eligible staff skipped.
 
 **Debug Steps:**
-1. Check if balancing runs (search logs for "[BALANCE]")
-2. Verify calendar dates are being skipped (search logs for "Skipping balancing")
-3. Check min/max values (should be 2 and 3)
-4. Verify final count matches target (search for "Final count" messages)
+1. Check if balancing runs (search logs for "[BALANCE] Starting")
+2. Check if `dailyLimitsRaw` has values (search logs for "dailyLimitsRaw source: database")
+3. Check if min/max values are correct (should show "min: 2, max: 3")
+4. Check if staff are being skipped (search for "Skip ×")
+5. Check final count (search for "Final count")
 
-**Solution:**
-- If not running: Check if Phase 3 is being skipped
-- If calendar dates not skipped: Ensure `calendarRules[dateKey]` check (Line 1266)
-- If wrong min/max: Verify line 1258-1259 constants or load from settings
+**Console Commands to Debug:**
+```js
+// Check all BALANCE logs
+window.consoleLogger.getLogs().filter(l => l.message.includes('[BALANCE]')).forEach(l => console.log(l.message))
+
+// Check specific date (e.g., Dec 5)
+window.consoleLogger.getLogs().filter(l => l.message.includes('12-05')).forEach(l => console.log(l.message))
+
+// Check dailyLimitsRaw
+window.consoleLogger.getLogs().filter(l => l.message.includes('dailyLimitsRaw')).forEach(l => console.log(l.message))
+```
+
+**Common Skip Reasons:**
+- `(adjacent conflict)` - Would create ××, △×, ×△ pattern
+- `(staff group conflict)` - Another group member already has × that day
+- `(would create consecutive ×)` - Would create 2+ consecutive off days
+
+**Solution (Phase 6.1):**
+- If `dailyLimitsRaw` shows `null`: Check `getLiveSettings()` returns `dailyLimitsRaw` from settings provider
+- If all staff skipped: Too many constraints prevent any assignment (may need relaxation)
+- If wrong min/max: Check database `ai_settings.daily_limits` table
 
 ### Issue: Priority rules not applied
 
@@ -1707,23 +1832,37 @@ When adding a new constraint:
 - If overwritten: Ensure re-enforcement happens after each phase
 - If staff not found: Verify staff ID/name matching logic
 
-### Issue: 5-day rest violations not fixed
+### Issue: 5-day rest violations not fixed (>5 consecutive work days)
 
-**Cause:** 5-day rest enforcement not running, or fixes violate other constraints.
+**Cause (Phase 6.2):** `enforce5DayRestAfterBalance()` not running, or not finding violations correctly.
 
 **Debug Steps:**
-1. Check if enforcement runs (search logs for "[5-DAY-REST]")
-2. Verify violations are detected (search for "VIOLATION in window")
-3. Check if × is assigned (search for "Assigned ×")
-4. Check if △ fallback is used (search for "Assigned △")
-5. Verify weekly limits aren't blocking (search for "would violate")
+1. Check if enforcement runs (search logs for "[5-DAY-REST] Enforcing")
+2. Verify violations are detected (search for "VIOLATION:")
+3. Check if breaks are applied (search for "Breaking streak")
+4. Verify final count (search for "Enforcement complete")
 
-**Solution:**
-- If not running: Check enforce5DayRestConstraint() is called (Line 1202)
-- If violations not detected: Verify window counting logic
-- If can't assign ×: Check weekly limits (may need to relax)
-- If can't assign △: Check adjacent conflict logic
-- If still violations: Log rest-day counting (might be counting △ as rest incorrectly)
+**Console Commands to Debug:**
+```js
+// Check 5-DAY-REST logs
+window.consoleLogger.getLogs().filter(l => l.message.includes('[5-DAY-REST]')).forEach(l => console.log(l.message))
+
+// Check specific staff (e.g., 安井)
+window.consoleLogger.getLogs().filter(l => l.message.includes('安井')).forEach(l => console.log(l.message))
+```
+
+**Solution (Phase 6.2):**
+- `enforce5DayRestAfterBalance()` now runs AFTER BALANCE phase
+- It scans for consecutive work days >5 and inserts × in the middle of the streak
+- The `breakWorkStreak()` helper places × at day 5 to break the streak
+- If still violations: Check if the staff member is being processed (not filtered out)
+- If × not placed: The streak detection might not be finding the violation
+
+**Key Logic:**
+- Works AFTER BALANCE to catch all patterns
+- Counts consecutive work days (anything that is not × or △)
+- When streak >5, inserts × at position 5 (6th work day becomes rest)
+- Runs for ALL staff (社員 and パート) for labor law compliance
 
 ---
 
@@ -1910,12 +2049,6 @@ Total: < 50KB per generation
                             │
                             ▼
         ┌──────────────────────────────────┐
-        │ POST-REPAIR: Consecutive Off Days│
-        │ └─ Fix clustering patterns       │
-        └──────────────────────────────────┘
-                            │
-                            ▼
-        ┌──────────────────────────────────┐
         │ Phase 3 Integration (FINAL)      │
         │ ├─ Apply must_day_off (ALL)      │
         │ ├─ Override with △ (eligible)    │
@@ -1930,7 +2063,22 @@ Total: < 50KB per generation
         │ ├─ Ensure min 2 off per day      │
         │ ├─ Ensure max 3 off per day      │
         │ ├─ Skip calendar rule dates      │
-        │ └─ Check adjacent conflicts      │
+        │ ├─ Check adjacent conflicts      │
+        │ └─ ⚠️ Warn if MIN not met        │
+        └──────────────────────────────────┘
+                            │
+                            ▼
+        ┌──────────────────────────────────┐
+        │ 5-DAY REST Enforcement (Phase 6.2)│
+        │ ├─ Scan for >5 work streaks      │
+        │ ├─ Insert × to break streaks     │
+        │ └─ Labor law compliance          │
+        └──────────────────────────────────┘
+                            │
+                            ▼
+        ┌──────────────────────────────────┐
+        │ POST-REPAIR: Consecutive Off Days│
+        │ └─ Fix clustering patterns       │
         └──────────────────────────────────┘
                             │
                             ▼
@@ -1958,6 +2106,7 @@ When modifying the system, always remember:
 - **Always skip calendar rule dates in balancing**
 - **Always validate before assigning**
 - **Always test calendar rule interactions**
+- **5-day rest enforcement is critical for labor law compliance** (Phase 6.2)
 
 By following these principles, the system reliably generates schedules that satisfy all business requirements while respecting staff preferences and maintaining operational integrity.
 
