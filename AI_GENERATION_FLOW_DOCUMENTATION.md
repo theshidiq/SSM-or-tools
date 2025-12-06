@@ -1,11 +1,19 @@
 # AI Schedule Generation Flow: Complete Documentation
 
-**Document Version:** 1.4
+**Document Version:** 1.5
 **Last Updated:** 2025-12-06
-**Status:** Complete Reference Guide (Phase 6.3 Enhanced)
+**Status:** Complete Reference Guide (Phase 6.5 Enhanced)
 **Investigation Level:** Very Thorough
 
-**Phase 6.3 Changes (Latest):**
+**Phase 6.5 Changes (Latest):**
+- Added `FINAL-OVERRIDE` step in `HybridPredictor.predictSchedule()` (Step 7)
+- Calendar rules now run as the ABSOLUTE FINAL step, AFTER backup staff assignments
+- This ensures backup staff (like パート workers configured as backup) respect must_day_off rules
+- The override applies to ALL staff, including backup staff managed by BackupStaffService
+- Early shift (△) on must_day_off dates is preserved (user confirmed this is correct behavior)
+- Location: `HybridPredictor.js` lines 526-579
+
+**Phase 6.3 Changes:**
 - Added `MIN-ENFORCE-EARLY` pre-pass in `distributeOffDays()` to enforce MIN daily limits EARLY
 - MIN enforcement now runs BEFORE random distribution and BEFORE △ assignments
 - Only checks `××` consecutive pattern (not `△×`) to avoid blocking × after △

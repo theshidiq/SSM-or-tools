@@ -15,6 +15,7 @@ import { extractAllDataForAI } from "../utils/DataExtractor";
 import { BusinessRuleValidator } from "./BusinessRuleValidator";
 import { calculatePatternStability } from "../core/PatternRecognizer";
 import BackupStaffService from "../../services/BackupStaffService";
+import { CalendarRulesLoader } from "../utils/CalendarRulesLoader"; // ✅ Phase 6.5: Final calendar rules override
 
 export class HybridPredictor {
   constructor() {
@@ -522,7 +523,62 @@ export class HybridPredictor {
         dateRange,
       );
 
-      // Step 7: ✅ REMOVED - Post-processing MIN enforcement moved to BusinessRuleValidator BALANCE phase
+      // Step 7: ✅ FINAL CALENDAR RULES OVERRIDE (Phase 6.5)
+      // Calendar rules are the HIGHEST PRIORITY - they override everything including backup assignments
+      // This ensures must_day_off and must_work rules are ALWAYS respected
+      const calendarRules = inputData?.calendarRules || {};
+      if (Object.keys(calendarRules).length > 0) {
+        console.log("📅 [FINAL-OVERRIDE] Applying calendar rules as FINAL override...");
+
+        let calendarOverrideCount = 0;
+        Object.keys(calendarRules).forEach((dateKey) => {
+          const rule = calendarRules[dateKey];
+
+          // Apply must_day_off - ALL staff get × (day off), overrides ANY previous assignment
+          if (rule.must_day_off) {
+            staffMembers.forEach((staff) => {
+              const currentShift = finalSchedule[staff.id]?.[dateKey];
+              // Check if current shift is NOT already day off (×)
+              if (currentShift !== "×") {
+                if (!finalSchedule[staff.id]) {
+                  finalSchedule[staff.id] = {};
+                }
+                // Force day off, but allow △ for early shift staff on must_day_off
+                // (user confirmed this is correct behavior)
+                if (currentShift === "△") {
+                  console.log(`  📅 [FINAL-OVERRIDE] ${staff.name} on ${dateKey}: Keeping △ (early shift on must_day_off)`);
+                } else {
+                  finalSchedule[staff.id][dateKey] = "×";
+                  calendarOverrideCount++;
+                  console.log(`  📅 [FINAL-OVERRIDE] ${staff.name} on ${dateKey}: ${currentShift || "blank"} → × (must_day_off)`);
+                }
+              }
+            });
+          }
+
+          // Apply must_work - ALL staff must work, overrides any day off
+          if (rule.must_work) {
+            staffMembers.forEach((staff) => {
+              const currentShift = finalSchedule[staff.id]?.[dateKey];
+              // Check if current shift is day off (×) - need to change to working
+              if (currentShift === "×") {
+                if (!finalSchedule[staff.id]) {
+                  finalSchedule[staff.id] = {};
+                }
+                finalSchedule[staff.id][dateKey] = ""; // Normal shift
+                calendarOverrideCount++;
+                console.log(`  📅 [FINAL-OVERRIDE] ${staff.name} on ${dateKey}: × → blank (must_work)`);
+              }
+            });
+          }
+        });
+
+        console.log(`✅ [FINAL-OVERRIDE] Applied ${calendarOverrideCount} calendar rule overrides`);
+      } else {
+        console.log("📅 [FINAL-OVERRIDE] No calendar rules to apply");
+      }
+
+      // Step 8: ✅ REMOVED - Post-processing MIN enforcement moved to BusinessRuleValidator BALANCE phase
       // The post-processing was causing constraint violations because it ran AFTER all constraint checking.
       // MIN enforcement now happens DURING generation in BusinessRuleValidator's BALANCE phase,
       // which properly checks staff groups, 5-day rest, adjacent conflicts, and monthly limits.

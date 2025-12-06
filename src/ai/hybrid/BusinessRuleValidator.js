@@ -1296,33 +1296,10 @@ export class BusinessRuleValidator {
       // ✅ Final priority rules enforcement (ensure no overwrites)
       await this.applyPriorityRules(schedule, staffMembers, dateRange);
 
-      // NOTE: repairConsecutiveOffDays moved to run AFTER BALANCE phase (see below)
-      // This ensures consecutive × patterns created by Phase 3 or BALANCE are also repaired
+      // NOTE: Phase 3 calendar integration moved to run AFTER all post-processing
+      // to ensure calendar rules are truly the FINAL override
 
-      // ✅ NEW (Phase 3): Apply combined calendar rules + early shift preferences
-      // IMPORTANT: This runs LAST to ensure calendar rules override all other business rules
-      if (hasPhase3Integration) {
-        console.log("🔄 [Phase 3] Applying combined calendar rules + early shift preferences (FINAL OVERRIDE)...");
-
-        const combinedResult = CalendarEarlyShiftIntegrator.applyCombinedRules(
-          schedule,
-          calendarRules,
-          earlyShiftPreferences,
-          staffMembers
-        );
-
-        // Update schedule with combined rules applied
-        Object.assign(schedule, combinedResult.schedule);
-
-        console.log("✅ [Phase 3] Combined rules applied successfully (FINAL)", {
-          changesApplied: combinedResult.changesApplied,
-          earlyShiftsAssigned: combinedResult.summary.earlyShiftsAssigned,
-          dayOffsAssigned: combinedResult.summary.dayOffsAssigned,
-          mustWorkChanges: combinedResult.summary.mustWorkChanges,
-        });
-      }
-
-      console.log("✅ Rule-based schedule generated");
+      console.log("✅ Rule-based schedule generated (pre-calendar override)");
 
       // 🎯 DEBUG: Log final schedule to verify randomization
       console.log("🔍 [DEBUG] Final schedule being returned:");
@@ -1473,9 +1450,41 @@ export class BusinessRuleValidator {
       // This ensures no staff works more than 5 consecutive days
       await this.enforce5DayRestAfterBalance(schedule, staffMembers, dateRange);
 
-      // 🔧 FINAL FIX: Post-BALANCE repair to eliminate any consecutive off-days
-      // This runs LAST after Phase 3, BALANCE, and 5-day rest to catch all consecutive × patterns
+      // 🔧 Post-BALANCE repair to eliminate any consecutive off-days
       await this.repairConsecutiveOffDays(schedule, staffMembers, dateRange);
+
+      // ✅ Phase 6.4: Apply Phase 3 calendar rules LAST (FINAL OVERRIDE)
+      // This runs AFTER all post-processing to ensure calendar rules truly override everything
+      if (hasPhase3Integration) {
+        console.log("🔄 [Phase 3] Applying combined calendar rules + early shift preferences (FINAL OVERRIDE)...");
+
+        const combinedResult = CalendarEarlyShiftIntegrator.applyCombinedRules(
+          schedule,
+          calendarRules,
+          earlyShiftPreferences,
+          staffMembers
+        );
+
+        // Update schedule with combined rules applied (deep merge)
+        // Object.assign only does shallow copy, so we need to merge each staff's schedule
+        Object.keys(combinedResult.schedule).forEach(staffId => {
+          if (!schedule[staffId]) {
+            schedule[staffId] = {};
+          }
+          Object.assign(schedule[staffId], combinedResult.schedule[staffId]);
+        });
+
+        console.log("✅ [Phase 3] Combined rules applied successfully (FINAL)", {
+          changesApplied: combinedResult.changesApplied,
+          earlyShiftsAssigned: combinedResult.summary.earlyShiftsAssigned,
+          dayOffsAssigned: combinedResult.summary.dayOffsAssigned,
+          mustWorkChanges: combinedResult.summary.mustWorkChanges,
+          staffProcessed: Object.keys(combinedResult.schedule).length,
+          totalStaff: staffMembers.length,
+        });
+      }
+
+      console.log("✅ Rule-based schedule generated (calendar override applied)");
 
       return schedule;
     } catch (error) {
