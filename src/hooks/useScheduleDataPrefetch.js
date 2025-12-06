@@ -533,15 +533,19 @@ export const useScheduleDataPrefetch = (
     },
     onMutate: async ({ scheduleData }) => {
       // Optimistic update to local state
-      const previousSchedule = schedule;
+      // ✅ FIX: Create deep copy of previous schedule for rollback
+      const previousSchedule = JSON.parse(JSON.stringify(schedule));
 
       console.log(`⚡ [WEBSOCKET-PREFETCH] Applying optimistic update for period ${currentMonthIndex}`);
       console.log(`   Old schedule staff count: ${Object.keys(previousSchedule).length}`);
       console.log(`   New schedule staff count: ${Object.keys(scheduleData).length}`);
 
-      setSchedule(scheduleData);
+      // ✅ FIX: Create NEW object reference to trigger React re-render
+      // React uses reference equality, so we must create a new object
+      const newScheduleData = JSON.parse(JSON.stringify(scheduleData));
+      setSchedule(newScheduleData);
 
-      console.log(`✅ [WEBSOCKET-PREFETCH] Optimistic schedule update applied - state should re-render`);
+      console.log(`✅ [WEBSOCKET-PREFETCH] Optimistic schedule update applied - NEW reference created for re-render`);
       return { previousSchedule };
     },
     onError: (error, variables, context) => {

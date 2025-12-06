@@ -478,9 +478,15 @@ const ShiftScheduleEditorPhase3 = ({
   }, []);
 
   const handleScheduleUpdate = useCallback(
-    (newScheduleData, source = "auto") => {
-      console.log(`📅 [Phase 3] Schedule update from ${source}`);
-      updateSchedule(newScheduleData, currentStaff, { source });
+    (newScheduleData, staffForSave = null, options = {}) => {
+      // ✅ FIX: Accept options parameter to forward fromAI flag properly
+      // Handle legacy calls where second param was source string
+      const finalOptions = typeof staffForSave === 'string'
+        ? { source: staffForSave, ...options }
+        : { source: 'auto', ...options };
+
+      console.log(`📅 [Phase 3] Schedule update from ${finalOptions.source}${finalOptions.fromAI ? ' (AI)' : ''}`);
+      updateSchedule(newScheduleData, currentStaff, finalOptions);
     },
     [updateSchedule, currentStaff],
   );

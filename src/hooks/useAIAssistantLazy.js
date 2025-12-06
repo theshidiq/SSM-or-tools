@@ -492,10 +492,12 @@ export const useAIAssistantLazy = (
             }
 
             // Save to backend via WebSocket (this persists to database)
-            console.log("📤 [AI] Calling saveSchedule function...");
-            await saveSchedule(result.schedule);
+            // ✅ FIX: Pass { fromAI: true } to trigger immediate UI update with new reference
+            // This ensures React detects the state change and re-renders the ScheduleTable
+            console.log("📤 [AI] Calling saveSchedule function with fromAI flag...");
+            await saveSchedule(result.schedule, null, { fromAI: true });
 
-            console.log("✅ [AI] AI-generated schedule saved to backend successfully");
+            console.log("✅ [AI] AI-generated schedule saved to backend and UI updated immediately");
 
             // Save to localStorage as backup cache
             console.log("💾 [AI] Saving to localStorage as backup...");
