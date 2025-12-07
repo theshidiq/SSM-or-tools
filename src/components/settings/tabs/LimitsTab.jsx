@@ -587,18 +587,21 @@ const LimitsTab = ({
     const newLimit = {
       id: crypto.randomUUID(),
       name: "New Monthly Limit",
-      limitConfig: {
-        limitType: "max_off_days",
-        maxCount: 8,
-        scope: "individual",
-        targetIds: [],
-        distributionRules: {
-          maxConsecutive: 2,
-          preferWeekends: false,
-        },
+      limitType: "off_days",  // Enhanced: supports both MIN and MAX
+      minCount: 7,            // NEW: Minimum off days required
+      maxCount: 8,            // Maximum off days allowed
+      countHalfDays: true,    // NEW: Support 0.5 increments
+      excludeCalendarRules: true,       // NEW: Calendar days don't count
+      excludeEarlyShiftCalendar: true,  // NEW: △ on calendar days don't count
+      overrideWeeklyLimits: true,       // NEW: Monthly takes precedence
+      scope: "individual",
+      targetIds: [],
+      distributionRules: {
+        maxConsecutive: 2,
+        preferWeekends: false,
       },
-      isHardConstraint: false,
-      penaltyWeight: 5,
+      isHardConstraint: true,  // Enhanced: default to hard constraint
+      penaltyWeight: 50,       // Enhanced: higher priority than weekly
       description: "",
     };
     setOriginalMonthlyLimitData({ ...newLimit });
@@ -875,12 +878,13 @@ const LimitsTab = ({
   };
 
   const renderTargetSelector = (limit, isMonthly = false) => {
-    const scope = limit.limitConfig?.scope || "all";
+    // Support both new (top-level) and old (limitConfig) structure
+    const scope = limit.scope || limit.limitConfig?.scope || "all";
     if (scope === "all") return null;
 
     const options = getTargetOptions(scope);
     const updateFunc = isMonthly ? updateMonthlyLimit : updateWeeklyLimit;
-    const targetIds = limit.limitConfig?.targetIds || [];
+    const targetIds = limit.targetIds || limit.limitConfig?.targetIds || [];
 
     return (
       <div className="space-y-2">
@@ -900,12 +904,19 @@ const LimitsTab = ({
                   const updatedTargets = e.target.checked
                     ? [...targetIds, option.id]
                     : targetIds.filter((id) => id !== option.id);
-                  updateFunc(limit.id, {
-                    limitConfig: {
-                      ...limit.limitConfig,
+                  // For monthly limits, use top-level fields; for weekly, use limitConfig
+                  if (isMonthly) {
+                    updateFunc(limit.id, {
                       targetIds: updatedTargets,
-                    },
-                  });
+                    });
+                  } else {
+                    updateFunc(limit.id, {
+                      limitConfig: {
+                        ...limit.limitConfig,
+                        targetIds: updatedTargets,
+                      },
+                    });
+                  }
                 }}
                 className="w-4 h-4 text-blue-600 rounded focus:ring-blue-500"
               />
@@ -924,10 +935,11 @@ const LimitsTab = ({
 
   // Helper function to get target display text
   const getTargetDisplayText = (limit) => {
-    const scope = limit.limitConfig?.scope || "all";
+    // Support both new (top-level) and old (limitConfig) structure
+    const scope = limit.scope || limit.limitConfig?.scope || "all";
     if (scope === "all") return "";
 
-    const targetIds = limit.limitConfig?.targetIds || [];
+    const targetIds = limit.targetIds || limit.limitConfig?.targetIds || [];
 
     if (scope === "individual") {
       const selectedStaff = staffMembers.filter((staff) =>
@@ -1169,12 +1181,28 @@ const LimitsTab = ({
     const isEditing = editingMonthlyLimit === limit.id;
     const targetDisplayText = getTargetDisplayText(limit);
 
+    // Get values with fallbacks for backward compatibility
+    const minCount = limit.minCount ?? limit.limitConfig?.minCount ?? null;
+    const maxCount = limit.maxCount ?? limit.limitConfig?.maxCount ?? 8;
+    const limitType = limit.limitType || limit.limitConfig?.limitType || "off_days";
+    const excludeCalendarRules = limit.excludeCalendarRules ?? true;
+    const excludeEarlyShiftCalendar = limit.excludeEarlyShiftCalendar ?? true;
+    const overrideWeeklyLimits = limit.overrideWeeklyLimits ?? true;
+    const countHalfDays = limit.countHalfDays ?? true;
+    const scope = limit.scope || limit.limitConfig?.scope || "all";
+
+    // Format display text for min/max
+    const formatCount = (count) => {
+      if (count === null || count === undefined) return "—";
+      return count % 1 === 0 ? Math.floor(count) : count;
+    };
+
     const MONTHLY_LIMIT_TYPES = [
-      { id: "max_off_days", label: "Max Off Days" },
+      { id: "off_days", label: "Off Days (× and △)" },
+      { id: "max_off_days", label: "Max Off Days (legacy)" },
       { id: "max_work_days", label: "Max Work Days" },
       { id: "max_early_shifts", label: "Max Early Shifts" },
       { id: "max_late_shifts", label: "Max Late Shifts" },
-      { id: "min_off_days", label: "Min Off Days" },
     ];
 
     return (
@@ -1205,16 +1233,9 @@ const LimitsTab = ({
                 </h3>
               )}
               <p className="text-sm text-gray-600">
-                {(limit.limitConfig?.limitType || "max_off_days").replace(
-                  /_/g,
-                  " ",
-                )}{" "}
-                • Max{" "}
-                {(limit.limitConfig?.maxCount || 0) % 1 === 0
-                  ? Math.floor(limit.limitConfig?.maxCount || 0)
-                  : limit.limitConfig?.maxCount || 0}{" "}
-                per month
-                {limit.limitConfig?.scope !== "all" &&
+                {limitType.replace(/_/g, " ")}{" "}
+                • {minCount !== null ? `Min ${formatCount(minCount)}` : ""}{minCount !== null && maxCount !== null ? " / " : ""}{maxCount !== null ? `Max ${formatCount(maxCount)}` : ""} per month
+                {scope !== "all" &&
                   targetDisplayText &&
                   ` • ${targetDisplayText}`}
               </p>
@@ -1278,13 +1299,10 @@ const LimitsTab = ({
             {/* Limit Type */}
             <FormField label="Limit Type">
               <select
-                value={limit.limitConfig?.limitType || "max_off_days"}
+                value={limitType}
                 onChange={(e) =>
                   updateMonthlyLimit(limit.id, {
-                    limitConfig: {
-                      ...limit.limitConfig,
-                      limitType: e.target.value,
-                    },
+                    limitType: e.target.value,
                   })
                 }
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
@@ -1297,58 +1315,95 @@ const LimitsTab = ({
               </select>
             </FormField>
 
-            {/* Max Count */}
-            <NumberInput
-              label="Count"
-              value={limit.limitConfig?.maxCount || 0}
-              min={0}
-              max={31}
-              step={
-                limit.limitConfig?.limitType === "max_off_days" ? 0.5 : 1
-              }
-              onChange={(value) =>
-                updateMonthlyLimit(limit.id, {
-                  limitConfig: {
-                    ...limit.limitConfig,
-                    maxCount: value,
-                  },
-                })
-              }
-              description={
-                limit.limitConfig?.limitType === "max_off_days"
-                  ? "Maximum count for this limit type per month (supports half-days: 6.5, 7, 7.5, etc.)"
-                  : "Maximum count for this limit type per month"
-              }
-            />
+            {/* MIN/MAX Count Section */}
+            <div className="p-4 bg-green-50 rounded-lg border border-green-200 space-y-4">
+              <h4 className="font-semibold text-gray-800 flex items-center gap-2">
+                📊 Monthly Limits Range
+              </h4>
 
-            {/* Scope */}
-            <FormField label="Apply To">
-              <select
-                value={limit.limitConfig?.scope || "all"}
-                onChange={(e) =>
+              {/* Minimum Count */}
+              <NumberInput
+                label="Minimum Count"
+                value={minCount ?? ""}
+                min={0}
+                max={31}
+                step={countHalfDays ? 0.5 : 1}
+                onChange={(value) =>
                   updateMonthlyLimit(limit.id, {
-                    limitConfig: {
-                      ...limit.limitConfig,
-                      scope: e.target.value,
-                      targetIds: [], // Reset targets when scope changes
-                    },
+                    minCount: value === "" ? null : value,
                   })
                 }
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
-              >
-                {LIMIT_SCOPES.map((scope) => (
-                  <option key={scope.id} value={scope.id}>
-                    {scope.label}
-                  </option>
-                ))}
-              </select>
-            </FormField>
+                description="Minimum off days required per month (leave empty for no minimum)"
+                placeholder="No minimum"
+              />
 
-            {/* Target Selector */}
-            {renderTargetSelector(limit, true)}
+              {/* Maximum Count */}
+              <NumberInput
+                label="Maximum Count"
+                value={maxCount ?? ""}
+                min={0}
+                max={31}
+                step={countHalfDays ? 0.5 : 1}
+                onChange={(value) =>
+                  updateMonthlyLimit(limit.id, {
+                    maxCount: value === "" ? null : value,
+                  })
+                }
+                description="Maximum off days allowed per month (leave empty for no maximum)"
+                placeholder="No maximum"
+              />
 
-            {/* Constraint Settings */}
-            <div className="flex items-center justify-between">
+              {/* Half-day support toggle */}
+              <ToggleSwitch
+                label="Support Half Days"
+                description="Allow 0.5 day increments (e.g., 7.5 days)"
+                checked={countHalfDays}
+                onChange={(checked) =>
+                  updateMonthlyLimit(limit.id, { countHalfDays: checked })
+                }
+              />
+            </div>
+
+            {/* Calendar Rules Section */}
+            <div className="p-4 bg-blue-50 rounded-lg border border-blue-200 space-y-4">
+              <h4 className="font-semibold text-gray-800 flex items-center gap-2">
+                📅 Calendar Integration
+              </h4>
+
+              <ToggleSwitch
+                label="Exclude Calendar Rules from Count"
+                description="Days marked as must_day_off in calendar won't count toward monthly limit"
+                checked={excludeCalendarRules}
+                onChange={(checked) =>
+                  updateMonthlyLimit(limit.id, { excludeCalendarRules: checked })
+                }
+              />
+
+              <ToggleSwitch
+                label="Exclude Early Shift Calendar Days"
+                description="△ shifts on must_day_off dates won't count toward monthly limit"
+                checked={excludeEarlyShiftCalendar}
+                onChange={(checked) =>
+                  updateMonthlyLimit(limit.id, { excludeEarlyShiftCalendar: checked })
+                }
+              />
+            </div>
+
+            {/* Priority Section */}
+            <div className="p-4 bg-purple-50 rounded-lg border border-purple-200 space-y-4">
+              <h4 className="font-semibold text-gray-800 flex items-center gap-2">
+                ⚖️ Priority Settings
+              </h4>
+
+              <ToggleSwitch
+                label="Override Weekly Limits"
+                description="Monthly limits take precedence over weekly limits when conflicts occur"
+                checked={overrideWeeklyLimits}
+                onChange={(checked) =>
+                  updateMonthlyLimit(limit.id, { overrideWeeklyLimits: checked })
+                }
+              />
+
               <ToggleSwitch
                 label="Hard Constraint"
                 description="Cannot be violated vs. soft preference"
@@ -1357,20 +1412,43 @@ const LimitsTab = ({
                   updateMonthlyLimit(limit.id, { isHardConstraint: checked })
                 }
               />
+
+              {/* Penalty Weight */}
+              <Slider
+                label="Penalty Weight"
+                value={limit.penaltyWeight}
+                min={1}
+                max={100}
+                onChange={(value) =>
+                  updateMonthlyLimit(limit.id, { penaltyWeight: value })
+                }
+                description="Higher values make this constraint more important (50+ recommended for monthly)"
+                colorScheme={limit.isHardConstraint ? "red" : "orange"}
+              />
             </div>
 
-            {/* Penalty Weight */}
-            <Slider
-              label="Penalty Weight"
-              value={limit.penaltyWeight}
-              min={1}
-              max={100}
-              onChange={(value) =>
-                updateMonthlyLimit(limit.id, { penaltyWeight: value })
-              }
-              description="Higher values make this constraint more important"
-              colorScheme={limit.isHardConstraint ? "red" : "orange"}
-            />
+            {/* Scope */}
+            <FormField label="Apply To">
+              <select
+                value={scope}
+                onChange={(e) =>
+                  updateMonthlyLimit(limit.id, {
+                    scope: e.target.value,
+                    targetIds: [], // Reset targets when scope changes
+                  })
+                }
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
+              >
+                {LIMIT_SCOPES.map((s) => (
+                  <option key={s.id} value={s.id}>
+                    {s.label}
+                  </option>
+                ))}
+              </select>
+            </FormField>
+
+            {/* Target Selector */}
+            {renderTargetSelector(limit, true)}
           </div>
         )}
 
@@ -1378,68 +1456,84 @@ const LimitsTab = ({
           <p className="text-sm text-gray-600 mb-4">{limit.description}</p>
         )}
 
-        {/* Distribution Rules */}
-        <div className="space-y-3">
-          <h4 className="font-medium text-gray-800">Distribution Rules</h4>
-
-          <div className="mb-4">
-            <NumberInput
-              label="Max Consecutive"
-              value={
-                limit.limitConfig?.distributionRules?.maxConsecutive || 2
-              }
-              min={1}
-              max={7}
-              onChange={(value) =>
-                updateMonthlyLimit(limit.id, {
-                  limitConfig: {
-                    ...limit.limitConfig,
-                    distributionRules: {
-                      ...limit.limitConfig?.distributionRules,
-                      maxConsecutive: value,
-                    },
-                  },
-                })
-              }
-              size="small"
-              disabled={!isEditing}
-              description="Maximum consecutive days for this limit type"
-            />
-          </div>
-
-          <ToggleSwitch
-            label="Prefer Weekends"
-            checked={
-              limit.limitConfig?.distributionRules?.preferWeekends || false
-            }
-            onChange={(checked) =>
-              updateMonthlyLimit(limit.id, {
-                limitConfig: {
-                  ...limit.limitConfig,
-                  distributionRules: {
-                    ...limit.limitConfig?.distributionRules,
-                    preferWeekends: checked,
-                  },
-                },
-              })
-            }
-            size="small"
-            disabled={!isEditing}
-          />
-        </div>
-
+        {/* Summary badges when not editing */}
         {!isEditing && (
-          <div className="mt-4 flex items-center gap-4 text-sm text-gray-600">
-            <span
-              className={`px-2 py-1 rounded text-xs ${
-                limit.isHardConstraint
-                  ? "bg-red-100 text-red-700"
-                  : "bg-yellow-100 text-yellow-700"
-              }`}
-            >
-              {limit.isHardConstraint ? "Hard" : "Soft"}
-            </span>
-            <span>Weight: {limit.penaltyWeight}</span>
+          <div className="space-y-3">
+            {/* Settings Summary */}
+            <div className="flex flex-wrap gap-2">
+              {excludeCalendarRules && (
+                <span className="px-2 py-1 bg-blue-100 text-blue-700 rounded text-xs">
+                  Excludes Calendar Rules
+                </span>
+              )}
+              {overrideWeeklyLimits && (
+                <span className="px-2 py-1 bg-purple-100 text-purple-700 rounded text-xs">
+                  Overrides Weekly
+                </span>
+              )}
+              {countHalfDays && (
+                <span className="px-2 py-1 bg-green-100 text-green-700 rounded text-xs">
+                  Half-day Support
+                </span>
+              )}
+            </div>
+
+            {/* Distribution Rules */}
+            <div className="space-y-3">
+              <h4 className="font-medium text-gray-800">Distribution Rules</h4>
+
+              <div className="mb-4">
+                <NumberInput
+                  label="Max Consecutive"
+                  value={
+                    limit.distributionRules?.maxConsecutive || 2
+                  }
+                  min={1}
+                  max={7}
+                  onChange={(value) =>
+                    updateMonthlyLimit(limit.id, {
+                      distributionRules: {
+                        ...limit.distributionRules,
+                        maxConsecutive: value,
+                      },
+                    })
+                  }
+                  size="small"
+                  disabled={!isEditing}
+                  description="Maximum consecutive days for this limit type"
+                />
+              </div>
+
+              <ToggleSwitch
+                label="Prefer Weekends"
+                checked={
+                  limit.distributionRules?.preferWeekends || false
+                }
+                onChange={(checked) =>
+                  updateMonthlyLimit(limit.id, {
+                    distributionRules: {
+                      ...limit.distributionRules,
+                      preferWeekends: checked,
+                    },
+                  })
+                }
+                size="small"
+                disabled={!isEditing}
+              />
+            </div>
+
+            <div className="mt-4 flex items-center gap-4 text-sm text-gray-600">
+              <span
+                className={`px-2 py-1 rounded text-xs ${
+                  limit.isHardConstraint
+                    ? "bg-red-100 text-red-700"
+                    : "bg-yellow-100 text-yellow-700"
+                }`}
+              >
+                {limit.isHardConstraint ? "Hard" : "Soft"}
+              </span>
+              <span>Weight: {limit.penaltyWeight}</span>
+            </div>
           </div>
         )}
       </div>

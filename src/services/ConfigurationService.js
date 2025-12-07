@@ -594,23 +594,28 @@ export class ConfigurationService {
       // Note: Constraint weights are now auto-detected from actual settings
       // No manual constraint weight configuration needed
 
-      // Monthly Limits
+      // Monthly Limits (Enhanced for Phase 1)
       monthlyLimits: [
         {
           id: "monthly-limit-off-days",
-          name: "Maximum Off Days Per Month",
-          limitType: "max_off_days",
-          maxCount: 8,
+          name: "Monthly Off Days Limit",
+          limitType: "off_days",  // Changed from "max_off_days" to support both MIN and MAX
+          minCount: 7,            // NEW: Minimum off days required per month
+          maxCount: 8,            // Maximum off days allowed per month
+          countHalfDays: true,    // NEW: Support 0.5 increments (e.g., 7.5)
+          excludeCalendarRules: true,       // NEW: must_day_off dates don't count toward limit
+          excludeEarlyShiftCalendar: true,  // NEW: △ on must_day_off doesn't count
+          overrideWeeklyLimits: true,       // NEW: Monthly takes precedence over weekly
           scope: "individual",
           targetIds: [],
           distributionRules: {
             maxConsecutive: 2,
             preferWeekends: false,
           },
-          isHardConstraint: false,
-          penaltyWeight: 40,
+          isHardConstraint: true,  // Changed to true (MIN/MAX are hard constraints)
+          penaltyWeight: 50,       // Increased from 40 (higher than weekly)
           description:
-            "Maximum number of days off allowed per staff member per month",
+            "Monthly off day limits per staff member (excludes calendar rule days)",
         },
       ],
 
@@ -745,11 +750,75 @@ export class ConfigurationService {
   }
 
   /**
-   * Get monthly limits
+   * Get monthly limits (Enhanced for Phase 1)
+   * Returns array of monthly limit configurations with enhanced fields:
+   * - minCount: Minimum off days required (new)
+   * - maxCount: Maximum off days allowed
+   * - excludeCalendarRules: Whether to exclude must_day_off from count (new)
+   * - excludeEarlyShiftCalendar: Whether to exclude △ on must_day_off (new)
+   * - overrideWeeklyLimits: Whether monthly takes precedence over weekly (new)
+   * - countHalfDays: Whether to support 0.5 increments (new)
    */
   getMonthlyLimits() {
     const settings = this.settings || this.getDefaultSettings();
-    return settings.monthlyLimits || this.getDefaultSettings().monthlyLimits;
+    const limits = settings.monthlyLimits || this.getDefaultSettings().monthlyLimits;
+
+    // Ensure all limits have the new fields with defaults
+    return limits.map(limit => ({
+      ...limit,
+      // Ensure new fields have defaults for backwards compatibility
+      minCount: limit.minCount ?? null,  // null means no minimum
+      maxCount: limit.maxCount ?? limit.max ?? 8,  // Support legacy "max" field
+      countHalfDays: limit.countHalfDays ?? true,
+      excludeCalendarRules: limit.excludeCalendarRules ?? true,
+      excludeEarlyShiftCalendar: limit.excludeEarlyShiftCalendar ?? true,
+      overrideWeeklyLimits: limit.overrideWeeklyLimits ?? true,
+      // Normalize limitType (support legacy "max_off_days")
+      limitType: limit.limitType === "max_off_days" ? "off_days" : (limit.limitType || "off_days"),
+    }));
+  }
+
+  /**
+   * Get effective monthly limit for a specific staff member
+   * Applies calendar rule exclusions if configured
+   * @param {string} staffId - Staff member ID
+   * @param {Object} calendarRules - Calendar rules map { dateKey: { must_day_off: boolean } }
+   * @param {Object} earlyShiftPrefs - Early shift preferences { staffId: { dateKey: boolean } }
+   * @returns {Object} Effective limits { minCount, maxCount, calendarOffDays, calendarEarlyDays }
+   */
+  getEffectiveMonthlyLimit(staffId, calendarRules = {}, earlyShiftPrefs = {}) {
+    const limits = this.getMonthlyLimits();
+    const offDaysLimit = limits.find(l => l.limitType === "off_days") || limits[0];
+
+    if (!offDaysLimit) {
+      return { minCount: null, maxCount: 8, calendarOffDays: 0, calendarEarlyDays: 0 };
+    }
+
+    // Count calendar rule days (excluded from limit if excludeCalendarRules is true)
+    let calendarOffDays = 0;
+    let calendarEarlyDays = 0;
+
+    if (offDaysLimit.excludeCalendarRules) {
+      Object.keys(calendarRules).forEach(dateKey => {
+        if (calendarRules[dateKey]?.must_day_off) {
+          // Check if staff has early shift preference on this date
+          if (offDaysLimit.excludeEarlyShiftCalendar && earlyShiftPrefs[staffId]?.[dateKey]) {
+            calendarEarlyDays++;
+          } else {
+            calendarOffDays++;
+          }
+        }
+      });
+    }
+
+    return {
+      minCount: offDaysLimit.minCount,
+      maxCount: offDaysLimit.maxCount,
+      calendarOffDays,
+      calendarEarlyDays,
+      overrideWeeklyLimits: offDaysLimit.overrideWeeklyLimits,
+      countHalfDays: offDaysLimit.countHalfDays,
+    };
   }
 
   /**
