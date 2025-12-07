@@ -7,6 +7,7 @@
 
 import { getDaysInMonth } from "../../utils/dateUtils";
 import { ConfigurationService } from "../../services/ConfigurationService.js";
+import { MonthlyLimitCalculator } from "../utils/MonthlyLimitCalculator"; // ✅ Phase 4
 
 // Configuration service instance - will be initialized when first used
 let configService = null;
@@ -426,6 +427,9 @@ export const DAILY_LIMITS = STATIC_DAILY_LIMITS;
  */
 export const VIOLATION_TYPES = {
   MONTHLY_OFF_LIMIT: "monthly_off_limit",
+  // ✅ Phase 4: Monthly MIN/MAX with calendar exclusion support
+  MONTHLY_MIN_OFF_LIMIT: "monthly_min_off_limit",
+  MONTHLY_MAX_OFF_LIMIT: "monthly_max_off_limit",
   DAILY_OFF_LIMIT: "daily_off_limit",
   DAILY_EARLY_LIMIT: "daily_early_limit",
   DAILY_LATE_LIMIT: "daily_late_limit", // ✅ Phase 2: Added for consistency
@@ -2211,3 +2215,128 @@ async function getConstraintsByType(type) {
 
   return null;
 }
+
+/**
+ * ✅ Phase 4: Validate monthly MIN/MAX off limits using MonthlyLimitCalculator
+ * This validates that staff have the required minimum off days and don't exceed maximum,
+ * with support for calendar rule exclusion.
+ *
+ * @param {Object} schedule - Schedule data { staffId: { dateKey: shift } }
+ * @param {Array} staffMembers - Array of staff member objects
+ * @param {Object} monthlyLimit - Monthly limit configuration from database
+ * @param {Object} calendarRules - Calendar rules by date (must_day_off dates)
+ * @param {Object} earlyShiftPrefs - Early shift preferences by staffId->date
+ * @param {Array} dateRange - Array of date strings in the period
+ * @returns {Object} Validation result with violations array
+ */
+export const validateMinMonthlyOffLimits = (
+  schedule,
+  staffMembers,
+  monthlyLimit,
+  calendarRules = {},
+  earlyShiftPrefs = {},
+  dateRange = []
+) => {
+  const violations = [];
+
+  if (!monthlyLimit) {
+    return { valid: true, violations: [], summary: { checked: 0 } };
+  }
+
+  const config = {
+    monthlyLimit,
+    calendarRules,
+    earlyShiftPrefs,
+    dateRange,
+  };
+
+  staffMembers.forEach((staff) => {
+    const effectiveLimits = MonthlyLimitCalculator.calculateEffectiveLimits(
+      staff.id,
+      config
+    );
+
+    const counts = MonthlyLimitCalculator.countOffDays(
+      staff.id,
+      schedule,
+      calendarRules,
+      effectiveLimits.excludeCalendarRules
+    );
+
+    // Check MIN violation
+    if (
+      effectiveLimits.effectiveMin !== null &&
+      effectiveLimits.effectiveMin > 0 &&
+      counts.countableOffDays < effectiveLimits.effectiveMin
+    ) {
+      violations.push({
+        type: VIOLATION_TYPES.MONTHLY_MIN_OFF_LIMIT,
+        staffId: staff.id,
+        staffName: staff.name,
+        severity: "high",
+        message: `${staff.name} has only ${counts.countableOffDays} flexible off days, need at least ${effectiveLimits.effectiveMin}`,
+        details: {
+          current: counts.countableOffDays,
+          minimum: effectiveLimits.effectiveMin,
+          calendarOffDays: counts.calendarOffDays,
+          flexibleOffDays: counts.flexibleOffDays,
+          excludeCalendarRules: effectiveLimits.excludeCalendarRules,
+          deficit: effectiveLimits.effectiveMin - counts.countableOffDays,
+        },
+      });
+    }
+
+    // Check MAX violation
+    if (
+      effectiveLimits.effectiveMax !== null &&
+      counts.countableOffDays > effectiveLimits.effectiveMax
+    ) {
+      violations.push({
+        type: VIOLATION_TYPES.MONTHLY_MAX_OFF_LIMIT,
+        staffId: staff.id,
+        staffName: staff.name,
+        severity: "high",
+        message: `${staff.name} has ${counts.countableOffDays} flexible off days, exceeds maximum of ${effectiveLimits.effectiveMax}`,
+        details: {
+          current: counts.countableOffDays,
+          maximum: effectiveLimits.effectiveMax,
+          calendarOffDays: counts.calendarOffDays,
+          flexibleOffDays: counts.flexibleOffDays,
+          excludeCalendarRules: effectiveLimits.excludeCalendarRules,
+          excess: counts.countableOffDays - effectiveLimits.effectiveMax,
+        },
+      });
+    }
+  });
+
+  return {
+    valid: violations.length === 0,
+    violations,
+    summary: {
+      checked: staffMembers.length,
+      minViolations: violations.filter(
+        (v) => v.type === VIOLATION_TYPES.MONTHLY_MIN_OFF_LIMIT
+      ).length,
+      maxViolations: violations.filter(
+        (v) => v.type === VIOLATION_TYPES.MONTHLY_MAX_OFF_LIMIT
+      ).length,
+    },
+  };
+};
+
+/**
+ * ✅ Phase 4: Get monthly limit status for all staff
+ * Returns a summary of each staff member's monthly limit compliance
+ *
+ * @param {Array} staffMembers - Array of staff member objects
+ * @param {Object} schedule - Current schedule
+ * @param {Object} config - Configuration (monthlyLimit, calendarRules, earlyShiftPrefs, dateRange)
+ * @returns {Map} Map of staffId -> monthly limit status
+ */
+export const getAllStaffMonthlyLimitStatus = (staffMembers, schedule, config) => {
+  return MonthlyLimitCalculator.getAllStaffMonthlyStatus(
+    staffMembers,
+    schedule,
+    config
+  );
+};
