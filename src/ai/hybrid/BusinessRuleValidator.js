@@ -36,6 +36,7 @@ import {
 import { ConfigurationService } from "../../services/ConfigurationService.js";
 import { analyzeShiftMomentum } from "../core/PatternRecognizer";
 import { CalendarEarlyShiftIntegrator } from "../utils/CalendarEarlyShiftIntegrator";
+import { MonthlyLimitCalculator } from "../utils/MonthlyLimitCalculator";
 
 /**
  * Check if previous days have conflicting shift patterns
@@ -1228,6 +1229,44 @@ export class BusinessRuleValidator {
         });
       }
 
+      // ✅ Phase 3 Monthly Limits: Calculate effective limits per staff
+      const liveSettings = this.getLiveSettings();
+      const monthlyLimits = liveSettings.monthlyLimits || [];
+      const monthlyLimit = Array.isArray(monthlyLimits) && monthlyLimits.length > 0
+        ? monthlyLimits.find(l => l.limitType === "off_days" || l.limitType === "max_off_days") || monthlyLimits[0]
+        : null;
+
+      // Build date range as strings for MonthlyLimitCalculator
+      const dateRangeStrings = dateRange.map(d => d.toISOString().split("T")[0]);
+
+      // Calculate effective monthly limits for each staff member
+      const effectiveLimitsMap = new Map();
+      if (monthlyLimit) {
+        console.log("📊 [MONTHLY-LIMITS] Calculating effective limits per staff...");
+        console.log(`   Config: MIN=${monthlyLimit.minCount ?? 'none'}, MAX=${monthlyLimit.maxCount ?? 'none'}`);
+        console.log(`   Exclude Calendar: ${monthlyLimit.excludeCalendarRules ?? true}`);
+        console.log(`   Override Weekly: ${monthlyLimit.overrideWeeklyLimits ?? true}`);
+
+        staffMembers.forEach(staff => {
+          const effectiveLimits = MonthlyLimitCalculator.calculateEffectiveLimits(
+            staff.id,
+            {
+              monthlyLimit,
+              calendarRules,
+              earlyShiftPrefs: earlyShiftPreferences,
+              dateRange: dateRangeStrings,
+            }
+          );
+          effectiveLimitsMap.set(staff.id, effectiveLimits);
+        });
+
+        console.log(`✅ [MONTHLY-LIMITS] Calculated effective limits for ${effectiveLimitsMap.size} staff members`);
+      }
+
+      // Store for use in distributeOffDays and other methods
+      this._effectiveLimitsMap = effectiveLimitsMap;
+      this._calendarRules = calendarRules;
+
       // Initialize empty schedule
       const schedule = {};
       staffMembers.forEach((staff) => {
@@ -1279,6 +1318,14 @@ export class BusinessRuleValidator {
       // ✅ Re-enforce priority rules (prevent overwrites)
       await this.applyPriorityRules(schedule, staffMembers, dateRange);
 
+      // ✅ Phase 3 Monthly Limits: Enforce MIN monthly limits (add more × if needed)
+      if (effectiveLimitsMap.size > 0) {
+        await this.enforceMinMonthlyLimits(schedule, staffMembers, effectiveLimitsMap, dateRange, calendarRules);
+        // Re-enforce staff group constraints after MIN enforcement
+        await this.applyStaffGroupConstraints(schedule, staffMembers, dateRange);
+        await this.applyPriorityRules(schedule, staffMembers, dateRange);
+      }
+
       // ✅ NEW: Enforce 5-day rest constraint across entire schedule
       await this.enforce5DayRestConstraint(schedule, staffMembers, dateRange);
       // ✅ Re-enforce staff group constraints (rest enforcement may have broken them)
@@ -1312,7 +1359,7 @@ export class BusinessRuleValidator {
 
       // ✅ POST-GENERATION BALANCING: Ensure min/max daily limits from configuration
       // ✅ Phase 6: Use dailyLimitsRaw (object format) instead of dailyLimits (array format)
-      const liveSettings = this.getLiveSettings();
+      // Note: liveSettings already defined above for monthly limits
       const dailyLimitsRaw = liveSettings.dailyLimitsRaw || {};
       const staffGroups = liveSettings.staffGroups || [];
       const minOffPerDay = dailyLimitsRaw.minOffPerDay ?? 0;
@@ -2320,11 +2367,36 @@ export class BusinessRuleValidator {
         continue;
       }
 
+      // ✅ Phase 3 Monthly Limits: Get effective limits for this staff
+      const effectiveLimits = this._effectiveLimitsMap?.get(staff.id);
+      const effectiveMax = effectiveLimits?.effectiveMax ?? maxOffPerMonth;
+      const effectiveMin = effectiveLimits?.effectiveMin ?? 0;
+
+      // Check if staff has already reached monthly MAX (from calendar rules)
+      if (effectiveLimits && effectiveLimits.excludeCalendarRules === false) {
+        // Calendar days count toward limit - check current total
+        const currentCounts = MonthlyLimitCalculator.countOffDays(
+          staff.id,
+          schedule,
+          calendarRules,
+          false // Don't exclude calendar
+        );
+        if (currentCounts.totalOffDays >= effectiveMax) {
+          console.log(
+            `⏭️ [MONTHLY-MAX] ${staff.name}: Already at monthly MAX (${currentCounts.totalOffDays}/${effectiveMax}) - skipping distribution`
+          );
+          continue;
+        }
+      }
+
       let offDaysSet = 0;
-      const targetOffDays = Math.min(maxOffPerMonth - 1, 6); // Conservative target
+      // Use effective MAX from monthly limits if available, otherwise use old logic
+      const targetOffDays = effectiveLimits
+        ? Math.min(effectiveMax - 1, 6) // Target is MAX minus buffer
+        : Math.min(maxOffPerMonth - 1, 6); // Conservative target
 
       console.log(
-        `📅 [RULE-GEN] ${staff.name}: Target ${targetOffDays} off days`,
+        `📅 [RULE-GEN] ${staff.name}: Target ${targetOffDays} off days (effective MAX: ${effectiveMax}, MIN: ${effectiveMin})`,
       );
 
       // Build list of available days for this staff (not already set by priority rules)
@@ -2457,6 +2529,29 @@ export class BusinessRuleValidator {
               );
 
             if (!wouldViolateWeeklyLimit) {
+              // ✅ Phase 3 Monthly Limits: Check if would exceed monthly MAX
+              if (effectiveLimits) {
+                const canAddOff = MonthlyLimitCalculator.canAddOffDay(
+                  staff.id,
+                  schedule,
+                  effectiveLimits,
+                  calendarRules
+                );
+                if (!canAddOff) {
+                  console.log(
+                    `⏭️ [MONTHLY-MAX] ${staff.name}: Cannot assign × on ${bestCandidate.date.toLocaleDateString('ja-JP')} - ` +
+                    `would exceed monthly MAX (${effectiveLimits.effectiveMax})`
+                  );
+                  // Skip this date and try next
+                  shuffledDays.splice(bestCandidate.arrayIndex, 1);
+                  const jitter = Math.floor(Math.random() * 2);
+                  nextOffDayIndex =
+                    (bestCandidate.arrayIndex + interval + jitter) %
+                    Math.max(shuffledDays.length, 1);
+                  continue;
+                }
+              }
+
               // ✅ DAILY LIMIT CHECK: Count actual current off-staff before assigning
               const actualOffCount = staffMembers.filter(s =>
                 schedule[s.id]?.[bestCandidate.dateKey] === "×"
@@ -2476,7 +2571,7 @@ export class BusinessRuleValidator {
                 continue;
               }
 
-              // Safe to assign × without violating weekly limit or daily limit
+              // Safe to assign × without violating weekly limit, monthly limit, or daily limit
               schedule[staff.id][bestCandidate.dateKey] = "×";
               globalOffDayCount[bestCandidate.dateKey]++;
               offDaysSet++;
@@ -2626,6 +2721,105 @@ export class BusinessRuleValidator {
     }
 
     console.log("✅ [RULE-GEN] Off days distributed");
+  }
+
+  /**
+   * ✅ Phase 3 Monthly Limits: ENFORCE MIN MONTHLY LIMITS
+   * Post-processing to ensure every staff meets their minimum monthly off-day requirement
+   * @param {Object} schedule - Schedule to modify
+   * @param {Array} staffMembers - Staff member data
+   * @param {Map} effectiveLimitsMap - Map of staffId -> effective limits
+   * @param {Array} dateRange - Date range
+   * @param {Object} calendarRules - Calendar rules
+   */
+  async enforceMinMonthlyLimits(schedule, staffMembers, effectiveLimitsMap, dateRange, calendarRules = {}) {
+    console.log("📊 [MIN-MONTHLY] Enforcing minimum monthly off days...");
+
+    let addedCount = 0;
+    const dateRangeStrings = dateRange.map(d => d.toISOString().split("T")[0]);
+
+    for (const staff of staffMembers) {
+      const effectiveLimits = effectiveLimitsMap.get(staff.id);
+      if (!effectiveLimits || effectiveLimits.effectiveMin === null || effectiveLimits.effectiveMin === 0) {
+        continue; // No MIN requirement for this staff
+      }
+
+      // Check if staff needs more off days
+      let needsMore = MonthlyLimitCalculator.needsMoreOffDays(
+        staff.id,
+        schedule,
+        effectiveLimits,
+        calendarRules
+      );
+
+      if (!needsMore) {
+        continue; // Already meets MIN
+      }
+
+      const remaining = MonthlyLimitCalculator.getRemainingMinOffDays(
+        staff.id,
+        schedule,
+        effectiveLimits,
+        calendarRules
+      );
+
+      console.log(`📊 [MIN-MONTHLY] ${staff.name}: Needs ${remaining} more off days to meet MIN (${effectiveLimits.effectiveMin})`);
+
+      // Find eligible dates to add × (not calendar rule, not already off, respects constraints)
+      let added = 0;
+      for (const dateKey of dateRangeStrings) {
+        if (added >= remaining) break;
+
+        // Skip calendar rule dates
+        if (calendarRules[dateKey]?.must_day_off) continue;
+        if (calendarRules[dateKey]?.must_work) continue;
+
+        // Skip if already off or early
+        const currentShift = schedule[staff.id]?.[dateKey];
+        if (currentShift === "×" || currentShift === "△") continue;
+
+        // Check if would create consecutive × (avoid ×× patterns)
+        const prevDate = new Date(dateKey);
+        prevDate.setDate(prevDate.getDate() - 1);
+        const prevKey = prevDate.toISOString().split("T")[0];
+        const nextDate = new Date(dateKey);
+        nextDate.setDate(nextDate.getDate() + 1);
+        const nextKey = nextDate.toISOString().split("T")[0];
+
+        const prevShift = schedule[staff.id]?.[prevKey];
+        const nextShift = schedule[staff.id]?.[nextKey];
+
+        if (prevShift === "×" || nextShift === "×") {
+          continue; // Would create consecutive off days
+        }
+
+        // Check weekly limit (if override not enabled)
+        if (!effectiveLimits.overrideWeeklyLimits) {
+          const wouldViolateWeekly = await this.wouldViolateWeeklyOffDayLimit(
+            schedule,
+            staff,
+            dateKey,
+            dateRange
+          );
+          if (wouldViolateWeekly) {
+            console.log(`  ⏭️ [MIN-MONTHLY] ${staff.name}: Skip ${dateKey} (weekly limit)`);
+            continue;
+          }
+        }
+
+        // Assign ×
+        schedule[staff.id][dateKey] = "×";
+        added++;
+        addedCount++;
+        console.log(`  ✅ [MIN-MONTHLY] ${staff.name}: Added × on ${dateKey}`);
+      }
+
+      if (added < remaining) {
+        console.warn(`  ⚠️ [MIN-MONTHLY] ${staff.name}: Only added ${added}/${remaining} (some conflicts)`);
+      }
+    }
+
+    console.log(`✅ [MIN-MONTHLY] Enforcement complete: Added ${addedCount} off days to meet minimum limits`);
   }
 
   /**
