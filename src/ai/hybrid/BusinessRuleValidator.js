@@ -1242,10 +1242,23 @@ export class BusinessRuleValidator {
       // Calculate effective monthly limits for each staff member
       const effectiveLimitsMap = new Map();
       if (monthlyLimit) {
-        console.log("📊 [MONTHLY-LIMITS] Calculating effective limits per staff...");
-        console.log(`   Config: MIN=${monthlyLimit.minCount ?? 'none'}, MAX=${monthlyLimit.maxCount ?? 'none'}`);
-        console.log(`   Exclude Calendar: ${monthlyLimit.excludeCalendarRules ?? true}`);
-        console.log(`   Override Weekly: ${monthlyLimit.overrideWeeklyLimits ?? true}`);
+        console.log("\n📊 ═══════════════════════════════════════════════════════════════");
+        console.log("📊 MONTHLY LIMITS CONFIGURATION (Phase 5)");
+        console.log("📊 ═══════════════════════════════════════════════════════════════");
+        console.log(`   📋 Config: MIN=${monthlyLimit.minCount ?? 'none'}, MAX=${monthlyLimit.maxCount ?? 'none'}`);
+        console.log(`   📅 Exclude Calendar Rules: ${monthlyLimit.excludeCalendarRules ?? true}`);
+        console.log(`   📅 Exclude Early Shift Calendar: ${monthlyLimit.excludeEarlyShiftCalendar ?? true}`);
+        console.log(`   ⚖️ Override Weekly Limits: ${monthlyLimit.overrideWeeklyLimits ?? true}`);
+        console.log(`   🔢 Count Half Days: ${monthlyLimit.countHalfDays ?? true}`);
+
+        // Count calendar rule days
+        const calendarOffDates = Object.keys(calendarRules).filter(d => calendarRules[d]?.must_day_off);
+        if (calendarOffDates.length > 0) {
+          console.log(`\n   📅 Calendar must_day_off dates (${calendarOffDates.length}):`);
+          console.log(`      ${calendarOffDates.join(", ")}`);
+        }
+
+        console.log("\n   📋 Calculating effective limits per staff...");
 
         staffMembers.forEach(staff => {
           const effectiveLimits = MonthlyLimitCalculator.calculateEffectiveLimits(
@@ -1258,9 +1271,15 @@ export class BusinessRuleValidator {
             }
           );
           effectiveLimitsMap.set(staff.id, effectiveLimits);
+
+          // Log per-staff calendar rule impact (only if there are calendar rules)
+          if (effectiveLimits.totalCalendarDays > 0) {
+            console.log(`      ${staff.name}: ${effectiveLimits.calendarOffDays}× calendar off, ${effectiveLimits.calendarEarlyDays}△ calendar early`);
+          }
         });
 
-        console.log(`✅ [MONTHLY-LIMITS] Calculated effective limits for ${effectiveLimitsMap.size} staff members`);
+        console.log(`\n✅ [MONTHLY-LIMITS] Effective limits calculated for ${effectiveLimitsMap.size} staff`);
+        console.log("📊 ═══════════════════════════════════════════════════════════════\n");
       }
 
       // Store for use in distributeOffDays and other methods
@@ -1532,6 +1551,11 @@ export class BusinessRuleValidator {
       }
 
       console.log("✅ Rule-based schedule generated (calendar override applied)");
+
+      // ✅ Phase 5: Enhanced reporting - Monthly limits summary
+      if (effectiveLimitsMap.size > 0) {
+        this.logMonthlyLimitsSummary(schedule, staffMembers, effectiveLimitsMap, calendarRules);
+      }
 
       return schedule;
     } catch (error) {
@@ -2820,6 +2844,102 @@ export class BusinessRuleValidator {
     }
 
     console.log(`✅ [MIN-MONTHLY] Enforcement complete: Added ${addedCount} off days to meet minimum limits`);
+  }
+
+  /**
+   * ✅ Phase 5: Log monthly limits summary report
+   * Shows calendar off days per staff, flexible off days per staff, MIN/MAX compliance status
+   * @param {Object} schedule - Current schedule
+   * @param {Array} staffMembers - Staff member data
+   * @param {Map} effectiveLimitsMap - Map of staffId -> effective limits
+   * @param {Object} calendarRules - Calendar rules
+   */
+  logMonthlyLimitsSummary(schedule, staffMembers, effectiveLimitsMap, calendarRules = {}) {
+    console.log("\n📊 ═══════════════════════════════════════════════════════════════");
+    console.log("📊 MONTHLY LIMITS SUMMARY REPORT (Phase 5)");
+    console.log("📊 ═══════════════════════════════════════════════════════════════\n");
+
+    let compliantCount = 0;
+    let minViolationCount = 0;
+    let maxViolationCount = 0;
+    const staffSummaries = [];
+
+    staffMembers.forEach(staff => {
+      const effectiveLimits = effectiveLimitsMap.get(staff.id);
+      if (!effectiveLimits) return;
+
+      const counts = MonthlyLimitCalculator.countOffDays(
+        staff.id,
+        schedule,
+        calendarRules,
+        effectiveLimits.excludeCalendarRules
+      );
+
+      const minMet = effectiveLimits.effectiveMin === null ||
+                     counts.countableOffDays >= effectiveLimits.effectiveMin;
+      const maxOk = effectiveLimits.effectiveMax === null ||
+                    counts.countableOffDays <= effectiveLimits.effectiveMax;
+      const isCompliant = minMet && maxOk;
+
+      if (isCompliant) {
+        compliantCount++;
+      } else {
+        if (!minMet) minViolationCount++;
+        if (!maxOk) maxViolationCount++;
+      }
+
+      staffSummaries.push({
+        name: staff.name,
+        flexibleOff: counts.flexibleOffDays,
+        calendarOff: counts.calendarOffDays,
+        calendarEarly: counts.calendarEarlyDays,
+        totalOff: counts.totalOffDays,
+        countable: counts.countableOffDays,
+        min: effectiveLimits.effectiveMin,
+        max: effectiveLimits.effectiveMax,
+        minMet,
+        maxOk,
+        isCompliant,
+      });
+    });
+
+    // Print per-staff summary
+    console.log("📋 Staff Monthly Off-Day Status:");
+    console.log("   ─────────────────────────────────────────────────────────────────");
+    console.log("   Staff Name      │ Flexible │ Calendar │ Total │ Min │ Max │ Status");
+    console.log("   ─────────────────────────────────────────────────────────────────");
+
+    staffSummaries.forEach(s => {
+      const status = s.isCompliant ? "✅ OK" : (!s.minMet ? "⚠️ <MIN" : "⚠️ >MAX");
+      const minStr = s.min !== null ? String(s.min).padStart(3) : "  -";
+      const maxStr = s.max !== null ? String(s.max).padStart(3) : "  -";
+      console.log(
+        `   ${s.name.padEnd(15)} │    ${String(s.flexibleOff).padStart(3)}   │    ${String(s.calendarOff).padStart(3)}   │  ${String(s.totalOff).padStart(3)}  │ ${minStr} │ ${maxStr} │ ${status}`
+      );
+    });
+
+    console.log("   ─────────────────────────────────────────────────────────────────\n");
+
+    // Print summary statistics
+    console.log("📈 Compliance Summary:");
+    console.log(`   • Total Staff: ${staffMembers.length}`);
+    console.log(`   • Compliant: ${compliantCount} (${Math.round(compliantCount/staffMembers.length*100)}%)`);
+    if (minViolationCount > 0) {
+      console.log(`   • Below MIN: ${minViolationCount} staff`);
+    }
+    if (maxViolationCount > 0) {
+      console.log(`   • Above MAX: ${maxViolationCount} staff`);
+    }
+
+    // Calendar rule summary
+    const calendarDates = Object.keys(calendarRules).filter(d => calendarRules[d]?.must_day_off);
+    if (calendarDates.length > 0) {
+      console.log(`\n📅 Calendar Rules Applied:`);
+      console.log(`   • must_day_off dates: ${calendarDates.length} (excluded from monthly limits)`);
+      console.log(`   • Dates: ${calendarDates.join(", ")}`);
+    }
+
+    console.log("\n📊 ═══════════════════════════════════════════════════════════════\n");
   }
 
   /**
