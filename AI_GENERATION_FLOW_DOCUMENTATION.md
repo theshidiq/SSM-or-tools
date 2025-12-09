@@ -1,11 +1,24 @@
 # AI Schedule Generation Flow: Complete Documentation
 
-**Document Version:** 1.5
-**Last Updated:** 2025-12-06
-**Status:** Complete Reference Guide (Phase 6.5 Enhanced)
+**Document Version:** 1.6
+**Last Updated:** 2025-12-07
+**Status:** Complete Reference Guide (Phase 6.6 Monthly Limits Enhanced)
 **Investigation Level:** Very Thorough
 
-**Phase 6.5 Changes (Latest):**
+**Phase 6.6 Changes (Latest - Monthly Limits Enhancement):**
+- Added **MonthlyLimitCalculator** utility class (`src/ai/utils/MonthlyLimitCalculator.js`)
+- Added **MIN/MAX monthly off-day limits** support with calendar rule exclusion
+- Added **Calendar Rule Exclusion**: must_day_off dates don't count toward monthly limits
+- Added **Early Shift Calendar Exclusion**: △ on must_day_off dates don't count toward limits
+- Added **Weekly Limits Override**: Monthly limits take precedence when `overrideWeeklyLimits` is true
+- Added **Half-Day Support**: 0.5 increment support for flexible scheduling
+- Added **Enhanced Reporting**: Summary report showing per-staff compliance status
+- Added **enforceMinMonthlyLimits()** method in BusinessRuleValidator
+- Added **validateMinMonthlyOffLimits()** in ConstraintEngine for validation
+- Added violation types: `MONTHLY_MIN_OFF_LIMIT`, `MONTHLY_MAX_OFF_LIMIT`
+- Location: `BusinessRuleValidator.js`, `ConstraintEngine.js`, `MonthlyLimitCalculator.js`
+
+**Phase 6.5 Changes:**
 - Added `FINAL-OVERRIDE` step in `HybridPredictor.predictSchedule()` (Step 7)
 - Calendar rules now run as the ABSOLUTE FINAL step, AFTER backup staff assignments
 - This ensures backup staff (like パート workers configured as backup) respect must_day_off rules
@@ -866,40 +879,176 @@ async wouldViolateWeeklyOffDayLimit(schedule, staff, dateKey, dateRange) {
 - Calendar rules (Phase 3)
 - Never by anything else
 
-### 4.3 Monthly Limits (total off days per month)
+### 4.3 Monthly Limits (Phase 6.6 Enhanced - MIN/MAX with Calendar Exclusion)
 
-**What:** Total off-days a staff member can have per month
+**What:** Minimum and maximum off-days a staff member can have per month, with calendar rule exclusion support.
 
-**Configuration:**
+**Configuration (Enhanced):**
 ```javascript
 monthlyLimits: {
-  maxOffDaysPerMonth: 10,   // Max 10 days off per month
-  minWorkDaysPerMonth: 12   // Min 12 work days per month
+  minCount: 7,                      // MIN: Staff must have at least 7 off days
+  maxCount: 8,                      // MAX: Staff cannot exceed 8 off days
+  excludeCalendarRules: true,       // must_day_off dates DON'T count toward limits
+  excludeEarlyShiftCalendar: true,  // △ on must_day_off dates DON'T count
+  overrideWeeklyLimits: true,       // Monthly limits override weekly conflicts
+  countHalfDays: true               // Support 0.5 day increments
 }
 ```
 
-**Where Checked:**
+**Key Concept: Effective Limits with Calendar Exclusion**
 
-During off-day distribution (Lines 2076-2300):
+Calendar must_day_off dates are **excluded** from the monthly limit calculation:
 
 ```javascript
-for (const staff of staffMembers) {
-  // Count existing off days for this staff this month
-  const existingOffDays = countOffDaysInMonth(schedule, staff.id);
-  
-  // How many more can we assign?
-  const remaining = maxOffPerMonth - existingOffDays;
-  
-  if (remaining > 0) {
-    // Randomly distribute remaining off days
-    // Check all other constraints while doing so
+// Example:
+// Configured MAX: 8 days off
+// Calendar must_day_off dates: 3 (e.g., Dec 25, Jan 1, Feb 11)
+// Staff A has early shift preference on 1 of those dates
+
+// Effective calculation for Staff A:
+// - Calendar × days: 2 (automatically assigned, excluded from limit)
+// - Calendar △ days: 1 (early shift on must_day_off, excluded from limit)
+// - Flexible off days available: 8 (full limit, not reduced)
+// - Total possible off days: 2 + 1 + 8 = 11 (but only 8 count toward limit)
+```
+
+**MonthlyLimitCalculator Utility (Phase 6.6):**
+
+Located at `src/ai/utils/MonthlyLimitCalculator.js`:
+
+```javascript
+import { MonthlyLimitCalculator } from "../utils/MonthlyLimitCalculator";
+
+// Calculate effective limits for a staff member
+const effectiveLimits = MonthlyLimitCalculator.calculateEffectiveLimits(
+  staff.id,
+  {
+    monthlyLimit,           // Config from settings
+    calendarRules,          // Calendar rules object
+    earlyShiftPrefs,        // Early shift preferences
+    dateRange,              // Array of date strings
+  }
+);
+
+// Returns:
+// {
+//   configuredMin: 7,
+//   configuredMax: 8,
+//   effectiveMin: 7,        // Same as configured (calendar days excluded)
+//   effectiveMax: 8,        // Same as configured (calendar days excluded)
+//   calendarOffDays: 2,     // × on must_day_off dates
+//   calendarEarlyDays: 1,   // △ on must_day_off dates
+//   totalCalendarDays: 3,   // Total calendar rule days
+//   excludeCalendarRules: true,
+//   overrideWeeklyLimits: true,
+// }
+
+// Count off days (separates flexible vs calendar)
+const counts = MonthlyLimitCalculator.countOffDays(
+  staff.id,
+  schedule,
+  calendarRules,
+  excludeCalendarRules
+);
+// Returns: { flexibleOffDays, calendarOffDays, countableOffDays, totalOffDays }
+
+// Check if adding off day would violate MAX
+const canAddOff = MonthlyLimitCalculator.canAddOffDay(staff.id, schedule, effectiveLimits, calendarRules);
+
+// Check if staff needs more off days to meet MIN
+const needsMore = MonthlyLimitCalculator.needsMoreOffDays(staff.id, schedule, effectiveLimits, calendarRules);
+
+// Check if weekly limits should be overridden
+const override = MonthlyLimitCalculator.shouldOverrideWeeklyLimit(staff.id, schedule, effectiveLimits, calendarRules);
+```
+
+**Where Enforced:**
+
+1. **During Generation - MAX Check** (BusinessRuleValidator.distributeOffDays):
+   ```javascript
+   // ✅ Phase 3 Monthly Limits: Check if would exceed monthly MAX
+   if (effectiveLimits) {
+     const canAddOff = MonthlyLimitCalculator.canAddOffDay(staff.id, schedule, effectiveLimits, calendarRules);
+     if (!canAddOff) {
+       console.log(`⏭️ [MONTHLY-MAX] ${staff.name}: Cannot assign × - would exceed monthly MAX`);
+       continue;
+     }
+   }
+   ```
+
+2. **During Generation - MIN Enforcement** (BusinessRuleValidator.enforceMinMonthlyLimits):
+   ```javascript
+   // After distribution, enforce minimum requirements
+   await this.enforceMinMonthlyLimits(schedule, staffMembers, effectiveLimitsMap, dateRange, calendarRules);
+   ```
+
+3. **During Validation** (ConstraintEngine.validateMinMonthlyOffLimits):
+   ```javascript
+   const result = validateMinMonthlyOffLimits(
+     schedule,
+     staffMembers,
+     monthlyLimit,
+     calendarRules,
+     earlyShiftPrefs,
+     dateRange
+   );
+   // Returns: { valid: boolean, violations: [...], summary: {...} }
+   ```
+
+**Weekly Override Behavior:**
+
+When `overrideWeeklyLimits` is enabled and there's a conflict:
+
+```javascript
+// Scenario: Monthly MIN=7, Weekly MAX=2/week (would be 8/month)
+// If MIN not met yet, weekly limit is ignored:
+
+if (!effectiveLimits.overrideWeeklyLimits) {
+  const wouldViolateWeekly = await this.wouldViolateWeeklyOffDayLimit(...);
+  if (wouldViolateWeekly) {
+    console.log(`⏭️ [MIN-MONTHLY] ${staff.name}: Skip (weekly limit)`);
+    continue;
   }
 }
+// If overrideWeeklyLimits is true, weekly check is skipped
+```
+
+**Enhanced Reporting (Phase 5):**
+
+After generation, a summary report is logged:
+
+```
+📊 ═══════════════════════════════════════════════════════════════
+📊 MONTHLY LIMITS SUMMARY REPORT (Phase 5)
+📊 ═══════════════════════════════════════════════════════════════
+
+📋 Staff Monthly Off-Day Status:
+   ─────────────────────────────────────────────────────────────────
+   Staff Name      │ Flexible │ Calendar │ Total │ Min │ Max │ Status
+   ─────────────────────────────────────────────────────────────────
+   料理長          │      7   │      2   │    9  │   7 │   8 │ ✅ OK
+   古藤            │      8   │      2   │   10  │   7 │   8 │ ✅ OK
+   山田            │      6   │      2   │    8  │   7 │   8 │ ⚠️ <MIN
+   ─────────────────────────────────────────────────────────────────
+
+📈 Compliance Summary:
+   • Total Staff: 10
+   • Compliant: 9 (90%)
+   • Below MIN: 1 staff
+
+📅 Calendar Rules Applied:
+   • must_day_off dates: 2 (excluded from monthly limits)
+   • Dates: 2025-12-25, 2026-01-01
+
+📊 ═══════════════════════════════════════════════════════════════
 ```
 
 **Can Be Overridden By:**
-- Calendar rules (Phase 3)
-- Weekly limits (if hitting limit would violate weekly rule)
+- Calendar rules (Phase 3) - Calendar days are excluded from counting
+- Never reduced by weekly limits when `overrideWeeklyLimits` is true
+
+**Cannot Override:**
+- Calendar must_day_off rules (those are ADDED on top of monthly limits)
 
 ### 4.4 Adjacent Conflict Prevention (××, △△, ×△, △×)
 
@@ -1049,7 +1198,7 @@ if (offOrEarlyMembers.length > 1) {
 
 ## 5. Priority/Layering System: What Overrides What
 
-### 5.1 The Complete Hierarchy
+### 5.1 The Complete Hierarchy (Phase 6.6 Enhanced)
 
 ```
 TIER 0 (ABSOLUTE - Cannot be overridden):
@@ -1061,17 +1210,37 @@ TIER 1 (HARD CONSTRAINTS - Enforced during generation):
   ├─ Staff group constraints (only 1 off per group per date)
   ├─ Adjacent conflict prevention (no ××, △△, ×△, △×)
   ├─ Daily limits (min 2, max 3 off per day) [except on calendar dates]
-  ├─ Weekly limits (consecutive work days max)
+  ├─ Monthly limits MIN/MAX (Phase 6.6 - with calendar exclusion)
+  │   ├─ MIN: Minimum off days required per month
+  │   ├─ MAX: Maximum off days allowed per month
+  │   ├─ Calendar days EXCLUDED from counting
+  │   └─ Can OVERRIDE weekly limits when enabled
   └─ 5-day rest requirement (no 5+ consecutive work days)
+
+TIER 1.5 (DEMOTED WHEN MONTHLY OVERRIDES - Phase 6.6):
+  └─ Weekly limits (consecutive work days max)
+      └─ Demoted when monthlyLimits.overrideWeeklyLimits = true
 
 TIER 2 (SOFT CONSTRAINTS - Applied with fallback):
   ├─ Priority rules (preferred/avoided shifts)
-  ├─ Monthly limits (total off days)
   ├─ Backup staff preference (don't assign off to backup-only staff)
   └─ Operational efficiency metrics
 
 TIER 3 (FINAL CORRECTION - Applied after generation):
-  └─ Daily limit balancing (ensure exactly min-max off per day)
+  ├─ Daily limit balancing (ensure exactly min-max off per day)
+  ├─ Monthly MIN enforcement (add more × if below minimum)
+  └─ Monthly limits summary report (Phase 5 reporting)
+```
+
+**New Priority Rule (Phase 6.6):**
+```
+Monthly Limits vs Weekly Limits:
+- If overrideWeeklyLimits = true AND monthly MIN not met:
+  → Weekly limit is IGNORED, monthly MIN wins
+- If overrideWeeklyLimits = true AND at monthly MAX:
+  → Weekly limit ignored, but cannot add more offs anyway
+- If overrideWeeklyLimits = false:
+  → Weekly limits enforced as normal (may prevent reaching monthly MIN)
 ```
 
 ### 5.2 Specific Override Rules
