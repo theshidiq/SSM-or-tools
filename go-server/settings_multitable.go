@@ -13,6 +13,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/gorilla/websocket"
 )
 
@@ -22,14 +23,15 @@ import (
 
 // SettingsAggregate combines all 7 settings tables + version info
 type SettingsAggregate struct {
-	StaffGroups       []StaffGroup       `json:"staffGroups"`
-	WeeklyLimits      []WeeklyLimit      `json:"weeklyLimits"`
-	MonthlyLimits     []MonthlyLimit     `json:"monthlyLimits"`
+	StaffGroups       []StaffGroup          `json:"staffGroups"`
+	WeeklyLimits      []WeeklyLimit         `json:"weeklyLimits"`
+	MonthlyLimits     []MonthlyLimit        `json:"monthlyLimits"`
 	DailyLimits       map[string]interface{} `json:"dailyLimits"` // Daily limits stored as JSONB
-	PriorityRules     []PriorityRule     `json:"priorityRules"`
-	BackupAssignments []BackupAssignment `json:"backupAssignments"`
-	MLModelConfigs    []MLModelConfig    `json:"mlModelConfigs"`
-	Version           ConfigVersion      `json:"version"`
+	PriorityRules     []PriorityRule        `json:"priorityRules"`
+	BackupAssignments []BackupAssignment    `json:"backupAssignments"`
+	MLModelConfigs    []MLModelConfig       `json:"mlModelConfigs"`
+	ORToolsConfig     []ORToolsSolverConfig `json:"ortoolsConfig"`
+	Version           ConfigVersion         `json:"version"`
 }
 
 // MarshalJSON custom marshaler for SettingsAggregate
@@ -89,6 +91,41 @@ func (sa *SettingsAggregate) MarshalJSON() ([]byte, error) {
 		reactBackupAssignments[i] = assignment.ToReactFormat()
 	}
 
+	// ✅ FIX: Convert OR-Tools config array to single object for React
+	// React expects: { preset, penaltyWeights, solverSettings }
+	// Database stores: [ { id, preset, penaltyWeights, solverSettings, ... } ]
+	var reactORToolsConfig map[string]interface{}
+	if len(sa.ORToolsConfig) > 0 {
+		// Take the first (and typically only) config
+		config := sa.ORToolsConfig[0]
+		reactORToolsConfig = map[string]interface{}{
+			"id":             config.ID,
+			"preset":         config.Preset,
+			"penaltyWeights": config.PenaltyWeights,
+			"solverSettings": config.SolverSettings,
+			"isActive":       config.IsActive,
+		}
+		log.Printf("🔧 [MarshalJSON] OR-Tools config included: preset=%s, penaltyWeights=%v", config.Preset, config.PenaltyWeights)
+	} else {
+		// Provide defaults if no config exists
+		reactORToolsConfig = map[string]interface{}{
+			"preset": "balanced",
+			"penaltyWeights": map[string]interface{}{
+				"staffGroup":       100,
+				"dailyLimitMin":    50,
+				"dailyLimitMax":    50,
+				"monthlyLimit":     80,
+				"adjacentConflict": 30,
+				"fiveDayRest":      200,
+			},
+			"solverSettings": map[string]interface{}{
+				"timeout":    30,
+				"numWorkers": 4,
+			},
+		}
+		log.Printf("🔧 [MarshalJSON] No OR-Tools config found, using defaults")
+	}
+
 	// Create response structure with converted data
 	response := map[string]interface{}{
 		"staffGroups":       reactGroups,
@@ -98,6 +135,7 @@ func (sa *SettingsAggregate) MarshalJSON() ([]byte, error) {
 		"priorityRules":     reactPriorityRules,     // ← FIXED: Now using converted format
 		"backupAssignments": reactBackupAssignments, // Backup staff assignments
 		"mlModelConfigs":    sa.MLModelConfigs,
+		"ortoolsConfig":     reactORToolsConfig,     // ✅ FIX: Added OR-Tools config for React
 		"version":           sa.Version,
 	}
 
@@ -419,6 +457,21 @@ type MLModelConfig struct {
 	UpdatedAt           time.Time              `json:"updatedAt"`
 }
 
+// ORToolsSolverConfig represents OR-Tools solver configuration
+// Note: Uses snake_case JSON tags to match Supabase column names for proper deserialization
+type ORToolsSolverConfig struct {
+	ID             string                 `json:"id"`
+	RestaurantID   string                 `json:"restaurant_id"`
+	VersionID      string                 `json:"version_id,omitempty"`
+	Name           string                 `json:"name"`
+	Preset         string                 `json:"preset"`
+	PenaltyWeights map[string]interface{} `json:"penalty_weights"`
+	SolverSettings map[string]interface{} `json:"solver_settings"`
+	IsActive       bool                   `json:"is_active"`
+	CreatedAt      time.Time              `json:"created_at"`
+	UpdatedAt      time.Time              `json:"updated_at"`
+}
+
 // ToReactFormat converts snake_case to camelCase for React
 func (mc *MLModelConfig) ToReactFormat() map[string]interface{} {
 	return map[string]interface{}{
@@ -511,8 +564,8 @@ func (cv *ConfigVersion) ToReactFormat() map[string]interface{} {
 func (s *StaffSyncServer) getRestaurantID() string {
 	restaurantID := os.Getenv("RESTAURANT_ID")
 	if restaurantID == "" {
-		// Use default restaurant ID from Phase 1 verification
-		restaurantID = "e1661c71-b24f-4ee1-9e8b-7290a43c9575"
+		// Use default restaurant ID - "My Restaurant"
+		restaurantID = "4a4e4447-3ddc-4790-b2f9-b892722503b3"
 	}
 	return restaurantID
 }
@@ -731,8 +784,12 @@ func (s *StaffSyncServer) fetchDailyLimits(versionID string) (map[string]interfa
 	}
 
 	// Return default values if no daily limits found
-	log.Printf("⚠️ [fetchDailyLimits] No daily limits found, returning defaults")
+	// NOTE: Global daily limits (minOffPerDay, maxOffPerDay) are DEPRECATED
+	// Use staffTypeLimits for per-staff-type constraints instead
+	log.Printf("⚠️ [fetchDailyLimits] No daily limits found, returning defaults with staffTypeLimits")
 	return map[string]interface{}{
+		// DEPRECATED: Global daily limits - kept for backward compatibility but won't be used
+		// when staffTypeLimits is configured (auto-disabled in Python scheduler)
 		"minOffPerDay":           0,
 		"maxOffPerDay":           3,
 		"minEarlyPerDay":         0,
@@ -740,6 +797,15 @@ func (s *StaffSyncServer) fetchDailyLimits(versionID string) (map[string]interfa
 		"minLatePerDay":          0,
 		"maxLatePerDay":          3,
 		"minWorkingStaffPerDay":  3,
+		// DEFAULT: Staff Type Daily Limits - per-staff-type constraints
+		// This is now the PRIMARY constraint method for daily limits
+		"staffTypeLimits": map[string]interface{}{
+			"社員": map[string]interface{}{
+				"maxOff":   1,
+				"maxEarly": 2,
+				"isHard":   true,
+			},
+		},
 	}, nil
 }
 
@@ -906,6 +972,45 @@ func (s *StaffSyncServer) fetchBackupAssignments(versionID string) ([]BackupAssi
 	return assignments, nil
 }
 
+// fetchORToolsConfig retrieves OR-Tools solver configurations for the restaurant
+// Note: OR-Tools config is restaurant-scoped, not version-scoped
+func (s *StaffSyncServer) fetchORToolsConfig(versionID string) ([]ORToolsSolverConfig, error) {
+	// Fetch by restaurant_id since OR-Tools config is not version-specific
+	restaurantID := s.getRestaurantID()
+	url := fmt.Sprintf("%s/rest/v1/ortools_solver_config?restaurant_id=eq.%s&is_active=eq.true&select=*",
+		s.supabaseURL, restaurantID)
+
+	req, err := http.NewRequest("GET", url, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %w", err)
+	}
+
+	req.Header.Set("Authorization", "Bearer "+s.supabaseKey)
+	req.Header.Set("apikey", s.supabaseKey)
+	req.Header.Set("Content-Type", "application/json")
+
+	client := &http.Client{Timeout: 10 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch from Supabase: %w", err)
+	}
+	defer resp.Body.Close()
+
+	body, _ := io.ReadAll(resp.Body)
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("Supabase request failed with status %d: %s", resp.StatusCode, string(body))
+	}
+
+	var configs []ORToolsSolverConfig
+	if err := json.Unmarshal(body, &configs); err != nil {
+		return nil, fmt.Errorf("failed to parse response: %w", err)
+	}
+
+	log.Printf("🔧 Fetched %d OR-Tools solver configs from database", len(configs))
+	return configs, nil
+}
+
 // fetchAggregatedSettings fetches all settings tables for a specific version and aggregates them
 func (s *StaffSyncServer) fetchAggregatedSettings(versionID string) (*SettingsAggregate, error) {
 	// Fetch active version info
@@ -936,7 +1041,9 @@ func (s *StaffSyncServer) fetchAggregatedSettings(versionID string) (*SettingsAg
 	dailyLimits, err := s.fetchDailyLimits(versionID)
 	if err != nil {
 		log.Printf("⚠️ Failed to fetch daily limits: %v", err)
+		// Use staffTypeLimits as the default constraint method
 		dailyLimits = map[string]interface{}{
+			// DEPRECATED: Global daily limits (kept for backward compatibility)
 			"minOffPerDay":          0,
 			"maxOffPerDay":          3,
 			"minEarlyPerDay":        0,
@@ -944,6 +1051,14 @@ func (s *StaffSyncServer) fetchAggregatedSettings(versionID string) (*SettingsAg
 			"minLatePerDay":         0,
 			"maxLatePerDay":         3,
 			"minWorkingStaffPerDay": 3,
+			// DEFAULT: Staff Type Daily Limits - the PRIMARY constraint method
+			"staffTypeLimits": map[string]interface{}{
+				"社員": map[string]interface{}{
+					"maxOff":   1,
+					"maxEarly": 2,
+					"isHard":   true,
+				},
+			},
 		}
 	}
 
@@ -965,6 +1080,12 @@ func (s *StaffSyncServer) fetchAggregatedSettings(versionID string) (*SettingsAg
 		backupAssignments = []BackupAssignment{}
 	}
 
+	ortoolsConfig, err := s.fetchORToolsConfig(versionID)
+	if err != nil {
+		log.Printf("⚠️ Failed to fetch OR-Tools configs: %v", err)
+		ortoolsConfig = []ORToolsSolverConfig{}
+	}
+
 	// 🔍 DEBUG: Log aggregated settings summary
 	log.Printf("🔍 [fetchAggregatedSettings] Successfully aggregated settings for version %s:", versionID)
 	log.Printf("   - Staff Groups: %d", len(staffGroups))
@@ -974,6 +1095,7 @@ func (s *StaffSyncServer) fetchAggregatedSettings(versionID string) (*SettingsAg
 	log.Printf("   - Priority Rules: %d", len(priorityRules))
 	log.Printf("   - Backup Assignments: %d", len(backupAssignments))
 	log.Printf("   - ML Configs: %d", len(mlConfigs))
+	log.Printf("   - OR-Tools Configs: %d", len(ortoolsConfig))
 
 	return &SettingsAggregate{
 		StaffGroups:       staffGroups,
@@ -983,6 +1105,7 @@ func (s *StaffSyncServer) fetchAggregatedSettings(versionID string) (*SettingsAg
 		PriorityRules:     priorityRules,
 		BackupAssignments: backupAssignments,
 		MLModelConfigs:    mlConfigs,
+		ORToolsConfig:     ortoolsConfig,
 		Version:           *version,
 	}, nil
 }
@@ -1591,63 +1714,127 @@ func (s *StaffSyncServer) upsertDailyLimits(versionID string, limitData map[stri
 	return nil
 }
 
-// updateMonthlyLimit updates a monthly limit in the database
+// updateMonthlyLimit updates a monthly limit in the database using UPSERT pattern
+// First tries UPDATE, if no rows affected, then INSERTs new record
 func (s *StaffSyncServer) updateMonthlyLimit(versionID string, limitData map[string]interface{}) error {
 	limitID, ok := limitData["id"].(string)
 	if !ok {
 		return fmt.Errorf("missing or invalid limit id")
 	}
 
-	url := fmt.Sprintf("%s/rest/v1/monthly_limits?id=eq.%s&version_id=eq.%s",
-		s.supabaseURL, limitID, versionID)
+	log.Printf("🔍 [upsertMonthlyLimit] Processing monthly limit: %s", limitID)
+	log.Printf("🔍 [upsertMonthlyLimit] Limit data: %+v", limitData)
 
-	// Prepare update data (same structure as daily limits)
-	updateData := make(map[string]interface{})
+	url := fmt.Sprintf("%s/rest/v1/monthly_limits", s.supabaseURL)
+
+	// Prepare upsert data (same structure as daily limits)
+	upsertData := make(map[string]interface{})
+	upsertData["id"] = limitID
+	upsertData["version_id"] = versionID
+	upsertData["restaurant_id"] = s.getRestaurantID()
 
 	if name, ok := limitData["name"]; ok {
-		updateData["name"] = name
+		upsertData["name"] = name
+	} else {
+		upsertData["name"] = "New Monthly Limit"
 	}
-	if limitConfig, ok := limitData["limitConfig"]; ok {
-		updateData["limit_config"] = limitConfig
+	if limitConfig, ok := limitData["limitConfig"]; ok && limitConfig != nil {
+		upsertData["limit_config"] = limitConfig
+	} else {
+		// Default limit_config structure - required NOT NULL field
+		upsertData["limit_config"] = map[string]interface{}{
+			"limitType":  "off_days",
+			"minCount":   7,
+			"maxCount":   8,
+			"staffIds":   []string{},
+			"shiftTypes": []string{"×"},
+		}
 	}
 	if penaltyWeight, ok := limitData["penaltyWeight"]; ok {
-		updateData["penalty_weight"] = penaltyWeight
+		upsertData["penalty_weight"] = penaltyWeight
+	} else {
+		upsertData["penalty_weight"] = 1.0
 	}
 	if isHardConstraint, ok := limitData["isHardConstraint"]; ok {
-		updateData["is_hard_constraint"] = isHardConstraint
+		upsertData["is_hard_constraint"] = isHardConstraint
+	} else {
+		upsertData["is_hard_constraint"] = false
 	}
 	if effectiveFrom, ok := limitData["effectiveFrom"]; ok {
-		updateData["effective_from"] = effectiveFrom
+		upsertData["effective_from"] = effectiveFrom
 	}
 	if effectiveUntil, ok := limitData["effectiveUntil"]; ok {
-		updateData["effective_until"] = effectiveUntil
+		upsertData["effective_until"] = effectiveUntil
 	}
 
-	updateData["updated_at"] = time.Now().UTC().Format(time.RFC3339)
+	upsertData["is_active"] = true
+	upsertData["updated_at"] = time.Now().UTC().Format(time.RFC3339)
 
-	jsonData, _ := json.Marshal(updateData)
-	req, err := http.NewRequest("PATCH", url, bytes.NewBuffer(jsonData))
+	jsonData, _ := json.Marshal(upsertData)
+	log.Printf("🔍 [upsertMonthlyLimit] Upsert data: %s", string(jsonData))
+
+	// Strategy: First try to UPDATE existing row with matching id and version_id
+	// If no rows updated, then INSERT new row
+
+	// Step 1: Try to update existing row
+	updateURL := fmt.Sprintf("%s?id=eq.%s&version_id=eq.%s", url, limitID, versionID)
+	updateReq, err := http.NewRequest("PATCH", updateURL, bytes.NewBuffer(jsonData))
 	if err != nil {
-		return fmt.Errorf("failed to create request: %w", err)
+		return fmt.Errorf("failed to create update request: %w", err)
 	}
 
-	req.Header.Set("Authorization", "Bearer "+s.supabaseKey)
-	req.Header.Set("apikey", s.supabaseKey)
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Prefer", "return=minimal")
+	updateReq.Header.Set("apikey", s.supabaseKey)
+	updateReq.Header.Set("Authorization", "Bearer "+s.supabaseKey)
+	updateReq.Header.Set("Content-Type", "application/json")
+	updateReq.Header.Set("Prefer", "return=representation")
 
 	client := &http.Client{Timeout: 10 * time.Second}
-	resp, err := client.Do(req)
+	updateResp, err := client.Do(updateReq)
 	if err != nil {
 		return fmt.Errorf("failed to update monthly limit: %w", err)
 	}
-	defer resp.Body.Close()
+	defer updateResp.Body.Close()
 
-	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusNoContent {
-		body, _ := io.ReadAll(resp.Body)
-		return fmt.Errorf("update failed with status %d: %s", resp.StatusCode, string(body))
+	updateBody, _ := io.ReadAll(updateResp.Body)
+	log.Printf("🔍 [upsertMonthlyLimit] UPDATE response status: %d, body: %s", updateResp.StatusCode, string(updateBody))
+
+	// If update was successful and affected rows, we're done
+	if updateResp.StatusCode == http.StatusOK && len(updateBody) > 2 && string(updateBody) != "[]" {
+		log.Printf("✅ [upsertMonthlyLimit] Successfully updated existing monthly limit")
+		return nil
 	}
 
+	// Step 2: If no rows were updated, insert a new row
+	log.Printf("🔍 [upsertMonthlyLimit] No existing row found, inserting new row")
+
+	// Add created_at for new record
+	upsertData["created_at"] = time.Now().UTC().Format(time.RFC3339)
+	jsonData, _ = json.Marshal(upsertData)
+
+	insertReq, err := http.NewRequest("POST", url, bytes.NewBuffer(jsonData))
+	if err != nil {
+		return fmt.Errorf("failed to create insert request: %w", err)
+	}
+
+	insertReq.Header.Set("apikey", s.supabaseKey)
+	insertReq.Header.Set("Authorization", "Bearer "+s.supabaseKey)
+	insertReq.Header.Set("Content-Type", "application/json")
+	insertReq.Header.Set("Prefer", "return=representation")
+
+	insertResp, err := client.Do(insertReq)
+	if err != nil {
+		return fmt.Errorf("failed to insert monthly limit: %w", err)
+	}
+	defer insertResp.Body.Close()
+
+	insertBody, _ := io.ReadAll(insertResp.Body)
+	log.Printf("🔍 [upsertMonthlyLimit] INSERT response status: %d, body: %s", insertResp.StatusCode, string(insertBody))
+
+	if insertResp.StatusCode != http.StatusOK && insertResp.StatusCode != http.StatusCreated {
+		return fmt.Errorf("insert failed with status %d: %s", insertResp.StatusCode, string(insertBody))
+	}
+
+	log.Printf("✅ [upsertMonthlyLimit] Successfully inserted new monthly limit")
 	return nil
 }
 
@@ -1946,11 +2133,11 @@ func (s *StaffSyncServer) insertPriorityRule(versionID string, ruleData map[stri
 	log.Printf("🔍 [insertPriorityRule] Final rule_definition: %+v", ruleDefinition)
 
 	// Build INSERT payload with all required fields
-	// NOTE: restaurant_id comes from environment variable
+	// NOTE: restaurant_id comes from environment variable via getRestaurantID()
 	// ✅ FIX: Removed staff_id - database schema doesn't have this column
 	// Staff IDs are stored in rule_definition.staff_ids JSONB array
 	insertData := map[string]interface{}{
-		"restaurant_id": "e1661c71-b24f-4ee1-9e8b-7290a43c9575", // Hardcoded from env
+		"restaurant_id": s.getRestaurantID(),
 		"version_id":    versionID,
 		"name":          ruleData["name"],
 		"description":   ruleData["description"],
@@ -2039,10 +2226,22 @@ func (s *StaffSyncServer) insertPriorityRule(versionID string, ruleData map[stri
 
 // updateMLModelConfig updates an ML model configuration in the database
 func (s *StaffSyncServer) updateMLModelConfig(versionID string, configData map[string]interface{}) error {
+	// Try to get config ID from request, otherwise lookup existing or generate new
 	configID, ok := configData["id"].(string)
-	if !ok {
-		return fmt.Errorf("missing or invalid config id")
+	if !ok || configID == "" {
+		// Lookup existing config by version_id
+		existingConfigs, err := s.fetchMLModelConfigs(versionID)
+		if err == nil && len(existingConfigs) > 0 {
+			configID = existingConfigs[0].ID
+			log.Printf("📊 [updateMLModelConfig] Found existing config ID: %s", configID)
+		} else {
+			// Generate new UUID for new config
+			configID = uuid.New().String()
+			log.Printf("📊 [updateMLModelConfig] Generated new config ID: %s", configID)
+		}
 	}
+
+	log.Printf("📊 [updateMLModelConfig] Updating config: %s", configID)
 
 	url := fmt.Sprintf("%s/rest/v1/ml_model_configs?id=eq.%s&version_id=eq.%s",
 		s.supabaseURL, configID, versionID)
@@ -2094,6 +2293,138 @@ func (s *StaffSyncServer) updateMLModelConfig(versionID string, configData map[s
 		return fmt.Errorf("update failed with status %d: %s", resp.StatusCode, string(body))
 	}
 
+	return nil
+}
+
+// updateORToolsConfig updates an OR-Tools solver configuration in the database
+// Note: OR-Tools config is restaurant-scoped, not version-scoped
+func (s *StaffSyncServer) updateORToolsConfig(versionID string, configData map[string]interface{}) error {
+	restaurantID := s.getRestaurantID()
+
+	// Try to get config ID from request, otherwise lookup existing or generate new
+	configID, ok := configData["id"].(string)
+	if !ok || configID == "" {
+		// Lookup existing config by restaurant_id
+		existingConfigs, err := s.fetchORToolsConfig(versionID)
+		if err == nil && len(existingConfigs) > 0 {
+			configID = existingConfigs[0].ID
+			log.Printf("🔧 [updateORToolsConfig] Found existing config ID: %s", configID)
+		} else {
+			// Generate new UUID for new config
+			configID = uuid.New().String()
+			log.Printf("🔧 [updateORToolsConfig] Generated new config ID: %s", configID)
+		}
+	}
+
+	log.Printf("🔧 [updateORToolsConfig] Updating config: %s", configID)
+	log.Printf("🔧 [updateORToolsConfig] Config data: %+v", configData)
+
+	url := fmt.Sprintf("%s/rest/v1/ortools_solver_config", s.supabaseURL)
+
+	// Prepare upsert data with snake_case field names
+	upsertData := make(map[string]interface{})
+	upsertData["id"] = configID
+	// Note: version_id is NULL for restaurant-wide config
+	upsertData["restaurant_id"] = restaurantID
+
+	if name, ok := configData["name"]; ok {
+		upsertData["name"] = name
+	} else {
+		upsertData["name"] = "Default Solver Config"
+	}
+
+	if preset, ok := configData["preset"]; ok {
+		upsertData["preset"] = preset
+	} else {
+		upsertData["preset"] = "balanced"
+	}
+
+	if penaltyWeights, ok := configData["penaltyWeights"]; ok && penaltyWeights != nil {
+		upsertData["penalty_weights"] = penaltyWeights
+	} else {
+		// Default penalty weights
+		upsertData["penalty_weights"] = map[string]interface{}{
+			"hardConstraintViolation": 1000,
+			"monthlyLimitViolation":   100,
+			"dailyLimitViolation":     50,
+			"priorityRuleViolation":   10,
+		}
+	}
+
+	if solverSettings, ok := configData["solverSettings"]; ok && solverSettings != nil {
+		upsertData["solver_settings"] = solverSettings
+	} else {
+		// Default solver settings
+		upsertData["solver_settings"] = map[string]interface{}{
+			"maxTimeSeconds": 30,
+			"numWorkers":     4,
+			"logSearchProgress": false,
+		}
+	}
+
+	if isActive, ok := configData["isActive"]; ok {
+		upsertData["is_active"] = isActive
+	} else {
+		upsertData["is_active"] = true
+	}
+
+	upsertData["updated_at"] = time.Now().UTC().Format(time.RFC3339)
+
+	jsonData, _ := json.Marshal(upsertData)
+	log.Printf("🔧 [updateORToolsConfig] Upsert data: %s", string(jsonData))
+
+	// Try UPDATE first - query by id and restaurant_id (config is restaurant-scoped)
+	updateURL := fmt.Sprintf("%s?id=eq.%s&restaurant_id=eq.%s", url, configID, restaurantID)
+	req, err := http.NewRequest("PATCH", updateURL, bytes.NewBuffer(jsonData))
+	if err != nil {
+		return fmt.Errorf("failed to create request: %w", err)
+	}
+
+	req.Header.Set("Authorization", "Bearer "+s.supabaseKey)
+	req.Header.Set("apikey", s.supabaseKey)
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Prefer", "return=minimal")
+
+	client := &http.Client{Timeout: 10 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		return fmt.Errorf("failed to update OR-Tools config: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode == http.StatusOK || resp.StatusCode == http.StatusNoContent {
+		log.Printf("✅ [updateORToolsConfig] Successfully updated config")
+		return nil
+	}
+
+	// If UPDATE didn't find the row, try INSERT
+	log.Printf("⚠️ [updateORToolsConfig] UPDATE failed (status %d), trying INSERT", resp.StatusCode)
+
+	upsertData["created_at"] = time.Now().UTC().Format(time.RFC3339)
+	jsonData, _ = json.Marshal(upsertData)
+
+	req, err = http.NewRequest("POST", url, bytes.NewBuffer(jsonData))
+	if err != nil {
+		return fmt.Errorf("failed to create insert request: %w", err)
+	}
+
+	req.Header.Set("Authorization", "Bearer "+s.supabaseKey)
+	req.Header.Set("apikey", s.supabaseKey)
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Prefer", "return=minimal")
+
+	resp, err = client.Do(req)
+	if err != nil {
+		return fmt.Errorf("failed to insert OR-Tools config: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusCreated && resp.StatusCode != http.StatusNoContent {
+		body, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("insert failed with status %d: %s", resp.StatusCode, string(body))
+	}
+
+	log.Printf("✅ [updateORToolsConfig] Successfully inserted config")
 	return nil
 }
 
@@ -3733,6 +4064,64 @@ func (s *StaffSyncServer) handleMLConfigUpdate(client *Client, msg *Message) {
 
 	s.broadcastToAll(&freshMsg)
 	log.Printf("📡 Broadcasted updated ML config to all clients")
+}
+
+// handleORToolsConfigUpdate updates an OR-Tools solver configuration and broadcasts changes
+func (s *StaffSyncServer) handleORToolsConfigUpdate(client *Client, msg *Message) {
+	log.Printf("🔧 Processing SETTINGS_UPDATE_ORTOOLS_CONFIG from client %s", client.clientId)
+
+	payload, ok := msg.Payload.(map[string]interface{})
+	if !ok {
+		log.Printf("❌ Invalid payload format")
+		return
+	}
+
+	configData, ok := payload["config"].(map[string]interface{})
+	if !ok {
+		log.Printf("❌ Missing config data")
+		return
+	}
+
+	version, err := s.fetchActiveConfigVersion()
+	if err != nil {
+		s.sendErrorResponse(client, "Failed to fetch active version", err)
+		return
+	}
+
+	if version.IsLocked {
+		s.sendErrorResponse(client, "Cannot modify locked version", nil)
+		return
+	}
+
+	if err := s.updateORToolsConfig(version.ID, configData); err != nil {
+		s.sendErrorResponse(client, "Failed to update OR-Tools config", err)
+		return
+	}
+
+	if err := s.logConfigChange(version.ID, "ortools_solver_config", "UPDATE", configData); err != nil {
+		log.Printf("⚠️ Failed to log config change: %v", err)
+	}
+
+	log.Printf("✅ Successfully updated OR-Tools config")
+
+	settings, err := s.fetchAggregatedSettings(version.ID)
+	if err != nil {
+		log.Printf("⚠️ Failed to fetch updated settings: %v", err)
+		return
+	}
+
+	freshMsg := Message{
+		Type: "SETTINGS_SYNC_RESPONSE",
+		Payload: map[string]interface{}{
+			"settings": settings,
+			"updated":  "ortools_solver_config",
+		},
+		Timestamp: time.Now(),
+		ClientID:  msg.ClientID,
+	}
+
+	s.broadcastToAll(&freshMsg)
+	log.Printf("📡 Broadcasted updated OR-Tools config to all clients")
 }
 
 // handleSettingsMigrate migrates localStorage settings to multi-table backend

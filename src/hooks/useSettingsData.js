@@ -45,6 +45,7 @@ export const useSettingsData = (autosaveEnabled = true) => {
     updatePriorityRules: wsUpdatePriorityRules,
     deletePriorityRule: wsDeletePriorityRule,
     updateMLConfig: wsUpdateMLConfig,
+    updateORToolsConfig: wsUpdateORToolsConfig,
     createBackupAssignment: wsCreateBackupAssignment,
     updateBackupAssignment: wsUpdateBackupAssignment,
     deleteBackupAssignment: wsDeleteBackupAssignment,
@@ -71,6 +72,7 @@ export const useSettingsData = (autosaveEnabled = true) => {
     wsUpdatePriorityRules,
     wsDeletePriorityRule,
     wsUpdateMLConfig,
+    wsUpdateORToolsConfig,
     wsCreateBackupAssignment,
     wsUpdateBackupAssignment,
     wsDeleteBackupAssignment,
@@ -90,6 +92,7 @@ export const useSettingsData = (autosaveEnabled = true) => {
       wsUpdatePriorityRules,
       wsDeletePriorityRule,
       wsUpdateMLConfig,
+      wsUpdateORToolsConfig,
       wsCreateBackupAssignment,
       wsUpdateBackupAssignment,
       wsDeleteBackupAssignment,
@@ -106,6 +109,7 @@ export const useSettingsData = (autosaveEnabled = true) => {
     wsUpdatePriorityRules,
     wsDeletePriorityRule,
     wsUpdateMLConfig,
+    wsUpdateORToolsConfig,
     wsCreateBackupAssignment,
     wsUpdateBackupAssignment,
     wsDeleteBackupAssignment,
@@ -194,9 +198,30 @@ export const useSettingsData = (autosaveEnabled = true) => {
         weeklyLimits: wsSettings?.weeklyLimits ?? [],
         monthlyLimits: wsSettings?.monthlyLimits ?? [],
         dailyLimits: wsSettings?.dailyLimits ?? settingsRef.current?.dailyLimits ?? { minOffPerDay: 0, maxOffPerDay: 3, minEarlyPerDay: 0, maxEarlyPerDay: 2, minLatePerDay: 0, maxLatePerDay: 3, minWorkingStaffPerDay: 3 }, // Daily limits (per-date constraints with MIN/MAX)
+        // ✅ NEW: Staff Type Daily Limits (per-staff-type constraints)
+        // Synced via dailyLimits.staffTypeLimits or as top-level field
+        staffTypeLimits: wsSettings?.dailyLimits?.staffTypeLimits ?? wsSettings?.staffTypeLimits ?? settingsRef.current?.staffTypeLimits ?? {},
         priorityRules: wsSettings?.priorityRules ?? [],
         backupAssignments: wsSettings?.backupAssignments ?? [], // Backup staff assignments
         mlParameters: wsSettings?.mlModelConfigs?.[0] ?? {},
+        // ✅ FIX: Include ortoolsConfig from WebSocket response
+        // Server sends: { preset, penaltyWeights, solverSettings }
+        // ConstraintConfiguratorTab.jsx expects settings?.ortoolsConfig
+        ortoolsConfig: wsSettings?.ortoolsConfig ?? settingsRef.current?.ortoolsConfig ?? {
+          preset: 'balanced',
+          penaltyWeights: {
+            staffGroup: 100,
+            dailyLimitMin: 50,
+            dailyLimitMax: 50,
+            monthlyLimit: 80,
+            adjacentConflict: 30,
+            fiveDayRest: 200
+          },
+          solverSettings: {
+            timeout: 30,
+            numWorkers: 4
+          }
+        },
         version: wsVersion,
       };
 
@@ -741,6 +766,15 @@ export const useSettingsData = (autosaveEnabled = true) => {
           callbacks.wsUpdateMLConfig(newSettings.mlParameters);
         }
 
+        // Detect and update OR-Tools config
+        if (
+          JSON.stringify(oldSettings.ortoolsConfig) !==
+          JSON.stringify(newSettings.ortoolsConfig)
+        ) {
+          console.log("  - Updating ortools_solver_config table");
+          callbacks.wsUpdateORToolsConfig(newSettings.ortoolsConfig);
+        }
+
         // Detect and update daily limits
         const oldDailyLimits = oldSettings.dailyLimits || {};
         const newDailyLimits = newSettings.dailyLimits || {};
@@ -750,6 +784,22 @@ export const useSettingsData = (autosaveEnabled = true) => {
           console.log("    Old limits:", oldDailyLimits);
           console.log("    New limits:", newDailyLimits);
           callbacks.wsUpdateDailyLimits(newDailyLimits);
+        }
+
+        // ✅ NEW: Detect and update staff type limits (embed in dailyLimits for sync)
+        const oldStaffTypeLimits = oldSettings.staffTypeLimits || {};
+        const newStaffTypeLimits = newSettings.staffTypeLimits || {};
+
+        if (JSON.stringify(oldStaffTypeLimits) !== JSON.stringify(newStaffTypeLimits)) {
+          console.log("  - Updating staff_type_limits (via daily_limits table)");
+          console.log("    Old staffTypeLimits:", oldStaffTypeLimits);
+          console.log("    New staffTypeLimits:", newStaffTypeLimits);
+          // Embed staffTypeLimits in dailyLimits for database sync
+          const dailyLimitsWithStaffTypes = {
+            ...(newSettings.dailyLimits || oldSettings.dailyLimits || {}),
+            staffTypeLimits: newStaffTypeLimits,
+          };
+          callbacks.wsUpdateDailyLimits(dailyLimitsWithStaffTypes);
         }
 
         // Detect and update backup assignments (differential update like staff groups & priority rules)

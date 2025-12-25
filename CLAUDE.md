@@ -13,17 +13,27 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - `npm run test:ci` - Run tests in CI mode with coverage
 
 ### Docker Development (Hybrid Architecture)
-- **Production Deployment**: Multi-service architecture with Go WebSocket server
-- **Container Setup**: NGINX + Go server + AI servers + Redis with load balancing
+- **Production Deployment**: Multi-service architecture with Go WebSocket server + OR-Tools optimizer
+- **Container Setup**: NGINX + Go server + OR-Tools + AI servers + Redis with load balancing
 - **Access URL**: http://localhost:80 (production) or http://localhost (direct access)
 - **WebSocket URL**: ws://localhost:80/ws/ (proxied through NGINX)
 - **Health Monitoring**: Comprehensive health checks for all services
 - **Services**:
   - `shift-schedule-nginx` - NGINX reverse proxy with WebSocket support (ports 80/443)
   - `go-websocket-server` - Go WebSocket server (3 replicas, internal port 8080)
+  - `ortools-optimizer` - Python OR-Tools schedule optimizer (port 5050 external, 5000 internal)
   - `shift-schedule-redis` - Redis cache for session management
   - `shift-schedule-manager-ai-server-1` - AI processing server
   - `shift-schedule-manager-ai-server-2` - AI processing server (horizontal scaling)
+
+### Quick Start with OR-Tools
+```bash
+# Start OR-Tools + Go server only (minimal setup for development)
+docker-compose -f docker-compose.dev.yml up ortools-optimizer go-websocket-server --build
+
+# Full production stack
+docker-compose up --build
+```
 
 ### Code Quality
 - `npm run lint` - Run ESLint on src/ directory
@@ -43,6 +53,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ### Core Technology Stack
 - **React 18** with functional components and hooks
 - **Go WebSocket Server** for real-time communication and state management
+- **Python OR-Tools Service** for optimal schedule generation using Google CP-SAT solver
 - **Supabase** for database operations and data persistence
 - **React Query (@tanstack/react-query)** for client-side caching
 - **Tailwind CSS** for styling
@@ -50,7 +61,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ### Hybrid Architecture (6-Phase Implementation Complete)
 
-The application uses a **Hybrid Go + WebSocket + Supabase Architecture** that eliminates race conditions and provides real-time collaboration:
+The application uses a **Hybrid Go + WebSocket + OR-Tools + Supabase Architecture** that eliminates race conditions, provides real-time collaboration, and generates optimal schedules:
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
@@ -68,7 +79,15 @@ The application uses a **Hybrid Go + WebSocket + Supabase Architecture** that el
 │  ├── State Synchronization Engine                             │
 │  ├── Client Connection Management (1000+ concurrent)          │
 │  ├── Conflict Resolution Logic (4 strategies)                 │
-│  └── Message Compression & AI Integration                     │
+│  └── OR-Tools Client Integration                              │
+├─────────────────────────────────────────────────────────────────┤
+│                       OPTIMIZATION LAYER                        │
+├─────────────────────────────────────────────────────────────────┤
+│  Python OR-Tools Service (Port 5000)                           │
+│  ├── Google CP-SAT Constraint Solver                          │
+│  ├── Multi-constraint Optimization                            │
+│  ├── Soft/Hard Constraint Configuration                       │
+│  └── Penalty-based Best-effort Solutions                      │
 ├─────────────────────────────────────────────────────────────────┤
 │                         DATA LAYER                              │
 ├─────────────────────────────────────────────────────────────────┤
@@ -383,6 +402,118 @@ cd go-server && go build -o server main.go
 # Docker development
 docker-compose up go-websocket-server
 ```
+
+## Python OR-Tools Optimizer Service
+
+### Service Overview
+The OR-Tools service (`python-ortools-service/`) provides optimal schedule generation using Google's CP-SAT constraint programming solver. It replaces rule-based heuristics with mathematically optimal solutions.
+
+### Service Structure
+```
+python-ortools-service/
+├── scheduler.py           # Main optimizer with CP-SAT solver
+├── requirements.txt       # Python dependencies (ortools, flask, gunicorn)
+├── Dockerfile            # Production container with gunicorn
+├── test_scheduler.py     # Unit tests for optimization logic
+├── test_penalty_weights.py  # Penalty weight validation tests
+└── test_staff_type_limits.py  # Staff type constraint tests
+```
+
+### Constraint Types (Mapped from BusinessRuleValidator.js)
+The optimizer implements all constraints from the original multi-phase rule system:
+
+| Constraint | Type | Description |
+|------------|------|-------------|
+| Calendar Rules | HARD | `must_day_off` / `must_work` dates |
+| Staff Groups | SOFT/HARD | Only 1 member off/early per group per day |
+| Daily Limits | SOFT/HARD | Min/max staff off per day |
+| Staff Type Limits | SOFT/HARD | Per-type (社員/派遣/パート) daily limits |
+| Monthly Limits | SOFT/HARD | Min/max off days per staff per period |
+| 5-Day Rest | SOFT/HARD | No more than 5 consecutive work days |
+| Adjacent Conflicts | SOFT | No xx, sx, xs patterns |
+| Priority Rules | SOFT | Preferred/avoided shifts by day of week |
+
+### Penalty Weights (Configurable)
+```python
+DEFAULT_PENALTY_WEIGHTS = {
+    'staff_group': 100,      # High priority for group coverage
+    'daily_limit': 50,       # Medium priority for daily balance
+    'daily_limit_max': 50,   # Medium priority for max limits
+    'monthly_limit': 80,     # High priority for monthly fairness
+    'adjacent_conflict': 30, # Lower priority for comfort
+    '5_day_rest': 200,       # Very high for labor compliance
+    'staff_type_limit': 60,  # Medium-high for type coverage
+}
+```
+
+### API Endpoints
+```bash
+# Health check
+GET /health
+# Response: {"status": "healthy", "service": "ortools-optimizer", "version": "1.0"}
+
+# Schedule optimization
+POST /optimize
+# Body: {
+#   "staffMembers": [...],
+#   "dateRange": ["2024-01-01", ...],
+#   "constraints": {...},
+#   "timeout": 30
+# }
+# Response: {
+#   "success": true,
+#   "schedule": {"staffId": {"2024-01-01": "×", ...}},
+#   "solve_time": 1.23,
+#   "is_optimal": true,
+#   "violations": [...]
+# }
+```
+
+### Shift Type Mapping
+```python
+SHIFT_WORK = 0   # Normal work (empty or ○)
+SHIFT_OFF = 1    # Off day (×)
+SHIFT_EARLY = 2  # Early shift (△)
+SHIFT_LATE = 3   # Late shift (◇)
+```
+
+### Development Commands
+```bash
+# Run locally (development)
+cd python-ortools-service
+python scheduler.py  # Starts on port 5001
+
+# Run tests
+cd python-ortools-service
+pytest test_scheduler.py -v
+pytest test_penalty_weights.py -v
+pytest test_staff_type_limits.py -v
+
+# Docker development
+docker-compose -f docker-compose.dev.yml up ortools-optimizer --build
+```
+
+### Integration with Go Server
+The Go server communicates with OR-Tools via HTTP:
+
+```go
+// go-server/ortools_client.go
+type ORToolsClient struct {
+    baseURL    string  // Default: http://ortools-optimizer:5000
+    httpClient *http.Client
+}
+
+func (c *ORToolsClient) Optimize(req ORToolsRequest) (*ORToolsResponse, error)
+func (c *ORToolsClient) HealthCheck() bool
+```
+
+### Key Features
+- **Optimal Solutions**: Mathematically provable optimal schedules (vs heuristics)
+- **Soft Constraints**: Always returns a solution, even if some constraints are violated
+- **Violation Reporting**: Returns detailed list of constraint violations with penalties
+- **Parallel Search**: Configurable number of worker threads for faster solving
+- **Configurable Timeouts**: Default 30s, adjustable per request
+- **Best-effort Mode**: Like TensorFlow-based approach, provides solutions even when perfect satisfaction is impossible
 
 ## Chrome MCP Testing Framework
 

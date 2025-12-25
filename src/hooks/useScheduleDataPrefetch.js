@@ -531,31 +531,54 @@ export const useScheduleDataPrefetch = (
       console.log(`✅ [WEBSOCKET-PREFETCH] Schedule saved successfully`);
       return savedSchedule;
     },
-    onMutate: async ({ scheduleData }) => {
-      // Optimistic update to local state
-      // ✅ FIX: Create deep copy of previous schedule for rollback
-      const previousSchedule = JSON.parse(JSON.stringify(schedule));
+    onMutate: async ({ scheduleData, scheduleId: targetScheduleId }) => {
+      // Cancel outgoing refetches to avoid overwriting optimistic update
+      await queryClient.cancelQueries({
+        queryKey: PREFETCH_QUERY_KEYS.scheduleData(currentMonthIndex),
+      });
+
+      // Snapshot previous value for rollback
+      const previousCacheData = queryClient.getQueryData(
+        PREFETCH_QUERY_KEYS.scheduleData(currentMonthIndex)
+      );
+      const previousSchedule = previousCacheData?.schedule || schedule;
 
       console.log(`⚡ [WEBSOCKET-PREFETCH] Applying optimistic update for period ${currentMonthIndex}`);
       console.log(`   Old schedule staff count: ${Object.keys(previousSchedule).length}`);
       console.log(`   New schedule staff count: ${Object.keys(scheduleData).length}`);
 
-      // ✅ FIX: Create NEW object reference to trigger React re-render
-      // React uses reference equality, so we must create a new object
+      // CRITICAL: Update React Query cache immediately for subsequent reads
+      queryClient.setQueryData(
+        PREFETCH_QUERY_KEYS.scheduleData(currentMonthIndex),
+        (old) => ({
+          ...old,
+          schedule: scheduleData,
+          scheduleId: targetScheduleId || old?.scheduleId,
+          loadedAt: Date.now(),
+        })
+      );
+
+      // Also update local state for immediate UI update
       const newScheduleData = JSON.parse(JSON.stringify(scheduleData));
       setSchedule(newScheduleData);
 
-      console.log(`✅ [WEBSOCKET-PREFETCH] Optimistic schedule update applied - NEW reference created for re-render`);
-      return { previousSchedule };
+      console.log(`✅ [WEBSOCKET-PREFETCH] Optimistic schedule update applied - cache and state updated`);
+      return { previousSchedule, previousCacheData };
     },
     onError: (error, variables, context) => {
-      // Rollback optimistic update
-      if (context?.previousSchedule) {
-        setSchedule(context.previousSchedule);
-        console.log(
-          `🔄 [WEBSOCKET-PREFETCH] Rolled back optimistic schedule update`,
+      // Rollback optimistic update in both cache and state
+      if (context?.previousCacheData) {
+        queryClient.setQueryData(
+          PREFETCH_QUERY_KEYS.scheduleData(currentMonthIndex),
+          context.previousCacheData
         );
       }
+      if (context?.previousSchedule) {
+        setSchedule(context.previousSchedule);
+      }
+      console.log(
+        `🔄 [WEBSOCKET-PREFETCH] Rolled back optimistic schedule update`,
+      );
       console.error("❌ [WEBSOCKET-PREFETCH] Schedule save failed:", error);
       setError(`Save failed: ${error.message}`);
     },
@@ -834,52 +857,34 @@ export const useScheduleDataPrefetch = (
         }
 
         // WebSocket-first shift update (using the correct schedule ID)
-        if (isWebSocketEnabled && webSocketShifts.isConnected) {
+        if (isWebSocketEnabled && webSocketShifts.isConnected && scheduleIdToUse) {
           console.log(
             `📝 [WEBSOCKET-PREFETCH] WebSocket shift update: ${staffId} → ${dateKey} = "${shiftValue}" (Schedule: ${scheduleIdToUse})`,
           );
 
-          // CRITICAL FIX: Create a manual WebSocket message with the correct scheduleId
-          // The webSocketShifts.updateShift() uses stale scheduleId from hook initialization
-          // So we need to wait for state to propagate or fall back to Supabase
-
-          // Check if WebSocket hook has the latest scheduleId
-          if (scheduleIdToUse === currentScheduleId && currentScheduleId === webSocketShifts.scheduleData.scheduleId) {
-            // IDs match - safe to use WebSocket
-            return webSocketShifts
-              .updateShift(staffId, dateKey, shiftValue)
-              .then(() => {
-                console.log(
-                  "✅ [WEBSOCKET-PREFETCH] Shift updated via WebSocket",
-                );
-                // Optimistically update local state (WebSocket hook already does this)
-                setSchedule(webSocketShifts.scheduleData);
-              })
-              .catch((error) => {
-                console.error(
-                  "❌ [WEBSOCKET-PREFETCH] WebSocket shift update failed:",
-                  error,
-                );
-                // Fallback to Supabase on error
-                return scheduleOperations.updateShiftViaSupabase(
-                  staffId,
-                  dateKey,
-                  shiftValue,
-                );
-              });
-          } else {
-            // Schedule just created - WebSocket hook doesn't have new ID yet
-            // Fall back to Supabase for this first save, future saves will use WebSocket
-            console.log(
-              `⏭️ [WEBSOCKET-PREFETCH] Schedule just created (${scheduleIdToUse}), using Supabase for initial save`,
-            );
-            return scheduleOperations.updateShiftViaSupabase(
-              staffId,
-              dateKey,
-              shiftValue,
-              scheduleIdToUse, // Pass the new schedule ID explicitly
-            );
-          }
+          // Use WebSocket for shift updates - the hook handles optimistic updates
+          return webSocketShifts
+            .updateShift(staffId, dateKey, shiftValue)
+            .then(() => {
+              console.log(
+                "✅ [WEBSOCKET-PREFETCH] Shift updated via WebSocket",
+              );
+              // Note: Don't set schedule here - let WebSocket sync handle it
+              // to avoid race conditions
+            })
+            .catch((error) => {
+              console.error(
+                "❌ [WEBSOCKET-PREFETCH] WebSocket shift update failed:",
+                error,
+              );
+              // Fallback to Supabase on error
+              return scheduleOperations.updateShiftViaSupabase(
+                staffId,
+                dateKey,
+                shiftValue,
+                scheduleIdToUse,
+              );
+            });
         }
 
         // Fallback to Supabase direct update
@@ -887,6 +892,7 @@ export const useScheduleDataPrefetch = (
           staffId,
           dateKey,
           shiftValue,
+          scheduleIdToUse,
         );
       },
 
@@ -899,11 +905,15 @@ export const useScheduleDataPrefetch = (
           return Promise.reject(new Error("No schedule ID available"));
         }
 
-        // Create updated schedule
+        // CRITICAL FIX: Get latest schedule from React Query cache to avoid stale closure
+        const cachedData = queryClient.getQueryData(PREFETCH_QUERY_KEYS.scheduleData(currentMonthIndex));
+        const latestSchedule = cachedData?.schedule || schedule;
+
+        // Create updated schedule using latest data
         const newSchedule = {
-          ...schedule,
+          ...latestSchedule,
           [staffId]: {
-            ...schedule[staffId],
+            ...latestSchedule[staffId],
             [dateKey]: shiftValue,
           },
         };

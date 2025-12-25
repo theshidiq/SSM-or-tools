@@ -424,6 +424,102 @@ export const useAISettings = () => {
   }, [settings?.priorityRules]);
 
   /**
+   * ✅ NEW: OR-Tools Solver Configuration
+   * Used by Python OR-Tools scheduler to configure penalty weights and solver settings
+   * Database: { preset, penaltyWeights: {...}, solverSettings: {...}, hardConstraints: {...} }
+   */
+  const ortoolsConfig = useMemo(() => {
+    const config = settings?.ortoolsConfig;
+
+    // Default configuration
+    const defaults = {
+      preset: 'balanced',
+      penaltyWeights: {
+        staffGroup: 100,
+        dailyLimitMin: 50,
+        dailyLimitMax: 50,
+        monthlyLimit: 80,
+        adjacentConflict: 30,
+        fiveDayRest: 200,
+      },
+      solverSettings: {
+        timeout: 30,
+        numWorkers: 4,
+      },
+      // ✅ NEW: Hard constraints toggle (when true, constraints are strictly enforced)
+      hardConstraints: {
+        dailyLimits: false,
+        monthlyLimits: false,
+        staffGroups: false,
+        fiveDayRest: false,
+      },
+    };
+
+    if (!config) return defaults;
+
+    return {
+      preset: config.preset || defaults.preset,
+      penaltyWeights: {
+        staffGroup: config.penaltyWeights?.staffGroup ?? defaults.penaltyWeights.staffGroup,
+        dailyLimitMin: config.penaltyWeights?.dailyLimitMin ?? defaults.penaltyWeights.dailyLimitMin,
+        dailyLimitMax: config.penaltyWeights?.dailyLimitMax ?? defaults.penaltyWeights.dailyLimitMax,
+        monthlyLimit: config.penaltyWeights?.monthlyLimit ?? defaults.penaltyWeights.monthlyLimit,
+        adjacentConflict: config.penaltyWeights?.adjacentConflict ?? defaults.penaltyWeights.adjacentConflict,
+        fiveDayRest: config.penaltyWeights?.fiveDayRest ?? defaults.penaltyWeights.fiveDayRest,
+      },
+      solverSettings: {
+        timeout: config.solverSettings?.timeout ?? defaults.solverSettings.timeout,
+        numWorkers: config.solverSettings?.numWorkers ?? defaults.solverSettings.numWorkers,
+      },
+      // ✅ NEW: Hard constraints toggle
+      hardConstraints: {
+        dailyLimits: config.hardConstraints?.dailyLimits ?? defaults.hardConstraints.dailyLimits,
+        monthlyLimits: config.hardConstraints?.monthlyLimits ?? defaults.hardConstraints.monthlyLimits,
+        staffGroups: config.hardConstraints?.staffGroups ?? defaults.hardConstraints.staffGroups,
+        fiveDayRest: config.hardConstraints?.fiveDayRest ?? defaults.hardConstraints.fiveDayRest,
+      },
+    };
+  }, [settings?.ortoolsConfig]);
+
+  /**
+   * ✅ NEW: Staff Type Daily Limits Configuration
+   * Per-staff-type constraints for daily off/early limits
+   * Database: { staffTypeLimits: { '社員': { maxOff: 1, maxEarly: 2, isHard: true }, ... } }
+   *
+   * Business Logic:
+   * - For 社員 (n=6), max 1 off per day ensures adequate coverage
+   * - Allows combinations like: (1 off + 1 early) or (0 off + 2 early)
+   * - Prevents scenarios like: (2 off + 0 early) which reduces coverage too much
+   */
+  const staffTypeLimits = useMemo(() => {
+    const config = settings?.staffTypeLimits;
+
+    // Default configuration (no limits if not configured)
+    const defaults = {};
+
+    if (!config || Object.keys(config).length === 0) {
+      console.log('[useAISettings] No staffTypeLimits configured');
+      return defaults;
+    }
+
+    // Transform and validate each staff type limit
+    const transformed = {};
+    for (const [staffType, limits] of Object.entries(config)) {
+      transformed[staffType] = {
+        maxOff: limits.maxOff ?? null,           // null = no limit
+        maxEarly: limits.maxEarly ?? null,       // null = no limit
+        minNormal: limits.minNormal ?? null,     // null = no limit (minimum normal shifts)
+        isHard: limits.isHard ?? true,           // default to HARD constraint
+        penaltyWeight: limits.penaltyWeight ?? 60, // default penalty weight
+      };
+    }
+
+    console.log('[useAISettings] ✅ Staff type limits loaded:', transformed);
+
+    return transformed;
+  }, [settings?.staffTypeLimits]);
+
+  /**
    * Transform ML model configs from database format to AI format
    * Database: [{ id, modelType, hyperparameters: {...} }]
    * localStorage: { model_name, parameters: {...} }
@@ -661,6 +757,8 @@ export const useAISettings = () => {
       monthlyLimits,
       priorityRules,
       mlConfig,
+      ortoolsConfig, // ✅ NEW: OR-Tools solver configuration
+      staffTypeLimits, // ✅ NEW: Per-staff-type daily limits
       allConstraints,
       constraintWeights,
     };
@@ -677,6 +775,8 @@ export const useAISettings = () => {
       monthlyLimits,
       priorityRules,
       mlConfig,
+      ortoolsConfig, // ✅ NEW: OR-Tools solver configuration
+      staffTypeLimits, // ✅ NEW: Per-staff-type daily limits
 
       // Aggregated data
       allConstraints,
@@ -715,6 +815,8 @@ export const useAISettings = () => {
     monthlyLimits,
     priorityRules,
     mlConfig,
+    ortoolsConfig, // ✅ NEW: OR-Tools solver configuration
+    staffTypeLimits, // ✅ NEW: Per-staff-type daily limits
     allConstraints,
     constraintWeights,
     isLoading,

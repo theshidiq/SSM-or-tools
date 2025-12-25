@@ -52,6 +52,326 @@ const LIMIT_SCOPES = [
 ];
 
 /**
+ * Staff Type Limits Section - Configure per-staff-type daily limits
+ * Business Logic:
+ * - For 社員 (n=6), max 1 off per day ensures adequate coverage
+ * - Allows combinations like: (1 off + 1 early) or (0 off + 2 early)
+ * - Prevents scenarios like: (2 off + 0 early) which reduces coverage too much
+ */
+const StaffTypeLimitsSection = ({
+  staffTypeLimits,
+  staffMembers,
+  onUpdate,
+}) => {
+  const [localLimits, setLocalLimits] = useState(staffTypeLimits || {});
+  const [hasChanges, setHasChanges] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+
+  // Get unique staff types from staff members
+  const staffTypes = useMemo(() => {
+    const types = new Set();
+    staffMembers.forEach((staff) => {
+      if (staff.status) {
+        types.add(staff.status);
+      }
+    });
+    return Array.from(types);
+  }, [staffMembers]);
+
+  // Count staff by type
+  const staffCountByType = useMemo(() => {
+    const counts = {};
+    staffMembers.forEach((staff) => {
+      if (staff.status) {
+        counts[staff.status] = (counts[staff.status] || 0) + 1;
+      }
+    });
+    return counts;
+  }, [staffMembers]);
+
+  // Staff type color mapping
+  const staffTypeColors = {
+    "社員": { bg: "from-blue-50 to-blue-100", border: "border-blue-200", badge: "bg-blue-600", icon: "text-blue-600" },
+    "派遣": { bg: "from-green-50 to-green-100", border: "border-green-200", badge: "bg-green-600", icon: "text-green-600" },
+    "パート": { bg: "from-purple-50 to-purple-100", border: "border-purple-200", badge: "bg-purple-600", icon: "text-purple-600" },
+  };
+
+  const getTypeColors = (type) => staffTypeColors[type] || {
+    bg: "from-gray-50 to-gray-100",
+    border: "border-gray-200",
+    badge: "bg-gray-600",
+    icon: "text-gray-600"
+  };
+
+  // Update local state when props change
+  useEffect(() => {
+    if (staffTypeLimits) {
+      setLocalLimits(staffTypeLimits);
+      setHasChanges(false);
+    }
+  }, [staffTypeLimits]);
+
+  const handleLimitChange = (staffType, field, value) => {
+    const updated = {
+      ...localLimits,
+      [staffType]: {
+        ...localLimits[staffType],
+        [field]: value,
+      },
+    };
+    setLocalLimits(updated);
+    setHasChanges(true);
+  };
+
+  const handleAddStaffType = (staffType) => {
+    const updated = {
+      ...localLimits,
+      [staffType]: {
+        maxOff: 1,
+        maxEarly: 2,
+        isHard: true,
+        penaltyWeight: 60,
+      },
+    };
+    setLocalLimits(updated);
+    setHasChanges(true);
+  };
+
+  const handleRemoveStaffType = (staffType) => {
+    const updated = { ...localLimits };
+    delete updated[staffType];
+    setLocalLimits(updated);
+    setHasChanges(true);
+  };
+
+  const handleSave = async () => {
+    setIsSaving(true);
+    try {
+      await onUpdate(localLimits);
+      setHasChanges(false);
+      toast.success("Staff type limits updated successfully");
+    } catch (error) {
+      console.error("Failed to update staff type limits:", error);
+      toast.error("Failed to update staff type limits");
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleReset = () => {
+    setLocalLimits({});
+    setHasChanges(true);
+  };
+
+  // Get unconfigured staff types
+  const unconfiguredTypes = staffTypes.filter(type => !localLimits[type]);
+
+  return (
+    <div className="space-y-4 p-6 bg-gradient-to-br from-indigo-50 to-purple-50 rounded-lg border border-indigo-200">
+      {/* Header with Action Buttons */}
+      <div className="flex items-start justify-between">
+        <div>
+          <h3 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
+            <span className="w-8 h-8 bg-indigo-500 rounded-lg flex items-center justify-center text-white text-sm font-bold">
+              ST
+            </span>
+            Staff Type Daily Limits
+          </h3>
+          <p className="text-sm text-gray-600 mt-1">
+            Configure maximum off/early shifts per staff type per day (HARD constraint)
+          </p>
+        </div>
+
+        {/* Icon Action Buttons */}
+        <div className="flex gap-2">
+          <button
+            onClick={handleReset}
+            disabled={isSaving}
+            className="p-2 rounded-lg border-2 border-gray-300 text-gray-700 hover:border-gray-400 hover:bg-gray-50 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+            title="Clear All Limits"
+          >
+            <RotateCcw className="w-5 h-5" />
+          </button>
+          <button
+            onClick={handleSave}
+            disabled={!hasChanges || isSaving}
+            className={`p-2 rounded-lg transition-all ${
+              !hasChanges || isSaving
+                ? "bg-gray-300 text-gray-500 cursor-not-allowed"
+                : "bg-indigo-600 text-white hover:bg-indigo-700 shadow-md hover:shadow-lg"
+            }`}
+            title={isSaving ? "Saving..." : "Save Changes"}
+          >
+            {isSaving ? (
+              <Clock className="w-5 h-5 animate-spin" />
+            ) : (
+              <Check className="w-5 h-5" />
+            )}
+          </button>
+        </div>
+      </div>
+
+      {/* Info Alert */}
+      <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+        <div className="flex items-start gap-3">
+          <AlertTriangle className="w-5 h-5 text-blue-600 flex-shrink-0 mt-0.5" />
+          <div className="text-sm text-blue-800">
+            <p className="font-medium mb-1">Business Rule Example:</p>
+            <p>For 社員 with 6 total staff, setting Max Off = 1 ensures:</p>
+            <ul className="list-disc list-inside ml-2 mt-1 space-y-0.5">
+              <li className="text-green-700">1 off + 1 early + 4 normal = OK</li>
+              <li className="text-green-700">0 off + 2 early + 4 normal = OK</li>
+              <li className="text-red-700">2 off + 0 early + 4 normal = NOT ALLOWED</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+
+      {/* Configured Staff Types */}
+      <div className="space-y-4 bg-white p-6 rounded-lg shadow-sm">
+        {Object.entries(localLimits).length > 0 ? (
+          Object.entries(localLimits).map(([staffType, limits]) => {
+            const colors = getTypeColors(staffType);
+            const staffCount = staffCountByType[staffType] || 0;
+
+            return (
+              <div
+                key={staffType}
+                className={`p-4 rounded-lg border-2 ${colors.border} bg-gradient-to-br ${colors.bg}`}
+              >
+                {/* Staff Type Header */}
+                <div className="flex items-center justify-between mb-4">
+                  <div className="flex items-center gap-3">
+                    <span className={`px-3 py-1 ${colors.badge} text-white rounded-full text-sm font-bold`}>
+                      {staffType}
+                    </span>
+                    <span className="text-sm text-gray-600">
+                      {staffCount} staff member{staffCount !== 1 ? "s" : ""}
+                    </span>
+                  </div>
+                  <button
+                    onClick={() => handleRemoveStaffType(staffType)}
+                    className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                    title="Remove this staff type limit"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                </div>
+
+                {/* Limit Controls */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {/* Max Off Per Day */}
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium text-gray-700 flex items-center gap-2">
+                      Maximum Off Per Day
+                      <span className="text-red-500 text-xs">(HARD)</span>
+                    </label>
+                    <div className="flex items-center gap-3">
+                      <input
+                        type="range"
+                        min={0}
+                        max={Math.min(staffCount, 4)}
+                        step={1}
+                        value={limits.maxOff ?? 1}
+                        onChange={(e) => handleLimitChange(staffType, "maxOff", parseInt(e.target.value))}
+                        className="flex-1 h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-red-500"
+                      />
+                      <span className="w-12 text-center px-2 py-1 bg-red-100 text-red-800 rounded-lg font-bold text-lg">
+                        {limits.maxOff ?? 1}
+                      </span>
+                    </div>
+                    <p className="text-xs text-gray-500">
+                      Max {limits.maxOff ?? 1} {staffType} can be off (x) on any day
+                    </p>
+                  </div>
+
+                  {/* Max Early Per Day */}
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium text-gray-700 flex items-center gap-2">
+                      Maximum Early Per Day
+                      <span className="text-orange-500 text-xs">(SOFT)</span>
+                    </label>
+                    <div className="flex items-center gap-3">
+                      <input
+                        type="range"
+                        min={0}
+                        max={Math.min(staffCount, 4)}
+                        step={1}
+                        value={limits.maxEarly ?? 2}
+                        onChange={(e) => handleLimitChange(staffType, "maxEarly", parseInt(e.target.value))}
+                        className="flex-1 h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-orange-500"
+                      />
+                      <span className="w-12 text-center px-2 py-1 bg-orange-100 text-orange-800 rounded-lg font-bold text-lg">
+                        {limits.maxEarly ?? 2}
+                      </span>
+                    </div>
+                    <p className="text-xs text-gray-500">
+                      Max {limits.maxEarly ?? 2} {staffType} on early shift (triangle) per day
+                    </p>
+                  </div>
+                </div>
+
+                {/* Hard Constraint Toggle */}
+                <div className="mt-4 pt-4 border-t border-gray-200 flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <label className="text-sm font-medium text-gray-700">Hard Constraint</label>
+                    <span className="text-xs text-gray-500">(Cannot be violated)</span>
+                  </div>
+                  <button
+                    onClick={() => handleLimitChange(staffType, "isHard", !limits.isHard)}
+                    className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
+                      limits.isHard ? "bg-red-600" : "bg-gray-300"
+                    }`}
+                  >
+                    <span
+                      className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
+                        limits.isHard ? "translate-x-5" : "translate-x-0"
+                      }`}
+                    />
+                  </button>
+                </div>
+              </div>
+            );
+          })
+        ) : (
+          <div className="text-center py-8 text-gray-500">
+            <p className="mb-2">No staff type limits configured</p>
+            <p className="text-sm">Click a staff type below to add limits</p>
+          </div>
+        )}
+      </div>
+
+      {/* Add New Staff Type */}
+      {unconfiguredTypes.length > 0 && (
+        <div className="bg-white p-4 rounded-lg border border-gray-200">
+          <p className="text-sm font-medium text-gray-700 mb-3">Add Staff Type Limit:</p>
+          <div className="flex flex-wrap gap-2">
+            {unconfiguredTypes.map((staffType) => {
+              const colors = getTypeColors(staffType);
+              const staffCount = staffCountByType[staffType] || 0;
+
+              return (
+                <button
+                  key={staffType}
+                  onClick={() => handleAddStaffType(staffType)}
+                  className={`flex items-center gap-2 px-3 py-2 rounded-lg border-2 ${colors.border} hover:shadow-md transition-all hover:scale-105`}
+                >
+                  <Plus className={`w-4 h-4 ${colors.icon}`} />
+                  <span className={`px-2 py-0.5 ${colors.badge} text-white rounded text-xs font-bold`}>
+                    {staffType}
+                  </span>
+                  <span className="text-xs text-gray-500">({staffCount})</span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
+/**
  * Daily Limits Section - Configure per-date limits
  */
 const DailyLimitsSection = ({
@@ -62,6 +382,7 @@ const DailyLimitsSection = ({
   currentScheduleId,
 }) => {
   const [localLimits, setLocalLimits] = useState(dailyLimits || {
+    enabled: true, // NEW: Flag to enable/disable daily limits
     minOffPerDay: 0,
     maxOffPerDay: 3,
     minEarlyPerDay: 0,
@@ -77,6 +398,7 @@ const DailyLimitsSection = ({
   useEffect(() => {
     if (dailyLimits) {
       setLocalLimits({
+        enabled: dailyLimits.enabled ?? true, // NEW: Default to enabled
         minOffPerDay: dailyLimits.minOffPerDay ?? 0,
         maxOffPerDay: dailyLimits.maxOffPerDay ?? 3,
         minEarlyPerDay: dailyLimits.minEarlyPerDay ?? 0,
@@ -172,6 +494,7 @@ const DailyLimitsSection = ({
 
   const handleReset = () => {
     const defaults = {
+      enabled: true, // Reset to enabled
       minOffPerDay: 0,
       maxOffPerDay: 3,
       minEarlyPerDay: 0,
@@ -183,16 +506,44 @@ const DailyLimitsSection = ({
     setHasChanges(true);
   };
 
+  // Toggle enabled/disabled state
+  const handleToggleEnabled = () => {
+    setLocalLimits(prev => ({ ...prev, enabled: !prev.enabled }));
+    setHasChanges(true);
+  };
+
   return (
-    <div className="space-y-4 p-6 bg-gradient-to-br from-blue-50 to-indigo-50 rounded-lg border border-blue-200">
+    <div className={`space-y-4 p-6 rounded-lg border ${
+      localLimits.enabled
+        ? "bg-gradient-to-br from-blue-50 to-indigo-50 border-blue-200"
+        : "bg-gradient-to-br from-gray-50 to-gray-100 border-gray-300"
+    }`}>
       {/* Header with Action Buttons */}
       <div className="flex items-start justify-between">
         <div>
-          <h3 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
-            📅 Daily Limits (Per Date)
-          </h3>
-          <p className="text-sm text-gray-600 mt-1">
-            Configure minimum and maximum number of staff per shift type on any single day
+          <div className="flex items-center gap-3">
+            <h3 className={`text-lg font-semibold flex items-center gap-2 ${
+              localLimits.enabled ? "text-gray-900" : "text-gray-500"
+            }`}>
+              📅 Daily Limits (Per Date)
+            </h3>
+            {/* Enable/Disable Toggle */}
+            <button
+              onClick={handleToggleEnabled}
+              className={`px-3 py-1 rounded-full text-xs font-medium transition-all ${
+                localLimits.enabled
+                  ? "bg-green-100 text-green-700 hover:bg-green-200"
+                  : "bg-gray-200 text-gray-600 hover:bg-gray-300"
+              }`}
+            >
+              {localLimits.enabled ? "Enabled" : "Disabled"}
+            </button>
+          </div>
+          <p className={`text-sm mt-1 ${localLimits.enabled ? "text-gray-600" : "text-gray-400"}`}>
+            {localLimits.enabled
+              ? "Configure minimum and maximum number of staff per shift type on any single day"
+              : "Daily limits are disabled. Use Staff Type Limits for per-type constraints instead."
+            }
           </p>
         </div>
 
@@ -225,101 +576,110 @@ const DailyLimitsSection = ({
         </div>
       </div>
 
-      {/* Sliders */}
-      <div className="space-y-6 bg-white p-6 rounded-lg shadow-sm">
-        {/* Off Days (×) Group */}
-        <div className="space-y-3 p-4 bg-red-50 rounded-lg border border-red-200">
-          <h4 className="font-semibold text-gray-800 flex items-center gap-2">
-            🔴 Staff Off Days (×)
-          </h4>
-          <Slider
-            label="Minimum Staff Off Per Day"
-            value={localLimits.minOffPerDay}
-            min={0}
-            max={4}
-            step={1}
-            onChange={(value) => handleSliderChange("minOffPerDay", value)}
-            colorScheme="red"
-            showValue={true}
-            unit=" staff"
-            description="Minimum number of staff that must be off (×) on any single day"
-          />
-          <Slider
-            label="Maximum Staff Off Per Day"
-            value={localLimits.maxOffPerDay}
-            min={0}
-            max={4}
-            step={1}
-            onChange={(value) => handleSliderChange("maxOffPerDay", value)}
-            colorScheme="red"
-            showValue={true}
-            unit=" staff"
-            description="Maximum number of staff that can be off (×) on any single day"
-          />
-        </div>
+      {/* Sliders - Only show when enabled */}
+      {localLimits.enabled ? (
+        <div className="space-y-6 bg-white p-6 rounded-lg shadow-sm">
+          {/* Off Days (×) Group */}
+          <div className="space-y-3 p-4 bg-red-50 rounded-lg border border-red-200">
+            <h4 className="font-semibold text-gray-800 flex items-center gap-2">
+              🔴 Staff Off Days (×)
+            </h4>
+            <Slider
+              label="Minimum Staff Off Per Day"
+              value={localLimits.minOffPerDay}
+              min={0}
+              max={4}
+              step={1}
+              onChange={(value) => handleSliderChange("minOffPerDay", value)}
+              colorScheme="red"
+              showValue={true}
+              unit=" staff"
+              description="Minimum number of staff that must be off (×) on any single day"
+            />
+            <Slider
+              label="Maximum Staff Off Per Day"
+              value={localLimits.maxOffPerDay}
+              min={0}
+              max={4}
+              step={1}
+              onChange={(value) => handleSliderChange("maxOffPerDay", value)}
+              colorScheme="red"
+              showValue={true}
+              unit=" staff"
+              description="Maximum number of staff that can be off (×) on any single day"
+            />
+          </div>
 
-        {/* Early Shifts (△) Group */}
-        <div className="space-y-3 p-4 bg-orange-50 rounded-lg border border-orange-200">
-          <h4 className="font-semibold text-gray-800 flex items-center gap-2">
-            🟠 Early Shifts (△)
-          </h4>
-          <Slider
-            label="Minimum Early Shifts Per Day"
-            value={localLimits.minEarlyPerDay}
-            min={0}
-            max={2}
-            step={1}
-            onChange={(value) => handleSliderChange("minEarlyPerDay", value)}
-            colorScheme="orange"
-            showValue={true}
-            unit=" staff"
-            description="Minimum number of staff on early shifts (△) on any single day"
-          />
-          <Slider
-            label="Maximum Early Shifts Per Day"
-            value={localLimits.maxEarlyPerDay}
-            min={0}
-            max={2}
-            step={1}
-            onChange={(value) => handleSliderChange("maxEarlyPerDay", value)}
-            colorScheme="orange"
-            showValue={true}
-            unit=" staff"
-            description="Maximum number of staff on early shifts (△) on any single day"
-          />
-        </div>
+          {/* Early Shifts (△) Group */}
+          <div className="space-y-3 p-4 bg-orange-50 rounded-lg border border-orange-200">
+            <h4 className="font-semibold text-gray-800 flex items-center gap-2">
+              🟠 Early Shifts (△)
+            </h4>
+            <Slider
+              label="Minimum Early Shifts Per Day"
+              value={localLimits.minEarlyPerDay}
+              min={0}
+              max={2}
+              step={1}
+              onChange={(value) => handleSliderChange("minEarlyPerDay", value)}
+              colorScheme="orange"
+              showValue={true}
+              unit=" staff"
+              description="Minimum number of staff on early shifts (△) on any single day"
+            />
+            <Slider
+              label="Maximum Early Shifts Per Day"
+              value={localLimits.maxEarlyPerDay}
+              min={0}
+              max={2}
+              step={1}
+              onChange={(value) => handleSliderChange("maxEarlyPerDay", value)}
+              colorScheme="orange"
+              showValue={true}
+              unit=" staff"
+              description="Maximum number of staff on early shifts (△) on any single day"
+            />
+          </div>
 
-        {/* Late Shifts (◇) Group */}
-        <div className="space-y-3 p-4 bg-purple-50 rounded-lg border border-purple-200">
-          <h4 className="font-semibold text-gray-800 flex items-center gap-2">
-            🟣 Late Shifts (◇)
-          </h4>
-          <Slider
-            label="Minimum Late Shifts Per Day"
-            value={localLimits.minLatePerDay}
-            min={0}
-            max={3}
-            step={1}
-            onChange={(value) => handleSliderChange("minLatePerDay", value)}
-            colorScheme="purple"
-            showValue={true}
-            unit=" staff"
-            description="Minimum number of staff on late shifts (◇) on any single day"
-          />
-          <Slider
-            label="Maximum Late Shifts Per Day"
-            value={localLimits.maxLatePerDay}
-            min={0}
-            max={3}
-            step={1}
-            onChange={(value) => handleSliderChange("maxLatePerDay", value)}
-            colorScheme="purple"
-            showValue={true}
-            unit=" staff"
-            description="Maximum number of staff on late shifts (◇) on any single day"
-          />
+          {/* Late Shifts (◇) Group */}
+          <div className="space-y-3 p-4 bg-purple-50 rounded-lg border border-purple-200">
+            <h4 className="font-semibold text-gray-800 flex items-center gap-2">
+              🟣 Late Shifts (◇)
+            </h4>
+            <Slider
+              label="Minimum Late Shifts Per Day"
+              value={localLimits.minLatePerDay}
+              min={0}
+              max={3}
+              step={1}
+              onChange={(value) => handleSliderChange("minLatePerDay", value)}
+              colorScheme="purple"
+              showValue={true}
+              unit=" staff"
+              description="Minimum number of staff on late shifts (◇) on any single day"
+            />
+            <Slider
+              label="Maximum Late Shifts Per Day"
+              value={localLimits.maxLatePerDay}
+              min={0}
+              max={3}
+              step={1}
+              onChange={(value) => handleSliderChange("maxLatePerDay", value)}
+              colorScheme="purple"
+              showValue={true}
+              unit=" staff"
+              description="Maximum number of staff on late shifts (◇) on any single day"
+            />
+          </div>
         </div>
-      </div>
+      ) : (
+        /* Disabled Message */
+        <div className="bg-gray-100 p-6 rounded-lg border border-gray-200 text-center">
+          <p className="text-gray-500 text-sm">
+            Global daily limits are disabled. Configure per-staff-type limits below for more granular control.
+          </p>
+        </div>
+      )}
     </div>
   );
 };
@@ -347,13 +707,24 @@ const LimitsTab = ({
   const [isValidating, setIsValidating] = useState(false);
   const [pendingValidationErrors, setPendingValidationErrors] = useState([]); // Show validation errors in UI
 
-  // Daily Limits state
+  // Daily Limits state - DEPRECATED (kept for backward compatibility)
+  // Global daily limits have been replaced by Staff Type Daily Limits
+  // eslint-disable-next-line no-unused-vars
   const [dailyLimits, setDailyLimits] = useState(null);
-  const [isLoadingDailyLimits, setIsLoadingDailyLimits] = useState(true);
+  // eslint-disable-next-line no-unused-vars
+  const [isLoadingDailyLimits, setIsLoadingDailyLimits] = useState(false);
 
-  // Daily Limits Violations state
+  // Staff Type Limits state
+  const [staffTypeLimits, setStaffTypeLimits] = useState(null);
+  const [isLoadingStaffTypeLimits, setIsLoadingStaffTypeLimits] = useState(true);
+
+  // Daily Limits Violations state - DEPRECATED
+  // Global daily limits have been replaced by Staff Type Daily Limits
+  // eslint-disable-next-line no-unused-vars
   const [showDailyLimitViolations, setShowDailyLimitViolations] = useState(false);
+  // eslint-disable-next-line no-unused-vars
   const [dailyLimitViolations, setDailyLimitViolations] = useState([]);
+  // eslint-disable-next-line no-unused-vars
   const [dailyLimitOnAccept, setDailyLimitOnAccept] = useState(null);
 
   // Schedule validation hook
@@ -420,6 +791,24 @@ const LimitsTab = ({
 
     loadDailyLimits();
   }, [settings?.dailyLimits]);
+
+  // Load staff type limits from settings
+  useEffect(() => {
+    const loadStaffTypeLimits = async () => {
+      try {
+        setIsLoadingStaffTypeLimits(true);
+        const limits = settings?.staffTypeLimits || {};
+        setStaffTypeLimits(limits);
+      } catch (error) {
+        console.error("Failed to load staff type limits:", error);
+        toast.error("Failed to load staff type limits");
+      } finally {
+        setIsLoadingStaffTypeLimits(false);
+      }
+    };
+
+    loadStaffTypeLimits();
+  }, [settings?.staffTypeLimits]);
 
   // Phase 4.3: Wrap updateWeeklyLimits with refs (prevent infinite loops)
   // ✅ FIX: Remove staffMembers from dependencies to prevent unnecessary re-creations
@@ -635,6 +1024,22 @@ const LimitsTab = ({
       console.log("✅ Daily limits updated:", newLimits);
     } catch (error) {
       console.error("Failed to update daily limits:", error);
+      throw error;
+    }
+  };
+
+  // Update staff type limits handler
+  const handleUpdateStaffTypeLimits = async (newLimits) => {
+    try {
+      // Update via settings context
+      await updateSettings({
+        ...settings,
+        staffTypeLimits: newLimits,
+      });
+      setStaffTypeLimits(newLimits);
+      console.log("✅ Staff type limits updated:", newLimits);
+    } catch (error) {
+      console.error("Failed to update staff type limits:", error);
       throw error;
     }
   };
@@ -1616,18 +2021,18 @@ const LimitsTab = ({
         </div>
       )}
 
-      {/* Daily Limits Section */}
-      {isLoadingDailyLimits ? (
+      {/* Staff Type Daily Limits Section - PRIMARY constraint method */}
+      {/* NOTE: Global Daily Limits (DailyLimitsSection) has been DEPRECATED */}
+      {/* in favor of per-staff-type limits for more granular control */}
+      {isLoadingStaffTypeLimits ? (
         <div className="p-6 bg-gray-50 rounded-lg">
-          <p className="text-gray-600">Loading daily limits...</p>
+          <p className="text-gray-600">Loading staff type limits...</p>
         </div>
       ) : (
-        <DailyLimitsSection
-          dailyLimits={dailyLimits}
-          onUpdate={handleUpdateDailyLimits}
-          onValidate={handleValidateDailyLimits}
-          onShowViolations={handleShowDailyLimitViolations}
-          currentScheduleId={currentScheduleId}
+        <StaffTypeLimitsSection
+          staffTypeLimits={staffTypeLimits}
+          staffMembers={staffMembers}
+          onUpdate={handleUpdateStaffTypeLimits}
         />
       )}
 

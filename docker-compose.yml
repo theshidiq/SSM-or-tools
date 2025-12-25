@@ -1,8 +1,6 @@
 # Production Docker Compose configuration
 # Optimized for horizontal scaling and production workloads
 
-version: '3.8'
-
 services:
   # Nginx reverse proxy and static file server
   nginx:
@@ -107,6 +105,32 @@ services:
         monitor: 60s
         max_failure_ratio: 0.3
 
+  # OR-Tools Schedule Optimizer Service (Python)
+  ortools-optimizer:
+    build:
+      context: ./python-ortools-service
+      dockerfile: Dockerfile
+    container_name: shift-schedule-ortools
+    environment:
+      - PYTHONUNBUFFERED=1
+    networks:
+      - backend
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+          cpus: '2.0'
+        reservations:
+          memory: 512M
+          cpus: '1.0'
+
   # Phase 5: Production Go WebSocket Server with 3 replicas and load balancing
   go-websocket-server:
     build:
@@ -124,11 +148,14 @@ services:
       - WEBSOCKET_READ_BUFFER_SIZE=1024
       - WEBSOCKET_WRITE_BUFFER_SIZE=1024
       - MAX_CONNECTIONS=1000
+      # OR-Tools service URL
+      - ORTOOLS_SERVICE_URL=http://ortools-optimizer:5000
     networks:
       - backend
       - monitoring
     depends_on:
       - redis
+      - ortools-optimizer
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8080/health"]

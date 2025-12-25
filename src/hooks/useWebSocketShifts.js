@@ -86,6 +86,9 @@ export const useWebSocketShifts = (
   const isPeriodSwitchingRef = useRef(false); // Flag to prevent reconnection during period switches
   const currentPeriodRef = useRef(currentPeriod); // Ref to always have latest period for reconnections
 
+  // 🔧 RACE CONDITION FIX: Track pending optimistic updates that haven't been confirmed by server
+  const pendingUpdatesRef = useRef(new Map()); // Map<"staffId::dateKey", shiftValue>
+
   // Update period ref whenever currentPeriod changes
   useEffect(() => {
     currentPeriodRef.current = currentPeriod;
@@ -202,38 +205,85 @@ export const useWebSocketShifts = (
             break;
 
           case MESSAGE_TYPES.SHIFT_SYNC_RESPONSE:
-            setScheduleData(message.payload.scheduleData || {});
+            // 🔧 RACE CONDITION FIX: Merge server data with pending optimistic updates
+            const serverData = message.payload.scheduleData || {};
+
+            // Check if we have pending updates that need to be preserved
+            if (pendingUpdatesRef.current.size > 0) {
+              console.log(
+                `🔀 [WEBSOCKET-SHIFTS] Merging server data with ${pendingUpdatesRef.current.size} pending optimistic updates`,
+              );
+
+              // Create merged data: server data + pending optimistic updates
+              const mergedData = JSON.parse(JSON.stringify(serverData));
+              pendingUpdatesRef.current.forEach((shiftValue, key) => {
+                const [staffId, dateKey] = key.split('::');
+                if (!mergedData[staffId]) mergedData[staffId] = {};
+                mergedData[staffId][dateKey] = shiftValue;
+                console.log(`  🔹 Preserving pending: ${staffId} → ${dateKey} = "${shiftValue}"`);
+              });
+
+              setScheduleData(mergedData);
+
+              // Update React Query cache with merged data
+              queryClient.setQueryData(
+                ["schedule", "data", currentPeriod],
+                (old) => ({
+                  ...old,
+                  schedule: mergedData,
+                  loadedAt: Date.now(),
+                }),
+              );
+            } else {
+              // No pending updates, safe to use server data directly
+              setScheduleData(serverData);
+
+              // Update React Query cache
+              queryClient.setQueryData(
+                ["schedule", "data", currentPeriod],
+                (old) => ({
+                  ...old,
+                  schedule: serverData,
+                  loadedAt: Date.now(),
+                }),
+              );
+            }
+
             setSyncedPeriodIndex(message.payload.periodIndex ?? currentPeriod); // Track which period this data is for
             setLastSyncTimestamp(Date.now()); // Track timestamp for AI conflict detection
             setIsSyncing(false);
             console.log(
-              `✅ [WEBSOCKET-SHIFTS] Schedule synced for period ${message.payload.periodIndex ?? currentPeriod}: ${Object.keys(message.payload.scheduleData || {}).length} staff members`,
-            );
-
-            // Update React Query cache
-            queryClient.setQueryData(
-              ["schedule", "data", currentPeriod],
-              (old) => ({
-                ...old,
-                schedule: message.payload.scheduleData,
-                loadedAt: Date.now(),
-              }),
+              `✅ [WEBSOCKET-SHIFTS] Schedule synced for period ${message.payload.periodIndex ?? currentPeriod}: ${Object.keys(serverData).length} staff members`,
             );
             break;
 
           case MESSAGE_TYPES.SHIFT_BROADCAST:
-            // Real-time update from another client
-            const { staffId, dateKey, shiftValue } = message.payload;
+            // Real-time update from another client (or server confirming our update)
+            const { staffId: broadcastStaffId, dateKey: broadcastDateKey, shiftValue: broadcastShiftValue } = message.payload;
+            const broadcastKey = `${broadcastStaffId}::${broadcastDateKey}`;
+
+            // 🔧 RACE CONDITION FIX: Remove from pending if this confirms our optimistic update
+            if (pendingUpdatesRef.current.has(broadcastKey)) {
+              const pendingValue = pendingUpdatesRef.current.get(broadcastKey);
+              if (pendingValue === broadcastShiftValue) {
+                console.log(`✅ [WEBSOCKET-SHIFTS] Server confirmed optimistic update: ${broadcastStaffId} → ${broadcastDateKey} = "${broadcastShiftValue}"`);
+                pendingUpdatesRef.current.delete(broadcastKey);
+              } else {
+                console.warn(`⚠️ [WEBSOCKET-SHIFTS] Server value differs from pending: expected "${pendingValue}", got "${broadcastShiftValue}"`);
+                // Server wins - remove from pending
+                pendingUpdatesRef.current.delete(broadcastKey);
+              }
+            }
 
             setScheduleData((prev) => {
               const updated = { ...prev };
-              if (!updated[staffId]) updated[staffId] = {};
-              updated[staffId][dateKey] = shiftValue;
+              if (!updated[broadcastStaffId]) updated[broadcastStaffId] = {};
+              updated[broadcastStaffId][broadcastDateKey] = broadcastShiftValue;
               return updated;
             });
 
             console.log(
-              `📡 [WEBSOCKET-SHIFTS] Received broadcast update: ${staffId} → ${dateKey} = "${shiftValue}"`,
+              `📡 [WEBSOCKET-SHIFTS] Received broadcast update: ${broadcastStaffId} → ${broadcastDateKey} = "${broadcastShiftValue}"`,
             );
 
             // Invalidate React Query cache to trigger refetch
@@ -412,6 +462,11 @@ export const useWebSocketShifts = (
         `📝 [WEBSOCKET-SHIFTS] Updating shift: ${staffId} → ${dateKey} = "${shiftValue}"`,
       );
 
+      // 🔧 RACE CONDITION FIX: Track this as a pending update before server confirms
+      const pendingKey = `${staffId}::${dateKey}`;
+      pendingUpdatesRef.current.set(pendingKey, shiftValue);
+      console.log(`📌 [WEBSOCKET-SHIFTS] Added to pending: ${pendingKey} = "${shiftValue}" (total pending: ${pendingUpdatesRef.current.size})`);
+
       // Optimistic update
       setScheduleData((prev) => {
         const updated = { ...prev };
@@ -431,6 +486,7 @@ export const useWebSocketShifts = (
 
       if (!success && !enableOfflineQueue) {
         // Rollback optimistic update if not queued
+        pendingUpdatesRef.current.delete(pendingKey);
         setScheduleData((prev) => {
           const updated = { ...prev };
           if (updated[staffId]) {

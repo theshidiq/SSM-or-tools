@@ -1,9 +1,57 @@
 # Development Docker Compose configuration
 # Optimized for development workflow with hot reload and debugging
-
-version: '3.8'
+#
+# Quick start for OR-Tools only:
+#   docker-compose -f docker-compose.dev.yml up ortools-optimizer go-websocket-server --build
 
 services:
+  # OR-Tools Schedule Optimizer Service (Python)
+  ortools-optimizer:
+    build:
+      context: ./python-ortools-service
+      dockerfile: Dockerfile
+    container_name: ortools-optimizer
+    ports:
+      - "5050:5000"  # Use 5050 externally (5000 is used by AirPlay on Mac)
+    environment:
+      - PYTHONUNBUFFERED=1
+    networks:
+      - dev-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5000/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 5s
+    restart: unless-stopped
+
+  # Go WebSocket Server
+  go-websocket-server:
+    build:
+      context: ./go-server
+      dockerfile: Dockerfile
+    container_name: go-websocket-server
+    ports:
+      - "8080:8080"
+    environment:
+      - REACT_APP_SUPABASE_URL=${REACT_APP_SUPABASE_URL:-https://ymdyejrljmvajqjbejvh.supabase.co}
+      - SUPABASE_SERVICE_KEY=${SUPABASE_SERVICE_KEY:-}
+      - WEBSOCKET_PORT=8080
+      - GO_ENV=development
+      - ORTOOLS_SERVICE_URL=http://ortools-optimizer:5000
+    networks:
+      - dev-network
+    depends_on:
+      ortools-optimizer:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    restart: unless-stopped
+
   # React development server with hot reload
   client-dev:
     build:

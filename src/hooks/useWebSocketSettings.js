@@ -34,6 +34,7 @@ const MESSAGE_TYPES = {
   SETTINGS_UPDATE_PRIORITY_RULES: "SETTINGS_UPDATE_PRIORITY_RULES",
   SETTINGS_DELETE_PRIORITY_RULE: "SETTINGS_DELETE_PRIORITY_RULE",
   SETTINGS_UPDATE_ML_CONFIG: "SETTINGS_UPDATE_ML_CONFIG",
+  SETTINGS_UPDATE_ORTOOLS_CONFIG: "SETTINGS_UPDATE_ORTOOLS_CONFIG",
   SETTINGS_CREATE_BACKUP_ASSIGNMENT: "SETTINGS_CREATE_BACKUP_ASSIGNMENT",
   SETTINGS_UPDATE_BACKUP_ASSIGNMENT: "SETTINGS_UPDATE_BACKUP_ASSIGNMENT",
   SETTINGS_DELETE_BACKUP_ASSIGNMENT: "SETTINGS_DELETE_BACKUP_ASSIGNMENT",
@@ -176,6 +177,11 @@ export const useWebSocketSettings = (options = {}) => {
           monthlyLimits: actualSettings.monthlyLimits?.length || 0,
           priorityRules: actualSettings.priorityRules?.length || 0,
           mlModelConfigs: actualSettings.mlModelConfigs?.length || 0,
+          // ✅ FIX: Include ortoolsConfig in debug logging
+          ortoolsConfig: actualSettings.ortoolsConfig ? {
+            preset: actualSettings.ortoolsConfig.preset,
+            penaltyWeights: actualSettings.ortoolsConfig.penaltyWeights,
+          } : 'undefined',
         });
         console.log("📌 Active config version:", versionData?.versionNumber);
 
@@ -944,6 +950,42 @@ export const useWebSocketSettings = (options = {}) => {
   );
 
   /**
+   * Update OR-Tools solver config (table-specific operation)
+   */
+  const updateORToolsConfig = useCallback(
+    (configData) => {
+      if (!enabled) {
+        const error = new Error("WebSocket disabled");
+        console.log(
+          "🚫 Phase 3 Settings: OR-Tools config update blocked - WebSocket disabled",
+        );
+        return Promise.reject(error);
+      }
+
+      if (wsRef.current?.readyState === WebSocket.OPEN) {
+        const message = {
+          type: MESSAGE_TYPES.SETTINGS_UPDATE_ORTOOLS_CONFIG,
+          payload: { config: configData },
+          timestamp: new Date().toISOString(),
+          clientId: clientIdRef.current,
+        };
+
+        wsRef.current.send(JSON.stringify(message));
+        console.log("📤 Phase 3 Settings: Sent OR-Tools config update:", configData);
+
+        return Promise.resolve();
+      } else {
+        const error = new Error("WebSocket not connected");
+        console.error(
+          "❌ Phase 3 Settings: Failed to update OR-Tools config - not connected",
+        );
+        return Promise.reject(error);
+      }
+    },
+    [enabled],
+  );
+
+  /**
    * Create backup assignment (table-specific operation)
    */
   const createBackupAssignment = useCallback(
@@ -1241,6 +1283,7 @@ export const useWebSocketSettings = (options = {}) => {
     updatePriorityRules,
     deletePriorityRule,
     updateMLConfig,
+    updateORToolsConfig,
     createBackupAssignment,
     updateBackupAssignment,
     deleteBackupAssignment,

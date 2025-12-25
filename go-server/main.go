@@ -67,6 +67,7 @@ const (
 	MESSAGE_SETTINGS_UPDATE_PRIORITY_RULES    = "SETTINGS_UPDATE_PRIORITY_RULES"
 	MESSAGE_SETTINGS_DELETE_PRIORITY_RULE     = "SETTINGS_DELETE_PRIORITY_RULE"
 	MESSAGE_SETTINGS_UPDATE_ML_CONFIG         = "SETTINGS_UPDATE_ML_CONFIG"
+	MESSAGE_SETTINGS_UPDATE_ORTOOLS_CONFIG    = "SETTINGS_UPDATE_ORTOOLS_CONFIG"
 	MESSAGE_SETTINGS_CREATE_BACKUP_ASSIGNMENT = "SETTINGS_CREATE_BACKUP_ASSIGNMENT"
 	MESSAGE_SETTINGS_UPDATE_BACKUP_ASSIGNMENT = "SETTINGS_UPDATE_BACKUP_ASSIGNMENT"
 	MESSAGE_SETTINGS_DELETE_BACKUP_ASSIGNMENT = "SETTINGS_DELETE_BACKUP_ASSIGNMENT"
@@ -81,6 +82,11 @@ const (
 	MESSAGE_SHIFT_SYNC_RESPONSE = "SHIFT_SYNC_RESPONSE"
 	MESSAGE_SHIFT_BROADCAST     = "SHIFT_BROADCAST"
 	MESSAGE_SHIFT_BULK_UPDATE   = "SHIFT_BULK_UPDATE"
+
+	// OR-Tools schedule generation messages
+	MESSAGE_GENERATE_SCHEDULE_ORTOOLS = "GENERATE_SCHEDULE_ORTOOLS"
+	MESSAGE_SCHEDULE_GENERATED        = "SCHEDULE_GENERATED"
+	MESSAGE_GENERATE_SCHEDULE_ERROR   = "GENERATE_SCHEDULE_ERROR"
 
 	// Common messages
 	MESSAGE_CONNECTION_ACK = "CONNECTION_ACK"
@@ -319,6 +325,8 @@ func (s *StaffSyncServer) handleStaffSync(w http.ResponseWriter, r *http.Request
 			s.handlePriorityRuleDelete(client, &msg)
 		case MESSAGE_SETTINGS_UPDATE_ML_CONFIG:
 			s.handleMLConfigUpdate(client, &msg)
+		case MESSAGE_SETTINGS_UPDATE_ORTOOLS_CONFIG:
+			s.handleORToolsConfigUpdate(client, &msg)
 		case MESSAGE_SETTINGS_CREATE_BACKUP_ASSIGNMENT:
 			s.handleBackupAssignmentCreate(client, &msg)
 		case MESSAGE_SETTINGS_UPDATE_BACKUP_ASSIGNMENT:
@@ -342,6 +350,10 @@ func (s *StaffSyncServer) handleStaffSync(w http.ResponseWriter, r *http.Request
 			s.handleShiftSyncRequest(client, &msg)
 		case MESSAGE_SHIFT_BULK_UPDATE:
 			s.handleShiftBulkUpdate(client, &msg)
+
+		// OR-Tools schedule generation handler
+		case MESSAGE_GENERATE_SCHEDULE_ORTOOLS:
+			go s.handleGenerateScheduleORTools(client, &msg)
 
 		// Heartbeat/Connection health
 		case MESSAGE_PING:
@@ -1198,8 +1210,12 @@ func (s *StaffSyncServer) createStaffInSupabase(staffData map[string]interface{}
 	createData["created_at"] = time.Now().UTC().Format(time.RFC3339)
 	createData["updated_at"] = time.Now().UTC().Format(time.RFC3339)
 
-	// Set restaurant_id - hardcoded for now, should come from auth context in production
-	createData["restaurant_id"] = "e1661c71-b24f-4ee1-9e8b-7290a43c9575"
+	// Set restaurant_id from environment or use default
+	restaurantID := os.Getenv("RESTAURANT_ID")
+	if restaurantID == "" {
+		restaurantID = "4a4e4447-3ddc-4790-b2f9-b892722503b3"
+	}
+	createData["restaurant_id"] = restaurantID
 
 	// DEBUG: Log the data being sent to Supabase
 	log.Printf("🔍 [DEBUG] Creating staff with data: %+v", createData)
@@ -1371,4 +1387,231 @@ Health Check: /health
 `, s.supabaseURL, len(s.clients))
 
 	w.Write([]byte(info))
+}
+
+// handleGenerateScheduleORTools handles schedule generation requests via OR-Tools
+func (s *StaffSyncServer) handleGenerateScheduleORTools(client *Client, msg *Message) {
+	log.Printf("[ORTOOLS] Received schedule generation request from client %s", client.clientId)
+
+	// Parse the request payload
+	payload, ok := msg.Payload.(map[string]interface{})
+	if !ok {
+		s.sendORToolsError(client, "Invalid request payload format")
+		return
+	}
+
+	// Extract staff members
+	staffMembersRaw, ok := payload["staffMembers"].([]interface{})
+	if !ok {
+		s.sendORToolsError(client, "Missing or invalid staffMembers field")
+		return
+	}
+
+	var staffMembers []ORToolsStaffMember
+	for _, sm := range staffMembersRaw {
+		staffMap, ok := sm.(map[string]interface{})
+		if !ok {
+			continue
+		}
+		staff := ORToolsStaffMember{
+			ID:       getStringField(staffMap, "id"),
+			Name:     getStringField(staffMap, "name"),
+			Status:   getStringField(staffMap, "status"),
+			Position: getStringField(staffMap, "position"),
+		}
+		if staff.ID != "" {
+			staffMembers = append(staffMembers, staff)
+		}
+	}
+
+	// Extract date range
+	dateRangeRaw, ok := payload["dateRange"].([]interface{})
+	if !ok {
+		s.sendORToolsError(client, "Missing or invalid dateRange field")
+		return
+	}
+
+	var dateRange []string
+	for _, d := range dateRangeRaw {
+		if dateStr, ok := d.(string); ok {
+			dateRange = append(dateRange, dateStr)
+		}
+	}
+
+	// Extract constraints
+	constraints, _ := payload["constraints"].(map[string]interface{})
+	if constraints == nil {
+		constraints = make(map[string]interface{})
+	}
+
+	// Log constraint details for debugging
+	log.Printf("[ORTOOLS] === Constraint Debug Info ===")
+
+	// Log calendar rules
+	if calendarRules, ok := constraints["calendarRules"].(map[string]interface{}); ok {
+		log.Printf("[ORTOOLS] calendarRules: %d dates configured", len(calendarRules))
+	} else {
+		log.Printf("[ORTOOLS] calendarRules: NONE or invalid format")
+	}
+
+	// Log early shift preferences
+	if earlyShiftPrefs, ok := constraints["earlyShiftPreferences"].(map[string]interface{}); ok {
+		log.Printf("[ORTOOLS] earlyShiftPreferences: %d staff configured", len(earlyShiftPrefs))
+	} else {
+		log.Printf("[ORTOOLS] earlyShiftPreferences: NONE or invalid format")
+	}
+
+	// Log staff groups
+	if staffGroups, ok := constraints["staffGroups"].([]interface{}); ok {
+		log.Printf("[ORTOOLS] staffGroups: %d groups configured", len(staffGroups))
+		for i, g := range staffGroups {
+			if group, ok := g.(map[string]interface{}); ok {
+				name := group["name"]
+				if members, ok := group["members"].([]interface{}); ok {
+					log.Printf("[ORTOOLS]   Group %d '%v': %d members", i+1, name, len(members))
+				}
+			}
+		}
+	} else {
+		log.Printf("[ORTOOLS] staffGroups: NONE or invalid format")
+	}
+
+	// Log priority rules
+	if priorityRules, ok := constraints["priorityRules"].([]interface{}); ok {
+		log.Printf("[ORTOOLS] priorityRules: %d rules (array format)", len(priorityRules))
+	} else if priorityRules, ok := constraints["priorityRules"].(map[string]interface{}); ok {
+		log.Printf("[ORTOOLS] priorityRules: %d staff (object format)", len(priorityRules))
+	} else {
+		log.Printf("[ORTOOLS] priorityRules: NONE or invalid format")
+	}
+
+	// Log daily limits
+	if dailyLimits, ok := constraints["dailyLimitsRaw"].(map[string]interface{}); ok {
+		log.Printf("[ORTOOLS] dailyLimitsRaw: minOff=%v, maxOff=%v",
+			dailyLimits["minOffPerDay"], dailyLimits["maxOffPerDay"])
+	} else {
+		log.Printf("[ORTOOLS] dailyLimitsRaw: NONE or invalid format")
+	}
+
+	// Log monthly limit
+	if monthlyLimit, ok := constraints["monthlyLimit"].(map[string]interface{}); ok {
+		log.Printf("[ORTOOLS] monthlyLimit: min=%v, max=%v, excludeCalendar=%v",
+			monthlyLimit["minCount"], monthlyLimit["maxCount"], monthlyLimit["excludeCalendarRules"])
+	} else {
+		log.Printf("[ORTOOLS] monthlyLimit: NONE or invalid format")
+	}
+
+	// Log staff type limits (NEW - per-staff-type daily limits)
+	if staffTypeLimits, ok := constraints["staffTypeLimits"].(map[string]interface{}); ok {
+		log.Printf("[ORTOOLS] staffTypeLimits: %d types configured", len(staffTypeLimits))
+		for staffType, limits := range staffTypeLimits {
+			if limitsMap, ok := limits.(map[string]interface{}); ok {
+				log.Printf("[ORTOOLS]   %s: maxOff=%v, maxEarly=%v, isHard=%v",
+					staffType, limitsMap["maxOff"], limitsMap["maxEarly"], limitsMap["isHard"])
+			}
+		}
+	} else {
+		log.Printf("[ORTOOLS] staffTypeLimits: NONE or invalid format")
+	}
+
+	// Log OR-Tools config (penalty weights, solver settings)
+	if ortoolsConfig, ok := constraints["ortoolsConfig"].(map[string]interface{}); ok {
+		log.Printf("[ORTOOLS] ortoolsConfig: preset=%v", ortoolsConfig["preset"])
+		if penaltyWeights, ok := ortoolsConfig["penaltyWeights"].(map[string]interface{}); ok {
+			log.Printf("[ORTOOLS]   penaltyWeights: staffGroup=%v, dailyLimit=%v, monthlyLimit=%v",
+				penaltyWeights["staffGroup"], penaltyWeights["dailyLimitMin"], penaltyWeights["monthlyLimit"])
+		}
+	} else {
+		log.Printf("[ORTOOLS] ortoolsConfig: NONE or invalid format")
+	}
+
+	log.Printf("[ORTOOLS] === End Constraint Debug Info ===")
+
+	// Extract timeout
+	timeout := 30
+	if t, ok := payload["timeout"].(float64); ok {
+		timeout = int(t)
+	}
+
+	log.Printf("[ORTOOLS] Processing request: %d staff, %d days, timeout=%ds",
+		len(staffMembers), len(dateRange), timeout)
+
+	// Send to OR-Tools service
+	ortoolsClient := NewORToolsClient()
+
+	result, err := ortoolsClient.Optimize(ORToolsRequest{
+		StaffMembers: staffMembers,
+		DateRange:    dateRange,
+		Constraints:  constraints,
+		Timeout:      timeout,
+	})
+
+	if err != nil {
+		log.Printf("[ORTOOLS] Error calling OR-Tools service: %v", err)
+		s.sendORToolsError(client, fmt.Sprintf("OR-Tools service error: %v", err))
+		return
+	}
+
+	if !result.Success {
+		log.Printf("[ORTOOLS] Optimization failed: %s", result.Error)
+		s.sendORToolsError(client, result.Error)
+		return
+	}
+
+	// Send success response
+	response := Message{
+		Type: MESSAGE_SCHEDULE_GENERATED,
+		Payload: map[string]interface{}{
+			"schedule":  result.Schedule,
+			"solveTime": result.SolveTime,
+			"isOptimal": result.IsOptimal,
+			"status":    result.Status,
+			"stats":     result.Stats,
+		},
+		Timestamp: time.Now(),
+		ClientID:  client.clientId,
+	}
+
+	responseBytes, err := json.Marshal(response)
+	if err != nil {
+		log.Printf("[ORTOOLS] Error marshaling response: %v", err)
+		s.sendORToolsError(client, "Failed to marshal response")
+		return
+	}
+
+	err = client.conn.WriteMessage(websocket.TextMessage, responseBytes)
+	if err != nil {
+		log.Printf("[ORTOOLS] Error sending response: %v", err)
+		return
+	}
+
+	log.Printf("[ORTOOLS] ✅ Successfully sent generated schedule to client %s", client.clientId)
+}
+
+// sendORToolsError sends an error response for OR-Tools operations
+func (s *StaffSyncServer) sendORToolsError(client *Client, errorMsg string) {
+	response := Message{
+		Type: MESSAGE_GENERATE_SCHEDULE_ERROR,
+		Payload: map[string]interface{}{
+			"error": errorMsg,
+		},
+		Timestamp: time.Now(),
+		ClientID:  client.clientId,
+	}
+
+	responseBytes, err := json.Marshal(response)
+	if err != nil {
+		log.Printf("[ORTOOLS] Error marshaling error response: %v", err)
+		return
+	}
+
+	client.conn.WriteMessage(websocket.TextMessage, responseBytes)
+}
+
+// getStringField safely extracts a string field from a map
+func getStringField(m map[string]interface{}, key string) string {
+	if val, ok := m[key].(string); ok {
+		return val
+	}
+	return ""
 }
