@@ -264,13 +264,15 @@ type MonthlyLimit struct {
 }
 
 // ToReactFormat converts snake_case to camelCase for React
+// ✅ FIX: Also extracts nested fields from limit_config JSONB to top-level properties
+// React's LimitsTab.jsx expects minCount, maxCount, etc. at top level
 func (ml *MonthlyLimit) ToReactFormat() map[string]interface{} {
-	return map[string]interface{}{
+	result := map[string]interface{}{
 		"id":               ml.ID,
 		"restaurantId":     ml.RestaurantID,
 		"versionId":        ml.VersionID,
 		"name":             ml.Name,
-		"limitConfig":      ml.LimitConfig,
+		"limitConfig":      ml.LimitConfig, // Keep original for compatibility
 		"penaltyWeight":    ml.PenaltyWeight,
 		"isHardConstraint": ml.IsHardConstraint,
 		"effectiveFrom":    ml.EffectiveFrom,
@@ -279,6 +281,43 @@ func (ml *MonthlyLimit) ToReactFormat() map[string]interface{} {
 		"createdAt":        ml.CreatedAt,
 		"updatedAt":        ml.UpdatedAt,
 	}
+
+	// ✅ FIX: Extract nested fields from limit_config JSONB to top-level properties
+	// React's LimitsTab.jsx expects these at top level, not nested inside limitConfig
+	if ml.LimitConfig != nil {
+		if limitType, ok := ml.LimitConfig["limitType"]; ok {
+			result["limitType"] = limitType
+		}
+		if minCount, ok := ml.LimitConfig["minCount"]; ok {
+			result["minCount"] = minCount
+		}
+		if maxCount, ok := ml.LimitConfig["maxCount"]; ok {
+			result["maxCount"] = maxCount
+		}
+		if excludeCalendarRules, ok := ml.LimitConfig["excludeCalendarRules"]; ok {
+			result["excludeCalendarRules"] = excludeCalendarRules
+		}
+		if excludeEarlyShiftCalendar, ok := ml.LimitConfig["excludeEarlyShiftCalendar"]; ok {
+			result["excludeEarlyShiftCalendar"] = excludeEarlyShiftCalendar
+		}
+		if overrideWeeklyLimits, ok := ml.LimitConfig["overrideWeeklyLimits"]; ok {
+			result["overrideWeeklyLimits"] = overrideWeeklyLimits
+		}
+		if countHalfDays, ok := ml.LimitConfig["countHalfDays"]; ok {
+			result["countHalfDays"] = countHalfDays
+		}
+		if scope, ok := ml.LimitConfig["scope"]; ok {
+			result["scope"] = scope
+		}
+		if targetIds, ok := ml.LimitConfig["targetIds"]; ok {
+			result["targetIds"] = targetIds
+		}
+		if distributionRules, ok := ml.LimitConfig["distributionRules"]; ok {
+			result["distributionRules"] = distributionRules
+		}
+	}
+
+	return result
 }
 
 // PriorityRule represents scheduling priority rules
@@ -1738,17 +1777,60 @@ func (s *StaffSyncServer) updateMonthlyLimit(versionID string, limitData map[str
 	} else {
 		upsertData["name"] = "New Monthly Limit"
 	}
+	// ✅ FIX: React sends minCount, maxCount etc. at TOP LEVEL, not inside limitConfig
+	// We need to construct limit_config from top-level fields OR use existing limitConfig
 	if limitConfig, ok := limitData["limitConfig"]; ok && limitConfig != nil {
 		upsertData["limit_config"] = limitConfig
 	} else {
-		// Default limit_config structure - required NOT NULL field
-		upsertData["limit_config"] = map[string]interface{}{
+		// Build limit_config from top-level fields (React LimitsTab.jsx sends data at top level)
+		constructedConfig := map[string]interface{}{
 			"limitType":  "off_days",
-			"minCount":   7,
-			"maxCount":   8,
 			"staffIds":   []string{},
 			"shiftTypes": []string{"×"},
 		}
+
+		// Extract top-level fields that should be in limit_config
+		if limitType, ok := limitData["limitType"]; ok {
+			constructedConfig["limitType"] = limitType
+		}
+		if minCount, ok := limitData["minCount"]; ok {
+			constructedConfig["minCount"] = minCount
+			log.Printf("✅ [upsertMonthlyLimit] Found minCount at top level: %v", minCount)
+		} else {
+			constructedConfig["minCount"] = 7 // default
+		}
+		if maxCount, ok := limitData["maxCount"]; ok {
+			constructedConfig["maxCount"] = maxCount
+			log.Printf("✅ [upsertMonthlyLimit] Found maxCount at top level: %v", maxCount)
+		} else {
+			constructedConfig["maxCount"] = 8 // default
+		}
+		// Extract additional fields added in Phase 6 Monthly Limits Enhancement
+		if excludeCalendarRules, ok := limitData["excludeCalendarRules"]; ok {
+			constructedConfig["excludeCalendarRules"] = excludeCalendarRules
+		}
+		if excludeEarlyShiftCalendar, ok := limitData["excludeEarlyShiftCalendar"]; ok {
+			constructedConfig["excludeEarlyShiftCalendar"] = excludeEarlyShiftCalendar
+		}
+		if overrideWeeklyLimits, ok := limitData["overrideWeeklyLimits"]; ok {
+			constructedConfig["overrideWeeklyLimits"] = overrideWeeklyLimits
+		}
+		if countHalfDays, ok := limitData["countHalfDays"]; ok {
+			constructedConfig["countHalfDays"] = countHalfDays
+		}
+		if scope, ok := limitData["scope"]; ok {
+			constructedConfig["scope"] = scope
+		}
+		if targetIds, ok := limitData["targetIds"]; ok {
+			constructedConfig["targetIds"] = targetIds
+		}
+		// Distribution rules
+		if distributionRules, ok := limitData["distributionRules"]; ok {
+			constructedConfig["distributionRules"] = distributionRules
+		}
+
+		upsertData["limit_config"] = constructedConfig
+		log.Printf("✅ [upsertMonthlyLimit] Constructed limit_config from top-level fields: %+v", constructedConfig)
 	}
 	if penaltyWeight, ok := limitData["penaltyWeight"]; ok {
 		upsertData["penalty_weight"] = penaltyWeight

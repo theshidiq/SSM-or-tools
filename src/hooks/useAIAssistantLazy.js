@@ -1,11 +1,16 @@
 /**
- * useAIAssistantLazy.js
+ * useAIAssistantLazy.js (OR-Tools Version)
  *
- * Lazy-loading version of useAIAssistant that only loads AI features when requested
- * This provides a lightweight fallback with progressive enhancement
+ * Sends schedule generation requests to Go server -> OR-Tools service.
+ * Simplified from the previous multi-phase ML system to use constraint programming.
+ *
+ * Key Changes:
+ * - Removed: BusinessRuleValidator, HybridPredictor, TensorFlowScheduler
+ * - Added: Direct WebSocket communication to Go server for OR-Tools optimization
+ * - Kept: CalendarRulesLoader, EarlyShiftPreferencesLoader (data loading)
  */
 
-import { useState, useCallback, useRef, useEffect, useMemo } from "react";
+import { useState, useCallback, useRef, useEffect } from "react";
 import { optimizedStorage } from "../utils/storageUtils";
 import { generateDateRange } from "../utils/dateUtils";
 import { useAISettings } from "./useAISettings";
@@ -13,334 +18,140 @@ import { useRestaurant } from "../contexts/RestaurantContext";
 import { EarlyShiftPreferencesLoader } from "../ai/utils/EarlyShiftPreferencesLoader";
 import { CalendarRulesLoader } from "../ai/utils/CalendarRulesLoader";
 
-// Lazy loading functions that only import when needed
-const loadAISystem = async () => {
-  try {
-    // Loading AI system modules
+// WebSocket configuration (same as useWebSocketShifts)
+const WS_URL = process.env.REACT_APP_WEBSOCKET_URL || "ws://localhost:8080";
+const WS_ENDPOINT = "/staff-sync";
 
-    const [
-      { featureCacheManager },
-      { aiErrorHandler },
-      constraintModule,
-      configModule,
-    ] = await Promise.all([
-      import("../ai/cache/FeatureCacheManager.js"),
-      import("../ai/utils/ErrorHandler"),
-      import("../ai/constraints/ConstraintEngine"),
-      import("../ai/cache/ConfigurationCacheManager"),
-    ]);
-
-    return {
-      featureCacheManager,
-      aiErrorHandler,
-      constraintEngine: constraintModule,
-      configurationCache: configModule.configurationCache,
-    };
-  } catch (error) {
-    console.warn("⚠️ Failed to load AI system modules:", error.message);
-    return null;
-  }
-};
-
-const loadEnhancedAISystem = async () => {
-  try {
-    // Loading enhanced AI system
-
-    const [hybridModule, businessRuleModule, tensorFlowModule] =
-      await Promise.all([
-        import("../ai/hybrid/HybridPredictor"),
-        import("../ai/hybrid/BusinessRuleValidator"),
-        import("../ai/ml/TensorFlowScheduler"),
-      ]);
-
-    return {
-      HybridPredictor: hybridModule.HybridPredictor,
-      BusinessRuleValidator: businessRuleModule.BusinessRuleValidator,
-      TensorFlowScheduler: tensorFlowModule.TensorFlowScheduler,
-    };
-  } catch (error) {
-    console.warn("⚠️ Failed to load enhanced AI system:", error.message);
-    return null;
-  }
+// Message types for OR-Tools
+const MESSAGE_TYPES = {
+  GENERATE_SCHEDULE_ORTOOLS: "GENERATE_SCHEDULE_ORTOOLS",
+  SCHEDULE_GENERATED: "SCHEDULE_GENERATED",
+  GENERATE_SCHEDULE_ERROR: "GENERATE_SCHEDULE_ERROR",
+  CONNECTION_ACK: "CONNECTION_ACK",
 };
 
 export const useAIAssistantLazy = (
   scheduleData,
   staffMembers,
   currentMonthIndex,
-  saveSchedule, // Backend save operation (WebSocket + Database)
+  saveSchedule,
   options = {},
 ) => {
-  const {
-    autoInitialize = false,
-    enableEnhanced = true,
-    fallbackMode = true,
-  } = options;
+  const { autoInitialize = false } = options;
 
   // Core state
   const [isInitialized, setIsInitialized] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
-  const [systemType, setSystemType] = useState("not-loaded");
+  const [systemType, setSystemType] = useState("ortools");
   const [systemHealth, setSystemHealth] = useState(null);
-  const [isAvailable, setIsAvailable] = useState(false);
+  const [isAvailable, setIsAvailable] = useState(true);
   const [error, setError] = useState(null);
 
-  // AI System reference
-  const aiSystemRef = useRef(null);
-  const loadingPromiseRef = useRef(null);
+  // WebSocket reference
+  const wsRef = useRef(null);
+  const messageHandlersRef = useRef({});
 
-  // Get AI settings (WebSocket or localStorage)
+  // Get AI settings and restaurant context
   const aiSettings = useAISettings();
-
-  // Get restaurant context for loading early shift preferences
   const { restaurant } = useRestaurant();
 
-  // Lightweight fallback system that works without AI
-  const fallbackSystem = useMemo(
-    () => ({
-      type: "fallback",
-      generateSchedule: async () => {
-        // Using fallback schedule generation (rule-based)
+  /**
+   * Connect to WebSocket server
+   */
+  const connectWebSocket = useCallback(() => {
+    return new Promise((resolve, reject) => {
+      if (wsRef.current?.readyState === WebSocket.OPEN) {
+        resolve(wsRef.current);
+        return;
+      }
 
-        // Simple rule-based schedule generation
-        const newSchedule = { ...scheduleData };
-        const dateRange = generateDateRange(currentMonthIndex);
+      const wsUrl = `${WS_URL}${WS_ENDPOINT}?period=${currentMonthIndex}`;
+      console.log("[OR-TOOLS] Connecting to WebSocket:", wsUrl);
 
-        // Apply basic patterns for each staff member
-        staffMembers.forEach((staff) => {
-          if (!newSchedule[staff.id]) {
-            newSchedule[staff.id] = {};
+      const ws = new WebSocket(wsUrl);
+
+      ws.onopen = () => {
+        console.log("[OR-TOOLS] WebSocket connected");
+        wsRef.current = ws;
+        setIsAvailable(true);
+        resolve(ws);
+      };
+
+      ws.onerror = (event) => {
+        console.error("[OR-TOOLS] WebSocket error:", event);
+        setIsAvailable(false);
+        reject(new Error("WebSocket connection failed"));
+      };
+
+      ws.onclose = () => {
+        console.log("[OR-TOOLS] WebSocket closed");
+        wsRef.current = null;
+      };
+
+      ws.onmessage = (event) => {
+        try {
+          const message = JSON.parse(event.data);
+          const handler = messageHandlersRef.current[message.type];
+          if (handler) {
+            handler(message.payload);
           }
+        } catch (err) {
+          console.error("[OR-TOOLS] Error parsing message:", err);
+        }
+      };
 
-          dateRange.forEach((date, index) => {
-            const dateKey = date.toISOString().split("T")[0];
-            const dayOfWeek = date.getDay();
+      // Timeout for connection
+      setTimeout(() => {
+        if (ws.readyState !== WebSocket.OPEN) {
+          ws.close();
+          reject(new Error("WebSocket connection timeout"));
+        }
+      }, 10000);
+    });
+  }, [currentMonthIndex]);
 
-            // Simple pattern: work 5 days, rest 2 days
-            if (dayOfWeek === 0 || dayOfWeek === 6) {
-              // Weekend
-              newSchedule[staff.id][dateKey] = "×"; // Day off
-            } else if (staff.status === "パート") {
-              newSchedule[staff.id][dateKey] = "○"; // Part-time normal shift
-            } else {
-              newSchedule[staff.id][dateKey] = ""; // Full-time normal shift (empty)
-            }
-          });
-        });
-
-        return {
-          success: true,
-          schedule: newSchedule,
-          message: "Generated basic schedule using rule-based approach",
-          source: "fallback",
-        };
-      },
-
-      validateConstraints: (schedule) => {
-        // Basic validation
-        const issues = [];
-        const dateRange = generateDateRange(currentMonthIndex);
-
-        dateRange.forEach((date) => {
-          const dateKey = date.toISOString().split("T")[0];
-          const workingStaff = staffMembers.filter((staff) => {
-            const shift = schedule[staff.id]?.[dateKey];
-            return shift && shift !== "×"; // Not day off
-          });
-
-          // Check minimum staffing
-          if (workingStaff.length < 2) {
-            issues.push(
-              `${dateKey}: Minimum staffing not met (${workingStaff.length} < 2)`,
-            );
-          }
-        });
-
-        return {
-          isValid: issues.length === 0,
-          violations: issues,
-          source: "fallback",
-        };
-      },
-    }),
-    [scheduleData, staffMembers, currentMonthIndex],
-  );
-
-  // Initialize AI system
-  const initializeAI = useCallback(async () => {
-    if (isInitialized || isLoading) return aiSystemRef.current;
-
-    // If already loading, wait for existing promise
-    if (loadingPromiseRef.current) {
-      return await loadingPromiseRef.current;
+  /**
+   * Send message via WebSocket
+   */
+  const sendMessage = useCallback((type, payload) => {
+    if (wsRef.current?.readyState === WebSocket.OPEN) {
+      wsRef.current.send(JSON.stringify({
+        type,
+        payload,
+        timestamp: new Date().toISOString(),
+      }));
+      return true;
     }
+    return false;
+  }, []);
+
+  /**
+   * Initialize AI system (simplified for OR-Tools)
+   */
+  const initializeAI = useCallback(async () => {
+    if (isInitialized || isLoading) return true;
 
     setIsLoading(true);
     setError(null);
 
-    const loadingPromise = (async () => {
-      try {
-        // Initializing lazy AI system
-        setSystemType("loading");
-
-        // Try to load enhanced system first
-        if (enableEnhanced) {
-          const enhancedSystem = await loadEnhancedAISystem();
-          if (enhancedSystem) {
-            // Enhanced AI system loaded
-
-            // Initialize HybridPredictor with settings provider
-            const predictor = new enhancedSystem.HybridPredictor();
-
-            // ✅ FIX: Always configure and initialize predictor
-            // Don't skip initialization based on settings connection status
-            // The predictor can handle settings being loaded asynchronously
-            predictor.setSettingsProvider(aiSettings);
-            await predictor.initialize();
-
-            const system = {
-              type: "enhanced",
-              ...enhancedSystem,
-              hybridPredictor: predictor,
-              initialized: true,
-
-              // Bridge method to connect generateAIPredictions to hybridPredictor
-              generateSchedule: async ({
-                scheduleData: inputScheduleData,
-                staffMembers: inputStaffMembers,
-                currentMonthIndex: inputMonthIndex,
-                saveSchedule: inputSaveSchedule,
-                onProgress,
-                earlyShiftPreferences,
-                calendarRules,
-              }) => {
-                // Ensure predictor is initialized (lazy initialization)
-                if (!predictor.initialized || !predictor.isReady()) {
-                  console.log("🔧 Lazy-initializing HybridPredictor...");
-                  predictor.setSettingsProvider(aiSettings);
-                  await predictor.initialize();
-                  console.log("✅ HybridPredictor initialized");
-                }
-
-                const dateRange = generateDateRange(inputMonthIndex);
-
-                if (onProgress) {
-                  onProgress({
-                    stage: "predicting",
-                    progress: 30,
-                    message: "ハイブリッドAI予測中...",
-                  });
-                }
-
-                // Call hybrid predictor with progress callback
-                const result = await predictor.predictSchedule(
-                  {
-                    scheduleData: inputScheduleData,
-                    currentMonthIndex: inputMonthIndex,
-                    timestamp: Date.now(),
-                    earlyShiftPreferences,
-                    calendarRules,
-                  },
-                  inputStaffMembers,
-                  dateRange,
-                  onProgress // Forward progress callback
-                );
-
-                return {
-                  success: result.success !== false,
-                  schedule: result.schedule || result.predictions,
-                  message: result.message || "ハイブリッドAI予測完了",
-                  data: result,
-                  ...result,
-                };
-              },
-            };
-
-            // ✅ FIX: Validate predictor is properly initialized before marking ready
-            if (predictor.initialized && predictor.isReady()) {
-              aiSystemRef.current = system;
-              setSystemType("enhanced");
-              setIsInitialized(true);
-              setIsAvailable(true);
-              console.log("✅ Enhanced AI system initialized successfully with predictor");
-              return system;
-            } else {
-              console.warn("⚠️ Predictor not ready, will retry or use fallback");
-              // Don't mark as initialized - allow retry
-              if (fallbackMode) {
-                console.log("🔄 Falling back to basic system due to predictor initialization failure");
-                // Continue to fallback section below
-              } else {
-                return null;
-              }
-            }
-          }
-        }
-
-        // Fallback to basic system
-        const basicSystem = await loadAISystem();
-        if (basicSystem) {
-          // Basic AI system loaded
-          const system = {
-            type: "basic",
-            ...basicSystem,
-            initialized: true,
-          };
-
-          aiSystemRef.current = system;
-          setSystemType("basic");
-          setIsInitialized(true);
-          setIsAvailable(true);
-          return system;
-        }
-
-        // Use fallback system if nothing else works
-        if (fallbackMode) {
-          // Using fallback system (no AI loaded)
-          aiSystemRef.current = fallbackSystem;
-          setSystemType("fallback");
-          setIsInitialized(true);
-          setIsAvailable(true);
-          return fallbackSystem;
-        }
-
-        throw new Error("No AI system could be loaded");
-      } catch (err) {
-        console.error("❌ Failed to initialize AI system:", err);
-        setError(err.message);
-
-        // Use fallback if available
-        if (fallbackMode) {
-          aiSystemRef.current = fallbackSystem;
-          setSystemType("fallback");
-          setIsAvailable(true);
-          return fallbackSystem;
-        }
-
-        setSystemType("error");
-        setIsAvailable(false);
-        return null;
-      } finally {
-        setIsLoading(false);
-        loadingPromiseRef.current = null;
-      }
-    })();
-
-    loadingPromiseRef.current = loadingPromise;
-    return await loadingPromise;
-  }, [
-    isInitialized,
-    isLoading,
-    enableEnhanced,
-    fallbackMode,
-    fallbackSystem,
-    scheduleData,      // Fix stale closure
-    staffMembers,      // Fix stale closure
-    currentMonthIndex, // Fix stale closure
-    saveSchedule,      // Fix stale closure
-    aiSettings,        // ✅ FIX: Add aiSettings to prevent stale closure
-  ]);
+    try {
+      // Connect to WebSocket
+      await connectWebSocket();
+      setIsInitialized(true);
+      setSystemType("ortools");
+      setIsAvailable(true);
+      console.log("[OR-TOOLS] AI system initialized (OR-Tools via WebSocket)");
+      return true;
+    } catch (err) {
+      console.error("[OR-TOOLS] Initialization error:", err);
+      setError(err.message);
+      setIsAvailable(false);
+      return false;
+    } finally {
+      setIsLoading(false);
+    }
+  }, [isInitialized, isLoading, connectWebSocket]);
 
   // Auto-initialize if requested
   useEffect(() => {
@@ -349,14 +160,34 @@ export const useAIAssistantLazy = (
     }
   }, [autoInitialize, isInitialized, isLoading, initializeAI]);
 
-  // Generate AI predictions
+  // Cleanup WebSocket on unmount
+  useEffect(() => {
+    return () => {
+      if (wsRef.current) {
+        wsRef.current.close();
+        wsRef.current = null;
+      }
+    };
+  }, []);
+
+  /**
+   * Calculate date range for current month period
+   */
+  const calculateDateRange = useCallback((monthIndex) => {
+    const dateRange = generateDateRange(monthIndex);
+    return dateRange.map(date => date.toISOString().split("T")[0]);
+  }, []);
+
+  /**
+   * Generate AI predictions using OR-Tools via Go server
+   */
   const generateAIPredictions = useCallback(
     async (onProgress) => {
       setIsProcessing(true);
       setError(null);
 
       try {
-        // Report initialization progress
+        // Step 1: Initialize if needed
         if (onProgress) {
           onProgress({
             stage: "initializing",
@@ -365,168 +196,257 @@ export const useAIAssistantLazy = (
           });
         }
 
-        // Ensure AI is initialized
-        const system = aiSystemRef.current || (await initializeAI());
-        if (!system) {
-          // ✅ FIX: Provide better error handling with explicit fallback
-          if (fallbackMode && fallbackSystem) {
-            console.warn("⚠️ Enhanced system not available, using fallback system");
-            aiSystemRef.current = fallbackSystem;
-            setSystemType("fallback");
-            setIsInitialized(true);
-            setIsAvailable(true);
-            // Use fallback system
-            const fallbackResult = await fallbackSystem.generateSchedule({
-              scheduleData,
-              staffMembers,
-              currentMonthIndex,
-              saveSchedule,
-              onProgress,
-            });
-            return fallbackResult;
-          }
-          throw new Error("AI system not available and fallback is disabled");
-        }
+        // Ensure WebSocket is connected
+        await connectWebSocket();
 
-        // Report AI system ready
+        // Step 2: Load constraints from database
         if (onProgress) {
           onProgress({
-            stage: "starting",
+            stage: "loading_preferences",
             progress: 20,
-            message: "AI予測を開始...",
+            message: "設定を読み込み中...",
           });
         }
 
-        // Load early shift preferences for AI constraint processing
+        const dateRange = calculateDateRange(currentMonthIndex);
+
+        // Load early shift preferences
         let earlyShiftPreferences = {};
         if (restaurant?.id) {
           try {
-            if (onProgress) {
-              onProgress({
-                stage: "loading_preferences",
-                progress: 25,
-                message: "早番設定を読み込み中...",
-              });
-            }
-
-            const dateRange = generateDateRange(currentMonthIndex);
             earlyShiftPreferences = await EarlyShiftPreferencesLoader.loadPreferences(
               restaurant.id,
-              dateRange
+              generateDateRange(currentMonthIndex)
             );
-
             console.log(
-              `✅ [AI-LAZY] Loaded early shift preferences for ${Object.keys(earlyShiftPreferences).length} staff members`
+              `[OR-TOOLS] Loaded early shift preferences for ${Object.keys(earlyShiftPreferences).length} staff members`
             );
           } catch (err) {
-            console.warn("⚠️ [AI-LAZY] Failed to load early shift preferences:", err);
-            // Continue without preferences - AI will work without early shift constraints
+            console.warn("[OR-TOOLS] Failed to load early shift preferences:", err);
           }
-        } else {
-          console.warn("⚠️ [AI-LAZY] No restaurant ID available - skipping early shift preferences loading");
-          console.warn("⚠️ [AI-LAZY] Restaurant context:", { hasRestaurant: !!restaurant, restaurantId: restaurant?.id });
         }
 
-        // Load calendar rules (must_work, must_day_off) for AI constraint processing
+        // Load calendar rules
         let calendarRules = {};
         if (restaurant?.id) {
           try {
-            if (onProgress) {
-              onProgress({
-                stage: "loading_calendar_rules",
-                progress: 30,
-                message: "カレンダールールを読み込み中...",
-              });
-            }
-
-            const dateRange = generateDateRange(currentMonthIndex);
             calendarRules = await CalendarRulesLoader.loadRules(
               restaurant.id,
-              dateRange
+              generateDateRange(currentMonthIndex)
             );
-
             const rulesSummary = CalendarRulesLoader.getRulesSummary(calendarRules);
             console.log(
-              `✅ [AI-LAZY] Loaded ${rulesSummary.totalRules} calendar rules (${rulesSummary.mustWorkCount} must_work, ${rulesSummary.mustDayOffCount} must_day_off)`
+              `[OR-TOOLS] Loaded ${rulesSummary.totalRules} calendar rules`
             );
           } catch (err) {
-            console.warn("⚠️ [AI-LAZY] Failed to load calendar rules:", err);
-            // Continue without calendar rules - AI will work without calendar constraints
+            console.warn("[OR-TOOLS] Failed to load calendar rules:", err);
           }
-        } else {
-          console.warn("⚠️ [AI-LAZY] No restaurant ID available - skipping calendar rules loading");
-          console.warn("⚠️ [AI-LAZY] Restaurant context:", { hasRestaurant: !!restaurant, restaurantId: restaurant?.id });
         }
 
-        // Generating predictions using AI system
-
-        if (system.generateSchedule) {
-          const result = await system.generateSchedule({
-            scheduleData,
-            staffMembers,
-            currentMonthIndex,
-            saveSchedule, // Pass backend save operation
-            onProgress, // Pass progress callback through
-            earlyShiftPreferences, // Pass early shift preferences for constraint processing
-            calendarRules, // Pass calendar rules (must_work, must_day_off) for constraint processing
+        if (onProgress) {
+          onProgress({
+            stage: "optimizing",
+            progress: 30,
+            message: "OR-Toolsで最適化中...",
           });
+        }
 
-          console.log("🔍 [AI-LAZY] generateSchedule returned result:", {
-            success: result?.success,
-            hasSchedule: !!result?.schedule,
-            scheduleKeys: result?.schedule ? Object.keys(result.schedule).length : 0,
-            method: result?.metadata?.method
-          });
+        // Step 3: Extract pre-filled cells from current schedule
+        // These are staff day-off requests entered by manager before AI generation
+        // They will be treated as HARD constraints in OR-Tools (cannot be changed)
+        const prefilledSchedule = {};
+        let prefilledCount = 0;
 
-          // Apply the generated schedule to backend (WebSocket → Go Server → Database)
-          if (result.success && result.schedule) {
-            console.log("💾 [AI] Saving AI-generated schedule to backend...");
-            console.log(`📊 [AI] Schedule to save has ${Object.keys(result.schedule).length} staff members`);
-
-            if (onProgress) {
-              onProgress({
-                stage: "saving",
-                progress: 90,
-                message: "スケジュール保存中...",
+        if (scheduleData && typeof scheduleData === 'object') {
+          Object.entries(scheduleData).forEach(([staffId, dates]) => {
+            if (dates && typeof dates === 'object') {
+              Object.entries(dates).forEach(([dateKey, shiftValue]) => {
+                // Only include non-empty cells as pre-filled
+                if (shiftValue && typeof shiftValue === 'string' && shiftValue.trim() !== '') {
+                  if (!prefilledSchedule[staffId]) {
+                    prefilledSchedule[staffId] = {};
+                  }
+                  prefilledSchedule[staffId][dateKey] = shiftValue;
+                  prefilledCount++;
+                }
               });
             }
-
-            // Save to backend via WebSocket (this persists to database)
-            // ✅ FIX: Pass { fromAI: true } to trigger immediate UI update with new reference
-            // This ensures React detects the state change and re-renders the ScheduleTable
-            console.log("📤 [AI] Calling saveSchedule function with fromAI flag...");
-            await saveSchedule(result.schedule, null, { fromAI: true });
-
-            console.log("✅ [AI] AI-generated schedule saved to backend and UI updated immediately");
-
-            // Save to localStorage as backup cache
-            console.log("💾 [AI] Saving to localStorage as backup...");
-            optimizedStorage.saveScheduleData(currentMonthIndex, result.schedule);
-          } else {
-            console.error("❌ [AI-LAZY] Schedule save skipped - conditions not met:", {
-              success: result?.success,
-              hasSchedule: !!result?.schedule,
-              scheduleType: typeof result?.schedule
-            });
-          }
-
-          // Report completion
-          if (onProgress) {
-            onProgress({
-              stage: "completed",
-              progress: 100,
-              message: "予測完了",
-            });
-          }
-
-          console.log("✅ [AI-LAZY] Returning result to caller");
-          return result;
-        } else {
-          // Fallback for systems without generateSchedule
-          return await fallbackSystem.generateSchedule();
+          });
         }
+
+        if (prefilledCount > 0) {
+          console.log(`[OR-TOOLS] Extracted ${prefilledCount} pre-filled cells from schedule (will be preserved as HARD constraints)`);
+        } else {
+          console.log(`[OR-TOOLS] No pre-filled cells found - generating full schedule`);
+        }
+
+        // Step 4: Prepare constraints payload
+        // ✅ FIX: Extract monthly limit from monthlyLimits array (not singular monthlyLimit)
+        // The UI stores monthly limits as an array in settings.monthlyLimits
+        // We need to find the first "off_days" limit and extract minCount/maxCount
+        const monthlyLimitsArray = aiSettings?.monthlyLimits || [];
+        const offDaysLimit = monthlyLimitsArray.find(l =>
+          l.limitType === 'off_days' || l.limitType === 'max_off_days'
+        ) || monthlyLimitsArray[0];
+
+        // Extract minCount/maxCount from the found limit, with fallbacks
+        const monthlyLimitConfig = offDaysLimit ? {
+          minCount: offDaysLimit.minCount ?? offDaysLimit.maxCount ?? 7,
+          maxCount: offDaysLimit.maxCount ?? 8,
+          excludeCalendarRules: offDaysLimit.excludeCalendarRules ?? true,
+          excludeEarlyShiftCalendar: offDaysLimit.excludeEarlyShiftCalendar ?? true,
+          overrideWeeklyLimits: offDaysLimit.overrideWeeklyLimits ?? true,
+          countHalfDays: offDaysLimit.countHalfDays ?? true,
+        } : {
+          minCount: 7,
+          maxCount: 8,
+          excludeCalendarRules: true,
+        };
+
+        console.log(`[OR-TOOLS] Monthly limit config from settings:`, monthlyLimitConfig);
+
+        const constraints = {
+          calendarRules: calendarRules || {},
+          earlyShiftPreferences: earlyShiftPreferences || {},
+          // DEPRECATED: Global daily limits - auto-disabled when staffTypeLimits is configured
+          // See Python scheduler _add_daily_limits() for AUTO-DISABLE logic
+          dailyLimitsRaw: aiSettings?.dailyLimitsRaw || {
+            minOffPerDay: 0,  // Set to 0 to effectively disable
+            maxOffPerDay: 3,
+          },
+          // ✅ FIX: Use extracted monthly limit config (from monthlyLimits array)
+          monthlyLimit: monthlyLimitConfig,
+          staffGroups: aiSettings?.staffGroups || [],
+          priorityRules: aiSettings?.priorityRules || {},
+          // ✅ PRIMARY: Staff Type Daily Limits (replaces global daily limits)
+          // Per-staff-type constraints for off/early shifts
+          // When configured, global dailyLimitsRaw is AUTO-DISABLED in Python scheduler
+          // Default: { '社員': { maxOff: 1, maxEarly: 2, isHard: true } }
+          staffTypeLimits: aiSettings?.staffTypeLimits || {
+            '社員': { maxOff: 1, maxEarly: 2, isHard: true },
+          },
+          // ✅ FIX: Include OR-Tools solver configuration (penalty weights, timeout, etc.)
+          // This is used by Python OR-Tools scheduler to configure constraint penalties
+          ortoolsConfig: aiSettings?.ortoolsConfig || {
+            preset: 'balanced',
+            penaltyWeights: {
+              staffGroup: 100,
+              dailyLimitMin: 50,
+              dailyLimitMax: 50,
+              monthlyLimit: 80,
+              adjacentConflict: 30,
+              fiveDayRest: 200,
+            },
+            solverSettings: {
+              timeout: 30,
+              numWorkers: 4,
+            },
+          },
+          // ✅ NEW: Pre-filled schedule (user-edited cells before AI generation)
+          // These become HARD constraints in OR-Tools - they will NOT be changed
+          prefilledSchedule: prefilledSchedule,
+        };
+
+        // Log the ortoolsConfig being sent
+        console.log("[OR-TOOLS] Using ortoolsConfig:", JSON.stringify(constraints.ortoolsConfig, null, 2));
+
+        // Log staffTypeLimits if configured
+        if (Object.keys(constraints.staffTypeLimits).length > 0) {
+          console.log("[OR-TOOLS] Using staffTypeLimits:", JSON.stringify(constraints.staffTypeLimits, null, 2));
+        }
+
+        // Log pre-filled cells summary
+        if (prefilledCount > 0) {
+          const staffWithPrefills = Object.keys(prefilledSchedule).length;
+          console.log(`[OR-TOOLS] Pre-filled schedule: ${prefilledCount} cells across ${staffWithPrefills} staff members`);
+        }
+
+        // Step 5: Send optimization request to Go server
+        const result = await new Promise((resolve, reject) => {
+          const timeout = setTimeout(() => {
+            delete messageHandlersRef.current[MESSAGE_TYPES.SCHEDULE_GENERATED];
+            delete messageHandlersRef.current[MESSAGE_TYPES.GENERATE_SCHEDULE_ERROR];
+            reject(new Error("Schedule generation timed out (60s)"));
+          }, 60000);
+
+          // Register success handler
+          messageHandlersRef.current[MESSAGE_TYPES.SCHEDULE_GENERATED] = (data) => {
+            clearTimeout(timeout);
+            delete messageHandlersRef.current[MESSAGE_TYPES.SCHEDULE_GENERATED];
+            delete messageHandlersRef.current[MESSAGE_TYPES.GENERATE_SCHEDULE_ERROR];
+            resolve(data);
+          };
+
+          // Register error handler
+          messageHandlersRef.current[MESSAGE_TYPES.GENERATE_SCHEDULE_ERROR] = (data) => {
+            clearTimeout(timeout);
+            delete messageHandlersRef.current[MESSAGE_TYPES.SCHEDULE_GENERATED];
+            delete messageHandlersRef.current[MESSAGE_TYPES.GENERATE_SCHEDULE_ERROR];
+            reject(new Error(data.error || "Schedule generation failed"));
+          };
+
+          // Send request
+          const sent = sendMessage(MESSAGE_TYPES.GENERATE_SCHEDULE_ORTOOLS, {
+            staffMembers: staffMembers.map(s => ({
+              id: s.id,
+              name: s.name,
+              status: s.status,
+              position: s.position,
+            })),
+            dateRange,
+            constraints,
+            timeout: 30, // OR-Tools solve timeout
+          });
+
+          if (!sent) {
+            clearTimeout(timeout);
+            reject(new Error("Failed to send message - WebSocket not connected"));
+          }
+        });
+
+        if (onProgress) {
+          onProgress({
+            stage: "saving",
+            progress: 90,
+            message: "スケジュール保存中...",
+          });
+        }
+
+        // Step 5: Save the generated schedule
+        if (result.schedule) {
+          console.log("[OR-TOOLS] Saving generated schedule to backend...");
+          console.log(`[OR-TOOLS] Schedule has ${Object.keys(result.schedule).length} staff members`);
+
+          // Save to backend via WebSocket
+          await saveSchedule(result.schedule, null, { fromAI: true });
+          console.log("[OR-TOOLS] Schedule saved successfully");
+
+          // Save to localStorage as backup
+          optimizedStorage.saveScheduleData(currentMonthIndex, result.schedule);
+        }
+
+        if (onProgress) {
+          onProgress({
+            stage: "completed",
+            progress: 100,
+            message: `最適化完了 (${result.isOptimal ? '最適解' : '実行可能解'})`,
+          });
+        }
+
+        return {
+          success: true,
+          schedule: result.schedule,
+          isOptimal: result.isOptimal,
+          solveTime: result.solveTime,
+          status: result.status,
+          stats: result.stats,
+          message: result.isOptimal
+            ? "OR-Toolsによる最適スケジュールを生成しました"
+            : "OR-Toolsによる実行可能なスケジュールを生成しました",
+        };
+
       } catch (err) {
-        console.error("❌ Failed to generate AI predictions:", err);
+        console.error("[OR-TOOLS] Generation error:", err);
         setError(err.message);
 
         if (onProgress) {
@@ -546,13 +466,14 @@ export const useAIAssistantLazy = (
       }
     },
     [
-      scheduleData,
       staffMembers,
       currentMonthIndex,
-      saveSchedule, // Updated to use backend save operation
-      initializeAI,
-      fallbackSystem,
-      restaurant, // Add restaurant for early shift preferences loading
+      saveSchedule,
+      connectWebSocket,
+      sendMessage,
+      calculateDateRange,
+      restaurant,
+      aiSettings,
     ],
   );
 
@@ -566,19 +487,19 @@ export const useAIAssistantLazy = (
 
   // Get system status
   const getSystemStatus = useCallback(() => {
-    const system = aiSystemRef.current;
     return {
       isLoaded: isInitialized,
       isLoading,
       systemType,
       isAvailable,
       error,
-      initialized: system?.initialized || false,
+      initialized: isInitialized,
       health: systemHealth,
       features: {
-        enhanced: systemType === "enhanced",
-        basic: systemType === "basic",
-        fallback: systemType === "fallback",
+        ortools: true,
+        enhanced: false,
+        basic: false,
+        fallback: false,
       },
     };
   }, [isInitialized, isLoading, systemType, isAvailable, error, systemHealth]);
@@ -597,14 +518,14 @@ export const useAIAssistantLazy = (
     initializeAI,
     generateAIPredictions,
     autoFillSchedule,
-    generateSchedule: aiSystemRef.current?.generateSchedule, // Bridge to HybridPredictor
     getSystemStatus,
 
-    // Enhanced features detection
-    isEnhanced: systemType === "enhanced",
-    isBasic: systemType === "basic",
-    isFallback: systemType === "fallback",
-    isMLReady: systemType === "enhanced",
+    // Feature detection
+    isEnhanced: false,
+    isBasic: false,
+    isFallback: false,
+    isORTools: true,
+    isMLReady: true, // OR-Tools is always ready once connected
 
     // Backwards compatibility
     configurationStatus: isInitialized ? "ready" : "not-loaded",

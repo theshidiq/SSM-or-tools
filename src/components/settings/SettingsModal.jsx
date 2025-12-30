@@ -25,7 +25,7 @@ import { useSettings } from "../../contexts/SettingsContext";
 import StaffGroupsTab from "./tabs/StaffGroupsTab";
 import LimitsTab from "./tabs/LimitsTab";
 import PriorityRulesTab from "./tabs/PriorityRulesTab";
-import MLParametersTab from "./tabs/MLParametersTab";
+import ConstraintConfiguratorTab from "./tabs/ConstraintConfiguratorTab";
 import DataMigrationTab from "./tabs/DataMigrationTab";
 import PeriodsTab from "./tabs/PeriodsTab";
 import EarlyShiftPreferencesTab from "./tabs/EarlyShiftPreferencesTab";
@@ -41,7 +41,7 @@ const TABS = [
   { id: "daily-limits", label: "Limits", icon: "📅" },
   { id: "priority-rules", label: "Priority Rules", icon: "⭐" },
   { id: "early-shift", label: "Early Shift", icon: "△" },
-  { id: "ml-parameters", label: "ML Parameters", icon: "🤖" },
+  { id: "constraint-config", label: "Constraints", icon: "⚙️" },
   { id: "periods", label: "Periods", icon: "📆" },
   { id: "data-migration", label: "Data Migration", icon: "🔄" },
 ];
@@ -278,10 +278,10 @@ const SettingsModal = ({
         );
       case "early-shift":
         return <EarlyShiftPreferencesTab />;
-      case "ml-parameters":
-        // Phase 4.1: MLParametersTab only needs validationErrors (no staffMembers/scheduleId)
+      case "constraint-config":
+        // Constraint Configurator for OR-Tools penalty weights
         return (
-          <MLParametersTab
+          <ConstraintConfiguratorTab
             validationErrors={validationErrors[activeTab] || {}}
           />
         );

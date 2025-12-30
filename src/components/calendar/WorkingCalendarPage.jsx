@@ -9,6 +9,8 @@ const WorkingCalendarPage = () => {
   console.log('🟢 [CALENDAR] WorkingCalendarPage is rendering');
 
   const { restaurant } = useRestaurant();
+  console.log('🔍 [CALENDAR] restaurant context:', restaurant);
+  console.log('🔍 [CALENDAR] restaurant?.id:', restaurant?.id);
   const [currentMonthOffset, setCurrentMonthOffset] = useState(0); // 0 = current month
   const [showLoader, setShowLoader] = useState(false); // Delayed loading indicator
 
@@ -37,6 +39,13 @@ const WorkingCalendarPage = () => {
     dateRange.start,
     dateRange.end
   );
+
+  console.log('🔍 [CALENDAR] useCalendarRules result:', {
+    rules,
+    isLoading,
+    error,
+    rulesCount: Object.keys(rules || {}).length
+  });
 
   // Delayed loading indicator - only show loader if loading takes more than 300ms
   useEffect(() => {

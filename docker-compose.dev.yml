@@ -76,11 +76,13 @@ services:
       - REACT_APP_API_BASE_URL=http://localhost:3001/api
       - REACT_APP_ENVIRONMENT=development
       - CHOKIDAR_USEPOLLING=true
-      - FAST_REFRESH=true
-      # Development API keys (use non-production keys)
-      - REACT_APP_SUPABASE_URL=${REACT_APP_SUPABASE_URL_DEV:-}
-      - REACT_APP_SUPABASE_ANON_KEY=${REACT_APP_SUPABASE_ANON_KEY_DEV:-}
-      - REACT_APP_GOOGLE_VISION_API_KEY=${REACT_APP_GOOGLE_VISION_API_KEY_DEV:-}
+      - FAST_REFRESH=false
+      # Use same env vars as .env file
+      - REACT_APP_SUPABASE_URL=${REACT_APP_SUPABASE_URL}
+      - REACT_APP_SUPABASE_ANON_KEY=${REACT_APP_SUPABASE_ANON_KEY}
+      - REACT_APP_WEBSOCKET_URL=ws://go-websocket-server:8080
+      - REACT_APP_WEBSOCKET_STAFF_MANAGEMENT=true
+      - REACT_APP_WEBSOCKET_SETTINGS=true
     networks:
       - dev-network
     restart: unless-stopped

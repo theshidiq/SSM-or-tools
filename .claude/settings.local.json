@@ -51,7 +51,16 @@
       "Bash(kill:*)",
       "Bash(bash -c 'export $(grep -v \"\"^#\"\" ../.env | grep SUPABASE_SERVICE_KEY | xargs) && echo \"\"Key loaded: ${SUPABASE_SERVICE_KEY}\"\"')",
       "Bash(awk:*)",
-      "Bash(/dev/null)"
+      "Bash(/dev/null)",
+      "Bash(npm run start:react:*)",
+      "Bash(DISABLE_ESLINT_PLUGIN=true PORT=3000 npx react-scripts start:*)",
+      "Bash(docker logs:*)",
+      "Bash(./start.sh:*)",
+      "Bash(docker exec:*)",
+      "Bash(docker-compose up:*)",
+      "Bash(docker network rm:*)",
+      "Bash(rm:*)",
+      "Bash(FAST_REFRESH=false npm run start:react:*)"
     ],
     "deny": [],
     "ask": []

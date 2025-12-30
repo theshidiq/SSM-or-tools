@@ -50,6 +50,42 @@ class ShiftScheduleOptimizer:
         3: '\u25c7'      # LATE (diamond)
     }
 
+    # Symbol to shift type mapping (for pre-filled cells)
+    # Maps UI symbols to internal shift type constants
+    # Note: Stars and special symbols are treated as WORK (normal shift) variants
+    SYMBOL_TO_SHIFT = {
+        # OFF symbols (×)
+        '\u00d7': 1,     # × (multiplication sign) -> OFF
+        '×': 1,          # × (batsu) -> OFF
+        'x': 1,          # x (lowercase) -> OFF
+        'X': 1,          # X (uppercase) -> OFF
+        # EARLY symbols (△)
+        '\u25b3': 2,     # △ (triangle) -> EARLY
+        '△': 2,          # △ (sankaku) -> EARLY
+        's': 2,          # s (early shorthand) -> EARLY
+        'S': 2,          # S (early shorthand) -> EARLY
+        # LATE symbols (◇)
+        '\u25c7': 3,     # ◇ (diamond) -> LATE
+        '◇': 3,          # ◇ (diamond) -> LATE
+        # WORK symbols (○ and variants)
+        '\u25cb': 0,     # ○ (maru) -> WORK
+        '○': 0,          # ○ (maru) -> WORK
+        '': 0,           # empty -> WORK
+        # Special/Star symbols - treated as WORK (preserves the symbol but counts as working)
+        '★': 0,          # Black star -> WORK
+        '\u2605': 0,     # ★ (black star unicode) -> WORK
+        '☆': 0,          # White star -> WORK
+        '\u2606': 0,     # ☆ (white star unicode) -> WORK
+        '●': 0,          # Black circle -> WORK
+        '\u25cf': 0,     # ● (black circle unicode) -> WORK
+        '◎': 0,          # Double circle -> WORK
+        '\u25ce': 0,     # ◎ (bullseye unicode) -> WORK
+        '▣': 0,          # Square with fill -> WORK
+        '\u25a3': 0,     # ▣ (white square containing black small square) -> WORK
+        '⊘': 0,          # Circled division slash -> WORK
+        '\u2298': 0,     # ⊘ (circled division slash unicode) -> WORK
+    }
+
     def __init__(self):
         self.model = None
         self.shifts = {}
@@ -57,6 +93,7 @@ class ShiftScheduleOptimizer:
         self.date_range = []
         self.constraints_config = {}
         self.calendar_off_dates = set()  # Track must_day_off dates
+        self.prefilled_cells = set()  # Track pre-filled cells (staff_id, date) for reference
 
         # Soft constraint violation tracking (penalty-based like TensorFlow)
         self.violation_vars = []  # List of (violation_var, weight, description)
@@ -128,6 +165,14 @@ class ShiftScheduleOptimizer:
                 logger.info(f"    - {stype}: maxOff={limits.get('maxOff')}, maxEarly={limits.get('maxEarly')}, isHard={limits.get('isHard', True)}")
         else:
             logger.info("  staffTypeLimits: (none configured)")
+
+        # Log pre-filled schedule info
+        prefilled = constraints.get('prefilledSchedule', {})
+        if prefilled:
+            total_prefilled = sum(len(dates) for dates in prefilled.values() if isinstance(dates, dict))
+            logger.info(f"  🔒 prefilledSchedule: {total_prefilled} cells across {len(prefilled)} staff (HARD constraints)")
+        else:
+            logger.info("  prefilledSchedule: (none - generating full schedule)")
         logger.info("=" * 60)
 
         # Reset state
@@ -137,6 +182,7 @@ class ShiftScheduleOptimizer:
         self.date_range = date_range
         self.constraints_config = constraints
         self.calendar_off_dates = set()
+        self.prefilled_cells = set()  # Reset pre-filled cells tracking
         self.violation_vars = []  # Reset violation tracking
 
         # Load custom penalty weights and solver settings if provided
@@ -172,6 +218,7 @@ class ShiftScheduleOptimizer:
 
             # 2. Add all constraints (order matches original phases)
             self._add_basic_constraints()                    # One shift per staff per day
+            self._add_prefilled_constraints()                # PRE-PHASE: Lock user-edited cells as HARD constraints
             self._add_calendar_rules()                       # PRE-PHASE + Phase 3 Integration
             self._add_backup_staff_constraints()             # Backup staff can never have off days
             self._add_staff_group_constraints()              # PHASE 2
@@ -236,6 +283,110 @@ class ShiftScheduleOptimizer:
                     self.shifts[(staff['id'], date, shift)]
                     for shift in range(4)
                 ])
+
+    def _add_prefilled_constraints(self):
+        """
+        PRE-PHASE: Lock user-edited cells as HARD constraints.
+
+        This implements the "fill the rest" workflow where managers can:
+        1. Enter staff day-off requests (e.g., × on specific dates)
+        2. Mark special assignments (e.g., ★ for specific duties)
+        3. Run AI generation to fill remaining empty cells
+
+        Pre-filled cells become HARD constraints - they will NOT be changed
+        by the optimizer. This mimics the manual scheduling workflow where
+        the manager's pre-entries are always respected.
+
+        Data format from React (useAIAssistantLazy.js):
+        {
+            'prefilledSchedule': {
+                'staff-uuid-1': {
+                    '2024-01-15': '×',
+                    '2024-01-20': '△'
+                },
+                'staff-uuid-2': {
+                    '2024-01-18': '★'
+                }
+            }
+        }
+
+        Symbol mapping:
+        - × (batsu) -> OFF (SHIFT_OFF = 1)
+        - △ (sankaku) -> EARLY (SHIFT_EARLY = 2)
+        - ◇ (diamond) -> LATE (SHIFT_LATE = 3)
+        - ○, ★, ●, ◎, etc. -> WORK (SHIFT_WORK = 0)
+        """
+        prefilled = self.constraints_config.get('prefilledSchedule', {})
+
+        if not prefilled:
+            logger.info("[OR-TOOLS] No pre-filled cells provided (generating full schedule)")
+            return
+
+        # Create lookup for valid staff IDs
+        valid_staff_ids = {s['id'] for s in self.staff_members}
+        valid_dates = set(self.date_range)
+
+        constraint_count = 0
+        skipped_count = 0
+        unknown_symbols = set()
+
+        # Track pre-filled cells for use in solution extraction
+        prefilled_symbols = {}  # (staff_id, date) -> original_symbol
+
+        logger.info(f"[OR-TOOLS] 🔒 Adding pre-filled constraints (HARD) for {len(prefilled)} staff members...")
+
+        for staff_id, dates in prefilled.items():
+            # Skip if staff not in current schedule
+            if staff_id not in valid_staff_ids:
+                logger.warning(f"  Skipping unknown staff_id: {staff_id}")
+                skipped_count += len(dates) if isinstance(dates, dict) else 0
+                continue
+
+            if not isinstance(dates, dict):
+                logger.warning(f"  Skipping invalid dates format for staff {staff_id}: {type(dates)}")
+                continue
+
+            for date, symbol in dates.items():
+                # Skip if date not in current range
+                if date not in valid_dates:
+                    skipped_count += 1
+                    continue
+
+                # Skip empty symbols
+                if not symbol or (isinstance(symbol, str) and symbol.strip() == ''):
+                    continue
+
+                # Map symbol to shift type
+                symbol_stripped = symbol.strip() if isinstance(symbol, str) else str(symbol)
+                shift_type = self.SYMBOL_TO_SHIFT.get(symbol_stripped)
+
+                if shift_type is None:
+                    # Unknown symbol - try to handle gracefully
+                    # Default to WORK for unknown symbols (preserves the symbol in output)
+                    unknown_symbols.add(symbol_stripped)
+                    shift_type = self.SHIFT_WORK
+                    logger.warning(f"  Unknown symbol '{symbol_stripped}' for {staff_id} on {date} - treating as WORK")
+
+                # Add HARD constraint: This shift MUST be selected
+                self.model.Add(self.shifts[(staff_id, date, shift_type)] == 1)
+
+                # Track this cell as pre-filled
+                self.prefilled_cells.add((staff_id, date))
+                prefilled_symbols[(staff_id, date)] = symbol_stripped
+
+                constraint_count += 1
+
+        # Store prefilled symbols for solution extraction (to preserve original symbols)
+        self.prefilled_symbols = prefilled_symbols
+
+        if unknown_symbols:
+            logger.warning(f"[OR-TOOLS] Unknown symbols encountered: {unknown_symbols}")
+
+        if skipped_count > 0:
+            logger.info(f"[OR-TOOLS] Skipped {skipped_count} pre-filled cells (invalid staff/date)")
+
+        logger.info(f"[OR-TOOLS] 🔒 Added {constraint_count} pre-filled HARD constraints")
+        logger.info(f"[OR-TOOLS] Pre-filled cells will be preserved in final schedule")
 
     def _add_calendar_rules(self):
         """
@@ -734,6 +885,11 @@ class ShiftScheduleOptimizer:
 
         This ensures staff get their "flexible" off days in addition to holidays.
 
+        IMPORTANT: Pre-filled off days (×) COUNT towards monthly limits!
+        - If monthlyLimit.maxCount = 7 and staff has 2 pre-filled × days
+        - OR-Tools will only assign at most 5 more × days (7 - 2 = 5)
+        - This is automatic because pre-filled cells use the same shift variables
+
         CONFIGURABLE: Can be HARD or SOFT constraints based on ortoolsConfig.
         - HARD constraint: Strictly enforced, no violations allowed
         - SOFT constraint: Violations allowed with penalty
@@ -750,6 +906,32 @@ class ShiftScheduleOptimizer:
         # Calculate available flexible dates
         flexible_dates = [d for d in self.date_range if d not in self.calendar_off_dates]
         num_flexible_days = len(flexible_dates)
+
+        # ═══════════════════════════════════════════════════════════════════════════
+        # COUNT PRE-FILLED OFF DAYS PER STAFF (for logging/reporting)
+        # Pre-filled off days ARE included in monthly limits automatically
+        # because they use the same shift variables constrained to == 1
+        # ═══════════════════════════════════════════════════════════════════════════
+        prefilled_symbols = getattr(self, 'prefilled_symbols', {})
+        prefilled_off_by_staff = {}
+
+        for (staff_id, date), symbol in prefilled_symbols.items():
+            # Check if this is an OFF symbol (×, x, X)
+            if symbol in ['×', '\u00d7', 'x', 'X']:
+                # Only count if date is in flexible_dates (when exclude_calendar=True)
+                if exclude_calendar:
+                    if date in flexible_dates:
+                        prefilled_off_by_staff[staff_id] = prefilled_off_by_staff.get(staff_id, 0) + 1
+                else:
+                    prefilled_off_by_staff[staff_id] = prefilled_off_by_staff.get(staff_id, 0) + 1
+
+        # Log pre-filled off days summary
+        if prefilled_off_by_staff:
+            logger.info(f"[OR-TOOLS] 🔒 Pre-filled OFF days count towards monthly limits:")
+            for staff_id, count in prefilled_off_by_staff.items():
+                staff_name = next((s.get('name', staff_id) for s in self.staff_members if s['id'] == staff_id), staff_id)
+                remaining = max_off - count
+                logger.info(f"    {staff_name}: {count} pre-filled × → remaining limit: {remaining} (max {max_off})")
 
         # Sanity check: can't require more off days than available dates
         min_off = min(min_off, num_flexible_days)
@@ -1286,16 +1468,30 @@ class ShiftScheduleOptimizer:
 
         # Extract schedule
         schedule = {}
+        prefilled_preserved = 0
+
+        # Get prefilled symbols if available (for preserving original symbols like ★)
+        prefilled_symbols = getattr(self, 'prefilled_symbols', {})
+
         for staff in self.staff_members:
             staff_id = staff['id']
             schedule[staff_id] = {}
 
             for date in self.date_range:
-                # Find which shift type is selected (exactly one will be 1)
-                for shift_type in range(4):
-                    if solver.Value(self.shifts[(staff_id, date, shift_type)]) == 1:
-                        schedule[staff_id][date] = self.SHIFT_SYMBOLS[shift_type]
-                        break
+                # Check if this cell was pre-filled - preserve original symbol
+                if (staff_id, date) in prefilled_symbols:
+                    # Use the original symbol (e.g., ★, ●, ◎) instead of mapped symbol
+                    schedule[staff_id][date] = prefilled_symbols[(staff_id, date)]
+                    prefilled_preserved += 1
+                else:
+                    # Find which shift type is selected (exactly one will be 1)
+                    for shift_type in range(4):
+                        if solver.Value(self.shifts[(staff_id, date, shift_type)]) == 1:
+                            schedule[staff_id][date] = self.SHIFT_SYMBOLS[shift_type]
+                            break
+
+        if prefilled_preserved > 0:
+            logger.info(f"[OR-TOOLS] 🔒 Preserved {prefilled_preserved} pre-filled cells with original symbols")
 
         # Calculate stats
         total_off = sum(
@@ -1340,7 +1536,8 @@ class ShiftScheduleOptimizer:
                 'staff_count': len(self.staff_members),
                 'date_count': len(self.date_range),
                 'total_violations': len(violations),
-                'total_violation_penalty': total_violation_penalty
+                'total_violation_penalty': total_violation_penalty,
+                'prefilled_cells': prefilled_preserved  # Number of pre-filled cells preserved
             },
             'violations': violations[:20] if violations else [],  # Return top 20 violations
             'config': {

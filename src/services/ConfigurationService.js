@@ -591,6 +591,23 @@ export class ConfigurationService {
         confidence_threshold: 0.75,
       },
 
+      // OR-Tools Solver Configuration
+      ortoolsConfig: {
+        preset: 'balanced',
+        penaltyWeights: {
+          staffGroup: 100,
+          dailyLimitMin: 50,
+          dailyLimitMax: 50,
+          monthlyLimit: 80,
+          adjacentConflict: 30,
+          fiveDayRest: 200
+        },
+        solverSettings: {
+          timeout: 30,
+          numWorkers: 4
+        }
+      },
+
       // Note: Constraint weights are now auto-detected from actual settings
       // No manual constraint weight configuration needed
 

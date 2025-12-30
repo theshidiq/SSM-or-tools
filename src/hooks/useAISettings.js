@@ -289,17 +289,28 @@ export const useAISettings = () => {
 
   /**
    * Transform monthly limits from database format to AI format
-   * Database: [{ id, name, limitConfig: {...} }] or flat format
-   * AI: [{ id, name, limitType, maxCount, distribution: {...} }]
+   * Database: [{ id, name, minCount, maxCount, limitType, excludeCalendarRules, ... }]
+   * AI: [{ id, name, limitType, minCount, maxCount, excludeCalendarRules, ... }]
+   *
+   * ✅ FIX: Include minCount and all new fields from LimitsTab.jsx
    */
   const monthlyLimits = useMemo(() => {
     if (!settings?.monthlyLimits) return [];
 
+    console.log('[useAISettings] Raw monthlyLimits from settings:', settings.monthlyLimits);
+
     return settings.monthlyLimits.map((limit) => ({
       id: limit.id,
       name: limit.name,
-      limitType: limit.limitType || limit.limit_type || "max_off_days",
-      maxCount: limit.maxCount || limit.max_count || 8,
+      limitType: limit.limitType || limit.limit_type || "off_days",
+      // ✅ FIX: Include minCount (was missing!)
+      minCount: limit.minCount ?? limit.min_count ?? null,
+      maxCount: limit.maxCount ?? limit.max_count ?? 8,
+      // ✅ FIX: Include new calendar integration fields
+      excludeCalendarRules: limit.excludeCalendarRules ?? limit.exclude_calendar_rules ?? true,
+      excludeEarlyShiftCalendar: limit.excludeEarlyShiftCalendar ?? limit.exclude_early_shift_calendar ?? true,
+      overrideWeeklyLimits: limit.overrideWeeklyLimits ?? limit.override_weekly_limits ?? true,
+      countHalfDays: limit.countHalfDays ?? limit.count_half_days ?? true,
       scope: limit.scope || "individual",
       targetIds: limit.targetIds || limit.target_ids || [],
       distribution: {
@@ -309,8 +320,8 @@ export const useAISettings = () => {
                        limit.distribution_rules?.prefer_weekends ?? false,
       },
       constraints: {
-        isHardConstraint: limit.isHardConstraint ?? limit.is_hard_constraint ?? false,
-        penaltyWeight: limit.penaltyWeight ?? limit.penalty_weight ?? 40,
+        isHardConstraint: limit.isHardConstraint ?? limit.is_hard_constraint ?? true,
+        penaltyWeight: limit.penaltyWeight ?? limit.penalty_weight ?? 50,
       },
       description: limit.description || "",
     }));

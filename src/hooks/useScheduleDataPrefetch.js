@@ -96,6 +96,7 @@ export const useScheduleDataPrefetch = (
   // AI modification tracking to prevent WebSocket from wiping AI-generated data
   const lastAIModificationRef = useRef(null);
   const localModificationsRef = useRef(new Set()); // Track modified cells
+  const aiSyncInProgressRef = useRef(false); // Flag to prevent sync during AI operation
 
   // WebSocket connection state tracking
   const isConnected = useMemo(() => {
@@ -327,6 +328,25 @@ export const useScheduleDataPrefetch = (
     );
   }, [currentScheduleData, currentMonthIndex]);
 
+  // Auto-cleanup AI protection state after protection window expires
+  useEffect(() => {
+    if (lastAIModificationRef.current && localModificationsRef.current.size > 0) {
+      const AI_CLEANUP_DELAY = 10000; // 10 seconds after AI modification
+      const timeSinceAI = Date.now() - lastAIModificationRef.current;
+      const remainingTime = Math.max(0, AI_CLEANUP_DELAY - timeSinceAI);
+
+      const cleanupTimer = setTimeout(() => {
+        if (localModificationsRef.current.size > 0) {
+          console.log(`🧹 [AI-PROTECTION] Cleanup: Clearing ${localModificationsRef.current.size} tracked AI cells after protection window`);
+          localModificationsRef.current.clear();
+          lastAIModificationRef.current = null;
+        }
+      }, remainingTime);
+
+      return () => clearTimeout(cleanupTimer);
+    }
+  }, [schedule]); // Re-check on schedule changes
+
   // Sync WebSocket shift data with local schedule state (WITH PERIOD VALIDATION + AI PROTECTION)
   useEffect(() => {
     if (
@@ -337,26 +357,23 @@ export const useScheduleDataPrefetch = (
       const syncedPeriod = webSocketShifts.syncedPeriodIndex;
 
       if (syncedPeriod === currentMonthIndex) {
-        // 🛡️ AI PROTECTION: Check if we have recent AI modifications
-        const wsTimestamp = webSocketShifts.lastSyncTimestamp || 0;
-        const aiTimestamp = lastAIModificationRef.current || 0;
-
-        if (aiTimestamp > wsTimestamp && localModificationsRef.current.size > 0) {
+        // 🛡️ AI PROTECTION: Block sync during active AI operation
+        if (aiSyncInProgressRef.current) {
           console.warn(
-            `⚠️ [WEBSOCKET-PREFETCH] Skipping WebSocket sync - AI changes (${localModificationsRef.current.size} cells) are newer than server data`,
+            `⚠️ [WEBSOCKET-PREFETCH] Skipping WebSocket sync - AI sync in progress`,
           );
-          // Schedule a backend persist to sync AI changes to server
-          setTimeout(() => {
-            if (webSocketShifts.bulkUpdateSchedule && typeof webSocketShifts.bulkUpdateSchedule === 'function') {
-              console.log('📤 [WEBSOCKET-PREFETCH] Persisting AI changes to backend');
-              webSocketShifts.bulkUpdateSchedule(schedule);
-              // Clear local modifications after successful persist
-              setTimeout(() => {
-                localModificationsRef.current.clear();
-                lastAIModificationRef.current = null;
-              }, 1000);
-            }
-          }, 500);
+          return;
+        }
+
+        // 🛡️ AI PROTECTION: Check if we have recent AI modifications (within 5 seconds)
+        const aiTimestamp = lastAIModificationRef.current || 0;
+        const timeSinceAI = Date.now() - aiTimestamp;
+        const AI_PROTECTION_WINDOW = 5000; // 5 seconds protection window
+
+        if (timeSinceAI < AI_PROTECTION_WINDOW && localModificationsRef.current.size > 0) {
+          console.warn(
+            `⚠️ [WEBSOCKET-PREFETCH] Skipping WebSocket sync - AI changes (${localModificationsRef.current.size} cells) are within protection window (${timeSinceAI}ms ago)`,
+          );
           return;
         }
 
@@ -398,7 +415,7 @@ export const useScheduleDataPrefetch = (
         // Don't sync - this prevents wrong period data from overwriting current display
       }
     }
-  }, [webSocketShifts.scheduleData, webSocketShifts.isConnected, webSocketShifts.syncedPeriodIndex, currentMonthIndex, schedule, webSocketShifts.bulkUpdateSchedule, webSocketShifts.lastSyncTimestamp]);
+  }, [webSocketShifts.scheduleData, webSocketShifts.isConnected, webSocketShifts.syncedPeriodIndex, currentMonthIndex]);
 
   // Overall loading state
   const isPrefetching =
@@ -449,7 +466,7 @@ export const useScheduleDataPrefetch = (
         );
         return {
           staff: processedStaffMembers,
-          schedule: currentScheduleData?.schedule || {}, // ✅ FIX: Use React Query data directly
+          schedule: currentScheduleData?.schedule || {},
           dateRange: generateDateRange(periodIndex),
           isFromCache: true,
           scheduleId: currentScheduleId,
@@ -458,11 +475,31 @@ export const useScheduleDataPrefetch = (
 
       // Current period data
       try {
+        // 🤖 AI PROTECTION: Use local schedule state when AI modifications are active
+        // This ensures the UI shows AI-generated data immediately
+        const hasActiveAIModifications = aiSyncInProgressRef.current ||
+          (lastAIModificationRef.current && (Date.now() - lastAIModificationRef.current) < 10000);
+
+        // Prefer local schedule state when:
+        // 1. AI modifications are active, OR
+        // 2. Local schedule has more data than React Query cache (indicates fresh AI update)
+        const localScheduleSize = Object.keys(schedule).length;
+        const cachedScheduleSize = Object.keys(currentScheduleData?.schedule || {}).length;
+        const preferLocalSchedule = hasActiveAIModifications || (localScheduleSize > 0 && localScheduleSize > cachedScheduleSize);
+
+        const effectiveSchedule = preferLocalSchedule
+          ? schedule
+          : (currentScheduleData?.schedule || schedule || {});
+
+        if (hasActiveAIModifications && preferLocalSchedule) {
+          console.log(`🤖 [AI-PROTECTION] getCurrentPeriodData using local schedule state (AI active, ${localScheduleSize} staff)`);
+        }
+
         return {
           staff: processedStaffMembers,
-          schedule: currentScheduleData?.schedule || {}, // ✅ FIX: Use React Query data directly instead of stale state
+          schedule: effectiveSchedule,
           dateRange: dateRange,
-          isFromCache: true,
+          isFromCache: !preferLocalSchedule,
           scheduleId: currentScheduleId,
           webSocketMode: isWebSocketEnabled,
           connectionStatus: webSocketStaff.connectionStatus,
@@ -484,7 +521,8 @@ export const useScheduleDataPrefetch = (
     [
       currentMonthIndex,
       processedStaffMembers,
-      currentScheduleData, // ✅ FIX: Use currentScheduleData instead of schedule state
+      currentScheduleData,
+      schedule, // Include local schedule state in dependencies
       dateRange,
       currentScheduleId,
       isWebSocketEnabled,
@@ -934,6 +972,9 @@ export const useScheduleDataPrefetch = (
         const isFromAI = options.fromAI || false;
         if (isFromAI) {
           console.log('🤖 [AI-PROTECTION] Recording AI-generated schedule update');
+
+          // Set sync-in-progress flag to block WebSocket sync during AI operation
+          aiSyncInProgressRef.current = true;
           lastAIModificationRef.current = Date.now();
 
           // Track all modified cells
@@ -1072,10 +1113,15 @@ export const useScheduleDataPrefetch = (
           console.log('🤖 [AI-PROTECTION] Applying AI-generated schedule immediately to UI');
           setSchedule({ ...newScheduleData });  // ✅ Immediate UI update with AI predictions (new reference)
 
-          // Invalidate cache to ensure React Query refetches fresh data
-          queryClient.invalidateQueries({
-            queryKey: PREFETCH_QUERY_KEYS.scheduleData(currentMonthIndex),
-          });
+          // Update React Query cache directly with AI data to prevent stale reads
+          queryClient.setQueryData(
+            PREFETCH_QUERY_KEYS.scheduleData(currentMonthIndex),
+            (old) => ({
+              ...old,
+              schedule: newScheduleData,
+              loadedAt: Date.now(),
+            })
+          );
 
           // Sync to backend asynchronously (non-blocking)
           if (isWebSocketEnabled && webSocketShifts.isConnected) {
@@ -1084,6 +1130,11 @@ export const useScheduleDataPrefetch = (
               .bulkUpdateSchedule(newScheduleData)
               .then(() => {
                 console.log("✅ [AI-WEBSOCKET] AI schedule synced to WebSocket successfully");
+                // Clear sync-in-progress flag after successful sync
+                setTimeout(() => {
+                  aiSyncInProgressRef.current = false;
+                  console.log("🤖 [AI-PROTECTION] Cleared AI sync-in-progress flag");
+                }, 2000); // Wait 2 seconds to let all server responses arrive
               })
               .catch((error) => {
                 console.error("❌ [AI-WEBSOCKET] WebSocket sync failed, trying Supabase:", error);
@@ -1092,8 +1143,25 @@ export const useScheduleDataPrefetch = (
                   newScheduleData,
                   staffForSave,
                   scheduleIdToUse,
-                ).catch(err => console.error("❌ [AI-SUPABASE] Supabase fallback failed:", err));
+                ).then(() => {
+                  aiSyncInProgressRef.current = false;
+                }).catch(err => {
+                  console.error("❌ [AI-SUPABASE] Supabase fallback failed:", err);
+                  aiSyncInProgressRef.current = false;
+                });
               });
+          } else {
+            // No WebSocket, sync via Supabase
+            scheduleOperations.updateScheduleViaSupabase(
+              newScheduleData,
+              staffForSave,
+              scheduleIdToUse,
+            ).then(() => {
+              aiSyncInProgressRef.current = false;
+            }).catch(err => {
+              console.error("❌ [AI-SUPABASE] Supabase save failed:", err);
+              aiSyncInProgressRef.current = false;
+            });
           }
 
           return Promise.resolve();  // Return immediately (don't block UI)

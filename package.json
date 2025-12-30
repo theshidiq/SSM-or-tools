@@ -27,9 +27,10 @@
     "npm": ">=8.0.0"
   },
   "scripts": {
-    "start": "concurrently --kill-others-on-fail --prefix-colors \"cyan,green\" --names \"REACT,GO\" \"npm run start:react\" \"npm run start:go\"",
-    "start:react": "react-scripts start",
+    "start": "concurrently --kill-others-on-fail --prefix-colors \"cyan,green,yellow\" --names \"REACT,GO,ORTOOLS\" \"npm run start:react\" \"npm run start:go\" \"npm run start:ortools\"",
+    "start:react": "FAST_REFRESH=false react-scripts start",
     "start:go": "cd go-server && ./start.sh",
+    "start:ortools": "cd python-ortools-service && python3 scheduler.py",
     "dev": "npm start",
     "build": "react-scripts build",
     "build:analyze": "npm run build && npx webpack-bundle-analyzer build/static/js/*.js",
@@ -87,8 +88,11 @@
     "performance": "lighthouse http://localhost:3000 --output=html --output-path=lighthouse-report.html",
     "docker:build": "docker build -t shift-schedule-manager .",
     "docker:run": "docker run -p 3000:3000 shift-schedule-manager",
-    "docker:dev": "docker-compose up -d",
-    "docker:stop": "docker-compose down"
+    "docker:dev": "docker-compose -f docker-compose.dev.yml up client-dev go-websocket-server ortools-optimizer --build",
+    "docker:dev:all": "docker-compose -f docker-compose.dev.yml up --build",
+    "docker:dev:backend": "docker-compose -f docker-compose.dev.yml up go-websocket-server ortools-optimizer --build",
+    "docker:stop": "docker-compose -f docker-compose.dev.yml down",
+    "docker:prod": "docker-compose up --build"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.2.1",

@@ -1525,6 +1525,25 @@ func (s *StaffSyncServer) handleGenerateScheduleORTools(client *Client, msg *Mes
 		log.Printf("[ORTOOLS] ortoolsConfig: NONE or invalid format")
 	}
 
+	// Log pre-filled schedule (user-edited cells before AI generation)
+	// These will be treated as HARD constraints in OR-Tools
+	if prefilledSchedule, ok := constraints["prefilledSchedule"].(map[string]interface{}); ok {
+		prefilledCellCount := 0
+		for _, dates := range prefilledSchedule {
+			if datesMap, ok := dates.(map[string]interface{}); ok {
+				prefilledCellCount += len(datesMap)
+			}
+		}
+		if prefilledCellCount > 0 {
+			log.Printf("[ORTOOLS] 🔒 prefilledSchedule: %d cells across %d staff (will be preserved as HARD constraints)",
+				prefilledCellCount, len(prefilledSchedule))
+		} else {
+			log.Printf("[ORTOOLS] prefilledSchedule: empty (generating full schedule)")
+		}
+	} else {
+		log.Printf("[ORTOOLS] prefilledSchedule: NONE (generating full schedule)")
+	}
+
 	log.Printf("[ORTOOLS] === End Constraint Debug Info ===")
 
 	// Extract timeout

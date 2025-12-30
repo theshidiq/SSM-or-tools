@@ -2,6 +2,10 @@ import React, { createContext, useContext, useState, useEffect } from "react";
 
 const RestaurantContext = createContext(null);
 
+// Get restaurant ID from environment variable or use default
+const DEFAULT_RESTAURANT_ID = process.env.REACT_APP_RESTAURANT_ID || "4a4e4447-3ddc-4790-b2f9-b892722503b3";
+const DEFAULT_RESTAURANT_NAME = "My Restaurant";
+
 export const useRestaurant = () => {
   const context = useContext(RestaurantContext);
   if (!context) {
@@ -26,13 +30,19 @@ export const RestaurantProvider = ({ children }) => {
 
       if (savedRestaurantData) {
         const restaurantInfo = JSON.parse(savedRestaurantData);
+        // Check if saved restaurant ID matches the env var - if not, update it
+        if (restaurantInfo.id !== DEFAULT_RESTAURANT_ID) {
+          console.log(`🔄 [RestaurantContext] Updating restaurant ID from ${restaurantInfo.id} to ${DEFAULT_RESTAURANT_ID}`);
+          restaurantInfo.id = DEFAULT_RESTAURANT_ID;
+          restaurantInfo.name = DEFAULT_RESTAURANT_NAME;
+          localStorage.setItem("restaurant-info", JSON.stringify(restaurantInfo));
+        }
         setRestaurant(restaurantInfo);
       } else {
-        // Use the existing synced restaurant ID from database
-        // This restaurant already exists in Supabase
+        // Use the restaurant ID from environment variable
         const defaultRestaurant = {
-          id: "e1661c71-b24f-4ee1-9e8b-7290a43c9575",
-          name: "Sample Restaurant",
+          id: DEFAULT_RESTAURANT_ID,
+          name: DEFAULT_RESTAURANT_NAME,
           address: "",
           phone: "",
           settings: {},
@@ -49,10 +59,10 @@ export const RestaurantProvider = ({ children }) => {
       console.error("Failed to initialize restaurant:", err);
       setError(err.message);
 
-      // Use fallback restaurant on error (use the synced restaurant ID)
+      // Use fallback restaurant on error (use the env var restaurant ID)
       const fallbackRestaurant = {
-        id: "e1661c71-b24f-4ee1-9e8b-7290a43c9575",
-        name: "Sample Restaurant",
+        id: DEFAULT_RESTAURANT_ID,
+        name: DEFAULT_RESTAURANT_NAME,
         address: "",
         phone: "",
         settings: {},

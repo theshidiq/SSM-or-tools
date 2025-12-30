@@ -29,7 +29,14 @@ export const useCalendarRules = (restaurantId, startDate, endDate) => {
 
   // Load calendar rules from database
   const loadRules = useCallback(async () => {
+    console.log(`🔍 [useCalendarRules] loadRules called with:`, {
+      restaurantId,
+      startDate: startDate ? formatDate(startDate) : null,
+      endDate: endDate ? formatDate(endDate) : null,
+    });
+
     if (!restaurantId) {
+      console.warn(`⚠️ [useCalendarRules] No restaurantId provided, skipping load`);
       setIsLoading(false);
       return;
     }
@@ -52,9 +59,15 @@ export const useCalendarRules = (restaurantId, startDate, endDate) => {
         query = query.lte("date", formatDate(endDate));
       }
 
+      console.log(`🔍 [useCalendarRules] Executing query for restaurant: ${restaurantId}`);
       const { data, error: queryError } = await query;
 
-      if (queryError) throw queryError;
+      if (queryError) {
+        console.error(`❌ [useCalendarRules] Query error:`, queryError);
+        throw queryError;
+      }
+
+      console.log(`📦 [useCalendarRules] Raw data from DB:`, data);
 
       // Convert array to object: { "2025-01-01": "must_day_off", ... }
       const rulesMap = {};
@@ -62,6 +75,7 @@ export const useCalendarRules = (restaurantId, startDate, endDate) => {
         rulesMap[rule.date] = rule.rule_type;
       });
 
+      console.log(`📦 [useCalendarRules] Processed rulesMap:`, rulesMap);
       setRules(rulesMap);
       console.log(`✅ [useCalendarRules] Loaded ${data?.length || 0} rules`);
     } catch (err) {

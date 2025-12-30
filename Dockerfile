@@ -114,7 +114,7 @@ RUN npm install
 
 # Set development environment
 ENV NODE_ENV=development
-ENV FAST_REFRESH=true
+ENV FAST_REFRESH=false
 ENV CHOKIDAR_USEPOLLING=true
 
 # Security: Change ownership to non-root user
