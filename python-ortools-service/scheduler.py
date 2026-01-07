@@ -94,6 +94,8 @@ class ShiftScheduleOptimizer:
         self.constraints_config = {}
         self.calendar_off_dates = set()  # Track must_day_off dates
         self.prefilled_cells = set()  # Track pre-filled cells (staff_id, date) for reference
+        self.backup_unavailable_slots = {}  # Track (staff_id, date) -> any_member_off bool var for backup unavailability
+        self.backup_staff_ids = set()  # Track backup staff IDs (exempt from monthly limits)
 
         # Soft constraint violation tracking (penalty-based like TensorFlow)
         self.violation_vars = []  # List of (violation_var, weight, description)
@@ -108,6 +110,7 @@ class ShiftScheduleOptimizer:
             'adjacent_conflict': 30, # Lower penalty for adjacent conflicts
             '5_day_rest': 200,       # Very high for labor law compliance
             'staff_type_limit': 60,  # Medium-high penalty for per-type limits
+            'backup_coverage': 500,  # HIGHEST priority for backup staff coverage (critical for operations)
         }
 
         # Active penalty weights (starts as defaults, can be overridden)
@@ -173,6 +176,17 @@ class ShiftScheduleOptimizer:
             logger.info(f"  🔒 prefilledSchedule: {total_prefilled} cells across {len(prefilled)} staff (HARD constraints)")
         else:
             logger.info("  prefilledSchedule: (none - generating full schedule)")
+
+        # Log backup assignments
+        backup_assignments = constraints.get('backupAssignments', [])
+        if backup_assignments:
+            logger.info(f"  🛡️ backupAssignments: {len(backup_assignments)} assignments")
+            for ba in backup_assignments[:3]:  # Show first 3
+                logger.info(f"    - staffId={ba.get('staffId')}, groupId={ba.get('groupId')}, isActive={ba.get('isActive', True)}")
+            if len(backup_assignments) > 3:
+                logger.info(f"    ... and {len(backup_assignments) - 3} more")
+        else:
+            logger.info("  backupAssignments: (none)")
         logger.info("=" * 60)
 
         # Reset state
@@ -183,6 +197,7 @@ class ShiftScheduleOptimizer:
         self.constraints_config = constraints
         self.calendar_off_dates = set()
         self.prefilled_cells = set()  # Reset pre-filled cells tracking
+        self.backup_unavailable_slots = {}  # Reset backup unavailable slots tracking
         self.violation_vars = []  # Reset violation tracking
 
         # Load custom penalty weights and solver settings if provided
@@ -198,6 +213,7 @@ class ShiftScheduleOptimizer:
             'adjacent_conflict': custom_weights.get('adjacentConflict', self.DEFAULT_PENALTY_WEIGHTS['adjacent_conflict']),
             '5_day_rest': custom_weights.get('fiveDayRest', self.DEFAULT_PENALTY_WEIGHTS['5_day_rest']),
             'staff_type_limit': custom_weights.get('staffTypeLimit', self.DEFAULT_PENALTY_WEIGHTS['staff_type_limit']),
+            'backup_coverage': custom_weights.get('backupCoverage', self.DEFAULT_PENALTY_WEIGHTS['backup_coverage']),
         }
 
         # Load solver settings
@@ -224,7 +240,8 @@ class ShiftScheduleOptimizer:
             self._add_staff_group_constraints()              # PHASE 2
             self._add_daily_limits()                         # BALANCE phase
             self._add_staff_type_daily_limits()             # Per-staff-type daily limits
-            self._add_monthly_limits()                       # Phase 6.6 monthly MIN/MAX
+            self._compute_priority_rule_off_equivalent()    # Pre-compute priority rule consumption (MUST be before monthly limits)
+            self._add_monthly_limits()                       # Phase 6.6 monthly MIN/MAX (uses priority rule consumption)
             self._add_adjacent_conflict_prevention()         # No xx, sx, xs
             self._add_5_day_rest_constraint()               # PHASE 4
             self._add_priority_rules()                       # PHASE 1 (soft constraints)
@@ -449,46 +466,256 @@ class ShiftScheduleOptimizer:
 
     def _add_backup_staff_constraints(self):
         """
-        Backup staff handling: Backup-only staff should NEVER have off days (×).
+        Backup staff coverage constraints using database backup assignments.
 
-        From AI_GENERATION_FLOW_DOCUMENTATION.md lines 2079-2093:
-        - Backup staff provide coverage when primary staff are off
-        - They need to be available on all days
-        - Should only get working shifts (○ or empty)
+        CORRECT BUSINESS LOGIC (from user requirement):
+        - When ANY member of a staff group has × (day off) → Backup staff MUST work (○)
+        - When NO member of a staff group has × → Backup staff gets Unavailable (⊘)
 
-        Staff can be marked as backup via:
-        - staff.isBackupOnly (camelCase)
-        - staff.is_backup_only (snake_case)
-        - staff.type === 'backup'
-        - staff.staffType === 'backup'
+        CONFIGURABLE CONSTRAINT: Can be HARD or SOFT based on ortoolsConfig.
+        - HARD constraint (DEFAULT): Backup MUST work when group member is off
+          * Ensures critical operational coverage
+          * Solver will fail if backup coverage cannot be satisfied
+          * Recommended for restaurants/healthcare where backup is mandatory
+        - SOFT constraint: Backup SHOULD work with high penalty (penalty weight used)
+          * Allows schedule generation even when backup coverage conflicts with other constraints
+          * Used when backup coverage is important but not absolutely required
+
+        Data format from React (backupAssignments from useAISettings.js):
+        [
+            {
+                'id': 'assignment-uuid',
+                'staffId': 'backup-staff-uuid',  # The backup staff member
+                'groupId': 'group-uuid',         # The group they cover
+                'isActive': True,
+                ...
+            }
+        ]
+
+        Staff groups format (from staffGroups):
+        [
+            {
+                'id': 'group-uuid',
+                'name': 'Group 2',
+                'members': ['staff-uuid-1', 'staff-uuid-2']  # Group members to cover
+            }
+        ]
+
+        Symbol meanings:
+        - ⊘ (Unavailable): Backup has no coverage duty (no one in group is off)
+        - ○ (Work): Backup SHOULD work to cover someone in the group who is off
         """
-        backup_count = 0
+        backup_assignments = self.constraints_config.get('backupAssignments', [])
+        staff_groups = self.constraints_config.get('staffGroups', [])
 
-        for staff in self.staff_members:
-            staff_id = staff['id']
+        if not backup_assignments:
+            logger.info("[OR-TOOLS] No backup assignments provided")
+            return
 
-            # Check various ways staff could be marked as backup
-            is_backup = (
-                staff.get('isBackupOnly', False) or
-                staff.get('is_backup_only', False) or
-                staff.get('type', '').lower() == 'backup' or
-                staff.get('staffType', '').lower() == 'backup' or
-                staff.get('staff_type', '').lower() == 'backup'
-            )
+        if not staff_groups:
+            logger.info("[OR-TOOLS] No staff groups provided - cannot process backup assignments")
+            return
 
-            if is_backup:
-                logger.info(f"[OR-TOOLS] Backup staff {staff.get('name', staff_id)}: No off days allowed")
+        # Check if backup coverage should be HARD constraint (default: True)
+        ortools_config = self.constraints_config.get('ortoolsConfig', {})
+        hard_constraints = ortools_config.get('hardConstraints', {})
+        backup_coverage_is_hard = hard_constraints.get('backupCoverage', False)  # DEFAULT: SOFT (allow violations with penalty)
 
-                for date in self.date_range:
-                    # Backup staff cannot have OFF shift
-                    self.model.Add(self.shifts[(staff_id, date, self.SHIFT_OFF)] == 0)
+        constraint_type = "HARD" if backup_coverage_is_hard else "SOFT"
 
-                backup_count += 1
+        # Create lookups
+        valid_staff_ids = {s['id'] for s in self.staff_members}
+        group_by_id = {g['id']: g for g in staff_groups}
 
-        if backup_count > 0:
-            logger.info(f"[OR-TOOLS] Added backup constraints for {backup_count} staff members")
+        logger.info(f"[OR-TOOLS] 🛡️ Processing {len(backup_assignments)} backup assignments ({constraint_type} constraints)...")
+
+        constraint_count = 0
+        skipped_count = 0
+
+        for assignment in backup_assignments:
+            # Skip inactive assignments
+            if not assignment.get('isActive', True):
+                skipped_count += 1
+                continue
+
+            backup_staff_id = assignment.get('staffId') or assignment.get('staff_id')
+            group_id = assignment.get('groupId') or assignment.get('group_id')
+
+            # Validate backup staff exists
+            if not backup_staff_id or backup_staff_id not in valid_staff_ids:
+                logger.warning(f"  Skipping - backup staff not found: {backup_staff_id}")
+                skipped_count += 1
+                continue
+
+            # Validate group exists
+            if not group_id or group_id not in group_by_id:
+                logger.warning(f"  Skipping - group not found: {group_id}")
+                skipped_count += 1
+                continue
+
+            group = group_by_id[group_id]
+            group_name = group.get('name', 'Unknown')
+            group_members = group.get('members', [])
+
+            # Filter to valid group members (must be in current staff list)
+            # This eliminates inactive/deleted staff from coverage calculation
+            valid_members = [m for m in group_members if m in valid_staff_ids]
+
+            if not valid_members:
+                logger.warning(f"  Skipping - no valid/active members in group '{group_name}' (original members: {group_members})")
+                skipped_count += 1
+                continue
+
+            # Get backup staff name for logging
+            backup_staff = next((s for s in self.staff_members if s['id'] == backup_staff_id), {})
+            backup_name = backup_staff.get('name', backup_staff_id)
+
+            # ═══════════════════════════════════════════════════════════════════════════
+            # IMPORTANT: Track backup staff IDs to EXCLUDE from monthly limits
+            # Backup staff schedule is determined ONLY by group coverage, not monthly quotas
+            # ═══════════════════════════════════════════════════════════════════════════
+            self.backup_staff_ids.add(backup_staff_id)
+
+            # Log filtered members info
+            filtered_count = len(group_members) - len(valid_members)
+            if filtered_count > 0:
+                logger.info(f"  🛡️ {backup_name} → covers group '{group_name}' ({len(valid_members)} active members, {filtered_count} inactive filtered out)")
+            else:
+                logger.info(f"  🛡️ {backup_name} → covers group '{group_name}' ({len(valid_members)} members)")
+
+            # ═══════════════════════════════════════════════════════════════════════════
+            # For each date, create backup coverage constraint
+            # ═══════════════════════════════════════════════════════════════════════════
+            for date in self.date_range:
+                # Skip calendar must_day_off dates (everyone is already off)
+                if date in self.calendar_off_dates:
+                    continue
+
+                # Count how many group members have OFF on this date
+                # any_member_off = sum(shifts[member, date, OFF]) >= 1
+                member_off_vars = [
+                    self.shifts[(member_id, date, self.SHIFT_OFF)]
+                    for member_id in valid_members
+                ]
+                any_member_off = self.model.NewBoolVar(f'any_off_{group_id}_{date}')
+                self.model.Add(sum(member_off_vars) >= 1).OnlyEnforceIf(any_member_off)
+                self.model.Add(sum(member_off_vars) == 0).OnlyEnforceIf(any_member_off.Not())
+
+                # ─────────────────────────────────────────────────────────────────────
+                # CONSTRAINT A: If any group member has OFF → Backup MUST work (○ ONLY)
+                # ─────────────────────────────────────────────────────────────────────
+                # CRITICAL FIX: Backup can ONLY have WORK (○), NOT early (△) or late (◇)
+                backup_work_var = self.shifts[(backup_staff_id, date, self.SHIFT_WORK)]
+                backup_early_var = self.shifts[(backup_staff_id, date, self.SHIFT_EARLY)]
+                backup_late_var = self.shifts[(backup_staff_id, date, self.SHIFT_LATE)]
+
+                if backup_coverage_is_hard:
+                    # ═══════════════════════════════════════════════════════════════════════════
+                    # HARD CONSTRAINT: Backup MUST have WORK (and ONLY work, no early/late)
+                    # ═══════════════════════════════════════════════════════════════════════════
+                    # If any_member_off == 1 → backup_work must be 1
+                    self.model.Add(backup_work_var == 1).OnlyEnforceIf(any_member_off)
+                    # Also ensure early and late are NOT selected when coverage is needed
+                    self.model.Add(backup_early_var == 0).OnlyEnforceIf(any_member_off)
+                    self.model.Add(backup_late_var == 0).OnlyEnforceIf(any_member_off)
+                    constraint_count += 3
+                else:
+                    # ═══════════════════════════════════════════════════════════════════════════
+                    # SOFT CONSTRAINT: Backup SHOULD work with penalty for violations
+                    # ═══════════════════════════════════════════════════════════════════════════
+                    # coverage_violation = 1 when: any_member_off=1 AND backup_work=0
+                    coverage_violation = self.model.NewBoolVar(f'backup_coverage_violation_{backup_staff_id}_{date}')
+
+                    # Using indicator constraints:
+                    # If any_member_off=0, coverage_violation must be 0
+                    self.model.Add(coverage_violation == 0).OnlyEnforceIf(any_member_off.Not())
+                    # If any_member_off=1 AND backup_work=1, coverage_violation must be 0
+                    self.model.Add(coverage_violation == 0).OnlyEnforceIf([any_member_off, backup_work_var])
+                    # If any_member_off=1 AND backup_work=0, coverage_violation must be 1
+                    self.model.AddBoolOr([any_member_off.Not(), backup_work_var, coverage_violation])
+
+                    # Add to violation tracking with high penalty
+                    self.violation_vars.append((
+                        coverage_violation,
+                        self.PENALTY_WEIGHTS['backup_coverage'],
+                        f'Backup {backup_name} not covering {group_name} on {date}'
+                    ))
+
+                    # SOFT constraint to prevent early/late shifts when coverage is needed
+                    # This should have medium-high penalty (backup should be normal work, not early/late)
+                    early_violation = self.model.NewBoolVar(f'backup_early_violation_{backup_staff_id}_{date}')
+                    late_violation = self.model.NewBoolVar(f'backup_late_violation_{backup_staff_id}_{date}')
+
+                    # early_violation = 1 when: any_member_off=1 AND backup_early=1
+                    self.model.Add(early_violation == 0).OnlyEnforceIf(any_member_off.Not())
+                    self.model.Add(early_violation == 0).OnlyEnforceIf([any_member_off, backup_early_var.Not()])
+                    self.model.Add(early_violation == 1).OnlyEnforceIf([any_member_off, backup_early_var])
+
+                    # late_violation = 1 when: any_member_off=1 AND backup_late=1
+                    self.model.Add(late_violation == 0).OnlyEnforceIf(any_member_off.Not())
+                    self.model.Add(late_violation == 0).OnlyEnforceIf([any_member_off, backup_late_var.Not()])
+                    self.model.Add(late_violation == 1).OnlyEnforceIf([any_member_off, backup_late_var])
+
+                    self.violation_vars.append((
+                        early_violation,
+                        self.PENALTY_WEIGHTS['backup_coverage'] // 2,
+                        f'Backup {backup_name} has early shift when should cover {group_name} on {date}'
+                    ))
+                    self.violation_vars.append((
+                        late_violation,
+                        self.PENALTY_WEIGHTS['backup_coverage'] // 2,
+                        f'Backup {backup_name} has late shift when should cover {group_name} on {date}'
+                    ))
+                    constraint_count += 3
+
+                # ─────────────────────────────────────────────────────────────────────
+                # CONSTRAINT B: If NO group member has OFF → Backup MUST be OFF (shown as ⊘)
+                # ─────────────────────────────────────────────────────────────────────
+                # CRITICAL FIX: When no coverage needed, backup MUST be OFF (not work/early/late)
+                # This is now HARD constraint to guarantee the ⊘ behavior
+                backup_off_var = self.shifts[(backup_staff_id, date, self.SHIFT_OFF)]
+
+                if backup_coverage_is_hard:
+                    # ═══════════════════════════════════════════════════════════════════════════
+                    # HARD CONSTRAINT: When no coverage needed, backup MUST be OFF
+                    # ═══════════════════════════════════════════════════════════════════════════
+                    # If any_member_off == 0 → backup_off must be 1
+                    self.model.Add(backup_off_var == 1).OnlyEnforceIf(any_member_off.Not())
+                    # Also ensure work, early, and late are NOT selected when no coverage
+                    self.model.Add(backup_work_var == 0).OnlyEnforceIf(any_member_off.Not())
+                    self.model.Add(backup_early_var == 0).OnlyEnforceIf(any_member_off.Not())
+                    self.model.Add(backup_late_var == 0).OnlyEnforceIf(any_member_off.Not())
+                    constraint_count += 4
+                else:
+                    # ═══════════════════════════════════════════════════════════════════════════
+                    # SOFT CONSTRAINT: Backup SHOULD be OFF when no coverage needed
+                    # ═══════════════════════════════════════════════════════════════════════════
+                    # unavailable_violation = 1 when: any_member_off=0 AND backup_off=0
+                    unavailable_violation = self.model.NewBoolVar(f'backup_unavailable_violation_{backup_staff_id}_{date}')
+
+                    # If any_member_off=1, unavailable_violation must be 0 (no constraint)
+                    self.model.Add(unavailable_violation == 0).OnlyEnforceIf(any_member_off)
+                    # If any_member_off=0 AND backup_off=1, unavailable_violation must be 0
+                    self.model.Add(unavailable_violation == 0).OnlyEnforceIf([any_member_off.Not(), backup_off_var])
+                    # If any_member_off=0 AND backup_off=0, unavailable_violation must be 1
+                    self.model.AddBoolOr([any_member_off, backup_off_var, unavailable_violation])
+
+                    # Add to violation tracking with MUCH lower penalty
+                    # This is intentionally SOFT even when coverage is HARD - unavailability is less critical
+                    self.violation_vars.append((
+                        unavailable_violation,
+                        self.PENALTY_WEIGHTS['backup_coverage'] // 10,
+                        f'Backup {backup_name} working when no coverage needed on {date}'
+                    ))
+                    constraint_count += 1
+
+                # Track this slot for solution extraction (to output ⊘ instead of ×)
+                self.backup_unavailable_slots[(backup_staff_id, date)] = any_member_off
+
+        if skipped_count > 0:
+            logger.info(f"[OR-TOOLS] Backup assignments: {constraint_count} {constraint_type} constraints added, {skipped_count} skipped")
         else:
-            logger.info("[OR-TOOLS] No backup staff found")
+            logger.info(f"[OR-TOOLS] 🛡️ Added {constraint_count} backup coverage {constraint_type} constraints")
 
     def _add_staff_group_constraints(self):
         """
@@ -612,7 +839,13 @@ class ShiftScheduleOptimizer:
             return
 
         # Use provided limits or smart defaults based on staff count
-        staff_count = len(self.staff_members)
+        # NOTE: Exclude backup staff from daily limit calculations
+        non_backup_staff = [s for s in self.staff_members if s['id'] not in self.backup_staff_ids]
+        staff_count = len(non_backup_staff)
+
+        if len(self.backup_staff_ids) > 0:
+            logger.info(f"  🛡️ {len(self.backup_staff_ids)} backup staff excluded from daily limits (staff_count={staff_count})")
+
         default_min = min(2, staff_count - 1) if staff_count > 1 else 0
         default_max = min(3, staff_count - 1) if staff_count > 1 else 0
 
@@ -645,10 +878,10 @@ class ShiftScheduleOptimizer:
                 if rule.get('must_day_off') or rule.get('must_work'):
                     continue
 
-            # Count off days (x) on this date across all staff
+            # Count off days (x) on this date across non-backup staff only
             off_count = sum([
                 self.shifts[(staff['id'], date, self.SHIFT_OFF)]
-                for staff in self.staff_members
+                for staff in non_backup_staff
             ])
 
             if daily_limit_is_hard:
@@ -731,9 +964,18 @@ class ShiftScheduleOptimizer:
 
         # ═══════════════════════════════════════════════════════════════════════════
         # STEP 1: Group staff by their status (staff type)
+        # NOTE: Backup staff are EXCLUDED from staff type limits
         # ═══════════════════════════════════════════════════════════════════════════
         staff_by_type = {}
+        skipped_backup_count = 0
         for staff in self.staff_members:
+            staff_id = staff['id']
+
+            # Skip backup staff - they are exempt from staff type limits
+            if staff_id in self.backup_staff_ids:
+                skipped_backup_count += 1
+                continue
+
             # Use .get() with default to handle missing 'status' field
             status = staff.get('status', 'Unknown')
 
@@ -745,6 +987,8 @@ class ShiftScheduleOptimizer:
         # Log staff distribution for debugging
         distribution = [(t, len(s)) for t, s in staff_by_type.items()]
         logger.info(f"  Staff distribution by type: {distribution}")
+        if skipped_backup_count > 0:
+            logger.info(f"  🛡️ {skipped_backup_count} backup staff excluded from staff type limits")
 
         # ═══════════════════════════════════════════════════════════════════════════
         # STEP 2: Apply constraints for each staff type
@@ -784,7 +1028,18 @@ class ShiftScheduleOptimizer:
                 warning_count += 1
                 continue
 
-            constraint_mode = "HARD" if is_hard else "SOFT"
+            # ═══════════════════════════════════════════════════════════════════════════
+            # IMPORTANT: Always use SOFT constraints for staff type limits
+            # HARD constraints can easily become INFEASIBLE when combined with monthly limits
+            # Example: 6 社員 need 8 off days each = 48 total, but maxOff=1 × 26 days = 26 max
+            # ═══════════════════════════════════════════════════════════════════════════
+            # Override is_hard to always be False - user requested "HARD" but we use high penalty SOFT instead
+            original_is_hard = is_hard
+            is_hard = False  # ALWAYS SOFT to prevent INFEASIBLE
+
+            # Use higher penalty when user originally wanted HARD constraint
+            penalty_multiplier = 3 if original_is_hard else 1
+            constraint_mode = "SOFT (high priority)" if original_is_hard else "SOFT"
             logger.info(f"  Type '{staff_type}': {len(type_staff)} staff, maxOff={max_off}, maxEarly={max_early}, mode={constraint_mode}")
 
             # EDGE CASE: Warn if limits exceed staff count (ineffective but valid)
@@ -795,8 +1050,28 @@ class ShiftScheduleOptimizer:
                 logger.info(f"    Note: maxEarly={max_early} >= staff_count={len(type_staff)} (constraint will never bind)")
 
             # ═══════════════════════════════════════════════════════════════════════
-            # STEP 3: Create constraints for each date
+            # STEP 3: Create COMBINED constraints for each date
             # ═══════════════════════════════════════════════════════════════════════
+            # COMBINED CONSTRAINT: off × 1.0 + early × 0.5 <= maxOff + (maxEarly × 0.5)
+            # Since CP-SAT requires integers, we scale by 2:
+            # off × 2 + early × 1 <= (maxOff × 2) + (maxEarly × 1)
+            #
+            # Example with maxOff=1, maxEarly=2:
+            # - Combined limit (scaled) = 1×2 + 2×1 = 4
+            # - Valid: 1× + 2△ = 2 + 2 = 4 ✅
+            # - Valid: 0× + 4△ = 0 + 4 = 4 ✅
+            # - Valid: 2× + 0△ = 4 + 0 = 4 ✅
+            # - Invalid: 1× + 3△ = 2 + 3 = 5 ❌
+            # ═══════════════════════════════════════════════════════════════════════
+
+            # Calculate combined limit (scaled by 2)
+            # Handle None values: if not specified, treat as unlimited (use large value)
+            max_off_val = max_off if max_off is not None else 999
+            max_early_val = max_early if max_early is not None else 999
+            max_scaled = (max_off_val * 2) + (max_early_val * 1)
+
+            logger.info(f"    Combined limit formula: off×2 + early×1 <= {max_scaled} (maxOff={max_off_val}×2 + maxEarly={max_early_val}×1)")
+
             for date in self.date_range:
                 # EDGE CASE: Skip calendar override dates (must_day_off/must_work)
                 # These dates have forced assignments that override daily limits
@@ -804,68 +1079,45 @@ class ShiftScheduleOptimizer:
                     continue
 
                 # ─────────────────────────────────────────────────────────────────────
-                # CONSTRAINT A: Max off days for this staff type on this date
+                # COMBINED CONSTRAINT: off × 2 + early × 1 <= max_scaled
+                # This allows flexible combinations like:
+                # - 1 off + 2 early = 2 + 2 = 4 (if max_scaled=4)
+                # - 0 off + 4 early = 0 + 4 = 4
+                # - 2 off + 0 early = 4 + 0 = 4
                 # ─────────────────────────────────────────────────────────────────────
-                if max_off is not None:
-                    # Count off shifts (×) for this staff type on this date
-                    off_count = sum([
-                        self.shifts[(staff['id'], date, self.SHIFT_OFF)]
-                        for staff in type_staff
-                    ])
 
-                    if is_hard:
-                        # HARD CONSTRAINT: Strictly enforce limit
-                        self.model.Add(off_count <= max_off)
-                        constraint_count += 1
-                    else:
-                        # SOFT CONSTRAINT: Penalize violations
-                        # violation = max(0, off_count - max_off)
-                        violation_var = self.model.NewIntVar(
-                            0, len(type_staff),
-                            f'staff_type_{staff_type}_off_{date}_violation'
-                        )
-                        self.model.Add(violation_var >= off_count - max_off)
-                        self.model.Add(violation_var >= 0)
+                # Get shift variables for this staff type on this date
+                off_vars = [self.shifts[(staff['id'], date, self.SHIFT_OFF)] for staff in type_staff]
+                early_vars = [self.shifts[(staff['id'], date, self.SHIFT_EARLY)] for staff in type_staff]
 
-                        # Track for objective penalty
-                        self.violation_vars.append((
-                            violation_var,
-                            self.PENALTY_WEIGHTS['staff_type_limit'],
-                            f'Staff type {staff_type} over max off on {date}'
-                        ))
-                        constraint_count += 1
+                # Create scaled sum: off × 2 + early × 1
+                # off counts as 2 (= 1.0 in original scale), early counts as 1 (= 0.5)
+                scaled_terms = []
+                for var in off_vars:
+                    scaled_terms.append(var * 2)
+                for var in early_vars:
+                    scaled_terms.append(var * 1)
 
-                # ─────────────────────────────────────────────────────────────────────
-                # CONSTRAINT B: Max early shifts for this staff type on this date
-                # ─────────────────────────────────────────────────────────────────────
-                if max_early is not None:
-                    # Count early shifts (△) for this staff type on this date
-                    early_count = sum([
-                        self.shifts[(staff['id'], date, self.SHIFT_EARLY)]
-                        for staff in type_staff
-                    ])
+                combined_scaled = sum(scaled_terms)
 
-                    if is_hard:
-                        # HARD CONSTRAINT: Strictly enforce limit
-                        self.model.Add(early_count <= max_early)
-                        constraint_count += 1
-                    else:
-                        # SOFT CONSTRAINT: Penalize violations
-                        # violation = max(0, early_count - max_early)
-                        violation_var = self.model.NewIntVar(
-                            0, len(type_staff),
-                            f'staff_type_{staff_type}_early_{date}_violation'
-                        )
-                        self.model.Add(violation_var >= early_count - max_early)
-                        self.model.Add(violation_var >= 0)
+                # SOFT CONSTRAINT: Penalize violations of combined limit
+                # violation = max(0, combined_scaled - max_scaled)
+                max_violation = len(type_staff) * 3  # Upper bound for violation
+                violation_var = self.model.NewIntVar(
+                    0, max_violation,
+                    f'staff_type_{staff_type}_combined_{date}_violation'
+                )
+                self.model.Add(violation_var >= combined_scaled - max_scaled)
+                self.model.Add(violation_var >= 0)
 
-                        # Track for objective penalty
-                        self.violation_vars.append((
-                            violation_var,
-                            self.PENALTY_WEIGHTS['staff_type_limit'],
-                            f'Staff type {staff_type} over max early on {date}'
-                        ))
-                        constraint_count += 1
+                # Track for objective penalty (use higher penalty when user wanted HARD)
+                effective_penalty = self.PENALTY_WEIGHTS['staff_type_limit'] * penalty_multiplier
+                self.violation_vars.append((
+                    violation_var,
+                    effective_penalty,
+                    f'Staff type {staff_type} over combined limit on {date}'
+                ))
+                constraint_count += 1
 
         # ═══════════════════════════════════════════════════════════════════════════
         # SUMMARY LOGGING
@@ -874,6 +1126,172 @@ class ShiftScheduleOptimizer:
             logger.warning(f"[OR-TOOLS] Staff type limits: {constraint_count} constraints added, {warning_count} warnings")
         else:
             logger.info(f"[OR-TOOLS] Added {constraint_count} staff type limit constraints")
+
+    def _compute_priority_rule_off_equivalent(self):
+        """
+        Pre-compute off-equivalent consumed by HARD priority rules per staff.
+
+        This method must be called BEFORE _add_monthly_limits() so that the
+        monthly limit constraint can adjust the remaining budget.
+
+        HARD priority rules force specific shifts on specific days. These forced
+        shifts should count toward the monthly off-equivalent limit just like
+        pre-filled cells.
+
+        Off-equivalent weights (scaled by 2 for integer math):
+        - × (off) = 1.0 = 2 scaled
+        - △ (early) = 0.5 = 1 scaled
+
+        Example:
+        - Monthly limit max = 4 off-equivalent (8 scaled)
+        - Staff has HARD priority rule: "Sunday early shifts" (4 Sundays)
+        - Priority consumed = 4 × 1 = 4 scaled (= 2.0 off-equivalent)
+        - Remaining budget = 8 - 4 = 4 scaled (= 2.0 off-equivalent)
+        """
+        self.priority_rule_off_equiv = {}  # {staff_id: scaled_value}
+
+        priority_rules = self.constraints_config.get('priorityRules', [])
+
+        if not priority_rules:
+            logger.info("[OR-TOOLS] No priority rules - no off-equivalent pre-consumption")
+            return
+
+        # Handle array format only (object format is legacy)
+        if isinstance(priority_rules, dict):
+            # Legacy object format not supported for pre-computation
+            logger.info("[OR-TOOLS] Priority rules in legacy object format - skipping pre-computation")
+            return
+
+        valid_staff_ids = {s['id'] for s in self.staff_members}
+
+        # Day index to name mapping (JavaScript: 0=Sunday, 1=Monday, ..., 6=Saturday)
+        day_index_to_name = {
+            0: 'sunday', 1: 'monday', 2: 'tuesday', 3: 'wednesday',
+            4: 'thursday', 5: 'friday', 6: 'saturday'
+        }
+
+        total_consumption = 0
+
+        for rule in priority_rules:
+            rule_name = rule.get('name', 'Unnamed')
+            logger.info(f"[PRIORITY-PRE] Processing rule '{rule_name}': keys={list(rule.keys())}")
+
+            # Only process HARD constraints that force shifts
+            is_hard = rule.get('isHardConstraint', False)
+            if not is_hard:
+                constraints = rule.get('constraints', {})
+                is_hard = constraints.get('isHardConstraint', False)
+
+            logger.info(f"[PRIORITY-PRE]   isHardConstraint={is_hard}")
+
+            if not is_hard:
+                continue  # Skip SOFT rules - they don't guarantee shifts
+
+            if not rule.get('isActive', True):
+                logger.info(f"[PRIORITY-PRE]   Skipping inactive rule")
+                continue  # Skip inactive rules
+
+            rule_type = rule.get('ruleType', '')
+
+            # Count preferred_shift and required_off rules that force shifts
+            # avoided_shift and blocked rules force shift=0, not counted toward off-equivalent
+            # If no ruleType specified but has shiftType, assume it's a preferred shift rule
+            if rule_type in ['avoided_shift', 'blocked']:
+                continue  # These don't force off/early, they prevent shifts
+
+            # Extract staff IDs using helper methods
+            staff_id = self._extract_staff_id_from_rule(rule)
+            staff_ids = self._extract_staff_ids_from_rule(rule)
+
+            # Build list of all staff IDs this rule applies to
+            target_staff_ids = []
+            if staff_id and staff_id in valid_staff_ids:
+                target_staff_ids.append(staff_id)
+            for sid in staff_ids:
+                if sid in valid_staff_ids and sid not in target_staff_ids:
+                    target_staff_ids.append(sid)
+
+            if not target_staff_ids:
+                logger.info(f"[PRIORITY-PRE]   No valid staff IDs found, skipping")
+                continue
+
+            logger.info(f"[PRIORITY-PRE]   Staff IDs: {target_staff_ids}")
+
+            # Get shift type from multiple possible locations:
+            # 1. Top-level shiftType (camelCase from Go server ToReactFormat)
+            # 2. ruleDefinition.shift_type (snake_case from database JSONB)
+            # 3. preferences.shiftType (legacy format)
+            shift_type_name = rule.get('shiftType', '')
+            if not shift_type_name:
+                rule_def = rule.get('ruleDefinition', {})
+                shift_type_name = rule_def.get('shift_type', '') or rule_def.get('shiftType', '')
+            if not shift_type_name:
+                prefs = rule.get('preferences', {})
+                shift_type_name = prefs.get('shiftType', '')
+
+            shift_type_name = (shift_type_name or 'off').lower()
+            logger.info(f"[PRIORITY-PRE]   Shift type: {shift_type_name}")
+
+            # Determine off-equivalent value (scaled by 2)
+            if shift_type_name == 'off':
+                off_equiv_scaled = 2  # 1.0 off-equivalent
+            elif shift_type_name == 'early':
+                off_equiv_scaled = 1  # 0.5 off-equivalent
+            else:
+                continue  # late/work don't count toward off-equivalent
+
+            # Get days of week from multiple possible locations:
+            # 1. Top-level daysOfWeek (camelCase from Go server ToReactFormat)
+            # 2. ruleDefinition.days_of_week (snake_case from database JSONB)
+            # 3. preferences.daysOfWeek (legacy format)
+            days_of_week = rule.get('daysOfWeek', [])
+            if not days_of_week:
+                rule_def = rule.get('ruleDefinition', {})
+                days_of_week = rule_def.get('days_of_week', []) or rule_def.get('daysOfWeek', [])
+            if not days_of_week:
+                prefs = rule.get('preferences', {})
+                days_of_week = prefs.get('daysOfWeek', [])
+
+            # Convert to lowercase day names
+            # Handle both integer indices (0=Sunday) and string names ("Sunday")
+            target_days = []
+            for d in days_of_week:
+                if isinstance(d, int) and d in day_index_to_name:
+                    # Integer index: 0 -> 'sunday'
+                    target_days.append(day_index_to_name[d])
+                elif isinstance(d, str):
+                    # String name: 'Sunday' -> 'sunday'
+                    target_days.append(d.lower())
+
+            if not target_days:
+                logger.info(f"[PRIORITY-PRE]   No target days found, skipping")
+                continue
+
+            logger.info(f"[PRIORITY-PRE]   Days of week: {target_days}")
+
+            # Count matching dates for each staff member
+            for target_staff_id in target_staff_ids:
+                for date in self.date_range:
+                    # Skip calendar off dates (handled separately)
+                    if date in self.calendar_off_dates:
+                        continue
+
+                    day_name = self._get_day_of_week(date)
+                    if day_name in target_days:
+                        # This date will be forced by the HARD priority rule
+                        current = self.priority_rule_off_equiv.get(target_staff_id, 0)
+                        self.priority_rule_off_equiv[target_staff_id] = current + off_equiv_scaled
+                        total_consumption += off_equiv_scaled
+
+        # Log the pre-computed consumption
+        if self.priority_rule_off_equiv:
+            logger.info(f"[OR-TOOLS] 📋 Priority rule off-equivalent pre-consumption:")
+            for staff_id, consumed in self.priority_rule_off_equiv.items():
+                staff_name = next((s.get('name', staff_id) for s in self.staff_members if s['id'] == staff_id), staff_id)
+                logger.info(f"    {staff_name}: {consumed/2:.1f} off-equivalent ({consumed} scaled)")
+            logger.info(f"[OR-TOOLS] 📋 Total priority rule consumption: {total_consumption/2:.1f} off-equivalent")
+        else:
+            logger.info("[OR-TOOLS] 📋 No HARD priority rules with off/early shifts - no pre-consumption")
 
     def _add_monthly_limits(self):
         """
@@ -899,8 +1317,16 @@ class ShiftScheduleOptimizer:
         if not monthly_limit:
             return
 
-        min_off = monthly_limit.get('minCount', 7)
-        max_off = monthly_limit.get('maxCount', 8)
+        # Handle None/null values for minCount (means no minimum constraint)
+        min_off_raw = monthly_limit.get('minCount')
+        max_off_raw = monthly_limit.get('maxCount')
+
+        # If minCount is None/null, treat as 0 (no minimum constraint)
+        # If maxCount is None/null, use a high default (effectively no maximum)
+        # Use floor for min (more lenient) and ceil for max (more lenient)
+        import math
+        min_off = int(math.floor(float(min_off_raw))) if min_off_raw is not None else 0
+        max_off = int(math.ceil(float(max_off_raw))) if max_off_raw is not None else 999
         exclude_calendar = monthly_limit.get('excludeCalendarRules', True)
 
         # Calculate available flexible dates
@@ -908,30 +1334,34 @@ class ShiftScheduleOptimizer:
         num_flexible_days = len(flexible_dates)
 
         # ═══════════════════════════════════════════════════════════════════════════
-        # COUNT PRE-FILLED OFF DAYS PER STAFF (for logging/reporting)
-        # Pre-filled off days ARE included in monthly limits automatically
+        # COUNT PRE-FILLED OFF-EQUIVALENT PER STAFF (for logging/reporting)
+        # Pre-filled cells ARE included in monthly limits automatically
         # because they use the same shift variables constrained to == 1
+        # × counts as 1.0, △ counts as 0.5 off-equivalent
         # ═══════════════════════════════════════════════════════════════════════════
         prefilled_symbols = getattr(self, 'prefilled_symbols', {})
-        prefilled_off_by_staff = {}
+        prefilled_off_equiv_by_staff = {}  # Now tracks scaled off-equivalent (×=2, △=1)
 
         for (staff_id, date), symbol in prefilled_symbols.items():
-            # Check if this is an OFF symbol (×, x, X)
-            if symbol in ['×', '\u00d7', 'x', 'X']:
-                # Only count if date is in flexible_dates (when exclude_calendar=True)
-                if exclude_calendar:
-                    if date in flexible_dates:
-                        prefilled_off_by_staff[staff_id] = prefilled_off_by_staff.get(staff_id, 0) + 1
-                else:
-                    prefilled_off_by_staff[staff_id] = prefilled_off_by_staff.get(staff_id, 0) + 1
+            # Check if date should be counted (based on exclude_calendar setting)
+            if exclude_calendar and date not in flexible_dates:
+                continue
 
-        # Log pre-filled off days summary
-        if prefilled_off_by_staff:
-            logger.info(f"[OR-TOOLS] 🔒 Pre-filled OFF days count towards monthly limits:")
-            for staff_id, count in prefilled_off_by_staff.items():
+            # Check for OFF symbol (×, x, X) - counts as 2 (scaled)
+            if symbol in ['×', '\u00d7', 'x', 'X']:
+                prefilled_off_equiv_by_staff[staff_id] = prefilled_off_equiv_by_staff.get(staff_id, 0) + 2
+            # Check for EARLY symbol (△) - counts as 1 (scaled, = 0.5 off-equivalent)
+            elif symbol in ['△', '\u25b3', 's', 'S']:
+                prefilled_off_equiv_by_staff[staff_id] = prefilled_off_equiv_by_staff.get(staff_id, 0) + 1
+
+        # Log pre-filled off-equivalent summary
+        if prefilled_off_equiv_by_staff:
+            logger.info(f"[OR-TOOLS] 🔒 Pre-filled off-equivalent (×=1.0, △=0.5) counts towards monthly limits:")
+            for staff_id, scaled_count in prefilled_off_equiv_by_staff.items():
                 staff_name = next((s.get('name', staff_id) for s in self.staff_members if s['id'] == staff_id), staff_id)
-                remaining = max_off - count
-                logger.info(f"    {staff_name}: {count} pre-filled × → remaining limit: {remaining} (max {max_off})")
+                off_equiv = scaled_count / 2.0  # Convert back to original scale for display
+                remaining_equiv = max_off - off_equiv
+                logger.info(f"    {staff_name}: {off_equiv:.1f} pre-filled off-equiv → remaining: {remaining_equiv:.1f} (max {max_off})")
 
         # Sanity check: can't require more off days than available dates
         min_off = min(min_off, num_flexible_days)
@@ -942,39 +1372,97 @@ class ShiftScheduleOptimizer:
             min_off = max_off
 
         # Check if monthly limits should be HARD constraints
-        ortools_config = self.constraints_config.get('ortoolsConfig', {})
-        hard_constraints = ortools_config.get('hardConstraints', {})
-        monthly_limit_is_hard = hard_constraints.get('monthlyLimits', False)
+        # Check both: monthlyLimit.isHardConstraint (direct) AND ortoolsConfig.hardConstraints.monthlyLimits (legacy)
+        monthly_limit_is_hard = monthly_limit.get('isHardConstraint', False)
+        if not monthly_limit_is_hard:
+            ortools_config = self.constraints_config.get('ortoolsConfig', {})
+            hard_constraints = ortools_config.get('hardConstraints', {})
+            monthly_limit_is_hard = hard_constraints.get('monthlyLimits', False)
 
         constraint_type = "HARD" if monthly_limit_is_hard else "SOFT"
-        logger.info(f"[OR-TOOLS] Adding monthly limits ({constraint_type}): min={min_off}, max={max_off}, exclude_calendar={exclude_calendar}, flexible_days={num_flexible_days}...")
+
+        # ═══════════════════════════════════════════════════════════════════════════
+        # COMBINED OFF-EQUIVALENT: off × 1.0 + early × 0.5
+        # Since CP-SAT requires integers, we scale by 2:
+        # off × 2 + early × 1 >= min_off × 2
+        # off × 2 + early × 1 <= max_off × 2
+        #
+        # Example with minCount=7, maxCount=8:
+        # - Min (scaled) = 7 × 2 = 14
+        # - Max (scaled) = 8 × 2 = 16
+        # - Valid: 7× + 0△ = 14 ✅ (7 off-equivalent)
+        # - Valid: 5× + 4△ = 10 + 4 = 14 ✅ (7 off-equivalent)
+        # - Valid: 3× + 8△ = 6 + 8 = 14 ✅ (7 off-equivalent)
+        # ═══════════════════════════════════════════════════════════════════════════
+        min_scaled = min_off * 2  # Scale by 2 for integer math
+        max_scaled = max_off * 2
+
+        logger.info(f"[OR-TOOLS] Adding monthly limits ({constraint_type}): min={min_off} (scaled={min_scaled}), max={max_off} (scaled={max_scaled}), exclude_calendar={exclude_calendar}, flexible_days={num_flexible_days}...")
+        logger.info(f"    Formula: off×2 + early×1 in [{min_scaled}, {max_scaled}] (early counts as 0.5 off-equivalent)")
 
         constraint_count = 0
         total_days = len(self.date_range)
+        skipped_backup_count = 0
 
         for staff in self.staff_members:
             staff_id = staff['id']
             staff_name = staff.get('name', staff_id)
 
+            # ═══════════════════════════════════════════════════════════════════════════
+            # SKIP BACKUP STAFF - They are exempt from monthly limits
+            # Backup staff schedule is determined ONLY by group coverage constraints
+            # ═══════════════════════════════════════════════════════════════════════════
+            if staff_id in self.backup_staff_ids:
+                skipped_backup_count += 1
+                logger.info(f"  🛡️ Skipping backup staff {staff_name} from monthly limits (coverage-based schedule)")
+                continue
+
+            # ═══════════════════════════════════════════════════════════════════════════
+            # Get priority rule off-equivalent consumption for this staff (FOR LOGGING ONLY)
+            # Priority rules with HARD constraints force shifts that count toward limits
+            #
+            # IMPORTANT: Do NOT adjust the monthly limit by priority consumption!
+            # The priority-forced shifts are counted in combined_scaled automatically
+            # since they use the same shift variables. Adjusting would double-count.
+            #
+            # Example: max=4 off-equiv (scaled=8), 4 Sunday early priority (2 off-equiv)
+            #   - Priority forces: early[sunday1-4] == 1 (contributes 4 to combined_scaled)
+            #   - Constraint: combined_scaled <= 8 (original, NOT adjusted)
+            #   - If solver assigns 2 more off days: combined_scaled = 4 + 4 = 8 ✓
+            #   - Total off-equiv: 2 (priority) + 2 (free) = 4 ✓
+            # ═══════════════════════════════════════════════════════════════════════════
+            priority_consumed = getattr(self, 'priority_rule_off_equiv', {}).get(staff_id, 0)
+
+            if priority_consumed > 0:
+                # Log the priority consumption for visibility (but don't adjust limits)
+                logger.info(f"  📋 {staff_name}: priority rules force {priority_consumed/2:.1f} off-equiv (will count in combined total)")
+                logger.info(f"      → Monthly limit: max={max_scaled/2:.1f}, min={min_scaled/2:.1f} (includes priority shifts)")
+
             if exclude_calendar:
-                # Count only non-calendar off days (flexible off days)
-                flexible_off_count = sum([
-                    self.shifts[(staff_id, date, self.SHIFT_OFF)]
-                    for date in flexible_dates
-                ])
+                # Count combined off-equivalent for flexible dates (excluding calendar)
+                # off × 2 + early × 1
+                off_vars = [self.shifts[(staff_id, date, self.SHIFT_OFF)] for date in flexible_dates]
+                early_vars = [self.shifts[(staff_id, date, self.SHIFT_EARLY)] for date in flexible_dates]
+
+                # Create scaled sum: off × 2 + early × 1
+                combined_scaled = sum(var * 2 for var in off_vars) + sum(var * 1 for var in early_vars)
+
+                # Upper bound for violation variables (scaled)
+                max_possible = num_flexible_days * 3
 
                 if monthly_limit_is_hard:
-                    # HARD CONSTRAINT: Strictly enforce limits
-                    if min_off > 0:
-                        self.model.Add(flexible_off_count >= min_off)
+                    # HARD CONSTRAINT: Strictly enforce ORIGINAL limits
+                    # Priority-forced shifts count in combined_scaled automatically
+                    if min_scaled > 0:
+                        self.model.Add(combined_scaled >= min_scaled)
                         constraint_count += 1
-                    self.model.Add(flexible_off_count <= max_off)
+                    self.model.Add(combined_scaled <= max_scaled)
                     constraint_count += 1
                 else:
-                    # SOFT CONSTRAINT for min: Penalize if below minimum
-                    if min_off > 0:
-                        under_min_var = self.model.NewIntVar(0, num_flexible_days, f'monthly_under_min_{staff_id}')
-                        self.model.Add(under_min_var >= min_off - flexible_off_count)
+                    # SOFT CONSTRAINT for min: Penalize if below ORIGINAL minimum
+                    if min_scaled > 0:
+                        under_min_var = self.model.NewIntVar(0, max_possible, f'monthly_under_min_{staff_id}')
+                        self.model.Add(under_min_var >= min_scaled - combined_scaled)
                         self.model.Add(under_min_var >= 0)
                         self.violation_vars.append((
                             under_min_var,
@@ -983,9 +1471,9 @@ class ShiftScheduleOptimizer:
                         ))
                         constraint_count += 1
 
-                    # SOFT CONSTRAINT for max: Penalize if above maximum
-                    over_max_var = self.model.NewIntVar(0, num_flexible_days, f'monthly_over_max_{staff_id}')
-                    self.model.Add(over_max_var >= flexible_off_count - max_off)
+                    # SOFT CONSTRAINT for max: Penalize if above ORIGINAL maximum
+                    over_max_var = self.model.NewIntVar(0, max_possible, f'monthly_over_max_{staff_id}')
+                    self.model.Add(over_max_var >= combined_scaled - max_scaled)
                     self.model.Add(over_max_var >= 0)
                     self.violation_vars.append((
                         over_max_var,
@@ -994,23 +1482,27 @@ class ShiftScheduleOptimizer:
                     ))
                     constraint_count += 1
             else:
-                # Count all off days
-                total_off_count = sum([
-                    self.shifts[(staff_id, date, self.SHIFT_OFF)]
-                    for date in self.date_range
-                ])
+                # Count combined off-equivalent for all dates
+                # off × 2 + early × 1
+                off_vars = [self.shifts[(staff_id, date, self.SHIFT_OFF)] for date in self.date_range]
+                early_vars = [self.shifts[(staff_id, date, self.SHIFT_EARLY)] for date in self.date_range]
+
+                combined_scaled = sum(var * 2 for var in off_vars) + sum(var * 1 for var in early_vars)
+                max_possible = total_days * 3
 
                 if monthly_limit_is_hard:
-                    # HARD CONSTRAINT
-                    if min_off > 0:
-                        self.model.Add(total_off_count >= min_off)
+                    # HARD CONSTRAINT: Strictly enforce ORIGINAL limits
+                    # Priority-forced shifts count in combined_scaled automatically
+                    if min_scaled > 0:
+                        self.model.Add(combined_scaled >= min_scaled)
                         constraint_count += 1
-                    self.model.Add(total_off_count <= max_off)
+                    self.model.Add(combined_scaled <= max_scaled)
                     constraint_count += 1
                 else:
-                    if min_off > 0:
-                        under_min_var = self.model.NewIntVar(0, total_days, f'monthly_under_min_{staff_id}')
-                        self.model.Add(under_min_var >= min_off - total_off_count)
+                    # SOFT CONSTRAINT for min: Penalize if below ORIGINAL minimum
+                    if min_scaled > 0:
+                        under_min_var = self.model.NewIntVar(0, max_possible, f'monthly_under_min_{staff_id}')
+                        self.model.Add(under_min_var >= min_scaled - combined_scaled)
                         self.model.Add(under_min_var >= 0)
                         self.violation_vars.append((
                             under_min_var,
@@ -1019,8 +1511,9 @@ class ShiftScheduleOptimizer:
                         ))
                         constraint_count += 1
 
-                    over_max_var = self.model.NewIntVar(0, total_days, f'monthly_over_max_{staff_id}')
-                    self.model.Add(over_max_var >= total_off_count - max_off)
+                    # SOFT CONSTRAINT for max: Penalize if above ORIGINAL maximum
+                    over_max_var = self.model.NewIntVar(0, max_possible, f'monthly_over_max_{staff_id}')
+                    self.model.Add(over_max_var >= combined_scaled - max_scaled)
                     self.model.Add(over_max_var >= 0)
                     self.violation_vars.append((
                         over_max_var,
@@ -1029,7 +1522,7 @@ class ShiftScheduleOptimizer:
                     ))
                     constraint_count += 1
 
-        logger.info(f"[OR-TOOLS] Added {constraint_count} monthly limit {constraint_type.lower()} constraints")
+        logger.info(f"[OR-TOOLS] Added {constraint_count} monthly limit {constraint_type.lower()} constraints (with early=0.5 weight)")
 
     def _add_adjacent_conflict_prevention(self):
         """
@@ -1303,13 +1796,19 @@ class ShiftScheduleOptimizer:
                 prefs = rule.get('preferences', {})
                 priority_level = prefs.get('priorityLevel', 2)
 
-            # Convert daysOfWeek indices to day names for matching
+            # Convert daysOfWeek to lowercase day names for matching
             # IMPORTANT: JavaScript uses 0=Sunday, Python weekday() uses 0=Monday
+            # Handle both integer indices (0=Sunday) and string names ("Sunday")
             day_index_to_name = {
                 0: 'sunday', 1: 'monday', 2: 'tuesday', 3: 'wednesday',
                 4: 'thursday', 5: 'friday', 6: 'saturday'
             }
-            target_days = [day_index_to_name.get(d, '') for d in days_of_week if d in day_index_to_name]
+            target_days = []
+            for d in days_of_week:
+                if isinstance(d, int) and d in day_index_to_name:
+                    target_days.append(day_index_to_name[d])
+                elif isinstance(d, str):
+                    target_days.append(d.lower())
 
             logger.info(f"  Rule: {rule.get('name', 'Unnamed')} - staff={target_staff_ids}, type={rule_type}, shift={shift_type_name}, days={target_days}, hard={is_hard}")
 
@@ -1326,20 +1825,21 @@ class ShiftScheduleOptimizer:
 
                     shift_var = self.shifts[(target_staff_id, date, shift_type)]
 
-                    if rule_type in ['preferred_shift', 'required_off']:
-                        if is_hard:
-                            # Hard constraint: MUST have this shift on these days
-                            self.model.Add(shift_var == 1)
-                        else:
-                            # Soft constraint: prefer this shift (add to objective with weight)
-                            self.preferred_vars.append((shift_var, priority_level))
-                    elif rule_type in ['avoided_shift', 'blocked']:
+                    if rule_type in ['avoided_shift', 'blocked']:
                         if is_hard:
                             # Hard constraint: MUST NOT have this shift on these days
                             self.model.Add(shift_var == 0)
                         else:
                             # Soft constraint: avoid this shift
                             self.avoided_vars.append((shift_var, priority_level))
+                    else:
+                        # Default to preferred_shift behavior (includes 'preferred_shift', 'required_off', or empty string)
+                        if is_hard:
+                            # Hard constraint: MUST have this shift on these days
+                            self.model.Add(shift_var == 1)
+                        else:
+                            # Soft constraint: prefer this shift (add to objective with weight)
+                            self.preferred_vars.append((shift_var, priority_level))
 
             rules_applied += 1
 
@@ -1469,9 +1969,16 @@ class ShiftScheduleOptimizer:
         # Extract schedule
         schedule = {}
         prefilled_preserved = 0
+        backup_unavailable_count = 0
 
         # Get prefilled symbols if available (for preserving original symbols like ★)
         prefilled_symbols = getattr(self, 'prefilled_symbols', {})
+
+        # Get backup unavailable slots for ⊘ symbol output
+        backup_unavailable_slots = getattr(self, 'backup_unavailable_slots', {})
+
+        # Unavailable symbol for backup staff when no coverage needed
+        UNAVAILABLE_SYMBOL = '\u2298'  # ⊘ (circled division slash)
 
         for staff in self.staff_members:
             staff_id = staff['id']
@@ -1487,11 +1994,31 @@ class ShiftScheduleOptimizer:
                     # Find which shift type is selected (exactly one will be 1)
                     for shift_type in range(4):
                         if solver.Value(self.shifts[(staff_id, date, shift_type)]) == 1:
-                            schedule[staff_id][date] = self.SHIFT_SYMBOLS[shift_type]
+                            # Check if this is a backup staff slot
+                            if (staff_id, date) in backup_unavailable_slots:
+                                any_member_off_var = backup_unavailable_slots[(staff_id, date)]
+                                member_off_value = solver.Value(any_member_off_var)
+
+                                # LOGIC:
+                                # - If any_member_off == 1 (coverage needed) → show normal shift (○, △, etc.)
+                                # - If any_member_off == 0 (no coverage needed) AND shift is OFF → show ⊘
+                                # - If any_member_off == 0 but shift is WORK → show normal (violation of unavailable)
+                                if member_off_value == 0 and shift_type == self.SHIFT_OFF:
+                                    # No coverage needed AND backup has OFF → show as Unavailable (⊘)
+                                    schedule[staff_id][date] = UNAVAILABLE_SYMBOL
+                                    backup_unavailable_count += 1
+                                else:
+                                    # Coverage needed OR backup is working → show normal shift symbol
+                                    schedule[staff_id][date] = self.SHIFT_SYMBOLS[shift_type]
+                            else:
+                                schedule[staff_id][date] = self.SHIFT_SYMBOLS[shift_type]
                             break
 
         if prefilled_preserved > 0:
             logger.info(f"[OR-TOOLS] 🔒 Preserved {prefilled_preserved} pre-filled cells with original symbols")
+
+        if backup_unavailable_count > 0:
+            logger.info(f"[OR-TOOLS] 🛡️ Set {backup_unavailable_count} backup slots to ⊘ (unavailable - no coverage needed)")
 
         # Calculate stats
         total_off = sum(

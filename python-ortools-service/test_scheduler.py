@@ -110,8 +110,9 @@ class TestShiftScheduleOptimizer:
                 'calendarRules': {
                     '2025-12-25': {'must_day_off': True}
                 },
+                # Correct format: { staffId: { dateString: boolean } }
                 'earlyShiftPreferences': {
-                    'staff-1': {'dates': ['2025-12-25']}
+                    'staff-1': {'2025-12-25': True}
                 },
                 'dailyLimitsRaw': {'minOffPerDay': 1, 'maxOffPerDay': 2}
             },
@@ -256,23 +257,33 @@ class TestShiftScheduleOptimizer:
         for staff in sample_staff:
             assert result['schedule'][staff['id']]['2025-12-05'] == work_symbol
 
-    def test_infeasible_constraints_detected(self, small_staff, short_dates):
-        """Test that infeasible constraints are detected."""
+    def test_violations_reported_for_conflicting_constraints(self, small_staff, short_dates):
+        """Test that violations are reported when SOFT constraints conflict.
+
+        When constraints conflict but are SOFT, the solver finds a best-effort solution
+        and reports violations with penalties.
+        """
         optimizer = ShiftScheduleOptimizer()
 
-        # Impossible: 3 staff, min 4 off per day
+        # Conflicting constraints: daily min 2 off with only 3 staff over 10 days
+        # means each staff needs ~6.7 off days on average, but if max is 5, violations occur
         result = optimizer.optimize_schedule(
             staff_members=small_staff,
             date_range=short_dates,
             constraints={
-                'dailyLimitsRaw': {'minOffPerDay': 4, 'maxOffPerDay': 4}
+                'dailyLimitsRaw': {'minOffPerDay': 2, 'maxOffPerDay': 2},  # Exactly 2 off per day
+                'monthlyLimit': {
+                    'minCount': None,
+                    'maxCount': 3,  # Max 3 off-equivalent per staff (tight constraint)
+                },
             },
             timeout_seconds=5
         )
 
-        # Should fail because we can't have 4 off with only 3 staff
-        assert result['success'] == False
-        assert 'INFEASIBLE' in result.get('status', '') or 'error' in result
+        # Solver should succeed but report violations
+        assert result['success'] == True
+        # Solution should have violations (either daily under-min or monthly over-max)
+        assert result.get('violations') is not None and len(result['violations']) > 0
 
     def test_solution_statistics(self, sample_staff, short_dates):
         """Test that solution includes statistics."""

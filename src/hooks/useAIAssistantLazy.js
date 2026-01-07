@@ -290,6 +290,7 @@ export const useAIAssistantLazy = (
         ) || monthlyLimitsArray[0];
 
         // Extract minCount/maxCount from the found limit, with fallbacks
+        // ✅ FIX: Include isHardConstraint to properly enforce monthly limits
         const monthlyLimitConfig = offDaysLimit ? {
           minCount: offDaysLimit.minCount ?? offDaysLimit.maxCount ?? 7,
           maxCount: offDaysLimit.maxCount ?? 8,
@@ -297,13 +298,18 @@ export const useAIAssistantLazy = (
           excludeEarlyShiftCalendar: offDaysLimit.excludeEarlyShiftCalendar ?? true,
           overrideWeeklyLimits: offDaysLimit.overrideWeeklyLimits ?? true,
           countHalfDays: offDaysLimit.countHalfDays ?? true,
+          // ✅ isHardConstraint: When true, OR-Tools will strictly enforce the limit
+          // Priority rules shifts (△ early) count toward this limit
+          isHardConstraint: offDaysLimit.isHard ?? offDaysLimit.isHardConstraint ?? true,
         } : {
           minCount: 7,
           maxCount: 8,
           excludeCalendarRules: true,
+          isHardConstraint: true, // Default to HARD constraint
         };
 
         console.log(`[OR-TOOLS] Monthly limit config from settings:`, monthlyLimitConfig);
+        console.log(`[OR-TOOLS] Monthly limit isHardConstraint: ${monthlyLimitConfig.isHardConstraint} (will ${monthlyLimitConfig.isHardConstraint ? 'STRICTLY enforce' : 'softly penalize'} limits)`);
 
         const constraints = {
           calendarRules: calendarRules || {},
@@ -345,6 +351,12 @@ export const useAIAssistantLazy = (
           // ✅ NEW: Pre-filled schedule (user-edited cells before AI generation)
           // These become HARD constraints in OR-Tools - they will NOT be changed
           prefilledSchedule: prefilledSchedule,
+          // ✅ NEW: Backup staff assignments (for coverage constraints)
+          // Business Logic:
+          // - When ANY member of a group has day off (×), backup staff MUST work (○)
+          // - When NO member of a group has day off, backup staff gets Unavailable (⊘)
+          // - This is a HARD constraint in OR-Tools
+          backupAssignments: aiSettings?.backupAssignments || [],
         };
 
         // Log the ortoolsConfig being sent
@@ -353,6 +365,11 @@ export const useAIAssistantLazy = (
         // Log staffTypeLimits if configured
         if (Object.keys(constraints.staffTypeLimits).length > 0) {
           console.log("[OR-TOOLS] Using staffTypeLimits:", JSON.stringify(constraints.staffTypeLimits, null, 2));
+        }
+
+        // Log backupAssignments if configured
+        if (constraints.backupAssignments && constraints.backupAssignments.length > 0) {
+          console.log("[OR-TOOLS] Using backupAssignments:", JSON.stringify(constraints.backupAssignments, null, 2));
         }
 
         // Log pre-filled cells summary

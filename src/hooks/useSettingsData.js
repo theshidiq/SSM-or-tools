@@ -420,6 +420,10 @@ export const useSettingsData = (autosaveEnabled = true) => {
       console.log("🔍 [UPDATE SETTINGS] updateSettings called with:", {
         oldGroupsCount: settingsRef.current?.staffGroups?.length,
         newGroupsCount: newSettings?.staffGroups?.length,
+        oldMonthlyLimits: settingsRef.current?.monthlyLimits?.length,
+        newMonthlyLimits: newSettings?.monthlyLimits?.length,
+        oldMonthlyLimitsData: JSON.stringify(settingsRef.current?.monthlyLimits),
+        newMonthlyLimitsData: JSON.stringify(newSettings?.monthlyLimits),
         useWebSocket
       });
 
@@ -427,10 +431,14 @@ export const useSettingsData = (autosaveEnabled = true) => {
         // 🔧 FIX: CRITICAL - Prevent circular updates when syncing FROM WebSocket
         // But ALLOW user-initiated updates even during sync
         console.log(`🔍 [UPDATE CHECK] isSyncingFromWebSocketRef.current = ${isSyncingFromWebSocketRef.current}`);
+        console.log(`🔍 [UPDATE CHECK] Monthly limits in settings:`, JSON.stringify(newSettings?.monthlyLimits));
         if (isSyncingFromWebSocketRef.current) {
           // ✅ IMPROVED: Check if this is a circular update (wsSettings → setSettings → updateSettings)
           // or a legitimate user operation (user creates/updates → updateSettings)
+          console.log(`🔍 [UPDATE CHECK] wsSettings exists? ${!!wsSettings}`);
+          console.log(`🔍 [UPDATE CHECK] Comparing newSettings vs wsSettings for circular check...`);
           const isCircularUpdate = wsSettings && JSON.stringify(newSettings) === JSON.stringify(wsSettings);
+          console.log(`🔍 [UPDATE CHECK] isCircularUpdate = ${isCircularUpdate}`);
 
           if (isCircularUpdate) {
             console.log(
@@ -639,12 +647,16 @@ export const useSettingsData = (autosaveEnabled = true) => {
         }
 
         // Detect and update monthly limits
-        if (
-          JSON.stringify(oldSettings.monthlyLimits) !==
-          JSON.stringify(newSettings.monthlyLimits)
-        ) {
+        console.log("🔍 [MONTHLY-LIMITS-DEBUG] Checking monthly limits changes:");
+        console.log("  - oldSettings.monthlyLimits:", JSON.stringify(oldSettings.monthlyLimits));
+        console.log("  - newSettings.monthlyLimits:", JSON.stringify(newSettings.monthlyLimits));
+        const monthlyLimitsChanged = JSON.stringify(oldSettings.monthlyLimits) !== JSON.stringify(newSettings.monthlyLimits);
+        console.log("  - Changed?", monthlyLimitsChanged);
+
+        if (monthlyLimitsChanged) {
           console.log("  - Updating monthly_limits table");
           newSettings.monthlyLimits?.forEach((limit) => {
+            console.log("  - Sending limit update:", JSON.stringify(limit));
             callbacks.wsUpdateMonthlyLimits(limit);
           });
         }

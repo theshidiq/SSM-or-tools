@@ -248,19 +248,20 @@ func (wl *WeeklyLimit) ToReactFormat() map[string]interface{} {
 }
 
 // MonthlyLimit represents monthly shift constraints
+// ✅ FIX: JSON tags use snake_case to match Supabase REST API response format
 type MonthlyLimit struct {
 	ID               string                 `json:"id"`
-	RestaurantID     string                 `json:"restaurantId"`
-	VersionID        string                 `json:"versionId"`
+	RestaurantID     string                 `json:"restaurant_id"`
+	VersionID        string                 `json:"version_id"`
 	Name             string                 `json:"name"`
-	LimitConfig      map[string]interface{} `json:"limitConfig"`
-	PenaltyWeight    float64                `json:"penaltyWeight"`
-	IsHardConstraint bool                   `json:"isHardConstraint"`
-	EffectiveFrom    *time.Time             `json:"effectiveFrom"`
-	EffectiveUntil   *time.Time             `json:"effectiveUntil"`
-	IsActive         bool                   `json:"isActive"`
-	CreatedAt        time.Time              `json:"createdAt"`
-	UpdatedAt        time.Time              `json:"updatedAt"`
+	LimitConfig      map[string]interface{} `json:"limit_config"`
+	PenaltyWeight    float64                `json:"penalty_weight"`
+	IsHardConstraint bool                   `json:"is_hard_constraint"`
+	EffectiveFrom    *time.Time             `json:"effective_from"`
+	EffectiveUntil   *time.Time             `json:"effective_until"`
+	IsActive         bool                   `json:"is_active"`
+	CreatedAt        time.Time              `json:"created_at"`
+	UpdatedAt        time.Time              `json:"updated_at"`
 }
 
 // ToReactFormat converts snake_case to camelCase for React
@@ -1778,9 +1779,51 @@ func (s *StaffSyncServer) updateMonthlyLimit(versionID string, limitData map[str
 		upsertData["name"] = "New Monthly Limit"
 	}
 	// ✅ FIX: React sends minCount, maxCount etc. at TOP LEVEL, not inside limitConfig
-	// We need to construct limit_config from top-level fields OR use existing limitConfig
+	// When limitConfig exists, we MUST merge top-level values (minCount, maxCount) into it
+	// because React sends updated values at top level while limitConfig contains old values
 	if limitConfig, ok := limitData["limitConfig"]; ok && limitConfig != nil {
-		upsertData["limit_config"] = limitConfig
+		// Convert limitConfig to map so we can modify it
+		configMap, isMap := limitConfig.(map[string]interface{})
+		if isMap {
+			// ✅ CRITICAL FIX: Top-level values take PRECEDENCE over limitConfig values
+			// This ensures user updates (e.g., maxCount from 7.5 to 8) are persisted
+			if minCount, hasMin := limitData["minCount"]; hasMin {
+				configMap["minCount"] = minCount
+				log.Printf("✅ [upsertMonthlyLimit] Overriding limitConfig.minCount with top-level value: %v", minCount)
+			}
+			if maxCount, hasMax := limitData["maxCount"]; hasMax {
+				configMap["maxCount"] = maxCount
+				log.Printf("✅ [upsertMonthlyLimit] Overriding limitConfig.maxCount with top-level value: %v", maxCount)
+			}
+			// Also merge other top-level fields that might have been updated
+			if excludeCalendarRules, ok := limitData["excludeCalendarRules"]; ok {
+				configMap["excludeCalendarRules"] = excludeCalendarRules
+			}
+			if excludeEarlyShiftCalendar, ok := limitData["excludeEarlyShiftCalendar"]; ok {
+				configMap["excludeEarlyShiftCalendar"] = excludeEarlyShiftCalendar
+			}
+			if overrideWeeklyLimits, ok := limitData["overrideWeeklyLimits"]; ok {
+				configMap["overrideWeeklyLimits"] = overrideWeeklyLimits
+			}
+			if countHalfDays, ok := limitData["countHalfDays"]; ok {
+				configMap["countHalfDays"] = countHalfDays
+			}
+			if scope, ok := limitData["scope"]; ok {
+				configMap["scope"] = scope
+			}
+			if targetIds, ok := limitData["targetIds"]; ok {
+				configMap["targetIds"] = targetIds
+			}
+			if distributionRules, ok := limitData["distributionRules"]; ok {
+				configMap["distributionRules"] = distributionRules
+			}
+			upsertData["limit_config"] = configMap
+			log.Printf("✅ [upsertMonthlyLimit] Merged top-level values into limitConfig: %+v", configMap)
+		} else {
+			// limitConfig exists but isn't a map, use it as-is
+			upsertData["limit_config"] = limitConfig
+			log.Printf("⚠️ [upsertMonthlyLimit] limitConfig is not a map, using as-is: %v", limitConfig)
+		}
 	} else {
 		// Build limit_config from top-level fields (React LimitsTab.jsx sends data at top level)
 		constructedConfig := map[string]interface{}{

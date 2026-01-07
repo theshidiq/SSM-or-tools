@@ -714,6 +714,22 @@ export const useWebSocketSettings = (options = {}) => {
    */
   const updateMonthlyLimits = useCallback(
     (limitData) => {
+      // 🔍 DEBUG: Log function entry
+      console.log("🔍 [updateMonthlyLimits] Function called with limit:", {
+        id: limitData?.id,
+        name: limitData?.name,
+        minCount: limitData?.minCount,
+        maxCount: limitData?.maxCount,
+        enabled,
+        wsReadyState: wsRef.current?.readyState,
+        wsReadyStateNames: {
+          0: "CONNECTING",
+          1: "OPEN",
+          2: "CLOSING",
+          3: "CLOSED"
+        }[wsRef.current?.readyState] || "UNDEFINED"
+      });
+
       if (!enabled) {
         const error = new Error("WebSocket disabled");
         console.log(
@@ -729,6 +745,13 @@ export const useWebSocketSettings = (options = {}) => {
           timestamp: new Date().toISOString(),
           clientId: clientIdRef.current,
         };
+
+        console.log("🔍 [updateMonthlyLimits] Sending WebSocket message:", {
+          type: message.type,
+          limitId: limitData?.id,
+          limitName: limitData?.name,
+          payload: JSON.stringify(message.payload)
+        });
 
         wsRef.current.send(JSON.stringify(message));
         console.log(

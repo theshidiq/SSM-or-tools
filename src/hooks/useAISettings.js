@@ -493,6 +493,35 @@ export const useAISettings = () => {
   }, [settings?.ortoolsConfig]);
 
   /**
+   * ✅ NEW: Backup Staff Assignments
+   * Maps backup staff to the groups they cover
+   * Database: [{ id, staffId, groupId, ... }]
+   * AI: [{ id, staffId, groupId, ... }]
+   *
+   * Business Logic:
+   * - When ANY member of a group has day off (×), backup staff MUST work (○)
+   * - When NO member of a group has day off, backup staff gets Unavailable (⊘)
+   * - This is a HARD constraint in OR-Tools
+   */
+  const backupAssignments = useMemo(() => {
+    if (!settings?.backupAssignments) return [];
+
+    console.log('[useAISettings] Raw backupAssignments from settings:', settings.backupAssignments);
+
+    return settings.backupAssignments.map((assignment) => ({
+      id: assignment.id,
+      staffId: assignment.staffId || assignment.staff_id,
+      groupId: assignment.groupId || assignment.group_id,
+      assignmentType: assignment.assignmentType || assignment.assignment_type || 'regular',
+      priorityOrder: assignment.priorityOrder || assignment.priority_order || 1,
+      isActive: assignment.isActive ?? assignment.is_active ?? true,
+      effectiveFrom: assignment.effectiveFrom || assignment.effective_from,
+      effectiveUntil: assignment.effectiveUntil || assignment.effective_until,
+      notes: assignment.notes || '',
+    }));
+  }, [settings?.backupAssignments]);
+
+  /**
    * ✅ NEW: Staff Type Daily Limits Configuration
    * Per-staff-type constraints for daily off/early limits
    * Database: { staffTypeLimits: { '社員': { maxOff: 1, maxEarly: 2, isHard: true }, ... } }
@@ -770,6 +799,7 @@ export const useAISettings = () => {
       mlConfig,
       ortoolsConfig, // ✅ NEW: OR-Tools solver configuration
       staffTypeLimits, // ✅ NEW: Per-staff-type daily limits
+      backupAssignments, // ✅ NEW: Backup staff assignments for coverage
       allConstraints,
       constraintWeights,
     };
@@ -788,6 +818,7 @@ export const useAISettings = () => {
       mlConfig,
       ortoolsConfig, // ✅ NEW: OR-Tools solver configuration
       staffTypeLimits, // ✅ NEW: Per-staff-type daily limits
+      backupAssignments, // ✅ NEW: Backup staff assignments for coverage
 
       // Aggregated data
       allConstraints,
@@ -828,6 +859,7 @@ export const useAISettings = () => {
     mlConfig,
     ortoolsConfig, // ✅ NEW: OR-Tools solver configuration
     staffTypeLimits, // ✅ NEW: Per-staff-type daily limits
+    backupAssignments, // ✅ NEW: Backup staff assignments
     allConstraints,
     constraintWeights,
     isLoading,
