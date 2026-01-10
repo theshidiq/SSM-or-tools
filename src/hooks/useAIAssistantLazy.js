@@ -372,6 +372,17 @@ export const useAIAssistantLazy = (
           console.log("[OR-TOOLS] Using backupAssignments:", JSON.stringify(constraints.backupAssignments, null, 2));
         }
 
+        // 🔍 DEBUG: Log staffGroups with members to verify data flow
+        if (constraints.staffGroups && constraints.staffGroups.length > 0) {
+          console.log("[OR-TOOLS] 🔍 DEBUG - staffGroups being sent:");
+          constraints.staffGroups.forEach((group, i) => {
+            console.log(`  Group ${i+1}: "${group.name}" (id: ${group.id})`);
+            console.log(`    members: ${JSON.stringify(group.members)}`);
+          });
+        } else {
+          console.log("[OR-TOOLS] ⚠️ WARNING - No staffGroups to send!");
+        }
+
         // Log pre-filled cells summary
         if (prefilledCount > 0) {
           const staffWithPrefills = Object.keys(prefilledSchedule).length;

@@ -1,0 +1,21 @@
+{
+  "staffMembers": [
+    {"id": "staff-1", "name": "田中太郎", "status": "社員", "position": "調理"}
+  ],
+  "dateRange": [
+    "2025-01-01", "2025-01-02", "2025-01-03", "2025-01-04", "2025-01-05",
+    "2025-01-06", "2025-01-07", "2025-01-08", "2025-01-09", "2025-01-10"
+  ],
+  "constraints": {
+    "calendarRules": {},
+    "staffGroups": [],
+    "monthlyLimit": {
+      "minCount": 2.3,
+      "maxCount": 3.7,
+      "excludeCalendarRules": true
+    },
+    "staffTypeLimits": {},
+    "prefilledSchedule": {}
+  },
+  "timeout": 10
+}

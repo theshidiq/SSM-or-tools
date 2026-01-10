@@ -53,23 +53,40 @@ export const useAISettings = () => {
   const staffGroups = useMemo(() => {
     if (!settings?.staffGroups) return [];
 
+    // 🔍 DEBUG: Log raw staffGroups from settings
+    console.log('[useAISettings] 🔍 DEBUG - Raw staffGroups from settings:',
+      JSON.stringify(settings.staffGroups.map(g => ({
+        id: g.id,
+        name: g.name,
+        members: g.members,
+        groupConfig: g.groupConfig,
+      })), null, 2));
+
     // Filter out soft-deleted groups (is_active === false)
     const activeGroups = settings.staffGroups.filter(
       (group) => group.is_active !== false
     );
 
-    return activeGroups.map((group) => ({
-      id: group.id,
-      name: group.name,
-      members: group.members || [],
-      description: group.description || "",
-      metadata: {
-        color: group.color || "#3B82F6",
-        createdAt: group.created_at,
-        updatedAt: group.updated_at,
-        isActive: group.is_active !== false,
-      },
-    }));
+    return activeGroups.map((group) => {
+      // 🔍 DEBUG: Check where members come from
+      const members = group.members || group.groupConfig?.members || [];
+      if (!group.members && group.groupConfig?.members) {
+        console.log(`[useAISettings] ⚠️ Group "${group.name}" has members in groupConfig, not at top level`);
+      }
+
+      return {
+        id: group.id,
+        name: group.name,
+        members: members,
+        description: group.description || "",
+        metadata: {
+          color: group.color || "#3B82F6",
+          createdAt: group.created_at,
+          updatedAt: group.updated_at,
+          isActive: group.is_active !== false,
+        },
+      };
+    });
   }, [settings?.staffGroups]);
 
   /**

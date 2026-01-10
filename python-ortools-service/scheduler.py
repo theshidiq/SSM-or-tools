@@ -339,12 +339,30 @@ class ShiftScheduleOptimizer:
             logger.info("[OR-TOOLS] No pre-filled cells provided (generating full schedule)")
             return
 
+        # ═══════════════════════════════════════════════════════════════════════════
+        # CRITICAL FIX: Identify backup staff IDs BEFORE processing pre-filled cells
+        # Backup staff schedules are determined ONLY by coverage constraints,
+        # NOT by pre-filled values. This prevents conflicts with backup coverage HARD constraints.
+        # ═══════════════════════════════════════════════════════════════════════════
+        backup_assignments = self.constraints_config.get('backupAssignments', [])
+        backup_staff_ids_early = set()
+        for assignment in backup_assignments:
+            if assignment.get('isActive', True):
+                staff_id = assignment.get('staffId') or assignment.get('staff_id')
+                if staff_id:
+                    backup_staff_ids_early.add(staff_id)
+
+        if backup_staff_ids_early:
+            logger.info(f"[OR-TOOLS] 🛡️ {len(backup_staff_ids_early)} backup staff will be EXCLUDED from pre-filled constraints")
+            logger.info(f"[OR-TOOLS]    (Backup schedules determined by coverage constraints, not pre-filled values)")
+
         # Create lookup for valid staff IDs
         valid_staff_ids = {s['id'] for s in self.staff_members}
         valid_dates = set(self.date_range)
 
         constraint_count = 0
         skipped_count = 0
+        backup_skipped_count = 0
         unknown_symbols = set()
 
         # Track pre-filled cells for use in solution extraction
@@ -353,6 +371,13 @@ class ShiftScheduleOptimizer:
         logger.info(f"[OR-TOOLS] 🔒 Adding pre-filled constraints (HARD) for {len(prefilled)} staff members...")
 
         for staff_id, dates in prefilled.items():
+            # ═══════════════════════════════════════════════════════════════════════════
+            # CRITICAL: Skip backup staff - their schedule is determined by coverage constraints
+            # ═══════════════════════════════════════════════════════════════════════════
+            if staff_id in backup_staff_ids_early:
+                backup_skipped_count += len(dates) if isinstance(dates, dict) else 0
+                continue
+
             # Skip if staff not in current schedule
             if staff_id not in valid_staff_ids:
                 logger.warning(f"  Skipping unknown staff_id: {staff_id}")
@@ -401,6 +426,9 @@ class ShiftScheduleOptimizer:
 
         if skipped_count > 0:
             logger.info(f"[OR-TOOLS] Skipped {skipped_count} pre-filled cells (invalid staff/date)")
+
+        if backup_skipped_count > 0:
+            logger.info(f"[OR-TOOLS] 🛡️ Skipped {backup_skipped_count} backup staff pre-filled cells (schedule determined by coverage)")
 
         logger.info(f"[OR-TOOLS] 🔒 Added {constraint_count} pre-filled HARD constraints")
         logger.info(f"[OR-TOOLS] Pre-filled cells will be preserved in final schedule")
@@ -508,6 +536,12 @@ class ShiftScheduleOptimizer:
         backup_assignments = self.constraints_config.get('backupAssignments', [])
         staff_groups = self.constraints_config.get('staffGroups', [])
 
+        # Debug: Log received data
+        logger.info(f"[OR-TOOLS] 🔍 DEBUG - backupAssignments received: {backup_assignments}")
+        logger.info(f"[OR-TOOLS] 🔍 DEBUG - staffGroups received: {len(staff_groups)} groups")
+        for g in staff_groups:
+            logger.info(f"[OR-TOOLS] 🔍 DEBUG - Group '{g.get('name', g.get('id'))}': members={g.get('members', [])}")
+
         if not backup_assignments:
             logger.info("[OR-TOOLS] No backup assignments provided")
             return
@@ -519,7 +553,7 @@ class ShiftScheduleOptimizer:
         # Check if backup coverage should be HARD constraint (default: True)
         ortools_config = self.constraints_config.get('ortoolsConfig', {})
         hard_constraints = ortools_config.get('hardConstraints', {})
-        backup_coverage_is_hard = hard_constraints.get('backupCoverage', False)  # DEFAULT: SOFT (allow violations with penalty)
+        backup_coverage_is_hard = hard_constraints.get('backupCoverage', True)  # DEFAULT: HARD (backup coverage guaranteed)
 
         constraint_type = "HARD" if backup_coverage_is_hard else "SOFT"
 
@@ -576,12 +610,22 @@ class ShiftScheduleOptimizer:
             # ═══════════════════════════════════════════════════════════════════════════
             self.backup_staff_ids.add(backup_staff_id)
 
-            # Log filtered members info
+            # Log filtered members info with actual member IDs for debugging
             filtered_count = len(group_members) - len(valid_members)
+            # Get member names for clearer logging
+            member_names = []
+            for mid in valid_members:
+                staff = next((s for s in self.staff_members if s['id'] == mid), None)
+                if staff:
+                    member_names.append(f"{staff.get('name', mid)}")
+                else:
+                    member_names.append(mid)
+
+            logger.info(f"  🛡️ {backup_name} → covers group '{group_name}'")
+            logger.info(f"     Group members ({len(valid_members)}): {', '.join(member_names)}")
+            logger.info(f"     Member IDs: {valid_members}")
             if filtered_count > 0:
-                logger.info(f"  🛡️ {backup_name} → covers group '{group_name}' ({len(valid_members)} active members, {filtered_count} inactive filtered out)")
-            else:
-                logger.info(f"  🛡️ {backup_name} → covers group '{group_name}' ({len(valid_members)} members)")
+                logger.info(f"     ({filtered_count} inactive members filtered out)")
 
             # ═══════════════════════════════════════════════════════════════════════════
             # For each date, create backup coverage constraint
@@ -591,18 +635,29 @@ class ShiftScheduleOptimizer:
                 if date in self.calendar_off_dates:
                     continue
 
-                # Count how many group members have OFF on this date
-                # any_member_off = sum(shifts[member, date, OFF]) >= 1
-                member_off_vars = [
-                    self.shifts[(member_id, date, self.SHIFT_OFF)]
-                    for member_id in valid_members
-                ]
+                # ═══════════════════════════════════════════════════════════════════════════
+                # BACKUP COVERAGE TRIGGER: Only day off (×) triggers coverage
+                # - OFF (×) - day off → backup MUST work
+                # - EARLY (△) - early shift → backup does NOT need to cover (staff still present)
+                # ═══════════════════════════════════════════════════════════════════════════
+                member_off_vars = []
+                for member_id in valid_members:
+                    # Only check for OFF (×), NOT early shift
+                    member_off = self.shifts[(member_id, date, self.SHIFT_OFF)]
+                    member_off_vars.append(member_off)
+
                 any_member_off = self.model.NewBoolVar(f'any_off_{group_id}_{date}')
-                self.model.Add(sum(member_off_vars) >= 1).OnlyEnforceIf(any_member_off)
-                self.model.Add(sum(member_off_vars) == 0).OnlyEnforceIf(any_member_off.Not())
+
+                # ═══════════════════════════════════════════════════════════════════════════
+                # any_member_off = MAX(member_off_vars) means:
+                # - If ANY member has day off (×), any_member_off = 1
+                # - If NO member has day off, any_member_off = 0
+                # Early shift (△) does NOT trigger backup coverage
+                # ═══════════════════════════════════════════════════════════════════════════
+                self.model.AddMaxEquality(any_member_off, member_off_vars)
 
                 # ─────────────────────────────────────────────────────────────────────
-                # CONSTRAINT A: If any group member has OFF → Backup MUST work (○ ONLY)
+                # CONSTRAINT A: If any group member has day off (×) → Backup MUST work (○)
                 # ─────────────────────────────────────────────────────────────────────
                 # CRITICAL FIX: Backup can ONLY have WORK (○), NOT early (△) or late (◇)
                 backup_work_var = self.shifts[(backup_staff_id, date, self.SHIFT_WORK)]
@@ -669,45 +724,35 @@ class ShiftScheduleOptimizer:
                     constraint_count += 3
 
                 # ─────────────────────────────────────────────────────────────────────
-                # CONSTRAINT B: If NO group member has OFF → Backup MUST be OFF (shown as ⊘)
+                # CONSTRAINT B: If NO group member has OFF → Backup SHOULD be OFF (shown as ⊘)
                 # ─────────────────────────────────────────────────────────────────────
-                # CRITICAL FIX: When no coverage needed, backup MUST be OFF (not work/early/late)
-                # This is now HARD constraint to guarantee the ⊘ behavior
+                # IMPORTANT: This is ALWAYS a SOFT constraint to avoid INFEASIBLE solutions
+                # The ⊘ symbol display is handled separately via backup_unavailable_slots tracking
+                # Making this HARD would conflict with daily/monthly limits causing no solution
                 backup_off_var = self.shifts[(backup_staff_id, date, self.SHIFT_OFF)]
 
-                if backup_coverage_is_hard:
-                    # ═══════════════════════════════════════════════════════════════════════════
-                    # HARD CONSTRAINT: When no coverage needed, backup MUST be OFF
-                    # ═══════════════════════════════════════════════════════════════════════════
-                    # If any_member_off == 0 → backup_off must be 1
-                    self.model.Add(backup_off_var == 1).OnlyEnforceIf(any_member_off.Not())
-                    # Also ensure work, early, and late are NOT selected when no coverage
-                    self.model.Add(backup_work_var == 0).OnlyEnforceIf(any_member_off.Not())
-                    self.model.Add(backup_early_var == 0).OnlyEnforceIf(any_member_off.Not())
-                    self.model.Add(backup_late_var == 0).OnlyEnforceIf(any_member_off.Not())
-                    constraint_count += 4
-                else:
-                    # ═══════════════════════════════════════════════════════════════════════════
-                    # SOFT CONSTRAINT: Backup SHOULD be OFF when no coverage needed
-                    # ═══════════════════════════════════════════════════════════════════════════
-                    # unavailable_violation = 1 when: any_member_off=0 AND backup_off=0
-                    unavailable_violation = self.model.NewBoolVar(f'backup_unavailable_violation_{backup_staff_id}_{date}')
+                # ═══════════════════════════════════════════════════════════════════════════
+                # SOFT CONSTRAINT: Backup SHOULD be OFF when no coverage needed
+                # ═══════════════════════════════════════════════════════════════════════════
+                # unavailable_violation = 1 when: any_member_off=0 AND backup_off=0
+                unavailable_violation = self.model.NewBoolVar(f'backup_unavailable_violation_{backup_staff_id}_{date}')
 
-                    # If any_member_off=1, unavailable_violation must be 0 (no constraint)
-                    self.model.Add(unavailable_violation == 0).OnlyEnforceIf(any_member_off)
-                    # If any_member_off=0 AND backup_off=1, unavailable_violation must be 0
-                    self.model.Add(unavailable_violation == 0).OnlyEnforceIf([any_member_off.Not(), backup_off_var])
-                    # If any_member_off=0 AND backup_off=0, unavailable_violation must be 1
-                    self.model.AddBoolOr([any_member_off, backup_off_var, unavailable_violation])
+                # If any_member_off=1, unavailable_violation must be 0 (no constraint)
+                self.model.Add(unavailable_violation == 0).OnlyEnforceIf(any_member_off)
+                # If any_member_off=0 AND backup_off=1, unavailable_violation must be 0
+                self.model.Add(unavailable_violation == 0).OnlyEnforceIf([any_member_off.Not(), backup_off_var])
+                # If any_member_off=0 AND backup_off=0, unavailable_violation must be 1
+                self.model.AddBoolOr([any_member_off, backup_off_var, unavailable_violation])
 
-                    # Add to violation tracking with MUCH lower penalty
-                    # This is intentionally SOFT even when coverage is HARD - unavailability is less critical
-                    self.violation_vars.append((
-                        unavailable_violation,
-                        self.PENALTY_WEIGHTS['backup_coverage'] // 10,
-                        f'Backup {backup_name} working when no coverage needed on {date}'
-                    ))
-                    constraint_count += 1
+                # Higher penalty when backup_coverage_is_hard (users expect ⊘ behavior)
+                # but still SOFT to avoid infeasibility
+                unavailable_penalty = self.PENALTY_WEIGHTS['backup_coverage'] // 2 if backup_coverage_is_hard else self.PENALTY_WEIGHTS['backup_coverage'] // 10
+                self.violation_vars.append((
+                    unavailable_violation,
+                    unavailable_penalty,
+                    f'Backup {backup_name} working when no coverage needed on {date}'
+                ))
+                constraint_count += 1
 
                 # Track this slot for solution extraction (to output ⊘ instead of ×)
                 self.backup_unavailable_slots[(backup_staff_id, date)] = any_member_off
@@ -1997,7 +2042,15 @@ class ShiftScheduleOptimizer:
                             # Check if this is a backup staff slot
                             if (staff_id, date) in backup_unavailable_slots:
                                 any_member_off_var = backup_unavailable_slots[(staff_id, date)]
-                                member_off_value = solver.Value(any_member_off_var)
+
+                                # CRITICAL FIX: Handle both BoolVar and literal values
+                                try:
+                                    member_off_value = solver.Value(any_member_off_var)
+                                except Exception:
+                                    # If any_member_off_var is a literal (not a variable),
+                                    # it means we need to check it differently
+                                    # This happens when the var was optimized to a constant
+                                    member_off_value = 1 if any_member_off_var else 0
 
                                 # LOGIC:
                                 # - If any_member_off == 1 (coverage needed) → show normal shift (○, △, etc.)
@@ -2009,7 +2062,12 @@ class ShiftScheduleOptimizer:
                                     backup_unavailable_count += 1
                                 else:
                                     # Coverage needed OR backup is working → show normal shift symbol
-                                    schedule[staff_id][date] = self.SHIFT_SYMBOLS[shift_type]
+                                    # ✅ FIX: For backup staff WORK shifts, use explicit ○ symbol instead of empty string
+                                    # This prevents UI from converting empty to ⊘ for パート staff
+                                    if shift_type == self.SHIFT_WORK:
+                                        schedule[staff_id][date] = '○'  # Explicit work symbol for backup covering
+                                    else:
+                                        schedule[staff_id][date] = self.SHIFT_SYMBOLS[shift_type]
                             else:
                                 schedule[staff_id][date] = self.SHIFT_SYMBOLS[shift_type]
                             break
@@ -2019,6 +2077,43 @@ class ShiftScheduleOptimizer:
 
         if backup_unavailable_count > 0:
             logger.info(f"[OR-TOOLS] 🛡️ Set {backup_unavailable_count} backup slots to ⊘ (unavailable - no coverage needed)")
+
+        # DEBUG: Log actual solver values for backup coverage analysis
+        if backup_unavailable_slots:
+            logger.info(f"[OR-TOOLS] 🔍 DEBUG - Backup coverage analysis:")
+            # Get backup staff ID
+            backup_staff_id = list(backup_unavailable_slots.keys())[0][0] if backup_unavailable_slots else None
+            if backup_staff_id:
+                # Find 料理長 ID for checking
+                ryoricho_id = '23ad831b-f8b3-415f-82e3-a6723a090dc6'
+
+                # Sample key dates including Sundays
+                sample_dates = ['2025-12-28', '2026-01-04', '2026-01-11', '2026-01-18', '2026-01-25']  # Sundays
+                for date in sample_dates:
+                    if date not in self.date_range:
+                        continue
+
+                    any_member_off_var = backup_unavailable_slots.get((backup_staff_id, date))
+                    backup_shift = schedule.get(backup_staff_id, {}).get(date, '')
+                    ryoricho_shift = schedule.get(ryoricho_id, {}).get(date, '')
+
+                    # Get actual shift type values from solver
+                    try:
+                        ryoricho_early_val = solver.Value(self.shifts[(ryoricho_id, date, self.SHIFT_EARLY)])
+                        ryoricho_off_val = solver.Value(self.shifts[(ryoricho_id, date, self.SHIFT_OFF)])
+                        backup_work_val = solver.Value(self.shifts[(backup_staff_id, date, self.SHIFT_WORK)])
+                        backup_off_val = solver.Value(self.shifts[(backup_staff_id, date, self.SHIFT_OFF)])
+
+                        # Try to get any_member_off value safely
+                        try:
+                            any_off_val = solver.Value(any_member_off_var) if any_member_off_var else 'N/A'
+                        except:
+                            any_off_val = 'LITERAL'
+
+                        logger.info(f"      {date}: 料理長={repr(ryoricho_shift)} (early={ryoricho_early_val}, off={ryoricho_off_val}), "
+                                   f"backup={repr(backup_shift)} (work={backup_work_val}, off={backup_off_val}), any_member_off={any_off_val}")
+                    except Exception as e:
+                        logger.info(f"      {date}: Error getting values: {e}")
 
         # Calculate stats
         total_off = sum(
