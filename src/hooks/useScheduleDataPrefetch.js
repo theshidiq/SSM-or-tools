@@ -21,7 +21,7 @@
  * - Total memory: 47.1 KB (17 periods × 2.77 KB)
  */
 
-import { useState, useEffect, useCallback, useRef, useMemo, startTransition } from "react";
+import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "../utils/supabase";
 import { generateDateRange } from "../utils/dateUtils";
@@ -382,32 +382,31 @@ export const useScheduleDataPrefetch = (
         );
 
         // 🎯 SMART MERGE: Preserve locally-modified cells during sync
-        // Wrapped in startTransition for non-blocking UI updates
-        startTransition(() => {
-          if (localModificationsRef.current.size > 0) {
-            console.log(
-              `🔀 [WEBSOCKET-PREFETCH] Smart merge: preserving ${localModificationsRef.current.size} locally-modified cells`,
-            );
+        // CRITICAL: Always create a NEW object reference for React to detect changes
+        if (localModificationsRef.current.size > 0) {
+          console.log(
+            `🔀 [WEBSOCKET-PREFETCH] Smart merge: preserving ${localModificationsRef.current.size} locally-modified cells`,
+          );
 
-            setSchedule(prev => {
-              const merged = { ...webSocketShifts.scheduleData };
+          setSchedule(prev => {
+            // Deep clone to ensure new references at all levels
+            const merged = JSON.parse(JSON.stringify(webSocketShifts.scheduleData));
 
-              // Preserve AI-modified cells
-              localModificationsRef.current.forEach(cellKey => {
-                const [staffId, dateKey] = cellKey.split('::');
-                if (prev[staffId]?.[dateKey] !== undefined) {
-                  if (!merged[staffId]) merged[staffId] = {};
-                  merged[staffId][dateKey] = prev[staffId][dateKey];
-                }
-              });
-
-              return merged;
+            // Preserve AI-modified cells
+            localModificationsRef.current.forEach(cellKey => {
+              const [staffId, dateKey] = cellKey.split('::');
+              if (prev[staffId]?.[dateKey] !== undefined) {
+                if (!merged[staffId]) merged[staffId] = {};
+                merged[staffId][dateKey] = prev[staffId][dateKey];
+              }
             });
-          } else {
-            // No local modifications - safe to replace
-            setSchedule(webSocketShifts.scheduleData);
-          }
-        });
+
+            return merged;
+          });
+        } else {
+          // No local modifications - deep clone for new reference
+          setSchedule(JSON.parse(JSON.stringify(webSocketShifts.scheduleData)));
+        }
       } else {
         console.warn(
           `⚠️ [WEBSOCKET-PREFETCH] Ignoring WebSocket data for period ${syncedPeriod} (currently viewing period ${currentMonthIndex})`,
@@ -475,31 +474,21 @@ export const useScheduleDataPrefetch = (
 
       // Current period data
       try {
-        // 🤖 AI PROTECTION: Use local schedule state when AI modifications are active
-        // This ensures the UI shows AI-generated data immediately
-        const hasActiveAIModifications = aiSyncInProgressRef.current ||
-          (lastAIModificationRef.current && (Date.now() - lastAIModificationRef.current) < 10000);
-
-        // Prefer local schedule state when:
-        // 1. AI modifications are active, OR
-        // 2. Local schedule has more data than React Query cache (indicates fresh AI update)
+        // 🔄 WEBSOCKET MODE: Always prefer local schedule state for immediate updates
+        // The local `schedule` state is synced from WebSocket and should be authoritative
         const localScheduleSize = Object.keys(schedule).length;
-        const cachedScheduleSize = Object.keys(currentScheduleData?.schedule || {}).length;
-        const preferLocalSchedule = hasActiveAIModifications || (localScheduleSize > 0 && localScheduleSize > cachedScheduleSize);
 
-        const effectiveSchedule = preferLocalSchedule
+        // In WebSocket mode, ALWAYS use local schedule state for real-time updates
+        // Fall back to cache only if local state is empty
+        const effectiveSchedule = localScheduleSize > 0
           ? schedule
-          : (currentScheduleData?.schedule || schedule || {});
-
-        if (hasActiveAIModifications && preferLocalSchedule) {
-          console.log(`🤖 [AI-PROTECTION] getCurrentPeriodData using local schedule state (AI active, ${localScheduleSize} staff)`);
-        }
+          : (currentScheduleData?.schedule || {});
 
         return {
           staff: processedStaffMembers,
           schedule: effectiveSchedule,
           dateRange: dateRange,
-          isFromCache: !preferLocalSchedule,
+          isFromCache: localScheduleSize === 0,
           scheduleId: currentScheduleId,
           webSocketMode: isWebSocketEnabled,
           connectionStatus: webSocketStaff.connectionStatus,

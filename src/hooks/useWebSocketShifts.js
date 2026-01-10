@@ -275,12 +275,14 @@ export const useWebSocketShifts = (
               }
             }
 
-            setScheduleData((prev) => {
-              const updated = { ...prev };
-              if (!updated[broadcastStaffId]) updated[broadcastStaffId] = {};
-              updated[broadcastStaffId][broadcastDateKey] = broadcastShiftValue;
-              return updated;
-            });
+            // MUST create new nested object references for React immutability
+            setScheduleData((prev) => ({
+              ...prev,
+              [broadcastStaffId]: {
+                ...(prev[broadcastStaffId] || {}),
+                [broadcastDateKey]: broadcastShiftValue,
+              },
+            }));
 
             console.log(
               `📡 [WEBSOCKET-SHIFTS] Received broadcast update: ${broadcastStaffId} → ${broadcastDateKey} = "${broadcastShiftValue}"`,
@@ -467,12 +469,15 @@ export const useWebSocketShifts = (
       pendingUpdatesRef.current.set(pendingKey, shiftValue);
       console.log(`📌 [WEBSOCKET-SHIFTS] Added to pending: ${pendingKey} = "${shiftValue}" (total pending: ${pendingUpdatesRef.current.size})`);
 
-      // Optimistic update
+      // Optimistic update - MUST create new nested object references for React
       setScheduleData((prev) => {
-        const updated = { ...prev };
-        if (!updated[staffId]) updated[staffId] = {};
-        updated[staffId][dateKey] = shiftValue;
-        return updated;
+        return {
+          ...prev,
+          [staffId]: {
+            ...(prev[staffId] || {}),
+            [dateKey]: shiftValue,
+          },
+        };
       });
 
       // Send to server
@@ -488,11 +493,12 @@ export const useWebSocketShifts = (
         // Rollback optimistic update if not queued
         pendingUpdatesRef.current.delete(pendingKey);
         setScheduleData((prev) => {
-          const updated = { ...prev };
-          if (updated[staffId]) {
-            delete updated[staffId][dateKey];
-          }
-          return updated;
+          if (!prev[staffId]) return prev;
+          const { [dateKey]: removed, ...restDates } = prev[staffId];
+          return {
+            ...prev,
+            [staffId]: restDates,
+          };
         });
         return Promise.reject(
           new Error("Not connected and offline queue disabled"),

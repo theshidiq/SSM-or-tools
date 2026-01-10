@@ -1408,10 +1408,21 @@ export default memo(ScheduleTable, (prevProps, nextProps) => {
   // Compare critical props that should trigger re-renders
   // Return true if props are equal (skip re-render), false if different (do re-render)
 
-  // Schedule data comparison - most important (reference equality)
+  // Schedule data comparison - check reference first, then content hash
   if (prevProps.schedule !== nextProps.schedule) {
     if (process.env.NODE_ENV === 'development') {
-      console.log('🔄 [MEMO] Re-rendering: schedule changed');
+      console.log('🔄 [MEMO] Re-rendering: schedule reference changed');
+    }
+    return false;
+  }
+
+  // Even if reference is same, check if content changed (for nested updates)
+  // Use JSON.stringify as a simple content hash - only for schedule object
+  const prevScheduleHash = JSON.stringify(prevProps.schedule || {});
+  const nextScheduleHash = JSON.stringify(nextProps.schedule || {});
+  if (prevScheduleHash !== nextScheduleHash) {
+    if (process.env.NODE_ENV === 'development') {
+      console.log('🔄 [MEMO] Re-rendering: schedule content changed');
     }
     return false;
   }
