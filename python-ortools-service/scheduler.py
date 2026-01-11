@@ -479,11 +479,17 @@ class ShiftScheduleOptimizer:
                             has_early_pref = staff_prefs['default'] == True
 
                     if has_early_pref:
-                        # Staff with early shift preference: Force s (early shift)
-                        self.model.Add(self.shifts[(staff_id, date, self.SHIFT_EARLY)] == 1)
-                        logger.info(f"  {staff.get('name', staff_id)}: EARLY on {date} (early pref)")
+                        # Staff with early shift preference: Strongly prefer early shift (SOFT to avoid INFEASIBLE)
+                        # Use high penalty (1000) to make it very likely but not absolutely required
+                        # Track as violation when staff is NOT assigned early shift
+                        not_early = self.model.NewBoolVar(f'not_early_{staff_id}_{date}')
+                        early_var = self.shifts[(staff_id, date, self.SHIFT_EARLY)]
+                        self.model.Add(early_var == 0).OnlyEnforceIf(not_early)
+                        self.model.Add(early_var == 1).OnlyEnforceIf(not_early.Not())
+                        self.violation_vars.append((not_early, 1000, f'early_pref_{staff_id}_{date}'))
+                        logger.info(f"  {staff.get('name', staff_id)}: PREFER EARLY on {date} (early pref, soft penalty=1000)")
                     else:
-                        # All other staff: Force x (off)
+                        # All other staff: Force x (off) - this is HARD as it's a calendar rule
                         self.model.Add(self.shifts[(staff_id, date, self.SHIFT_OFF)] == 1)
 
             elif rule.get('must_work'):
