@@ -109,6 +109,7 @@ const ShiftScheduleEditorPhase3 = ({
     phase: prefetchPhase,
     webSocketEnabled: isPrefetchWebSocketEnabled,
     fallbackMode,
+    shiftWebSocket, // For clearing pending updates
   } = useScheduleDataPrefetch(currentMonthIndex, { enabled: true });
 
   // For backwards compatibility, create aliases
@@ -508,6 +509,11 @@ const ShiftScheduleEditorPhase3 = ({
         message: `期間「${periodToClear.label}」の全てのシフトをクリアしますか？期間テーブルは保持されます。`,
         onConfirm: async () => {
           try {
+            // 🧹 Clear pending optimistic updates FIRST to prevent them from being merged back
+            if (shiftWebSocket?.clearPendingUpdates) {
+              shiftWebSocket.clearPendingUpdates();
+            }
+
             // Create empty schedule object for all staff
             const emptySchedule = {};
             effectiveStaffMembers.forEach((staff) => {
@@ -543,7 +549,7 @@ const ShiftScheduleEditorPhase3 = ({
         onCancel: () => setDeleteModal({ isOpen: false }),
       });
     },
-    [realtimePeriods, effectiveStaffMembers, prefetchDateRange, handleScheduleUpdate, refetchPrefetchData, invalidateAllPeriodsCache],
+    [realtimePeriods, effectiveStaffMembers, prefetchDateRange, handleScheduleUpdate, refetchPrefetchData, invalidateAllPeriodsCache, shiftWebSocket],
   );
 
   const handleShiftUpdate = useCallback(

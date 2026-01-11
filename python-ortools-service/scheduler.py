@@ -1593,10 +1593,18 @@ class ShiftScheduleOptimizer:
         - If BOTH dates are calendar_off_dates, skip (both are forced off anyway)
         - If only ONE date is calendar_off_date, we should still apply some constraints
           to prevent patterns that could form with the adjacent non-calendar date
+
+        Pre-filled cell handling:
+        - If a date has a pre-filled cell that is NOT an off day (×), prevent day-off adjacent to it
+        - This ensures pre-filled working shifts don't get surrounded by day-offs
         """
         logger.info("[OR-TOOLS] Adding adjacent conflict prevention (SOFT) (no xx, sx, xs)...")
 
         constraint_count = 0
+        prefilled_adjacent_count = 0
+
+        # Get pre-filled symbols for checking (set during _add_prefilled_constraints)
+        prefilled_symbols = getattr(self, 'prefilled_symbols', {})
 
         for staff in self.staff_members:
             staff_id = staff['id']
@@ -1608,6 +1616,12 @@ class ShiftScheduleOptimizer:
 
                 date1_is_calendar = date1 in self.calendar_off_dates
                 date2_is_calendar = date2 in self.calendar_off_dates
+
+                # Check if dates are pre-filled (and what type)
+                date1_prefilled_symbol = prefilled_symbols.get((staff_id, date1))
+                date2_prefilled_symbol = prefilled_symbols.get((staff_id, date2))
+                date1_is_prefilled_work = date1_prefilled_symbol is not None and date1_prefilled_symbol != '×'
+                date2_is_prefilled_work = date2_prefilled_symbol is not None and date2_prefilled_symbol != '×'
 
                 # If BOTH dates are calendar must_day_off, skip entirely
                 # (both are forced to off anyway, nothing to constrain)
@@ -1622,6 +1636,37 @@ class ShiftScheduleOptimizer:
                 # If date2 is calendar (forced off), only prevent sx pattern
                 if date2_is_calendar:
                     continue
+
+                # ═══════════════════════════════════════════════════════════════════════════
+                # PRE-FILLED CELL PROTECTION: Prevent day-off adjacent to pre-filled work cells
+                # ═══════════════════════════════════════════════════════════════════════════
+                # If date1 has a pre-filled work cell (not ×), prevent day-off on date2
+                if date1_is_prefilled_work and not date2_is_calendar:
+                    # Add SOFT constraint: date2 should not be off if date1 is pre-filled work
+                    prefilled_off_violation = self.model.NewBoolVar(f'prefilled_off_{staff_id}_{date1}_{date2}')
+                    self.model.Add(self.shifts[(staff_id, date2, self.SHIFT_OFF)] == 0).OnlyEnforceIf(prefilled_off_violation.Not())
+                    self.model.Add(self.shifts[(staff_id, date2, self.SHIFT_OFF)] == 1).OnlyEnforceIf(prefilled_off_violation)
+                    # Use high penalty (500) to strongly discourage day-off next to pre-filled work
+                    self.violation_vars.append((
+                        prefilled_off_violation,
+                        500,  # High penalty for day-off adjacent to pre-filled work
+                        f'Day-off after pre-filled work ({date1_prefilled_symbol}) for {staff_name} on {date2}'
+                    ))
+                    prefilled_adjacent_count += 1
+
+                # If date2 has a pre-filled work cell (not ×), prevent day-off on date1
+                if date2_is_prefilled_work and not date1_is_calendar:
+                    # Add SOFT constraint: date1 should not be off if date2 is pre-filled work
+                    prefilled_off_violation = self.model.NewBoolVar(f'prefilled_off_{staff_id}_{date2}_{date1}')
+                    self.model.Add(self.shifts[(staff_id, date1, self.SHIFT_OFF)] == 0).OnlyEnforceIf(prefilled_off_violation.Not())
+                    self.model.Add(self.shifts[(staff_id, date1, self.SHIFT_OFF)] == 1).OnlyEnforceIf(prefilled_off_violation)
+                    # Use high penalty (500) to strongly discourage day-off next to pre-filled work
+                    self.violation_vars.append((
+                        prefilled_off_violation,
+                        500,  # High penalty for day-off adjacent to pre-filled work
+                        f'Day-off before pre-filled work ({date2_prefilled_symbol}) for {staff_name} on {date1}'
+                    ))
+                    prefilled_adjacent_count += 1
 
                 # Neither date is calendar rule - apply all adjacent constraints as SOFT
                 # SOFT CONSTRAINT for xx (two consecutive off days)
@@ -1662,6 +1707,8 @@ class ShiftScheduleOptimizer:
                 constraint_count += 1
 
         logger.info(f"[OR-TOOLS] Added {constraint_count} adjacent conflict soft constraints")
+        if prefilled_adjacent_count > 0:
+            logger.info(f"[OR-TOOLS] Added {prefilled_adjacent_count} pre-filled work protection constraints (penalty=500)")
 
     def _add_5_day_rest_constraint(self):
         """

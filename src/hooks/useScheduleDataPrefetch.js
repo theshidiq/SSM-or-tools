@@ -1394,6 +1394,7 @@ export const useScheduleDataPrefetch = (
       isConnected: webSocketShifts.isConnected,
       isSyncing: webSocketShifts.isSyncing,
       clientId: webSocketShifts.clientId,
+      clearPendingUpdates: webSocketShifts.clearPendingUpdates, // Clear pending updates when schedule is cleared
     },
   };
 };

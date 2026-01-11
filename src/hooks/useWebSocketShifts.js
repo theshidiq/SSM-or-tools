@@ -600,6 +600,18 @@ export const useWebSocketShifts = (
     }
   }, [isConnected, scheduleId]); // Intentionally omitting syncSchedule
 
+  /**
+   * Clear all pending optimistic updates
+   * Call this when clearing the schedule to prevent old updates from being merged back
+   */
+  const clearPendingUpdates = useCallback(() => {
+    const pendingCount = pendingUpdatesRef.current.size;
+    if (pendingCount > 0) {
+      console.log(`🧹 [WEBSOCKET-SHIFTS] Clearing ${pendingCount} pending optimistic updates`);
+      pendingUpdatesRef.current.clear();
+    }
+  }, []);
+
   return {
     // Connection state
     connectionStatus,
@@ -620,6 +632,7 @@ export const useWebSocketShifts = (
     syncSchedule,
     connect,
     disconnect,
+    clearPendingUpdates, // Clear pending updates when schedule is cleared
 
     // Advanced
     offlineQueueLength: offlineQueueRef.current.length,
