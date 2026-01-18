@@ -289,23 +289,31 @@ export const useAIAssistantLazy = (
           l.limitType === 'off_days' || l.limitType === 'max_off_days'
         ) || monthlyLimitsArray[0];
 
-        // Extract minCount/maxCount from the found limit, with fallbacks
-        // ✅ FIX: Include isHardConstraint to properly enforce monthly limits
+        // Extract minCount/maxCount from the found limit
+        // ✅ FIX: Properly read values from database without incorrect fallbacks
+        // - minCount: null means "no minimum" - DO NOT fall back to maxCount!
+        // - isHardConstraint: Read from constraints.isHardConstraint (useAISettings path)
+        //   OR directly from the limit object (Go server extracts from limit_config)
         const monthlyLimitConfig = offDaysLimit ? {
-          minCount: offDaysLimit.minCount ?? offDaysLimit.maxCount ?? 7,
+          // ✅ FIX: Keep minCount as null when database has null (no minimum constraint)
+          // This gives flexibility for HARD priority rules to work
+          minCount: offDaysLimit.minCount,  // null = no minimum, number = enforce minimum
           maxCount: offDaysLimit.maxCount ?? 8,
           excludeCalendarRules: offDaysLimit.excludeCalendarRules ?? true,
           excludeEarlyShiftCalendar: offDaysLimit.excludeEarlyShiftCalendar ?? true,
           overrideWeeklyLimits: offDaysLimit.overrideWeeklyLimits ?? true,
           countHalfDays: offDaysLimit.countHalfDays ?? true,
-          // ✅ isHardConstraint: When true, OR-Tools will strictly enforce the limit
-          // Priority rules shifts (△ early) count toward this limit
-          isHardConstraint: offDaysLimit.isHard ?? offDaysLimit.isHardConstraint ?? true,
+          // ✅ FIX: Read isHardConstraint from correct path
+          // useAISettings transforms it to constraints.isHardConstraint
+          // But Go server also puts it at top level from is_hard_constraint column
+          isHardConstraint: offDaysLimit.constraints?.isHardConstraint ??
+                           offDaysLimit.isHardConstraint ??
+                           false,  // Default to SOFT to prevent INFEASIBLE conflicts
         } : {
-          minCount: 7,
+          minCount: null,  // No minimum by default
           maxCount: 8,
           excludeCalendarRules: true,
-          isHardConstraint: true, // Default to HARD constraint
+          isHardConstraint: false, // Default to SOFT constraint
         };
 
         console.log(`[OR-TOOLS] Monthly limit config from settings:`, monthlyLimitConfig);
@@ -420,6 +428,7 @@ export const useAIAssistantLazy = (
               name: s.name,
               status: s.status,
               position: s.position,
+              end_period: s.end_period || s.endPeriod || null,  // { year, month, day } or null
             })),
             dateRange,
             constraints,

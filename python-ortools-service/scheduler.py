@@ -93,9 +93,11 @@ class ShiftScheduleOptimizer:
         self.date_range = []
         self.constraints_config = {}
         self.calendar_off_dates = set()  # Track must_day_off dates
+        self.calendar_work_dates = set()  # Track must_work dates (for skipping priority rules)
         self.prefilled_cells = set()  # Track pre-filled cells (staff_id, date) for reference
         self.backup_unavailable_slots = {}  # Track (staff_id, date) -> any_member_off bool var for backup unavailability
         self.backup_staff_ids = set()  # Track backup staff IDs (exempt from monthly limits)
+        self.staff_end_dates = {}  # Track staff end dates: staff_id -> end_date string (YYYY-MM-DD)
 
         # Soft constraint violation tracking (penalty-based like TensorFlow)
         self.violation_vars = []  # List of (violation_var, weight, description)
@@ -111,6 +113,7 @@ class ShiftScheduleOptimizer:
             '5_day_rest': 200,       # Very high for labor law compliance
             'staff_type_limit': 60,  # Medium-high penalty for per-type limits
             'backup_coverage': 500,  # HIGHEST priority for backup staff coverage (critical for operations)
+            'staff_status_shift': 150,  # Very high penalty for 派遣/パート getting early/late shifts
         }
 
         # Active penalty weights (starts as defaults, can be overridden)
@@ -200,6 +203,27 @@ class ShiftScheduleOptimizer:
         self.backup_unavailable_slots = {}  # Reset backup unavailable slots tracking
         self.violation_vars = []  # Reset violation tracking
 
+        # ═══════════════════════════════════════════════════════════════════════════
+        # Parse staff end_period dates for employment termination handling
+        # Staff with end_period within the schedule period will:
+        # 1. Have no shifts assigned after end_period (cells left empty)
+        # 2. Have prorated monthly limits based on actual working days
+        # ═══════════════════════════════════════════════════════════════════════════
+        self.staff_end_dates = {}
+        for staff in staff_members:
+            end_period = staff.get('end_period') or staff.get('endPeriod')
+            if end_period and isinstance(end_period, dict):
+                year = end_period.get('year')
+                month = end_period.get('month')
+                day = end_period.get('day', 1)  # Default to 1st if no day specified
+                if year and month:
+                    end_date_str = f"{year}-{int(month):02d}-{int(day):02d}"
+                    self.staff_end_dates[staff['id']] = end_date_str
+                    logger.info(f"  📅 Staff {staff.get('name', staff['id'])}: end_period={end_date_str}")
+
+        if self.staff_end_dates:
+            logger.info(f"[OR-TOOLS] 📅 {len(self.staff_end_dates)} staff with end_period dates parsed")
+
         # Load custom penalty weights and solver settings if provided
         ortools_config = constraints.get('ortoolsConfig', {})
         custom_weights = ortools_config.get('penaltyWeights', {})
@@ -237,6 +261,7 @@ class ShiftScheduleOptimizer:
             self._add_prefilled_constraints()                # PRE-PHASE: Lock user-edited cells as HARD constraints
             self._add_calendar_rules()                       # PRE-PHASE + Phase 3 Integration
             self._add_backup_staff_constraints()             # Backup staff can never have off days
+            self._add_staff_status_shift_restrictions()      # 派遣/パート can only have work/off shifts
             self._add_staff_group_constraints()              # PHASE 2
             self._add_daily_limits()                         # BALANCE phase
             self._add_staff_type_daily_limits()             # Per-staff-type daily limits
@@ -268,6 +293,22 @@ class ShiftScheduleOptimizer:
                 'schedule': {}
             }
 
+    def _staff_works_on_date(self, staff_id: str, date: str) -> bool:
+        """
+        Check if staff is employed on this date (before or on end_period).
+
+        Args:
+            staff_id: The staff member's ID
+            date: Date string in YYYY-MM-DD format
+
+        Returns:
+            True if staff is employed on this date, False if after end_period
+        """
+        end_date = self.staff_end_dates.get(staff_id)
+        if end_date and date > end_date:
+            return False
+        return True
+
     def _create_variables(self):
         """
         Create boolean decision variables: shifts[staff_id, date, shift_type]
@@ -275,29 +316,48 @@ class ShiftScheduleOptimizer:
 
         Total variables: staff_count x days x 4 shift_types
         Example: 10 staff x 60 days x 4 = 2,400 variables
+
+        IMPORTANT: Skip creating variables for dates after staff's end_period.
+        This leaves those cells empty in the final schedule.
         """
-        total_vars = len(self.staff_members) * len(self.date_range) * 4
-        logger.info(f"[OR-TOOLS] Creating {total_vars} decision variables...")
+        skipped_count = 0
+        created_count = 0
 
         for staff in self.staff_members:
+            staff_id = staff['id']
             for date in self.date_range:
+                # Skip dates after staff's end_period (leave cells empty)
+                if not self._staff_works_on_date(staff_id, date):
+                    skipped_count += 4  # Would have created 4 variables
+                    continue
+
                 for shift_type in range(4):
-                    var_name = f"shift_{staff['id']}_{date}_{shift_type}"
-                    self.shifts[(staff['id'], date, shift_type)] = \
+                    var_name = f"shift_{staff_id}_{date}_{shift_type}"
+                    self.shifts[(staff_id, date, shift_type)] = \
                         self.model.NewBoolVar(var_name)
+                    created_count += 1
+
+        logger.info(f"[OR-TOOLS] Created {created_count} decision variables (skipped {skipped_count} for staff past end_period)")
 
     def _add_basic_constraints(self):
         """
         Basic constraint: Each staff has exactly one shift type per day.
         This is fundamental - without it, staff could have multiple shifts.
+
+        IMPORTANT: Skip dates after staff's end_period (no variables exist).
         """
         logger.info("[OR-TOOLS] Adding basic constraints...")
 
         for staff in self.staff_members:
+            staff_id = staff['id']
             for date in self.date_range:
+                # Skip dates after staff's end_period (no variables exist)
+                if not self._staff_works_on_date(staff_id, date):
+                    continue
+
                 # Exactly one shift type must be selected per day
                 self.model.AddExactlyOne([
-                    self.shifts[(staff['id'], date, shift)]
+                    self.shifts[(staff_id, date, shift)]
                     for shift in range(4)
                 ])
 
@@ -493,6 +553,8 @@ class ShiftScheduleOptimizer:
                         self.model.Add(self.shifts[(staff_id, date, self.SHIFT_OFF)] == 1)
 
             elif rule.get('must_work'):
+                # Track this date as a must_work date (for skipping priority rules)
+                self.calendar_work_dates.add(date)
                 # All staff must work normal shift
                 for staff in self.staff_members:
                     self.model.Add(self.shifts[(staff['id'], date, self.SHIFT_WORK)] == 1)
@@ -641,6 +703,10 @@ class ShiftScheduleOptimizer:
                 if date in self.calendar_off_dates:
                     continue
 
+                # Skip if backup staff not working on this date (after their end_period)
+                if not self._staff_works_on_date(backup_staff_id, date):
+                    continue
+
                 # ═══════════════════════════════════════════════════════════════════════════
                 # BACKUP COVERAGE TRIGGER: Only day off (×) triggers coverage
                 # - OFF (×) - day off → backup MUST work
@@ -648,6 +714,9 @@ class ShiftScheduleOptimizer:
                 # ═══════════════════════════════════════════════════════════════════════════
                 member_off_vars = []
                 for member_id in valid_members:
+                    # Skip members not working on this date (after their end_period)
+                    if not self._staff_works_on_date(member_id, date):
+                        continue
                     # Only check for OFF (×), NOT early shift
                     member_off = self.shifts[(member_id, date, self.SHIFT_OFF)]
                     member_off_vars.append(member_off)
@@ -768,6 +837,87 @@ class ShiftScheduleOptimizer:
         else:
             logger.info(f"[OR-TOOLS] 🛡️ Added {constraint_count} backup coverage {constraint_type} constraints")
 
+    def _add_staff_status_shift_restrictions(self):
+        """
+        STAFF STATUS SHIFT RESTRICTIONS: Limit shift types based on staff status.
+
+        Business Rule:
+        - 派遣 (Dispatch) staff: Can ONLY have normal work (○/empty) or day off (×)
+        - パート (Part-time) staff: Can ONLY have normal work (○/empty) or day off (×)
+        - 社員 (Regular) staff: Can have all shift types (no restriction)
+
+        This is a SOFT constraint with VERY HIGH penalty (150) - these staff types
+        should normally NEVER be assigned early (△) or late (◇) shifts, but the
+        solver can violate this if other constraints make it necessary (prevents INFEASIBLE).
+
+        Configuration (optional, via staffStatusShiftRestrictions):
+        {
+            '派遣': {'allowedShifts': ['work', 'off']},  # Forbids early, late
+            'パート': {'allowedShifts': ['work', 'off']},  # Forbids early, late
+        }
+
+        If not configured, uses default restrictions for 派遣 and パート.
+        """
+        # Get configuration or use defaults
+        restrictions_config = self.constraints_config.get('staffStatusShiftRestrictions', {})
+
+        # Default restrictions: 派遣 and パート can only have work/off
+        default_restrictions = {
+            '派遣': {'allowedShifts': ['work', 'off'], 'forbiddenShifts': ['early', 'late']},
+            'パート': {'allowedShifts': ['work', 'off'], 'forbiddenShifts': ['early', 'late']},
+        }
+
+        # Merge with configured restrictions (config overrides defaults)
+        effective_restrictions = {**default_restrictions, **restrictions_config}
+
+        # Check if restrictions are disabled
+        if self.constraints_config.get('disableStaffStatusShiftRestrictions', False):
+            logger.info("[OR-TOOLS] Staff status shift restrictions DISABLED by configuration")
+            return
+
+        logger.info(f"[OR-TOOLS] Adding staff status shift restrictions (SOFT) for {len(effective_restrictions)} status types...")
+
+        constraint_count = 0
+        staff_affected = 0
+        penalty_weight = self.PENALTY_WEIGHTS.get('staff_status_shift', 150)
+
+        for staff in self.staff_members:
+            staff_id = staff['id']
+            staff_name = staff.get('name', staff_id)
+            staff_status = staff.get('status', '社員')  # Default to 社員 if not set
+
+            # Skip if no restriction for this status
+            if staff_status not in effective_restrictions:
+                continue
+
+            restriction = effective_restrictions[staff_status]
+            forbidden_shifts = restriction.get('forbiddenShifts', [])
+
+            if not forbidden_shifts:
+                continue
+
+            staff_affected += 1
+
+            # Apply restriction for each date
+            for date in self.date_range:
+                for forbidden_shift_name in forbidden_shifts:
+                    # Map shift name to constant
+                    shift_type = self._parse_shift_type(forbidden_shift_name)
+
+                    # SOFT constraint: Create a violation variable for this forbidden shift
+                    # If shift_var == 1 (assigned), then violation == 1 (penalty applies)
+                    shift_var = self.shifts[(staff_id, date, shift_type)]
+
+                    # The shift_var itself is the violation indicator
+                    # If shift is assigned (shift_var == 1), we incur penalty
+                    shift_type_name = 'early' if shift_type == self.SHIFT_EARLY else 'late'
+                    description = f"Forbidden {shift_type_name} shift for {staff_name} ({staff_status}) on {date}"
+
+                    self.violation_vars.append((shift_var, penalty_weight, description))
+                    constraint_count += 1
+
+        logger.info(f"[OR-TOOLS] ⚠️ Added {constraint_count} staff status shift restrictions SOFT ({staff_affected} staff affected, penalty={penalty_weight})")
+
     def _add_staff_group_constraints(self):
         """
         PHASE 2: Staff group constraints.
@@ -871,17 +1021,21 @@ class ShiftScheduleOptimizer:
         - HARD constraint: Strictly enforced, no violations allowed (may fail if unsatisfiable)
         - SOFT constraint: Violations allowed with penalty (always finds a solution)
 
-        NEW: Can be disabled via 'enabled' flag when using per-staff-type limits instead.
-        AUTO-DISABLE: When staffTypeLimits are configured, global daily limits are automatically skipped.
+        Can be disabled via 'enabled' flag in dailyLimitsRaw.
+
+        NOTE: Daily limits and staff type limits serve DIFFERENT purposes and work together:
+        - Daily limits: min/max TOTAL staff off per day (across all types)
+        - Staff type limits: max of SPECIFIC TYPE off per day (e.g., max 1 社員)
         """
         daily_limits = self.constraints_config.get('dailyLimitsRaw', {})
         staff_type_limits = self.constraints_config.get('staffTypeLimits', {})
 
-        # AUTO-DISABLE: Skip global daily limits when staff type limits are configured
-        # This prevents conflicts between global "min 2 off per day" and per-type "max 1 社員 off per day"
+        # NOTE: Daily limits and staff type limits serve DIFFERENT purposes:
+        # - Daily limits: min/max TOTAL staff off per day (across all types)
+        # - Staff type limits: max of SPECIFIC TYPE off per day (e.g., max 1 社員)
+        # Both constraints should work together!
         if staff_type_limits and len(staff_type_limits) > 0:
-            logger.info("[OR-TOOLS] Daily limits AUTO-DISABLED (staffTypeLimits configured - using per-type limits instead)")
-            return
+            logger.info("[OR-TOOLS] Both daily limits AND staff type limits are active")
 
         # Check if daily limits are explicitly disabled via 'enabled' flag
         is_enabled = daily_limits.get('enabled', True)
@@ -930,9 +1084,11 @@ class ShiftScheduleOptimizer:
                     continue
 
             # Count off days (x) on this date across non-backup staff only
+            # IMPORTANT: Only include staff who work on this date (before end_period)
             off_count = sum([
                 self.shifts[(staff['id'], date, self.SHIFT_OFF)]
                 for staff in non_backup_staff
+                if self._staff_works_on_date(staff['id'], date)
             ])
 
             if daily_limit_is_hard:
@@ -1138,8 +1294,10 @@ class ShiftScheduleOptimizer:
                 # ─────────────────────────────────────────────────────────────────────
 
                 # Get shift variables for this staff type on this date
-                off_vars = [self.shifts[(staff['id'], date, self.SHIFT_OFF)] for staff in type_staff]
-                early_vars = [self.shifts[(staff['id'], date, self.SHIFT_EARLY)] for staff in type_staff]
+                # IMPORTANT: Only include staff who work on this date (before end_period)
+                active_type_staff = [s for s in type_staff if self._staff_works_on_date(s['id'], date)]
+                off_vars = [self.shifts[(staff['id'], date, self.SHIFT_OFF)] for staff in active_type_staff]
+                early_vars = [self.shifts[(staff['id'], date, self.SHIFT_EARLY)] for staff in active_type_staff]
 
                 # Create scaled sum: off × 2 + early × 1
                 # off counts as 2 (= 1.0 in original scale), early counts as 1 (= 0.5)
@@ -1222,9 +1380,19 @@ class ShiftScheduleOptimizer:
         }
 
         total_consumption = 0
+        processed_rule_ids = set()  # Track processed rule IDs to avoid duplicates
 
         for rule in priority_rules:
             rule_name = rule.get('name', 'Unnamed')
+            rule_id = rule.get('id', '')
+
+            # Skip duplicate rules (same ID already processed)
+            if rule_id and rule_id in processed_rule_ids:
+                logger.info(f"[PRIORITY-PRE] Skipping duplicate rule '{rule_name}' (id={rule_id})")
+                continue
+            if rule_id:
+                processed_rule_ids.add(rule_id)
+
             logger.info(f"[PRIORITY-PRE] Processing rule '{rule_name}': keys={list(rule.keys())}")
 
             # Only process HARD constraints that force shifts
@@ -1469,6 +1637,28 @@ class ShiftScheduleOptimizer:
                 continue
 
             # ═══════════════════════════════════════════════════════════════════════════
+            # PRORATE MONTHLY LIMITS FOR STAFF WITH end_period
+            # Staff who leave mid-period have fewer working days, so limits should be
+            # proportionally reduced to avoid INFEASIBLE scenarios.
+            # ═══════════════════════════════════════════════════════════════════════════
+            end_date = self.staff_end_dates.get(staff_id)
+            if end_date:
+                # Calculate actual working days (dates before or on end_period)
+                actual_working_days = sum(1 for d in self.date_range if d <= end_date)
+                prorate_ratio = actual_working_days / len(self.date_range) if len(self.date_range) > 0 else 1
+
+                # Prorate the limits (scaled values)
+                staff_min_scaled = max(0, int(min_scaled * prorate_ratio))
+                staff_max_scaled = max(2, int(max_scaled * prorate_ratio))  # At least 1 off day (scaled=2)
+
+                logger.info(f"  📅 {staff_name}: end_period={end_date}, works {actual_working_days}/{len(self.date_range)} days")
+                logger.info(f"      → Prorated limits: min={staff_min_scaled/2:.1f}, max={staff_max_scaled/2:.1f} (ratio={prorate_ratio:.2f})")
+            else:
+                # No end_period - use original limits
+                staff_min_scaled = min_scaled
+                staff_max_scaled = max_scaled
+
+            # ═══════════════════════════════════════════════════════════════════════════
             # Get priority rule off-equivalent consumption for this staff (FOR LOGGING ONLY)
             # Priority rules with HARD constraints force shifts that count toward limits
             #
@@ -1487,33 +1677,35 @@ class ShiftScheduleOptimizer:
             if priority_consumed > 0:
                 # Log the priority consumption for visibility (but don't adjust limits)
                 logger.info(f"  📋 {staff_name}: priority rules force {priority_consumed/2:.1f} off-equiv (will count in combined total)")
-                logger.info(f"      → Monthly limit: max={max_scaled/2:.1f}, min={min_scaled/2:.1f} (includes priority shifts)")
+                logger.info(f"      → Monthly limit: max={staff_max_scaled/2:.1f}, min={staff_min_scaled/2:.1f} (includes priority shifts)")
 
             if exclude_calendar:
                 # Count combined off-equivalent for flexible dates (excluding calendar)
                 # off × 2 + early × 1
-                off_vars = [self.shifts[(staff_id, date, self.SHIFT_OFF)] for date in flexible_dates]
-                early_vars = [self.shifts[(staff_id, date, self.SHIFT_EARLY)] for date in flexible_dates]
+                # IMPORTANT: Only include dates where staff is employed (before end_period)
+                staff_flexible_dates = [d for d in flexible_dates if self._staff_works_on_date(staff_id, d)]
+                off_vars = [self.shifts[(staff_id, date, self.SHIFT_OFF)] for date in staff_flexible_dates]
+                early_vars = [self.shifts[(staff_id, date, self.SHIFT_EARLY)] for date in staff_flexible_dates]
 
                 # Create scaled sum: off × 2 + early × 1
                 combined_scaled = sum(var * 2 for var in off_vars) + sum(var * 1 for var in early_vars)
 
-                # Upper bound for violation variables (scaled)
-                max_possible = num_flexible_days * 3
+                # Upper bound for violation variables (scaled) - based on staff's working days
+                max_possible = len(staff_flexible_dates) * 3
 
                 if monthly_limit_is_hard:
-                    # HARD CONSTRAINT: Strictly enforce ORIGINAL limits
+                    # HARD CONSTRAINT: Strictly enforce PRORATED limits
                     # Priority-forced shifts count in combined_scaled automatically
-                    if min_scaled > 0:
-                        self.model.Add(combined_scaled >= min_scaled)
+                    if staff_min_scaled > 0:
+                        self.model.Add(combined_scaled >= staff_min_scaled)
                         constraint_count += 1
-                    self.model.Add(combined_scaled <= max_scaled)
+                    self.model.Add(combined_scaled <= staff_max_scaled)
                     constraint_count += 1
                 else:
-                    # SOFT CONSTRAINT for min: Penalize if below ORIGINAL minimum
-                    if min_scaled > 0:
+                    # SOFT CONSTRAINT for min: Penalize if below PRORATED minimum
+                    if staff_min_scaled > 0:
                         under_min_var = self.model.NewIntVar(0, max_possible, f'monthly_under_min_{staff_id}')
-                        self.model.Add(under_min_var >= min_scaled - combined_scaled)
+                        self.model.Add(under_min_var >= staff_min_scaled - combined_scaled)
                         self.model.Add(under_min_var >= 0)
                         self.violation_vars.append((
                             under_min_var,
@@ -1522,9 +1714,9 @@ class ShiftScheduleOptimizer:
                         ))
                         constraint_count += 1
 
-                    # SOFT CONSTRAINT for max: Penalize if above ORIGINAL maximum
+                    # SOFT CONSTRAINT for max: Penalize if above PRORATED maximum
                     over_max_var = self.model.NewIntVar(0, max_possible, f'monthly_over_max_{staff_id}')
-                    self.model.Add(over_max_var >= combined_scaled - max_scaled)
+                    self.model.Add(over_max_var >= combined_scaled - staff_max_scaled)
                     self.model.Add(over_max_var >= 0)
                     self.violation_vars.append((
                         over_max_var,
@@ -1535,25 +1727,27 @@ class ShiftScheduleOptimizer:
             else:
                 # Count combined off-equivalent for all dates
                 # off × 2 + early × 1
-                off_vars = [self.shifts[(staff_id, date, self.SHIFT_OFF)] for date in self.date_range]
-                early_vars = [self.shifts[(staff_id, date, self.SHIFT_EARLY)] for date in self.date_range]
+                # IMPORTANT: Only include dates where staff is employed (before end_period)
+                staff_all_dates = [d for d in self.date_range if self._staff_works_on_date(staff_id, d)]
+                off_vars = [self.shifts[(staff_id, date, self.SHIFT_OFF)] for date in staff_all_dates]
+                early_vars = [self.shifts[(staff_id, date, self.SHIFT_EARLY)] for date in staff_all_dates]
 
                 combined_scaled = sum(var * 2 for var in off_vars) + sum(var * 1 for var in early_vars)
-                max_possible = total_days * 3
+                max_possible = len(staff_all_dates) * 3
 
                 if monthly_limit_is_hard:
-                    # HARD CONSTRAINT: Strictly enforce ORIGINAL limits
+                    # HARD CONSTRAINT: Strictly enforce PRORATED limits
                     # Priority-forced shifts count in combined_scaled automatically
-                    if min_scaled > 0:
-                        self.model.Add(combined_scaled >= min_scaled)
+                    if staff_min_scaled > 0:
+                        self.model.Add(combined_scaled >= staff_min_scaled)
                         constraint_count += 1
-                    self.model.Add(combined_scaled <= max_scaled)
+                    self.model.Add(combined_scaled <= staff_max_scaled)
                     constraint_count += 1
                 else:
-                    # SOFT CONSTRAINT for min: Penalize if below ORIGINAL minimum
-                    if min_scaled > 0:
+                    # SOFT CONSTRAINT for min: Penalize if below PRORATED minimum
+                    if staff_min_scaled > 0:
                         under_min_var = self.model.NewIntVar(0, max_possible, f'monthly_under_min_{staff_id}')
-                        self.model.Add(under_min_var >= min_scaled - combined_scaled)
+                        self.model.Add(under_min_var >= staff_min_scaled - combined_scaled)
                         self.model.Add(under_min_var >= 0)
                         self.violation_vars.append((
                             under_min_var,
@@ -1562,9 +1756,9 @@ class ShiftScheduleOptimizer:
                         ))
                         constraint_count += 1
 
-                    # SOFT CONSTRAINT for max: Penalize if above ORIGINAL maximum
+                    # SOFT CONSTRAINT for max: Penalize if above PRORATED maximum
                     over_max_var = self.model.NewIntVar(0, max_possible, f'monthly_over_max_{staff_id}')
-                    self.model.Add(over_max_var >= combined_scaled - max_scaled)
+                    self.model.Add(over_max_var >= combined_scaled - staff_max_scaled)
                     self.model.Add(over_max_var >= 0)
                     self.violation_vars.append((
                         over_max_var,
@@ -1748,11 +1942,19 @@ class ShiftScheduleOptimizer:
             for i in range(len(self.date_range) - 5):
                 window = self.date_range[i:i+6]
 
+                # Filter window to only include dates where staff works (before end_period)
+                active_window = [d for d in window if self._staff_works_on_date(staff_id, d)]
+
+                # Skip if window has no active dates (staff doesn't work in this period)
+                # Also skip if window is less than 6 days (staff ends mid-window)
+                if len(active_window) < 6:
+                    continue
+
                 # At least 1 OFF day (x) in the 6-day window
                 # Only OFF counts as true rest, not early shift
                 off_days = sum([
                     self.shifts[(staff_id, date, self.SHIFT_OFF)]
-                    for date in window
+                    for date in active_window
                 ])
 
                 if five_day_rest_is_hard:
@@ -1840,8 +2042,19 @@ class ShiftScheduleOptimizer:
         valid_staff_ids = {s['id'] for s in self.staff_members}
         rules_applied = 0
         rules_skipped = 0
+        processed_rule_ids = set()  # Track processed rule IDs to avoid duplicates
 
         for rule in priority_rules:
+            rule_id = rule.get('id', '')
+
+            # Skip duplicate rules (same ID already processed)
+            if rule_id and rule_id in processed_rule_ids:
+                logger.info(f"  Skipping duplicate rule '{rule.get('name', 'Unnamed')}' (id={rule_id})")
+                rules_skipped += 1
+                continue
+            if rule_id:
+                processed_rule_ids.add(rule_id)
+
             if not rule.get('isActive', True):
                 rules_skipped += 1
                 continue  # Skip inactive rules
@@ -1913,8 +2126,13 @@ class ShiftScheduleOptimizer:
             # Apply rule to ALL target staff members
             for target_staff_id in target_staff_ids:
                 for date in self.date_range:
-                    # Skip calendar override dates
-                    if date in self.calendar_off_dates:
+                    # Skip calendar override dates (must_day_off and must_work)
+                    # Calendar rules take precedence over priority rules
+                    if date in self.calendar_off_dates or date in self.calendar_work_dates:
+                        continue
+
+                    # Skip dates after staff's end_period (no variables exist)
+                    if not self._staff_works_on_date(target_staff_id, date):
                         continue
 
                     day_name = self._get_day_of_week(date)
