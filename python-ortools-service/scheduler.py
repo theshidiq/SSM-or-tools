@@ -267,6 +267,7 @@ class ShiftScheduleOptimizer:
             self._add_staff_type_daily_limits()             # Per-staff-type daily limits
             self._compute_priority_rule_off_equivalent()    # Pre-compute priority rule consumption (MUST be before monthly limits)
             self._add_monthly_limits()                       # Phase 6.6 monthly MIN/MAX (uses priority rule consumption)
+            self._add_monthly_early_shift_limits()           # Max 3 early shifts per month for 社員
             self._add_adjacent_conflict_prevention()         # No xx, sx, xs
             self._add_5_day_rest_constraint()               # PHASE 4
             self._add_priority_rules()                       # PHASE 1 (soft constraints)
@@ -560,6 +561,44 @@ class ShiftScheduleOptimizer:
                     self.model.Add(self.shifts[(staff['id'], date, self.SHIFT_WORK)] == 1)
                 logger.info(f"  All staff: WORK on {date} (must_work)")
 
+    def _fetch_japanese_holidays(self) -> set:
+        """
+        Fetch Japanese national holidays from holidays-jp.github.io API.
+        Returns a set of date strings (YYYY-MM-DD) that are holidays.
+
+        Caches result to avoid repeated API calls during same session.
+        """
+        if hasattr(self, '_japanese_holidays_cache'):
+            return self._japanese_holidays_cache
+
+        import requests
+        try:
+            response = requests.get(
+                'https://holidays-jp.github.io/api/v1/date.json',
+                timeout=5
+            )
+            if response.status_code == 200:
+                holidays_data = response.json()
+                self._japanese_holidays_cache = set(holidays_data.keys())
+                self._japanese_holidays_names = holidays_data  # Store names for logging
+                logger.info(f"[OR-TOOLS] Fetched {len(self._japanese_holidays_cache)} Japanese holidays from API")
+
+                # Log holidays in date range for debugging
+                holidays_in_range = [d for d in self.date_range if d in self._japanese_holidays_cache]
+                if holidays_in_range:
+                    logger.info(f"[OR-TOOLS] Holidays in schedule period ({len(holidays_in_range)}):")
+                    for h in holidays_in_range:
+                        logger.info(f"    {h}: {holidays_data.get(h, 'Unknown')}")
+
+                return self._japanese_holidays_cache
+        except Exception as e:
+            logger.warning(f"[OR-TOOLS] Failed to fetch Japanese holidays: {e}")
+
+        # Return empty set on failure (fail gracefully)
+        self._japanese_holidays_cache = set()
+        self._japanese_holidays_names = {}
+        return self._japanese_holidays_cache
+
     def _add_backup_staff_constraints(self):
         """
         Backup staff coverage constraints using database backup assignments.
@@ -630,6 +669,9 @@ class ShiftScheduleOptimizer:
         group_by_id = {g['id']: g for g in staff_groups}
 
         logger.info(f"[OR-TOOLS] 🛡️ Processing {len(backup_assignments)} backup assignments ({constraint_type} constraints)...")
+
+        # Fetch Japanese holidays for パート unavailability
+        japanese_holidays = self._fetch_japanese_holidays()
 
         constraint_count = 0
         skipped_count = 0
@@ -799,38 +841,42 @@ class ShiftScheduleOptimizer:
                     constraint_count += 3
 
                 # ─────────────────────────────────────────────────────────────────────
-                # CONSTRAINT B: If NO group member has OFF → Backup SHOULD be OFF (shown as ⊘)
+                # CONSTRAINT B: Backup availability based on Japanese holidays
                 # ─────────────────────────────────────────────────────────────────────
-                # IMPORTANT: This is ALWAYS a SOFT constraint to avoid INFEASIBLE solutions
-                # The ⊘ symbol display is handled separately via backup_unavailable_slots tracking
-                # Making this HARD would conflict with daily/monthly limits causing no solution
+                # NEW LOGIC (2024-01 update):
+                # - Default: Backup WORKS (○) when no coverage needed (inverted from before)
+                # - Holiday: Backup is UNAVAILABLE (⊘) on Japanese national holidays (HARD)
+                # - Coverage: Backup WORKS (○) when group member has day off (handled in A)
+                # - Holiday + Coverage conflict: Holiday takes precedence → UNAVAILABLE
                 backup_off_var = self.shifts[(backup_staff_id, date, self.SHIFT_OFF)]
 
-                # ═══════════════════════════════════════════════════════════════════════════
-                # SOFT CONSTRAINT: Backup SHOULD be OFF when no coverage needed
-                # ═══════════════════════════════════════════════════════════════════════════
-                # unavailable_violation = 1 when: any_member_off=0 AND backup_off=0
-                unavailable_violation = self.model.NewBoolVar(f'backup_unavailable_violation_{backup_staff_id}_{date}')
+                # Check if this date is a Japanese holiday
+                is_holiday = date in japanese_holidays
 
-                # If any_member_off=1, unavailable_violation must be 0 (no constraint)
-                self.model.Add(unavailable_violation == 0).OnlyEnforceIf(any_member_off)
-                # If any_member_off=0 AND backup_off=1, unavailable_violation must be 0
-                self.model.Add(unavailable_violation == 0).OnlyEnforceIf([any_member_off.Not(), backup_off_var])
-                # If any_member_off=0 AND backup_off=0, unavailable_violation must be 1
-                self.model.AddBoolOr([any_member_off, backup_off_var, unavailable_violation])
+                if is_holiday:
+                    # ═══════════════════════════════════════════════════════════════════════════
+                    # HARD CONSTRAINT: On Japanese holidays, backup MUST be OFF (unavailable)
+                    # This takes precedence over coverage - group member day off will be moved
+                    # ═══════════════════════════════════════════════════════════════════════════
+                    self.model.Add(backup_off_var == 1)
+                    constraint_count += 1
 
-                # Higher penalty when backup_coverage_is_hard (users expect ⊘ behavior)
-                # but still SOFT to avoid infeasibility
-                unavailable_penalty = self.PENALTY_WEIGHTS['backup_coverage'] // 2 if backup_coverage_is_hard else self.PENALTY_WEIGHTS['backup_coverage'] // 10
-                self.violation_vars.append((
-                    unavailable_violation,
-                    unavailable_penalty,
-                    f'Backup {backup_name} working when no coverage needed on {date}'
-                ))
-                constraint_count += 1
+                    # Get holiday name for logging
+                    holiday_name = getattr(self, '_japanese_holidays_names', {}).get(date, 'Holiday')
+                    logger.debug(f"    {date} ({holiday_name}): backup MUST be off (holiday)")
 
-                # Track this slot for solution extraction (to output ⊘ instead of ×)
-                self.backup_unavailable_slots[(backup_staff_id, date)] = any_member_off
+                    # Track as unavailable for solution extraction (to output ⊘)
+                    # Store a tuple (type, any_member_off) to handle both holiday and coverage cases
+                    self.backup_unavailable_slots[(backup_staff_id, date)] = ('holiday', None)
+                else:
+                    # ═══════════════════════════════════════════════════════════════════════════
+                    # NON-HOLIDAY: Backup WORKS by default
+                    # No constraint needed - backup will naturally get WORK assignment
+                    # Only track unavailable status based on coverage (any_member_off)
+                    # ═══════════════════════════════════════════════════════════════════════════
+                    # Track for solution extraction (any_member_off determines if coverage needed)
+                    # Store a tuple (type, any_member_off_var) for consistent handling
+                    self.backup_unavailable_slots[(backup_staff_id, date)] = ('coverage', any_member_off)
 
         if skipped_count > 0:
             logger.info(f"[OR-TOOLS] Backup assignments: {constraint_count} {constraint_type} constraints added, {skipped_count} skipped")
@@ -1214,17 +1260,23 @@ class ShiftScheduleOptimizer:
                 continue
 
             # Extract limit configuration
+            min_off = limits.get('minOff', None)  # NEW: Minimum staff of this type off per day
             max_off = limits.get('maxOff', None)
             max_early = limits.get('maxEarly', None)
             is_hard = limits.get('isHard', False)
 
             # EDGE CASE: No limits specified for this type
-            if max_off is None and max_early is None:
-                logger.warning(f"  Type '{staff_type}': No limits specified (maxOff/maxEarly) - skipping")
+            if min_off is None and max_off is None and max_early is None:
+                logger.warning(f"  Type '{staff_type}': No limits specified (minOff/maxOff/maxEarly) - skipping")
                 warning_count += 1
                 continue
 
             # EDGE CASE: Validate limit values
+            if min_off is not None and min_off < 0:
+                logger.error(f"  Type '{staff_type}': Invalid minOff={min_off} (must be >= 0) - skipping")
+                warning_count += 1
+                continue
+
             if max_off is not None and max_off < 0:
                 logger.error(f"  Type '{staff_type}': Invalid maxOff={max_off} (must be >= 0) - skipping")
                 warning_count += 1
@@ -1232,6 +1284,12 @@ class ShiftScheduleOptimizer:
 
             if max_early is not None and max_early < 0:
                 logger.error(f"  Type '{staff_type}': Invalid maxEarly={max_early} (must be >= 0) - skipping")
+                warning_count += 1
+                continue
+
+            # EDGE CASE: minOff cannot exceed maxOff
+            if min_off is not None and max_off is not None and min_off > max_off:
+                logger.error(f"  Type '{staff_type}': Invalid minOff={min_off} > maxOff={max_off} - skipping")
                 warning_count += 1
                 continue
 
@@ -1247,7 +1305,7 @@ class ShiftScheduleOptimizer:
             # Use higher penalty when user originally wanted HARD constraint
             penalty_multiplier = 3 if original_is_hard else 1
             constraint_mode = "SOFT (high priority)" if original_is_hard else "SOFT"
-            logger.info(f"  Type '{staff_type}': {len(type_staff)} staff, maxOff={max_off}, maxEarly={max_early}, mode={constraint_mode}")
+            logger.info(f"  Type '{staff_type}': {len(type_staff)} staff, minOff={min_off}, maxOff={max_off}, maxEarly={max_early}, mode={constraint_mode}")
 
             # EDGE CASE: Warn if limits exceed staff count (ineffective but valid)
             if max_off is not None and max_off >= len(type_staff):
@@ -1309,6 +1367,35 @@ class ShiftScheduleOptimizer:
 
                 combined_scaled = sum(scaled_terms)
 
+                # ─────────────────────────────────────────────────────────────────────
+                # MINIMUM OFF CONSTRAINT (NEW): At least minOff staff must be off
+                # This ensures adequate coverage by guaranteeing rest days
+                # ─────────────────────────────────────────────────────────────────────
+                if min_off is not None and min_off > 0:
+                    # Count only off days (×) for minimum constraint
+                    off_count = sum(off_vars)
+
+                    # SOFT CONSTRAINT: Penalize if below minimum
+                    # under_min = max(0, min_off - off_count)
+                    under_min_var = self.model.NewIntVar(
+                        0, len(type_staff),
+                        f'staff_type_{staff_type}_under_min_{date}'
+                    )
+                    self.model.Add(under_min_var >= min_off - off_count)
+                    self.model.Add(under_min_var >= 0)
+
+                    # Track for objective penalty (high priority for minimum constraint)
+                    effective_penalty = self.PENALTY_WEIGHTS['staff_type_limit'] * penalty_multiplier * 2  # Double penalty for minimum
+                    self.violation_vars.append((
+                        under_min_var,
+                        effective_penalty,
+                        f'Staff type {staff_type} under minimum off ({min_off}) on {date}'
+                    ))
+                    constraint_count += 1
+
+                # ─────────────────────────────────────────────────────────────────────
+                # MAXIMUM COMBINED CONSTRAINT: off × 2 + early × 1 <= max_scaled
+                # ─────────────────────────────────────────────────────────────────────
                 # SOFT CONSTRAINT: Penalize violations of combined limit
                 # violation = max(0, combined_scaled - max_scaled)
                 max_violation = len(type_staff) * 3  # Upper bound for violation
@@ -1769,6 +1856,52 @@ class ShiftScheduleOptimizer:
 
         logger.info(f"[OR-TOOLS] Added {constraint_count} monthly limit {constraint_type.lower()} constraints (with early=0.5 weight)")
 
+    def _add_monthly_early_shift_limits(self):
+        """
+        Limit monthly early shifts (△) for 社員 staff type to maximum 3 per month.
+
+        This is a HARD constraint to ensure no 社員 gets more than 3 early shifts
+        in a given month, preventing overload of early morning duties.
+        """
+        MAX_EARLY_PER_MONTH = 3
+        STAFF_TYPE_SHAIN = '社員'
+
+        # Debug: Log all staff types
+        logger.info(f"[OR-TOOLS] Staff types in data:")
+        for s in self.staff_members:
+            logger.info(f"    {s.get('name', 'Unknown')}: type='{s.get('type')}', status='{s.get('status')}'")
+
+        # Get all 社員 staff members - check both 'type' and 'status' fields
+        shain_staff = [s for s in self.staff_members if s.get('type') == STAFF_TYPE_SHAIN or s.get('status') == STAFF_TYPE_SHAIN]
+
+        if not shain_staff:
+            logger.info(f"[OR-TOOLS] No {STAFF_TYPE_SHAIN} staff found - skipping monthly early limit")
+            return
+
+        logger.info(f"[OR-TOOLS] Adding monthly early shift limit (max {MAX_EARLY_PER_MONTH}) for {len(shain_staff)} {STAFF_TYPE_SHAIN} staff...")
+        constraint_count = 0
+
+        for staff in shain_staff:
+            staff_id = staff['id']
+            staff_name = staff.get('name', staff_id)
+
+            # Get all dates this staff works (before end_period)
+            working_dates = [d for d in self.date_range if self._staff_works_on_date(staff_id, d)]
+
+            if not working_dates:
+                continue
+
+            # Sum all early shift variables for this staff across the month
+            early_vars = [self.shifts[(staff_id, date, self.SHIFT_EARLY)] for date in working_dates]
+            total_early = sum(early_vars)
+
+            # HARD constraint: max 3 early shifts per month
+            self.model.Add(total_early <= MAX_EARLY_PER_MONTH)
+            constraint_count += 1
+            logger.info(f"    {staff_name}: max {MAX_EARLY_PER_MONTH} early shifts across {len(working_dates)} days")
+
+        logger.info(f"[OR-TOOLS] Added {constraint_count} monthly early shift limit constraints for {STAFF_TYPE_SHAIN}")
+
     def _add_adjacent_conflict_prevention(self):
         """
         Prevent adjacent conflict patterns (SOFT - allows violations with penalty).
@@ -1777,8 +1910,7 @@ class ShiftScheduleOptimizer:
         - No xx (two consecutive off days)
         - No sx (early shift followed by off)
         - No xs (off followed by early shift)
-
-        Note: ss is NOT prevented in original code (early shifts can be consecutive)
+        - No ss (two consecutive early shifts) - ADDED to prevent early shift overload
 
         SOFT CONSTRAINT: Instead of hard failure, we add penalty for violations.
         This allows OR-Tools to provide best-effort solutions like TensorFlow.
@@ -1900,7 +2032,19 @@ class ShiftScheduleOptimizer:
                 ))
                 constraint_count += 1
 
-        logger.info(f"[OR-TOOLS] Added {constraint_count} adjacent conflict soft constraints")
+                # SOFT CONSTRAINT for ss (consecutive early shifts) - NEW
+                ss_sum = self.shifts[(staff_id, date1, self.SHIFT_EARLY)] + self.shifts[(staff_id, date2, self.SHIFT_EARLY)]
+                ss_violation = self.model.NewBoolVar(f'ss_violation_{staff_id}_{date1}')
+                self.model.Add(ss_sum <= 1).OnlyEnforceIf(ss_violation.Not())
+                self.model.Add(ss_sum >= 2).OnlyEnforceIf(ss_violation)
+                self.violation_vars.append((
+                    ss_violation,
+                    self.PENALTY_WEIGHTS['adjacent_conflict'],
+                    f'Consecutive early shifts for {staff_name} on {date1}-{date2}'
+                ))
+                constraint_count += 1
+
+        logger.info(f"[OR-TOOLS] Added {constraint_count} adjacent conflict soft constraints (incl. no consecutive early)")
         if prefilled_adjacent_count > 0:
             logger.info(f"[OR-TOOLS] Added {prefilled_adjacent_count} pre-filled work protection constraints (penalty=500)")
 
@@ -2121,7 +2265,15 @@ class ShiftScheduleOptimizer:
                 elif isinstance(d, str):
                     target_days.append(d.lower())
 
-            logger.info(f"  Rule: {rule.get('name', 'Unnamed')} - staff={target_staff_ids}, type={rule_type}, shift={shift_type_name}, days={target_days}, hard={is_hard}")
+            # Log rule details including allowedShifts for avoid_shift_with_exceptions
+            allowed_shifts_log = rule.get('allowedShifts', [])
+            if rule_type == 'avoid_shift_with_exceptions':
+                logger.info(f"  Rule: {rule.get('name', 'Unnamed')} - staff={target_staff_ids}, type={rule_type}, AVOID={shift_type_name}, ALLOW={allowed_shifts_log}, days={target_days}, hard={is_hard}")
+                # DEBUG: Write to file for debugging
+                with open('/tmp/priority_rule_debug.log', 'a') as f:
+                    f.write(f"[DEBUG] avoid_shift_with_exceptions: staff={target_staff_ids}, AVOID={shift_type_name}, ALLOW={allowed_shifts_log}, days={target_days}\n")
+            else:
+                logger.info(f"  Rule: {rule.get('name', 'Unnamed')} - staff={target_staff_ids}, type={rule_type}, shift={shift_type_name}, days={target_days}, hard={is_hard}")
 
             # Apply rule to ALL target staff members
             for target_staff_id in target_staff_ids:
@@ -2141,7 +2293,41 @@ class ShiftScheduleOptimizer:
 
                     shift_var = self.shifts[(target_staff_id, date, shift_type)]
 
-                    if rule_type in ['avoided_shift', 'blocked']:
+                    if rule_type == 'avoid_shift_with_exceptions':
+                        # SPECIAL HANDLING: Avoid the shiftType, but prefer the allowedShifts as alternatives
+                        # Example: "Avoid Early (△), Allow Off (×)" means:
+                        #   - Penalize Early Shift assignments
+                        #   - Give a slight preference to Off Day as an acceptable alternative
+
+                        # 1. Avoid the main shift type (same as 'avoided_shift')
+                        if is_hard:
+                            # Hard constraint: MUST NOT have this shift on these days
+                            self.model.Add(shift_var == 0)
+                        else:
+                            # Soft constraint: avoid this shift
+                            self.avoided_vars.append((shift_var, priority_level))
+
+                        # 2. Prefer the allowed exception shifts (with lower weight)
+                        # Extract allowedShifts from multiple possible locations
+                        allowed_shifts = rule.get('allowedShifts', [])
+                        if not allowed_shifts:
+                            prefs = rule.get('preferences', {})
+                            allowed_shifts = prefs.get('allowedShifts', [])
+
+                        for allowed_shift_name in allowed_shifts:
+                            allowed_shift_type = self._parse_shift_type(allowed_shift_name.lower())
+                            if allowed_shift_type != shift_type:  # Don't add the avoided shift as preferred
+                                allowed_shift_var = self.shifts[(target_staff_id, date, allowed_shift_type)]
+                                # Use MUCH higher weight (50) for exception preferences to FORCE some early shifts
+                                # Violation penalties are 50-200, so 50 will compete meaningfully
+                                # This should produce 2-4 early shifts out of ~12 applicable days
+                                exception_weight = 50
+                                self.preferred_vars.append((allowed_shift_var, exception_weight))
+                                # DEBUG: Log each exception preference added
+                                with open('/tmp/priority_rule_debug.log', 'a') as f:
+                                    f.write(f"[DEBUG] Added exception preference: staff={target_staff_id}, date={date}, shift={allowed_shift_name}({allowed_shift_type}), weight={exception_weight}\n")
+
+                    elif rule_type in ['avoided_shift', 'blocked']:
                         if is_hard:
                             # Hard constraint: MUST NOT have this shift on these days
                             self.model.Add(shift_var == 0)
@@ -2312,33 +2498,41 @@ class ShiftScheduleOptimizer:
                         if solver.Value(self.shifts[(staff_id, date, shift_type)]) == 1:
                             # Check if this is a backup staff slot
                             if (staff_id, date) in backup_unavailable_slots:
-                                any_member_off_var = backup_unavailable_slots[(staff_id, date)]
+                                slot_data = backup_unavailable_slots[(staff_id, date)]
 
-                                # CRITICAL FIX: Handle both BoolVar and literal values
-                                try:
-                                    member_off_value = solver.Value(any_member_off_var)
-                                except Exception:
-                                    # If any_member_off_var is a literal (not a variable),
-                                    # it means we need to check it differently
-                                    # This happens when the var was optimized to a constant
-                                    member_off_value = 1 if any_member_off_var else 0
+                                # NEW: Handle tuple format (slot_type, any_member_off_var)
+                                if isinstance(slot_data, tuple):
+                                    slot_type, any_member_off_var = slot_data
 
-                                # LOGIC:
-                                # - If any_member_off == 1 (coverage needed) → show normal shift (○, △, etc.)
-                                # - If any_member_off == 0 (no coverage needed) AND shift is OFF → show ⊘
-                                # - If any_member_off == 0 but shift is WORK → show normal (violation of unavailable)
-                                if member_off_value == 0 and shift_type == self.SHIFT_OFF:
-                                    # No coverage needed AND backup has OFF → show as Unavailable (⊘)
-                                    schedule[staff_id][date] = UNAVAILABLE_SYMBOL
-                                    backup_unavailable_count += 1
-                                else:
-                                    # Coverage needed OR backup is working → show normal shift symbol
-                                    # ✅ FIX: For backup staff WORK shifts, use explicit ○ symbol instead of empty string
-                                    # This prevents UI from converting empty to ⊘ for パート staff
-                                    if shift_type == self.SHIFT_WORK:
-                                        schedule[staff_id][date] = '○'  # Explicit work symbol for backup covering
+                                    if slot_type == 'holiday':
+                                        # Japanese holiday - backup MUST be unavailable (⊘)
+                                        schedule[staff_id][date] = UNAVAILABLE_SYMBOL
+                                        backup_unavailable_count += 1
                                     else:
-                                        schedule[staff_id][date] = self.SHIFT_SYMBOLS[shift_type]
+                                        # Regular backup coverage logic (slot_type == 'coverage')
+                                        # NEW LOGIC (inverted default):
+                                        # - Backup now WORKS by default, only holiday makes them unavailable
+                                        # ✅ FIX: For backup staff WORK shifts, use explicit ○ symbol
+                                        if shift_type == self.SHIFT_WORK:
+                                            schedule[staff_id][date] = '○'  # Explicit work symbol
+                                        elif shift_type == self.SHIFT_OFF:
+                                            # If backup is OFF on a non-holiday, this shouldn't happen normally
+                                            # but handle gracefully - show as normal off symbol
+                                            schedule[staff_id][date] = self.SHIFT_SYMBOLS[shift_type]
+                                        else:
+                                            schedule[staff_id][date] = self.SHIFT_SYMBOLS[shift_type]
+                                else:
+                                    # LEGACY: Handle old format (direct BoolVar or string)
+                                    # This maintains backward compatibility
+                                    if slot_data == 'holiday':
+                                        schedule[staff_id][date] = UNAVAILABLE_SYMBOL
+                                        backup_unavailable_count += 1
+                                    else:
+                                        # Regular backup coverage logic
+                                        if shift_type == self.SHIFT_WORK:
+                                            schedule[staff_id][date] = '○'
+                                        else:
+                                            schedule[staff_id][date] = self.SHIFT_SYMBOLS[shift_type]
                             else:
                                 schedule[staff_id][date] = self.SHIFT_SYMBOLS[shift_type]
                             break

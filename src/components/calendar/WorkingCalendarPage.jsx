@@ -1,9 +1,10 @@
 import React, { useState, useMemo, useEffect } from "react";
-import { ChevronLeft, ChevronRight, Calendar as CalendarIcon, Info } from "lucide-react";
+import { ChevronLeft, ChevronRight, Calendar as CalendarIcon, Info, Flag } from "lucide-react";
 import { format, startOfMonth, endOfMonth, eachDayOfInterval, addMonths, getDay, isSameMonth, isToday } from "date-fns";
 import { ja } from "date-fns/locale";
 import { useCalendarRules } from "../../hooks/useCalendarRules";
 import { useRestaurant } from "../../contexts/RestaurantContext";
+import { useJapaneseHolidays } from "../../hooks/useJapaneseHolidays";
 
 const WorkingCalendarPage = () => {
   console.log('🟢 [CALENDAR] WorkingCalendarPage is rendering');
@@ -36,6 +37,12 @@ const WorkingCalendarPage = () => {
   // Load calendar rules
   const { rules, isLoading, error, toggleRule } = useCalendarRules(
     restaurant?.id,
+    dateRange.start,
+    dateRange.end
+  );
+
+  // Load Japanese holidays
+  const { holidays: japaneseHolidays, isLoading: isLoadingHolidays, error: holidaysError } = useJapaneseHolidays(
     dateRange.start,
     dateRange.end
   );
@@ -366,6 +373,141 @@ const WorkingCalendarPage = () => {
             <p className="text-xs text-gray-600 flex items-center gap-2">
               <Info className="w-3 h-3" />
               <span>キーボード: ← → で月を移動</span>
+            </p>
+          </div>
+        </div>
+
+        {/* Japanese Holidays Section */}
+        <div className="bg-white p-4 rounded-lg shadow-sm border border-gray-200 mt-4">
+          <div className="flex items-center gap-2 mb-3">
+            <Flag className="w-4 h-4 text-red-600" />
+            <h3 className="text-sm font-semibold text-gray-900">日本の祝日</h3>
+            {isLoadingHolidays && (
+              <span className="text-xs text-gray-500 ml-2">読み込み中...</span>
+            )}
+          </div>
+
+          {holidaysError && (
+            <div className="text-xs text-red-600 mb-2">
+              祝日の取得に失敗しました: {holidaysError}
+            </div>
+          )}
+
+          {/* Holidays Calendar Grid */}
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">
+            {months.map((month) => {
+              const monthStart = startOfMonth(month);
+              const monthEnd = endOfMonth(month);
+              const days = eachDayOfInterval({ start: monthStart, end: monthEnd });
+              const startDay = getDay(monthStart);
+              const calendarDays = [...Array(startDay).fill(null), ...days];
+
+              // Get holidays for this month
+              const monthHolidays = Object.entries(japaneseHolidays).filter(([date]) => {
+                const holidayDate = new Date(date);
+                return holidayDate >= monthStart && holidayDate <= monthEnd;
+              });
+
+              return (
+                <div key={month.toISOString()} className="flex-1 min-w-0">
+                  {/* Month Header - Red theme for holidays */}
+                  <div className="bg-gradient-to-r from-red-600 to-red-700 text-white p-2 rounded-t">
+                    <h4 className="text-base font-bold text-center">
+                      {format(month, "yyyy年 M月", { locale: ja })}
+                      {monthHolidays.length > 0 && (
+                        <span className="ml-2 text-xs bg-white/20 px-2 py-0.5 rounded">
+                          {monthHolidays.length}件
+                        </span>
+                      )}
+                    </h4>
+                  </div>
+
+                  {/* Day of Week Headers */}
+                  <div className="grid grid-cols-7 gap-0.5 bg-gray-100 p-1">
+                    {["日", "月", "火", "水", "木", "金", "土"].map((day, index) => (
+                      <div
+                        key={day}
+                        className={`text-center text-xs font-semibold py-1 ${
+                          index === 0 ? "text-red-600" : index === 6 ? "text-blue-600" : "text-gray-700"
+                        }`}
+                      >
+                        {day}
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* Calendar Grid */}
+                  <div className="grid grid-cols-7 gap-1 p-2 bg-gray-50 rounded-b">
+                    {calendarDays.map((day, index) => {
+                      if (!day) {
+                        return <div key={`empty-${index}`} className="h-12" />;
+                      }
+
+                      const dateString = format(day, "yyyy-MM-dd");
+                      const holidayName = japaneseHolidays[dateString];
+                      const isHoliday = !!holidayName;
+                      const isCurrentMonth = isSameMonth(day, month);
+                      const isTodayDate = isToday(day);
+
+                      return (
+                        <div
+                          key={dateString}
+                          className={`
+                            h-12 w-full border rounded
+                            flex flex-col items-center justify-center
+                            text-xs relative
+                            ${isHoliday
+                              ? "bg-red-600 text-white border-red-700 font-bold"
+                              : isTodayDate
+                              ? "bg-gray-700 text-white border-gray-800"
+                              : "bg-white text-gray-900 border-gray-200"
+                            }
+                            ${!isCurrentMonth ? "opacity-40" : ""}
+                          `}
+                          title={isHoliday ? `${holidayName} - ${dateString}` : dateString}
+                        >
+                          <span className="font-semibold">{format(day, "d")}</span>
+                          {isHoliday && (
+                            <span className="text-[8px] leading-tight text-center truncate w-full px-0.5">
+                              {holidayName}
+                            </span>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+          {/* Holidays List */}
+          {Object.keys(japaneseHolidays).length > 0 && (
+            <div className="mt-3 pt-3 border-t border-gray-200">
+              <div className="text-xs font-semibold text-gray-700 mb-2">
+                期間内の祝日一覧 ({Object.keys(japaneseHolidays).length}件)
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {Object.entries(japaneseHolidays)
+                  .sort(([a], [b]) => a.localeCompare(b))
+                  .map(([date, name]) => (
+                    <div
+                      key={date}
+                      className="bg-red-100 text-red-800 px-2 py-1 rounded text-xs flex items-center gap-1"
+                    >
+                      <span className="font-semibold">{format(new Date(date), "M/d", { locale: ja })}</span>
+                      <span>{name}</span>
+                    </div>
+                  ))}
+              </div>
+            </div>
+          )}
+
+          {/* Holiday Legend */}
+          <div className="mt-3 pt-3 border-t border-gray-200">
+            <p className="text-xs text-gray-600 flex items-center gap-2">
+              <Flag className="w-3 h-3 text-red-600" />
+              <span>赤いセルは日本の祝日です。パート従業員は祝日に勤務できません。</span>
             </p>
           </div>
         </div>
