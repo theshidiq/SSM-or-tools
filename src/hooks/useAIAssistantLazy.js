@@ -334,10 +334,11 @@ export const useAIAssistantLazy = (
           priorityRules: aiSettings?.priorityRules || {},
           // ✅ PRIMARY: Staff Type Daily Limits (replaces global daily limits)
           // Per-staff-type constraints for off/early shifts
-          // When configured, global dailyLimitsRaw is AUTO-DISABLED in Python scheduler
-          // Default: { '社員': { maxOff: 1, maxEarly: 2, isHard: true } }
+          // minOff: Minimum staff of this type that MUST be off each day
+          // maxOff: Maximum staff of this type that CAN be off each day
+          // Default: { '社員': { minOff: 1, maxOff: 1, maxEarly: 2, isHard: true } }
           staffTypeLimits: aiSettings?.staffTypeLimits || {
-            '社員': { maxOff: 1, maxEarly: 2, isHard: true },
+            '社員': { minOff: 1, maxOff: 1, maxEarly: 2, isHard: true },
           },
           // ✅ FIX: Include OR-Tools solver configuration (penalty weights, timeout, etc.)
           // This is used by Python OR-Tools scheduler to configure constraint penalties
@@ -397,7 +398,7 @@ export const useAIAssistantLazy = (
           console.log(`[OR-TOOLS] Pre-filled schedule: ${prefilledCount} cells across ${staffWithPrefills} staff members`);
         }
 
-        // Step 5: Send optimization request to Go server
+        // Step 5: Send optimization request to Go server with simulated progress
         const result = await new Promise((resolve, reject) => {
           const timeout = setTimeout(() => {
             delete messageHandlersRef.current[MESSAGE_TYPES.SCHEDULE_GENERATED];
@@ -405,8 +406,35 @@ export const useAIAssistantLazy = (
             reject(new Error("Schedule generation timed out (60s)"));
           }, 60000);
 
+          // Simulated progress during OR-Tools solving
+          let currentProgress = 30;
+          const progressMessages = [
+            { progress: 35, message: "制約条件を構築中..." },          // Building constraints
+            { progress: 45, message: "変数を最適化中..." },            // Optimizing variables
+            { progress: 55, message: "スタッフグループを処理中..." },  // Processing staff groups
+            { progress: 65, message: "日次制限を適用中..." },          // Applying daily limits
+            { progress: 70, message: "月間制限を適用中..." },          // Applying monthly limits
+            { progress: 75, message: "5日休息を確認中..." },           // Checking 5-day rest
+            { progress: 80, message: "最適解を探索中..." },            // Searching for optimal solution
+            { progress: 85, message: "ソリューション検証中..." },      // Validating solution
+          ];
+
+          let progressIndex = 0;
+          const progressInterval = setInterval(() => {
+            if (progressIndex < progressMessages.length && onProgress) {
+              const nextMessage = progressMessages[progressIndex];
+              onProgress({
+                stage: "optimizing",
+                progress: nextMessage.progress,
+                message: nextMessage.message,
+              });
+              progressIndex++;
+            }
+          }, 400); // Update every 400ms for smoother progress
+
           // Register success handler
           messageHandlersRef.current[MESSAGE_TYPES.SCHEDULE_GENERATED] = (data) => {
+            clearInterval(progressInterval);
             clearTimeout(timeout);
             delete messageHandlersRef.current[MESSAGE_TYPES.SCHEDULE_GENERATED];
             delete messageHandlersRef.current[MESSAGE_TYPES.GENERATE_SCHEDULE_ERROR];
@@ -415,6 +443,7 @@ export const useAIAssistantLazy = (
 
           // Register error handler
           messageHandlersRef.current[MESSAGE_TYPES.GENERATE_SCHEDULE_ERROR] = (data) => {
+            clearInterval(progressInterval);
             clearTimeout(timeout);
             delete messageHandlersRef.current[MESSAGE_TYPES.SCHEDULE_GENERATED];
             delete messageHandlersRef.current[MESSAGE_TYPES.GENERATE_SCHEDULE_ERROR];
@@ -436,6 +465,7 @@ export const useAIAssistantLazy = (
           });
 
           if (!sent) {
+            clearInterval(progressInterval);
             clearTimeout(timeout);
             reject(new Error("Failed to send message - WebSocket not connected"));
           }
