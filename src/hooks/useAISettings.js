@@ -478,7 +478,7 @@ export const useAISettings = () => {
       hardConstraints: {
         dailyLimits: false,
         monthlyLimits: false,
-        staffGroups: false,
+        staffGroups: true,   // HARD by default - staff groups should not have >1 off/early per day
         fiveDayRest: false,
       },
     };
