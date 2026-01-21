@@ -254,6 +254,11 @@ export const useAIAssistantLazy = (
         // Step 3: Extract pre-filled cells from current schedule
         // These are staff day-off requests entered by manager before AI generation
         // They will be treated as HARD constraints in OR-Tools (cannot be changed)
+        //
+        // SMART HEURISTIC: If >30% of cells are filled, likely AI-generated (not manager edits)
+        // - Manager typically fills <5-10 cells (specific day-off requests)
+        // - AI generates ~50-80% of cells (full schedule)
+        // - If >30% filled, treat as AI-generated and ignore for fresh generation
         const prefilledSchedule = {};
         let prefilledCount = 0;
 
@@ -274,8 +279,19 @@ export const useAIAssistantLazy = (
           });
         }
 
-        if (prefilledCount > 0) {
-          console.log(`[OR-TOOLS] Extracted ${prefilledCount} pre-filled cells from schedule (will be preserved as HARD constraints)`);
+        // Calculate total possible cells (staff count × days in period)
+        const totalCells = staffMembers.length * dateRange.length;
+        const fillPercentage = totalCells > 0 ? (prefilledCount / totalCells) * 100 : 0;
+
+        // If >30% filled, likely AI-generated schedule → ignore and regenerate fresh
+        let finalPrefilledSchedule = prefilledSchedule;
+        if (fillPercentage > 30) {
+          console.log(`[OR-TOOLS] Detected ${prefilledCount} filled cells (${fillPercentage.toFixed(1)}% of ${totalCells} total)`);
+          console.log(`[OR-TOOLS] >30% filled → likely AI-generated → ignoring for fresh generation`);
+          finalPrefilledSchedule = {}; // Clear prefilled to force fresh generation
+          prefilledCount = 0;
+        } else if (prefilledCount > 0) {
+          console.log(`[OR-TOOLS] Extracted ${prefilledCount} pre-filled cells (${fillPercentage.toFixed(1)}% of ${totalCells}) - preserving as manager edits`);
         } else {
           console.log(`[OR-TOOLS] No pre-filled cells found - generating full schedule`);
         }
