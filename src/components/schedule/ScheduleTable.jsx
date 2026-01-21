@@ -1296,10 +1296,16 @@ const ScheduleTable = ({
 
                 // Calculate day off count to match statistics dashboard total
                 // Total = (early × 0.5) + (off × 1) + (holiday × 1)
+                // IMPORTANT: Only count dates within staff work period (after startPeriod, before endPeriod)
                 let dayOffCount = 0;
                 dateRange.forEach((date) => {
                   const dateKey = date.toISOString().split("T")[0];
                   const cellValue = schedule[staff.id]?.[dateKey] || "";
+
+                  // Skip dates outside staff work period (before start or after end)
+                  if (!isDateWithinWorkPeriod(date, staff)) {
+                    return; // Don't count this date
+                  }
 
                   // For パート staff: empty cells and unavailable symbol count as day off
                   if (staff.status === "パート") {
