@@ -280,7 +280,14 @@ class ShiftScheduleOptimizer:
             solver.parameters.max_time_in_seconds = timeout_seconds
             solver.parameters.num_search_workers = self.num_workers  # Use configurable workers
 
-            logger.info(f"[OR-TOOLS] Solving with {timeout_seconds}s timeout and {self.num_workers} workers...")
+            # Add random seed to generate different solutions on each run
+            # This allows multiple valid schedules instead of always returning the same one
+            import random
+            import time
+            random_seed = int(time.time() * 1000) % 2147483647  # Use timestamp as seed (max int32)
+            solver.parameters.random_seed = random_seed
+
+            logger.info(f"[OR-TOOLS] Solving with {timeout_seconds}s timeout, {self.num_workers} workers, seed={random_seed}...")
             status = solver.Solve(self.model)
 
             # 5. Extract and return results
