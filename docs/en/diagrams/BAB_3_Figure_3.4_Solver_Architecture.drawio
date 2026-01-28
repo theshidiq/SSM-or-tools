@@ -1,0 +1,108 @@
+<mxfile host="app.diagrams.net" agent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36" version="29.3.1">
+  <diagram name="Figure 3.4 - CP-SAT Solver Architecture" id="arsitektur-solver">
+    <mxGraphModel dx="935" dy="626" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="900" pageHeight="700" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        <mxCell id="title" parent="1" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=16;fontStyle=1;" value="CP-SAT SOLVER ARCHITECTURE" vertex="1">
+          <mxGeometry height="30" width="300" x="300" y="20" as="geometry" />
+        </mxCell>
+        <mxCell id="input-box" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#333333;strokeColor=#333333;fontColor=#ffffff;fontSize=12;fontStyle=1;verticalAlign=top;" value="INPUT LAYER" vertex="1">
+          <mxGeometry height="80" width="800" x="50" y="70" as="geometry" />
+        </mxCell>
+        <mxCell id="in1" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#666666;strokeColor=#333333;fontColor=#ffffff;fontSize=11;" value="Staff Data" vertex="1">
+          <mxGeometry height="35" width="100" x="80" y="100" as="geometry" />
+        </mxCell>
+        <mxCell id="in2" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#666666;strokeColor=#333333;fontColor=#ffffff;fontSize=11;" value="Date&#xa;Range" vertex="1">
+          <mxGeometry height="35" width="100" x="200" y="100" as="geometry" />
+        </mxCell>
+        <mxCell id="in3" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#666666;strokeColor=#333333;fontColor=#ffffff;fontSize=11;" value="Calendar&#xa;Rules" vertex="1">
+          <mxGeometry height="35" width="100" x="320" y="100" as="geometry" />
+        </mxCell>
+        <mxCell id="in4" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#666666;strokeColor=#333333;fontColor=#ffffff;fontSize=11;" value="Constraint&#xa;Config" vertex="1">
+          <mxGeometry height="35" width="100" x="440" y="100" as="geometry" />
+        </mxCell>
+        <mxCell id="in5" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#666666;strokeColor=#333333;fontColor=#ffffff;fontSize=11;" value="Pre-filled&#xa;Cells" vertex="1">
+          <mxGeometry height="35" width="100" x="560" y="100" as="geometry" />
+        </mxCell>
+        <mxCell id="in6" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#666666;strokeColor=#333333;fontColor=#ffffff;fontSize=11;" value="Penalty&#xa;Weights" vertex="1">
+          <mxGeometry height="35" width="100" x="680" y="100" as="geometry" />
+        </mxCell>
+        <mxCell id="proc-box" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#999999;strokeColor=#333333;fontColor=#000000;fontSize=12;fontStyle=1;verticalAlign=top;" value="PROCESSING LAYER" vertex="1">
+          <mxGeometry height="200" width="600" x="150" y="180" as="geometry" />
+        </mxCell>
+        <mxCell id="model" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#cccccc;strokeColor=#333333;fontSize=11;fontStyle=1;" value="Model Builder" vertex="1">
+          <mxGeometry height="40" width="200" x="200" y="220" as="geometry" />
+        </mxCell>
+        <mxCell id="var-create" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e0e0e0;strokeColor=#333333;fontSize=10;" value="Create Variables&#xa;shifts[s,d,t]" vertex="1">
+          <mxGeometry height="40" width="100" x="180" y="270" as="geometry" />
+        </mxCell>
+        <mxCell id="cons-add" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e0e0e0;strokeColor=#333333;fontSize=10;" value="Add&#xa;Constraints" vertex="1">
+          <mxGeometry height="40" width="100" x="300" y="270" as="geometry" />
+        </mxCell>
+        <mxCell id="solver" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#cccccc;strokeColor=#333333;fontSize=11;fontStyle=1;" value="CP-SAT Solver Core" vertex="1">
+          <mxGeometry height="40" width="200" x="500" y="220" as="geometry" />
+        </mxCell>
+        <mxCell id="search" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e0e0e0;strokeColor=#333333;fontSize=10;" value="Parallel&#xa;Search" vertex="1">
+          <mxGeometry height="40" width="80" x="480" y="270" as="geometry" />
+        </mxCell>
+        <mxCell id="propagate" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e0e0e0;strokeColor=#333333;fontSize=10;" value="Constraint&#xa;Propagation" vertex="1">
+          <mxGeometry height="40" width="80" x="570" y="270" as="geometry" />
+        </mxCell>
+        <mxCell id="optimize" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e0e0e0;strokeColor=#333333;fontSize=10;" value="Objective&#xa;Optimization" vertex="1">
+          <mxGeometry height="40" width="80" x="660" y="270" as="geometry" />
+        </mxCell>
+        <mxCell id="obj-box" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#333333;fontSize=11;fontStyle=2;" value="Objective Function: Minimize Σ(weight × violation)" vertex="1">
+          <mxGeometry height="35" width="400" x="250" y="330" as="geometry" />
+        </mxCell>
+        <mxCell id="out-box" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#e8e8e8;strokeColor=#333333;fontColor=#000000;fontSize=12;fontStyle=1;verticalAlign=top;" value="OUTPUT LAYER" vertex="1">
+          <mxGeometry height="120" width="800" x="50" y="410" as="geometry" />
+        </mxCell>
+        <mxCell id="status" parent="1" style="rhombus;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#333333;fontSize=11;fontStyle=1;" value="Status?" vertex="1">
+          <mxGeometry height="60" width="100" x="400" y="440" as="geometry" />
+        </mxCell>
+        <mxCell id="optimal" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#999999;strokeColor=#333333;fontSize=10;fontColor=#ffffff;" value="OPTIMAL&#xa;Best schedule" vertex="1">
+          <mxGeometry height="40" width="100" x="100" y="450" as="geometry" />
+        </mxCell>
+        <mxCell id="feasible" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#b3b3b3;strokeColor=#333333;fontSize=10;" value="FEASIBLE&#xa;Valid schedule" vertex="1">
+          <mxGeometry height="40" width="100" x="250" y="450" as="geometry" />
+        </mxCell>
+        <mxCell id="infeasible" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#666666;strokeColor=#333333;fontSize=10;fontColor=#ffffff;" value="INFEASIBLE&#xa;No solution" vertex="1">
+          <mxGeometry height="40" width="110" x="550" y="450" as="geometry" />
+        </mxCell>
+        <mxCell id="timeout" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#808080;strokeColor=#333333;fontSize=10;fontColor=#ffffff;" value="TIMEOUT&#xa;Time limit" vertex="1">
+          <mxGeometry height="40" width="100" x="700" y="450" as="geometry" />
+        </mxCell>
+        <mxCell id="result-box" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#333333;strokeColor=#333333;fontColor=#ffffff;fontSize=12;fontStyle=1;verticalAlign=top;" value="OUTPUT RESULT" vertex="1">
+          <mxGeometry height="100" width="570" x="165" y="560" as="geometry" />
+        </mxCell>
+        <mxCell id="out1" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#666666;strokeColor=#333333;fontColor=#ffffff;fontSize=11;" value="Schedule&#xa;Matrix" vertex="1">
+          <mxGeometry height="45" width="100" x="200" y="595" as="geometry" />
+        </mxCell>
+        <mxCell id="out2" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#666666;strokeColor=#333333;fontColor=#ffffff;fontSize=11;" value="Violation&#xa;List" vertex="1">
+          <mxGeometry height="45" width="100" x="330" y="595" as="geometry" />
+        </mxCell>
+        <mxCell id="out3" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#666666;strokeColor=#333333;fontColor=#ffffff;fontSize=11;" value="Computation&#xa;Time" vertex="1">
+          <mxGeometry height="45" width="100" x="460" y="595" as="geometry" />
+        </mxCell>
+        <mxCell id="out4" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#666666;strokeColor=#333333;fontColor=#ffffff;fontSize=11;" value="Optimal&#xa;Status" vertex="1">
+          <mxGeometry height="45" width="100" x="590" y="595" as="geometry" />
+        </mxCell>
+        <mxCell id="a1" edge="1" parent="1" source="input-box" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#333333;" target="proc-box">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="a2" edge="1" parent="1" source="model" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#333333;" target="solver">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="a3" edge="1" parent="1" source="proc-box" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#333333;">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="450" y="410" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="a4" edge="1" parent="1" source="out-box" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#333333;exitX=0.5;exitY=1;exitDx=0;exitDy=0;" target="result-box">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

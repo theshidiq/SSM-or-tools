@@ -1,0 +1,104 @@
+<mxfile host="app.diagrams.net" agent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36" version="29.3.1">
+  <diagram name="Gambar 3.1 - DSR Framework" id="dsr-framework">
+    <mxGraphModel dx="1216" dy="814" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1169" pageHeight="827" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        <mxCell id="env-box" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#333333;strokeWidth=2;verticalAlign=top;fontStyle=1;fontSize=12;" value="LINGKUNGAN" vertex="1">
+          <mxGeometry height="200" width="200" x="40" y="40" as="geometry" />
+        </mxCell>
+        <mxCell id="env-1" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#333333;fontSize=11;" value="Dapur Hotel" vertex="1">
+          <mxGeometry height="40" width="150" x="65" y="80" as="geometry" />
+        </mxCell>
+        <mxCell id="env-2" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#333333;fontSize=11;" value="Manajemen Staf" vertex="1">
+          <mxGeometry height="40" width="150" x="65" y="130" as="geometry" />
+        </mxCell>
+        <mxCell id="env-3" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#333333;fontSize=11;" value="Masalah&#xa;Penjadwalan Shift" vertex="1">
+          <mxGeometry height="45" width="150" x="65" y="180" as="geometry" />
+        </mxCell>
+        <mxCell id="res-box" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#e8e8e8;strokeColor=#333333;strokeWidth=2;verticalAlign=top;fontStyle=1;fontSize=12;" value="PENELITIAN" vertex="1">
+          <mxGeometry height="230" width="200" x="320" y="40" as="geometry" />
+        </mxCell>
+        <mxCell id="FNGPR46ILmBqzDRPOQ5U-1" edge="1" parent="1" source="res-1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;" target="art-1" value="">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="res-1" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#333333;fontSize=11;" value="Pengembangan" vertex="1">
+          <mxGeometry height="40" width="150" x="345" y="80" as="geometry" />
+        </mxCell>
+        <mxCell id="FNGPR46ILmBqzDRPOQ5U-2" edge="1" parent="1" source="art-1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;" target="res-2" value="">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="art-1" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#333333;fontSize=11;" value="Pengoptimal&#xa;Jadwal" vertex="1">
+          <mxGeometry height="40" width="120" x="360" y="140" as="geometry" />
+        </mxCell>
+        <mxCell id="res-2" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#333333;fontSize=11;" value="Evaluasi" vertex="1">
+          <mxGeometry height="40" width="150" x="345" y="210" as="geometry" />
+        </mxCell>
+        <mxCell id="kb-box" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#333333;strokeWidth=2;verticalAlign=top;fontStyle=1;fontSize=12;" value="BASIS PENGETAHUAN" vertex="1">
+          <mxGeometry height="200" width="200" x="600" y="40" as="geometry" />
+        </mxCell>
+        <mxCell id="kb-1" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#333333;fontSize=11;" value="OR-Tools CP-SAT" vertex="1">
+          <mxGeometry height="40" width="150" x="625" y="80" as="geometry" />
+        </mxCell>
+        <mxCell id="kb-2" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#333333;fontSize=11;" value="Constraint&#xa;Programming" vertex="1">
+          <mxGeometry height="40" width="150" x="625" y="130" as="geometry" />
+        </mxCell>
+        <mxCell id="kb-3" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#333333;fontSize=11;" value="Optimisasi&#xa;Soft Constraint" vertex="1">
+          <mxGeometry height="45" width="150" x="625" y="180" as="geometry" />
+        </mxCell>
+        <mxCell id="eval-box" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#d9d9d9;strokeColor=#333333;strokeWidth=2;verticalAlign=top;fontStyle=1;fontSize=12;" value="EVALUASI" vertex="1">
+          <mxGeometry height="230" width="280" x="280" y="315" as="geometry" />
+        </mxCell>
+        <mxCell id="eval-1" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#333333;fontSize=11;" value="Metrik Kualitas Jadwal" vertex="1">
+          <mxGeometry height="35" width="230" x="305" y="360" as="geometry" />
+        </mxCell>
+        <mxCell id="eval-2" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#333333;fontSize=11;" value="Tingkat Kepuasan Constraint" vertex="1">
+          <mxGeometry height="35" width="230" x="305" y="405" as="geometry" />
+        </mxCell>
+        <mxCell id="eval-3" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#333333;fontSize=11;" value="Analisis Waktu Komputasi" vertex="1">
+          <mxGeometry height="35" width="230" x="305" y="450" as="geometry" />
+        </mxCell>
+        <mxCell id="eval-4" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#333333;fontSize=11;" value="Pengujian Penerimaan Pengguna" vertex="1">
+          <mxGeometry height="35" width="230" x="305" y="495" as="geometry" />
+        </mxCell>
+        <mxCell id="arrow-1" edge="1" parent="1" source="env-box" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#333333;strokeWidth=1;fontSize=10;" target="res-box" value="">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="300" y="140" />
+              <mxPoint x="300" y="140" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="arrow-2" edge="1" parent="1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#333333;strokeWidth=1;fontSize=10;" value="">
+          <mxGeometry relative="1" x="0.3846" as="geometry">
+            <mxPoint as="offset" />
+            <Array as="points">
+              <mxPoint x="600" y="150" />
+            </Array>
+            <mxPoint x="600" y="100" as="sourcePoint" />
+            <mxPoint x="520" y="150" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="arrow-5" edge="1" parent="1" source="res-box" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#333333;strokeWidth=1;" target="eval-box" value="">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="arrow-6" edge="1" parent="1" source="env-box" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#333333;strokeWidth=1;dashed=1;" target="eval-box" value="">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="140" y="350" />
+              <mxPoint x="140" y="350" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="arrow-7" edge="1" parent="1" source="kb-box" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#333333;strokeWidth=1;dashed=1;" target="eval-box" value="">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="700" y="350" />
+              <mxPoint x="700" y="350" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

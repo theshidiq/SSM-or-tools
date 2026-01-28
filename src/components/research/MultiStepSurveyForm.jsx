@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useForm } from 'react-hook-form';
 import ProgressBar from './ProgressBar';
-import { SurveySection1 } from './SurveySection1';
 import { SurveySection2 } from './SurveySection2';
 import { SurveySection3 } from './SurveySection3';
 import { SurveySection4 } from './SurveySection4';
@@ -12,7 +11,7 @@ import { SurveySection8 } from './SurveySection8';
 import { supabase } from '../../utils/supabaseClient';
 
 /**
- * MultiStepSurveyForm - 8-section wizard form with progress tracking
+ * MultiStepSurveyForm - 7-section wizard form with progress tracking
  */
 const MultiStepSurveyForm = ({ language = 'ja' }) => {
   const [currentSection, setCurrentSection] = useState(1);
@@ -36,7 +35,7 @@ const MultiStepSurveyForm = ({ language = 'ja' }) => {
     },
   });
 
-  const totalSections = 8;
+  const totalSections = 7;
   const progress = (currentSection / totalSections) * 100;
 
   // Auto-save to localStorage
@@ -159,7 +158,7 @@ const MultiStepSurveyForm = ({ language = 'ja' }) => {
       const submissionData = {
         ...data,
         completed: true,
-        current_section: 8,
+        current_section: 7,
         language: language,
       };
 
@@ -237,14 +236,13 @@ const MultiStepSurveyForm = ({ language = 'ja' }) => {
       {/* Form */}
       <form onSubmit={handleSubmit(onSubmit)} className="bg-white rounded-2xl shadow-xl p-8 mt-6">
         {/* Render current section */}
-        {currentSection === 1 && <SurveySection1 register={register} errors={errors} language={language} />}
-        {currentSection === 2 && <SurveySection2 register={register} errors={errors} language={language} />}
-        {currentSection === 3 && <SurveySection3 register={register} errors={errors} language={language} />}
-        {currentSection === 4 && <SurveySection4 register={register} errors={errors} language={language} />}
-        {currentSection === 5 && <SurveySection5 register={register} errors={errors} language={language} />}
-        {currentSection === 6 && <SurveySection6 register={register} errors={errors} language={language} />}
-        {currentSection === 7 && <SurveySection7 register={register} errors={errors} language={language} />}
-        {currentSection === 8 && <SurveySection8 register={register} errors={errors} language={language} />}
+        {currentSection === 1 && <SurveySection2 register={register} errors={errors} language={language} />}
+        {currentSection === 2 && <SurveySection3 register={register} errors={errors} language={language} />}
+        {currentSection === 3 && <SurveySection4 register={register} errors={errors} language={language} />}
+        {currentSection === 4 && <SurveySection5 register={register} errors={errors} language={language} />}
+        {currentSection === 5 && <SurveySection6 register={register} errors={errors} language={language} />}
+        {currentSection === 6 && <SurveySection7 register={register} errors={errors} language={language} />}
+        {currentSection === 7 && <SurveySection8 register={register} errors={errors} language={language} />}
 
         {/* Navigation Buttons */}
         <div className="flex justify-between mt-8 pt-6 border-t">

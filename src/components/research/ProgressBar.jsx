@@ -3,7 +3,6 @@ import React from 'react';
 const ProgressBar = ({ current, total, progress, language = 'ja' }) => {
   const sectionNames = {
     ja: [
-      '基本情報',
       '時間効率',
       '正確性',
       '意思決定支援',
@@ -13,7 +12,6 @@ const ProgressBar = ({ current, total, progress, language = 'ja' }) => {
       '総合評価',
     ],
     en: [
-      'Background',
       'Time Efficiency',
       'Accuracy',
       'Decision Support',

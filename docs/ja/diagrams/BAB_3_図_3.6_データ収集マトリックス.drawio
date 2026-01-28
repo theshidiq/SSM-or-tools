@@ -1,0 +1,88 @@
+<mxfile host="app.diagrams.net" agent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36" version="29.3.1">
+  <diagram name="図 3.6 - データ収集マトリックス" id="matriks-data">
+    <mxGraphModel dx="1216" dy="814" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="850" pageHeight="600" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        <mxCell id="title" parent="1" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=16;fontStyle=1;" value="データ収集マトリックス" vertex="1">
+          <mxGeometry height="30" width="350" x="250" y="20" as="geometry" />
+        </mxCell>
+        <mxCell id="h1" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#333333;strokeColor=#333333;fontColor=#ffffff;fontSize=11;fontStyle=1;" value="カテゴリ" vertex="1">
+          <mxGeometry height="40" width="120" x="50" y="70" as="geometry" />
+        </mxCell>
+        <mxCell id="h2" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#333333;strokeColor=#333333;fontColor=#ffffff;fontSize=11;fontStyle=1;" value="データタイプ" vertex="1">
+          <mxGeometry height="40" width="150" x="170" y="70" as="geometry" />
+        </mxCell>
+        <mxCell id="h3" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#333333;strokeColor=#333333;fontColor=#ffffff;fontSize=11;fontStyle=1;" value="方法" vertex="1">
+          <mxGeometry height="40" width="120" x="320" y="70" as="geometry" />
+        </mxCell>
+        <mxCell id="h4" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#333333;strokeColor=#333333;fontColor=#ffffff;fontSize=11;fontStyle=1;" value="ソース" vertex="1">
+          <mxGeometry height="40" width="120" x="440" y="70" as="geometry" />
+        </mxCell>
+        <mxCell id="h5" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#333333;strokeColor=#333333;fontColor=#ffffff;fontSize=11;fontStyle=1;" value="目的" vertex="1">
+          <mxGeometry height="40" width="220" x="560" y="70" as="geometry" />
+        </mxCell>
+        <mxCell id="r1c1" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#666666;strokeColor=#333333;fontColor=#ffffff;fontSize=10;fontStyle=1;" value="一次" vertex="1">
+          <mxGeometry height="100" width="120" x="50" y="110" as="geometry" />
+        </mxCell>
+        <mxCell id="r1c2" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#e0e0e0;strokeColor=#333333;fontSize=10;align=left;spacingLeft=5;" value="• 厨房スタッフリスト&#xa;• 運用ルール&#xa;• 必須休日&#xa;• 現在のシフトパターン" vertex="1">
+          <mxGeometry height="100" width="150" x="170" y="110" as="geometry" />
+        </mxCell>
+        <mxCell id="r1c3" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#e0e0e0;strokeColor=#333333;fontSize=10;" value="インタビュー&#xa;観察&#xa;文書化" vertex="1">
+          <mxGeometry height="100" width="120" x="320" y="110" as="geometry" />
+        </mxCell>
+        <mxCell id="r1c4" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#e0e0e0;strokeColor=#333333;fontSize=10;" value="ホテル厨房&#xa;マネージャー" vertex="1">
+          <mxGeometry height="100" width="120" x="440" y="110" as="geometry" />
+        </mxCell>
+        <mxCell id="r1c5" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#e0e0e0;strokeColor=#333333;fontSize=10;" value="問題領域の理解、&#xa;制約定義、ビジネス&#xa;要件の検証" vertex="1">
+          <mxGeometry height="100" width="220" x="560" y="110" as="geometry" />
+        </mxCell>
+        <mxCell id="r2c1" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#808080;strokeColor=#333333;fontColor=#ffffff;fontSize=10;fontStyle=1;" value="二次" vertex="1">
+          <mxGeometry height="100" width="120" x="50" y="210" as="geometry" />
+        </mxCell>
+        <mxCell id="r2c2" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#f0f0f0;strokeColor=#333333;fontSize=10;align=left;spacingLeft=5;" value="• 労働規制&#xa;• 最適化文献&#xa;• OR-Toolsドキュメント&#xa;• CSPベストプラクティス" vertex="1">
+          <mxGeometry height="100" width="150" x="170" y="210" as="geometry" />
+        </mxCell>
+        <mxCell id="r2c3" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#f0f0f0;strokeColor=#333333;fontSize=10;" value="文献調査&#xa;技術&#xa;ドキュメント" vertex="1">
+          <mxGeometry height="100" width="120" x="320" y="210" as="geometry" />
+        </mxCell>
+        <mxCell id="r2c4" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#f0f0f0;strokeColor=#333333;fontSize=10;" value="学術誌&#xa;Google&#xa;ドキュメント" vertex="1">
+          <mxGeometry height="100" width="120" x="440" y="210" as="geometry" />
+        </mxCell>
+        <mxCell id="r2c5" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#f0f0f0;strokeColor=#333333;fontSize=10;" value="理論的基盤、&#xa;アルゴリズム選択、&#xa;ソルバーパラメータ設定" vertex="1">
+          <mxGeometry height="100" width="220" x="560" y="210" as="geometry" />
+        </mxCell>
+        <mxCell id="r3c1" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#999999;strokeColor=#333333;fontColor=#000000;fontSize=10;fontStyle=1;" value="技術" vertex="1">
+          <mxGeometry height="100" width="120" x="50" y="310" as="geometry" />
+        </mxCell>
+        <mxCell id="r3c2" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#333333;fontSize=10;align=left;spacingLeft=5;" value="• 計算時間&#xa;• 目的関数値&#xa;• ソルバー状態&#xa;• 違反リスト" vertex="1">
+          <mxGeometry height="100" width="150" x="170" y="310" as="geometry" />
+        </mxCell>
+        <mxCell id="r3c3" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#333333;fontSize=10;" value="システムログ&#xa;パフォーマンス&#xa;メトリクス" vertex="1">
+          <mxGeometry height="100" width="120" x="320" y="310" as="geometry" />
+        </mxCell>
+        <mxCell id="r3c4" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#333333;fontSize=10;" value="CP-SAT&#xa;ソルバー" vertex="1">
+          <mxGeometry height="100" width="120" x="440" y="310" as="geometry" />
+        </mxCell>
+        <mxCell id="r3c5" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#333333;fontSize=10;" value="アルゴリズム効率評価、&#xa;ソリューション品質分析、&#xa;パラメータ最適化" vertex="1">
+          <mxGeometry height="100" width="220" x="560" y="310" as="geometry" />
+        </mxCell>
+        <mxCell id="r4c1" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#b3b3b3;strokeColor=#333333;fontColor=#000000;fontSize=10;fontStyle=1;" value="検証" vertex="1">
+          <mxGeometry height="100" width="120" x="50" y="410" as="geometry" />
+        </mxCell>
+        <mxCell id="r4c2" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#e8e8e8;strokeColor=#333333;fontSize=10;align=left;spacingLeft=5;" value="• UAT結果&#xa;• ユーザーフィードバック&#xa;• 満足度スコア&#xa;• 問題報告" vertex="1">
+          <mxGeometry height="100" width="150" x="170" y="410" as="geometry" />
+        </mxCell>
+        <mxCell id="r4c3" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#e8e8e8;strokeColor=#333333;fontSize=10;" value="UAT&#xa;アンケート&#xa;観察" vertex="1">
+          <mxGeometry height="100" width="120" x="320" y="410" as="geometry" />
+        </mxCell>
+        <mxCell id="r4c4" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#e8e8e8;strokeColor=#333333;fontSize=10;" value="エンド&#xa;ユーザー" vertex="1">
+          <mxGeometry height="100" width="120" x="440" y="410" as="geometry" />
+        </mxCell>
+        <mxCell id="r4c5" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#e8e8e8;strokeColor=#333333;fontSize=10;" value="ユーザー受入検証、&#xa;改善点の特定、&#xa;有用性の検証" vertex="1">
+          <mxGeometry height="100" width="220" x="560" y="410" as="geometry" />
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

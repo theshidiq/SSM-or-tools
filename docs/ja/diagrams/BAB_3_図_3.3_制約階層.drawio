@@ -1,0 +1,70 @@
+<mxfile host="app.diagrams.net" agent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36" version="29.3.1">
+  <diagram name="図 3.3 - 制約階層" id="hierarki-constraint">
+    <mxGraphModel dx="1057" dy="708" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="850" pageHeight="700" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        <mxCell id="title" parent="1" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=16;fontStyle=1;" value="制約階層" vertex="1">
+          <mxGeometry height="30" width="300" x="275" y="10" as="geometry" />
+        </mxCell>
+        <mxCell id="h1" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#333333;strokeColor=#333333;fontColor=#ffffff;fontSize=12;fontStyle=1;" value="ハード制約&#xa;100%充足必須" vertex="1">
+          <mxGeometry height="50" width="268.63" x="291.37" y="50" as="geometry" />
+        </mxCell>
+        <mxCell id="h2" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#4a4a4a;strokeColor=#333333;fontColor=#ffffff;fontSize=11;" value="1日1シフト  |  事前入力セル  |  カレンダールール" vertex="1">
+          <mxGeometry height="40" width="307.25" x="272.75" y="120" as="geometry" />
+        </mxCell>
+        <mxCell id="s1" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#666666;strokeColor=#333333;fontColor=#ffffff;fontSize=11;fontStyle=1;" value="ソフト - 最高優先度&#xa;労働規制遵守" vertex="1">
+          <mxGeometry height="45" width="329.75" x="260.12" y="190" as="geometry" />
+        </mxCell>
+        <mxCell id="s1d" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#808080;strokeColor=#333333;fontColor=#ffffff;fontSize=11;" value="5日休息（ペナルティ = 200）" vertex="1">
+          <mxGeometry height="35" width="355" x="247.5" y="255" as="geometry" />
+        </mxCell>
+        <mxCell id="s2" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#999999;strokeColor=#333333;fontColor=#000000;fontSize=11;fontStyle=1;" value="ソフト - 高優先度&#xa;公平性とカバレッジ" vertex="1">
+          <mxGeometry height="45" width="372" x="239" y="310" as="geometry" />
+        </mxCell>
+        <mxCell id="s2d" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#b3b3b3;strokeColor=#333333;fontColor=#000000;fontSize=11;" value="スタッフグループ (100)  |  月間制限 (80)" vertex="1">
+          <mxGeometry height="35" width="420" x="215.5" y="380" as="geometry" />
+        </mxCell>
+        <mxCell id="s3" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#cccccc;strokeColor=#333333;fontColor=#000000;fontSize=11;fontStyle=1;" value="ソフト - 中優先度&#xa;運用バランス" vertex="1">
+          <mxGeometry height="45" width="450" x="199.99" y="440" as="geometry" />
+        </mxCell>
+        <mxCell id="s3d" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e0e0e0;strokeColor=#333333;fontColor=#000000;fontSize=11;" value="スタッフタイプ (60)  |  日次制限 (50)" vertex="1">
+          <mxGeometry height="35" width="500" x="175" y="500" as="geometry" />
+        </mxCell>
+        <mxCell id="s4" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f0f0f0;strokeColor=#333333;fontColor=#000000;fontSize=11;fontStyle=1;" value="ソフト - 低優先度&#xa;生活の質" vertex="1">
+          <mxGeometry height="45" width="550" x="149.99" y="550" as="geometry" />
+        </mxCell>
+        <mxCell id="s4d" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#333333;fontColor=#000000;fontSize=11;" value="隣接競合 (30)" vertex="1">
+          <mxGeometry height="35" width="585" x="133" y="620" as="geometry" />
+        </mxCell>
+        <mxCell id="a1" edge="1" parent="1" source="h1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#333333;" target="h2">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="a2" edge="1" parent="1" source="h2" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#333333;" target="s1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="a3" edge="1" parent="1" source="s1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#333333;" target="s1d">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="a4" edge="1" parent="1" source="s1d" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#333333;" target="s2">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="a5" edge="1" parent="1" source="s2" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#333333;" target="s2d">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="a6" edge="1" parent="1" source="s2d" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#333333;" target="s3">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="a7" edge="1" parent="1" source="s3" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#333333;" target="s3d">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="a8" edge="1" parent="1" source="s3d" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#333333;" target="s4">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="a9" edge="1" parent="1" source="s4" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#333333;" target="s4d">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

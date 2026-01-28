@@ -136,16 +136,16 @@ export const SurveySection1 = ({ register, errors, language = 'ja' }) => {
   );
 };
 
-// Section 2: Time Efficiency
+// Section 1: Time Efficiency
 export const SurveySection2 = ({ register, errors, language = 'ja' }) => {
   const t = language === 'ja' ? {
-    title: 'セクション2: 時間効率',
+    title: 'セクション1: 時間効率',
     manualTime: '手動方式で1期分のシフト作成にかかった平均時間は？',
     aiTime: 'AI支援システムで1期分のシフト作成にかかる平均時間は？',
     satisfaction: '時間削減について、どの程度満足していますか？',
     reason: '理由を教えてください',
   } : {
-    title: 'Section 2: Time Efficiency',
+    title: 'Section 1: Time Efficiency',
     manualTime: 'How long did it take to create one schedule period manually?',
     aiTime: 'How long does it take with the AI-assisted system?',
     satisfaction: 'How satisfied are you with the time savings?',
@@ -203,10 +203,10 @@ export const SurveySection2 = ({ register, errors, language = 'ja' }) => {
   );
 };
 
-// Section 3: Accuracy and Quality
+// Section 2: Accuracy and Quality
 export const SurveySection3 = ({ register, errors, language = 'ja' }) => {
   const t = language === 'ja' ? {
-    title: 'セクション3: 正確性と品質',
+    title: 'セクション2: 正確性と品質',
     manualViolations: '手動方式で、制約違反はどのくらい発生しましたか？',
     aiViolations: 'AI支援システムでの制約違反の頻度は？',
     accuracySatisfaction: 'システムの制約チェック精度について、どの程度満足していますか？',
@@ -214,7 +214,7 @@ export const SurveySection3 = ({ register, errors, language = 'ja' }) => {
     aiFairness: 'AI支援システムでのスケジュールの公平性をどう評価しますか？',
     patternUnderstanding: 'AIシステムは、スタッフの希望やパターンをどの程度理解していると感じますか？',
   } : {
-    title: 'Section 3: Accuracy and Quality',
+    title: 'Section 2: Accuracy and Quality',
     manualViolations: 'How often did constraint violations occur with manual scheduling?',
     aiViolations: 'How often do constraint violations occur with the AI system?',
     accuracySatisfaction: 'How satisfied are you with the constraint validation accuracy?',
@@ -274,16 +274,16 @@ export const SurveySection3 = ({ register, errors, language = 'ja' }) => {
   );
 };
 
-// Section 4: Decision Support
+// Section 3: Decision Support
 export const SurveySection4 = ({ register, errors, language = 'ja' }) => {
   const t = language === 'ja' ? {
-    title: 'セクション4: 意思決定支援',
+    title: 'セクション3: 意思決定支援',
     trust: 'AIのスケジュール提案は、どの程度信頼できると感じますか？',
     patternUsefulness: 'パターン認識機能は役立っていますか？',
     optimizationUsage: '自動最適化機能を使用していますか？',
     decisionQuality: 'AI支援により、より良い意思決定ができるようになりましたか？',
   } : {
-    title: 'Section 4: Decision Support',
+    title: 'Section 3: Decision Support',
     trust: 'How much do you trust the AI schedule recommendations?',
     patternUsefulness: 'Is the pattern recognition feature useful?',
     optimizationUsage: 'Do you use the automatic optimization feature?',
@@ -342,17 +342,17 @@ export const SurveySection4 = ({ register, errors, language = 'ja' }) => {
   );
 };
 
-// Section 5: User Experience
+// Section 4: User Experience
 export const SurveySection5 = ({ register, errors, language = 'ja' }) => {
   const t = language === 'ja' ? {
-    title: 'セクション5: ユーザー体験',
+    title: 'セクション4: ユーザー体験',
     manualUsability: '手動方式の使いやすさをどう評価しますか？',
     aiUsability: 'AI支援システムの使いやすさをどう評価しますか？',
     learningDifficulty: 'システムの学習は簡単でしたか？',
     realtimeSync: 'リアルタイム同期機能は役立っていますか？',
     responseTime: 'システムの応答速度について満足していますか？',
   } : {
-    title: 'Section 5: User Experience',
+    title: 'Section 4: User Experience',
     manualUsability: 'How would you rate the usability of manual methods?',
     aiUsability: 'How would you rate the usability of the AI-assisted system?',
     learningDifficulty: 'Was the system easy to learn?',
@@ -404,16 +404,16 @@ export const SurveySection5 = ({ register, errors, language = 'ja' }) => {
   );
 };
 
-// Section 6: Business Impact
+// Section 5: Business Impact
 export const SurveySection6 = ({ register, errors, language = 'ja' }) => {
   const t = language === 'ja' ? {
-    title: 'セクション6: ビジネスインパクト',
+    title: 'セクション5: ビジネスインパクト',
     staffSatisfactionChange: 'AI導入後、スタッフの満足度は向上しましたか？',
     roi: '投資対効果をどう評価しますか？',
     managementEfficiency: 'マネージャーとしての業務効率は向上しましたか？',
     annualTimeSaved: '年間でどのくらいの時間を節約できていると感じますか？',
   } : {
-    title: 'Section 6: Business Impact',
+    title: 'Section 5: Business Impact',
     staffSatisfactionChange: 'Has staff satisfaction improved after AI implementation?',
     roi: 'How would you rate the return on investment (ROI)?',
     managementEfficiency: 'Has your management efficiency improved?',
@@ -471,16 +471,16 @@ export const SurveySection6 = ({ register, errors, language = 'ja' }) => {
   );
 };
 
-// Section 7: Improvements and Future
+// Section 6: Improvements and Future
 export const SurveySection7 = ({ register, errors, language = 'ja' }) => {
   const t = language === 'ja' ? {
-    title: 'セクション7: 改善と今後',
+    title: 'セクション6: 改善と今後',
     recommendation: '他のレストランにこのシステムを推奨しますか？',
     continueUsing: '5年後もこのシステムを使い続けたいですか？',
     trainingSupport: 'システムトレーニング/サポートは十分でしたか？',
     futureExpectations: 'AI技術の進化により、今後どのような機能を期待しますか？',
   } : {
-    title: 'Section 7: Improvements and Future',
+    title: 'Section 6: Improvements and Future',
     recommendation: 'Would you recommend this system to other restaurants?',
     continueUsing: 'Would you want to continue using this system in 5 years?',
     trainingSupport: 'Was the system training/support adequate?',
@@ -538,16 +538,16 @@ export const SurveySection7 = ({ register, errors, language = 'ja' }) => {
   );
 };
 
-// Section 8: Overall Evaluation
+// Section 7: Overall Evaluation
 export const SurveySection8 = ({ register, errors, language = 'ja' }) => {
   const t = language === 'ja' ? {
-    title: 'セクション8: 総合評価',
+    title: 'セクション7: 総合評価',
     overallComparison: '全体的に、手動方式とAI支援システムを比較してどちらが優れていますか？',
     returnToManual: '手動方式に戻りたいと思いますか？',
     mostImpressive: 'AIシステムで最も印象的だった経験を教えてください',
     additionalComments: 'システムに関するその他のコメントや提案',
   } : {
-    title: 'Section 8: Overall Evaluation',
+    title: 'Section 7: Overall Evaluation',
     overallComparison: 'Overall, which system is better: manual or AI-assisted?',
     returnToManual: 'Would you want to go back to manual scheduling?',
     mostImpressive: 'Describe your most impressive experience with the AI system',
