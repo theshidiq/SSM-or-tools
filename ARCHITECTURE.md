@@ -23,7 +23,7 @@ This document provides comprehensive technical documentation of the system archi
 
 ---
 
-## 🎯 Overview
+## Overview
 
 The Shift Schedule Manager is a **hybrid architecture** system that combines:
 
@@ -40,7 +40,7 @@ This architecture provides:
 
 ---
 
-## 🏗️ Architecture Layers
+## Architecture Layers
 
 ### Layer 1: Client Layer
 
@@ -193,7 +193,7 @@ This architecture provides:
 
 ---
 
-## 🔄 Data Flow
+## Data Flow
 
 ### 1. User Action to Schedule Update
 
@@ -270,7 +270,7 @@ Two users edit same cell simultaneously
 
 ---
 
-## 🔧 Component Details
+## Component Details
 
 ### React Hooks Architecture
 
@@ -413,7 +413,7 @@ def _add_staff_group_constraints(self):
 
 ---
 
-## 🛠️ Technology Stack
+## Technology Stack
 
 ### Frontend Stack
 
@@ -449,7 +449,7 @@ def _add_staff_group_constraints(self):
 
 ---
 
-## 🎯 Design Decisions
+## Design Decisions
 
 ### 1. Why Hybrid Architecture?
 
@@ -516,7 +516,7 @@ def _add_staff_group_constraints(self):
 
 ---
 
-## 📐 Constraint Programming Model
+## Constraint Programming Model
 
 ### Mathematical Formulation
 
@@ -569,7 +569,7 @@ vᵢ = Boolean variable (1 if violated, 0 otherwise)
 
 ---
 
-## 🌐 WebSocket Protocol
+## WebSocket Protocol
 
 ### Connection Lifecycle
 
@@ -622,7 +622,7 @@ vᵢ = Boolean variable (1 if violated, 0 otherwise)
 
 ---
 
-## 🗄️ Database Schema
+## Database Schema
 
 ### staff_members Table
 
@@ -655,7 +655,7 @@ CREATE TABLE schedule_data (
 
 ---
 
-## 🚀 Deployment Architecture
+## Deployment Architecture
 
 ### Production Deployment (Docker Compose)
 
@@ -704,7 +704,7 @@ nginx:
 
 ---
 
-## ⚡ Performance Characteristics
+## Performance Characteristics
 
 ### Latency Benchmarks
 
@@ -726,7 +726,7 @@ nginx:
 
 ---
 
-## 🔒 Security Considerations
+## Security Considerations
 
 ### Authentication & Authorization
 
@@ -750,7 +750,7 @@ nginx:
 
 ---
 
-## 📚 Additional Resources
+## Additional Resources
 
 - [README.md](./README.md) - Project overview
 - [CLAUDE.md](./CLAUDE.md) - Development guide for Claude Code

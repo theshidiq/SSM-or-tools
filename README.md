@@ -1,6 +1,6 @@
-# 🍽️ Shift Schedule Manager with OR-Tools
+# Shift Schedule Manager with OR-Tools
 
-> **AI-powered shift scheduling system that reduces manual scheduling time by 94% using Google OR-Tools CP-SAT constraint solver**
+> AI-powered shift scheduling system that reduces manual scheduling time by 94% using Google OR-Tools CP-SAT constraint solver
 
 [![MIT License](https://img.shields.io/badge/License-MIT-green.svg)](https://choosealicense.com/licenses/mit/)
 [![React](https://img.shields.io/badge/React-18.x-blue.svg)](https://reactjs.org/)
@@ -12,11 +12,11 @@ A production-ready, real-time shift scheduling system for hotel kitchen division
 
 ---
 
-## 🎯 Problem & Solution
+## Problem & Solution
 
-**The Problem**: Manual shift scheduling for 15-20 hotel kitchen staff takes **4-8 hours** per period, with frequent constraint violations, unfair distribution, and human errors.
+**The Problem**: Manual shift scheduling for 15-20 hotel kitchen staff takes 4-8 hours per period, with frequent constraint violations, unfair distribution, and human errors.
 
-**Our Solution**: Hybrid architecture combining React frontend, Go WebSocket server, and Python OR-Tools optimizer that generates optimal schedules in **<30 seconds** with 100% constraint satisfaction.
+**Our Solution**: Hybrid architecture combining React frontend, Go WebSocket server, and Python OR-Tools optimizer that generates optimal schedules in under 30 seconds with 100% constraint satisfaction.
 
 ### Key Achievements
 
@@ -29,34 +29,34 @@ A production-ready, real-time shift scheduling system for hotel kitchen division
 
 ---
 
-## ✨ Features
+## Features
 
-### 🎯 Mathematical Optimization
+### Mathematical Optimization
 - **Google OR-Tools CP-SAT Solver**: Mathematically proven optimal schedules
 - **Multi-Constraint Support**: 10+ simultaneous constraints (hard & soft)
 - **Penalty-Based Optimization**: Always returns feasible solutions
 - **Configurable Weights**: Fine-tune constraint priorities
 
-### ⚡ Real-time Collaboration
+### Real-time Collaboration
 - **WebSocket Communication**: <50ms latency updates
 - **1000+ Concurrent Users**: Production-tested scalability
 - **4 Conflict Resolution Strategies**: Intelligent merge algorithms
 - **99.95% Uptime**: Auto-reconnection with exponential backoff
 
-### 🌐 Production-Ready
+### Production-Ready
 - **Docker Deployment**: NGINX + 3 Go server replicas + OR-Tools
 - **Load Balancing**: Horizontal scaling with health checks
 - **Monitoring**: Prometheus metrics integration
 - **Message Compression**: 50% network traffic reduction
 
-### 🇯🇵 Japanese Localization
+### Japanese Localization
 - **Bilingual Interface**: Complete Japanese/English support
 - **Date Formatting**: Japanese locale integration (令和表記)
 - **Shift Symbols**: △ (早番), ○ (通常), ◇ (遅番), × (休み)
 
 ---
 
-## 🏗️ Architecture
+## Architecture
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
@@ -97,7 +97,7 @@ See [ARCHITECTURE.md](./ARCHITECTURE.md) for detailed technical documentation.
 
 ---
 
-## 🚀 Quick Start
+## Quick Start
 
 ### Prerequisites
 
@@ -145,7 +145,7 @@ open http://localhost
 
 ---
 
-## 📋 Constraint Programming Model
+## Constraint Programming Model
 
 ### Decision Variables
 
@@ -186,7 +186,7 @@ Where:
 
 ---
 
-## 🧪 Testing
+## Testing
 
 ### Comprehensive Test Strategy
 
@@ -213,14 +213,14 @@ npm run test:strategy
 
 | Component | Coverage | Status |
 |-----------|----------|--------|
-| React Components | 85%+ | ✅ |
-| Go WebSocket Server | 80%+ | ✅ |
-| OR-Tools Optimizer | 90%+ | ✅ |
-| Integration Tests | Full stack | ✅ |
+| React Components | 85%+ | Passing |
+| Go WebSocket Server | 80%+ | Passing |
+| OR-Tools Optimizer | 90%+ | Passing |
+| Integration Tests | Full stack | Passing |
 
 ---
 
-## 📊 Research & Evaluation
+## Research & Evaluation
 
 This project is backed by rigorous academic research using **Design Science Research (DSR)** methodology.
 
@@ -244,7 +244,7 @@ See [research/](./research/) directory for complete documentation.
 
 ---
 
-## 📖 Documentation
+## Documentation
 
 | Document | Description |
 |----------|-------------|
@@ -255,7 +255,7 @@ See [research/](./research/) directory for complete documentation.
 
 ---
 
-## 🛠️ Tech Stack
+## Tech Stack
 
 ### Frontend
 - **React 18** - Modern UI library with hooks
@@ -283,27 +283,27 @@ See [research/](./research/) directory for complete documentation.
 
 ---
 
-## 🎯 Use Cases
+## Use Cases
 
 ### Perfect for:
 
-- 🏨 **Hotels & Restaurants**: Kitchen, front desk, housekeeping shifts
-- 🏥 **Healthcare**: Nurse scheduling with labor law compliance
-- 🏭 **Manufacturing**: Production line shift optimization
-- 🛒 **Retail**: Store staff scheduling with peak hours
-- 📞 **Call Centers**: 24/7 coverage optimization
+- **Hotels & Restaurants**: Kitchen, front desk, housekeeping shifts
+- **Healthcare**: Nurse scheduling with labor law compliance
+- **Manufacturing**: Production line shift optimization
+- **Retail**: Store staff scheduling with peak hours
+- **Call Centers**: 24/7 coverage optimization
 
 ### Key Benefits:
 
-✅ **94% Time Savings**: From hours to minutes
-✅ **100% Compliance**: Automatic labor law adherence
-✅ **Fair Distribution**: Mathematically optimal fairness
-✅ **Real-time Collaboration**: Multiple managers simultaneously
-✅ **Scalable**: From 10 to 100+ staff members
+- **94% Time Savings**: From hours to minutes
+- **100% Compliance**: Automatic labor law adherence
+- **Fair Distribution**: Mathematically optimal fairness
+- **Real-time Collaboration**: Multiple managers simultaneously
+- **Scalable**: From 10 to 100+ staff members
 
 ---
 
-## 🔧 Development
+## Development
 
 ### Available Commands
 
@@ -367,13 +367,13 @@ shift-schedule-manager-ortools/
 
 ---
 
-## 📝 License
+## License
 
 This project is licensed under the **MIT License** - see the [LICENSE](LICENSE) file for details.
 
 ---
 
-## 👨‍💻 Author
+## Author
 
 **Kamal Ashidiq**
 
@@ -382,7 +382,7 @@ This project is licensed under the **MIT License** - see the [LICENSE](LICENSE) 
 
 ---
 
-## 🙏 Acknowledgments
+## Acknowledgments
 
 - **Google OR-Tools Team** - For the powerful CP-SAT solver
 - **Hevner et al. (2004)** - Design Science Research methodology
@@ -391,7 +391,7 @@ This project is licensed under the **MIT License** - see the [LICENSE](LICENSE) 
 
 ---
 
-## 📚 References
+## References
 
 ### Academic References
 
@@ -407,27 +407,23 @@ This project is licensed under the **MIT License** - see the [LICENSE](LICENSE) 
 
 ---
 
-## 🎯 Roadmap
+## Roadmap
 
-- [ ] **Multi-tenancy Support**: Support for multiple organizations
-- [ ] **Mobile App**: React Native iOS/Android applications
-- [ ] **Advanced Analytics**: ML-based demand forecasting
-- [ ] **API Documentation**: OpenAPI/Swagger specs
-- [ ] **Internationalization**: Additional language support beyond Japanese/English
-- [ ] **Cloud Deployment Guide**: AWS/GCP/Azure deployment tutorials
-
----
-
-## ⭐ Star History
-
-If this project helped you, please consider giving it a ⭐!
+- Multi-tenancy Support: Support for multiple organizations
+- Mobile App: React Native iOS/Android applications
+- Advanced Analytics: ML-based demand forecasting
+- API Documentation: OpenAPI/Swagger specs
+- Internationalization: Additional language support beyond Japanese/English
+- Cloud Deployment Guide: AWS/GCP/Azure deployment tutorials
 
 ---
 
-<p align="center">
-  <strong>Built with ❤️ for the hospitality industry</strong>
-</p>
+## Star History
 
-<p align="center">
-  Made with care for Japanese restaurant shift management
-</p>
+If this project helped you, please consider giving it a star on GitHub.
+
+---
+
+**Built for the hospitality industry**
+
+Made with care for Japanese restaurant shift management
