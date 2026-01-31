@@ -527,9 +527,14 @@ export const addNextPeriod = async () => {
 };
 
 // Generate date range based on current month index
-export const generateDateRange = (monthIndex) => {
+// Optionally accepts periods array to use instead of cache (for React state synchronization)
+export const generateDateRange = (monthIndex, periodsFromState = null) => {
+  // Use provided periods or fall back to cache
+  const periodsToUse = periodsFromState || periodsCache;
+  const isUsingCache = !periodsFromState;
+
   // Handle case where no periods exist or cache not initialized
-  if (!cacheInitialized || periodsCache.length === 0) {
+  if (isUsingCache && (!cacheInitialized || periodsToUse.length === 0)) {
     // Only log once during development, not repeatedly
     if (
       process.env.NODE_ENV === "development" &&
@@ -543,27 +548,32 @@ export const generateDateRange = (monthIndex) => {
     return [];
   }
 
+  // Handle empty periods from state
+  if (!periodsToUse || periodsToUse.length === 0) {
+    return [];
+  }
+
   // Bounds check for monthIndex
   if (
     monthIndex < 0 ||
-    monthIndex >= periodsCache.length ||
-    periodsCache[monthIndex] === undefined
+    monthIndex >= periodsToUse.length ||
+    periodsToUse[monthIndex] === undefined
   ) {
     monthIndex = 0;
-    if (periodsCache.length === 0) {
+    if (periodsToUse.length === 0) {
       return []; // Still empty, return empty array
     }
   }
 
-  const period = periodsCache[monthIndex];
+  const period = periodsToUse[monthIndex];
   if (!period || !period.start || !period.end) {
     console.error(`Invalid period for monthIndex ${monthIndex}:`, period);
     // If we have no valid periods, return empty array
-    if (periodsCache.length === 0) {
+    if (periodsToUse.length === 0) {
       return [];
     }
     // Try first period as fallback
-    return generateDateRange(0);
+    return generateDateRange(0, periodsToUse);
   }
 
   const dates = [];
@@ -1157,4 +1167,146 @@ export const getDateLabel = (date, staff = null) => {
 
   // If no special boundary date, return formatted date
   return format(currentDate, "d");
+};
+
+/**
+ * Remap schedule data from old period dates to new period dates.
+ * This allows displaying schedule data that was created with a different period configuration.
+ *
+ * The remapping is based on the DAY POSITION within the period, not the absolute date.
+ * For example:
+ * - Old period: Dec 21 - Jan 20 (day 1 = Dec 21, day 11 = Dec 31)
+ * - New period: Dec 1 - Dec 31 (day 1 = Dec 1, day 11 = Dec 11)
+ * - Data from Dec 21 (day 1 of old) → displays at Dec 1 (day 1 of new)
+ *
+ * @param {Object} scheduleData - The schedule data { staffId: { dateKey: shiftValue } }
+ * @param {Object} currentPeriod - Current period { start: Date, end: Date }
+ * @returns {Object} - Remapped schedule data with new date keys
+ */
+export const remapScheduleDataToPeriod = (scheduleData, currentPeriod) => {
+  if (!scheduleData || !currentPeriod || !currentPeriod.start || !currentPeriod.end) {
+    return scheduleData || {};
+  }
+
+  // Get all dates from the schedule data to detect the original period range
+  const allDates = new Set();
+  Object.values(scheduleData).forEach(staffSchedule => {
+    if (staffSchedule && typeof staffSchedule === 'object') {
+      Object.keys(staffSchedule).forEach(dateKey => allDates.add(dateKey));
+    }
+  });
+
+  if (allDates.size === 0) {
+    return scheduleData;
+  }
+
+  // Sort dates to find the original period range
+  const sortedDates = Array.from(allDates).sort();
+  const oldStartDateStr = sortedDates[0];
+  const oldEndDateStr = sortedDates[sortedDates.length - 1];
+
+  const oldStartDate = new Date(oldStartDateStr + 'T00:00:00.000Z');
+  const newStartDate = new Date(currentPeriod.start);
+
+  // Check if remapping is needed (old start differs from new start)
+  const newStartStr = newStartDate.toISOString().split('T')[0];
+  if (oldStartDateStr === newStartStr) {
+    // No remapping needed - dates already match current period
+    return scheduleData;
+  }
+
+  console.log(`🔄 [DATE-REMAP] Remapping schedule data from ${oldStartDateStr} to ${newStartStr}`);
+
+  // Calculate the day offset between old and new period starts
+  const remappedData = {};
+
+  Object.entries(scheduleData).forEach(([staffId, staffSchedule]) => {
+    if (!staffSchedule || typeof staffSchedule !== 'object') {
+      remappedData[staffId] = staffSchedule;
+      return;
+    }
+
+    remappedData[staffId] = {};
+
+    Object.entries(staffSchedule).forEach(([oldDateKey, shiftValue]) => {
+      // Calculate day position in old period (0-indexed)
+      const oldDate = new Date(oldDateKey + 'T00:00:00.000Z');
+      const dayOffset = Math.round((oldDate - oldStartDate) / (1000 * 60 * 60 * 24));
+
+      // Calculate new date based on day position
+      const newDate = new Date(newStartDate);
+      newDate.setUTCDate(newDate.getUTCDate() + dayOffset);
+
+      // Only include if within current period range
+      const currentEndDate = new Date(currentPeriod.end);
+      if (newDate <= currentEndDate) {
+        const newDateKey = newDate.toISOString().split('T')[0];
+        remappedData[staffId][newDateKey] = shiftValue;
+      }
+    });
+  });
+
+  console.log(`✅ [DATE-REMAP] Remapped ${allDates.size} dates for ${Object.keys(remappedData).length} staff members`);
+
+  return remappedData;
+};
+
+/**
+ * Reverse remap: Convert new period dates back to original storage dates.
+ * Used when saving data to maintain consistency with stored data format.
+ *
+ * @param {string} newDateKey - Date in new period format (e.g., "2025-12-01")
+ * @param {Object} currentPeriod - Current period { start: Date, end: Date }
+ * @param {string} originalStartDateStr - The original period start date string
+ * @returns {string} - Original date key for storage
+ */
+export const reverseRemapDateKey = (newDateKey, currentPeriod, originalStartDateStr) => {
+  if (!currentPeriod || !currentPeriod.start || !originalStartDateStr) {
+    return newDateKey;
+  }
+
+  const newStartDate = new Date(currentPeriod.start);
+  const newStartStr = newStartDate.toISOString().split('T')[0];
+
+  // If no remapping was done, return as-is
+  if (originalStartDateStr === newStartStr) {
+    return newDateKey;
+  }
+
+  const oldStartDate = new Date(originalStartDateStr + 'T00:00:00.000Z');
+  const newDate = new Date(newDateKey + 'T00:00:00.000Z');
+
+  // Calculate day offset from new period start
+  const dayOffset = Math.round((newDate - newStartDate) / (1000 * 60 * 60 * 24));
+
+  // Calculate original date
+  const originalDate = new Date(oldStartDate);
+  originalDate.setUTCDate(originalDate.getUTCDate() + dayOffset);
+
+  return originalDate.toISOString().split('T')[0];
+};
+
+/**
+ * Detect the original period start date from schedule data.
+ * Returns the earliest date found in the schedule.
+ *
+ * @param {Object} scheduleData - The schedule data { staffId: { dateKey: shiftValue } }
+ * @returns {string|null} - Original start date string or null if no data
+ */
+export const detectOriginalPeriodStart = (scheduleData) => {
+  if (!scheduleData) return null;
+
+  let earliestDate = null;
+
+  Object.values(scheduleData).forEach(staffSchedule => {
+    if (staffSchedule && typeof staffSchedule === 'object') {
+      Object.keys(staffSchedule).forEach(dateKey => {
+        if (!earliestDate || dateKey < earliestDate) {
+          earliestDate = dateKey;
+        }
+      });
+    }
+  });
+
+  return earliestDate;
 };

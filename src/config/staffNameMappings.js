@@ -9,32 +9,31 @@
 
 export const staffNameMappings = {
   // Exact matches (no mapping needed, but listed for reference)
-  "料理長": "料理長",
-  "井関": "井関",
-  "古藤": "古藤",
-  "小池": "小池",
-  "岸": "岸",
-  "高野": "高野",
-  "中田": "中田",
+  料理長: "料理長",
+  井関: "井関",
+  古藤: "古藤",
+  小池: "小池",
+  岸: "岸",
+  高野: "高野",
+  中田: "中田",
 
   // Mismatched names (require mapping)
-  "織": "与儀",
-  "由辺": "田辺",
-  "カマレ": "カマル",
-  "安井": "やすい"
+  織: "与儀",
+  由辺: "田辺",
+  カマレ: "カマル",
+  安井: "やすい",
 };
 
 /**
  * Reverse mapping: Database Name → HTML Name
  * Automatically generated from staffNameMappings
  */
-export const reverseStaffNameMappings = Object.entries(staffNameMappings).reduce(
-  (acc, [htmlName, dbName]) => {
-    acc[dbName] = htmlName;
-    return acc;
-  },
-  {}
-);
+export const reverseStaffNameMappings = Object.entries(
+  staffNameMappings,
+).reduce((acc, [htmlName, dbName]) => {
+  acc[dbName] = htmlName;
+  return acc;
+}, {});
 
 /**
  * Get database name from HTML name
@@ -87,7 +86,10 @@ export function saveCustomMappings() {
     }
   });
 
-  localStorage.setItem('customStaffNameMappings', JSON.stringify(customMappings));
+  localStorage.setItem(
+    "customStaffNameMappings",
+    JSON.stringify(customMappings),
+  );
 }
 
 /**
@@ -95,7 +97,7 @@ export function saveCustomMappings() {
  */
 export function loadCustomMappings() {
   try {
-    const stored = localStorage.getItem('customStaffNameMappings');
+    const stored = localStorage.getItem("customStaffNameMappings");
     if (stored) {
       const customMappings = JSON.parse(stored);
       Object.entries(customMappings).forEach(([htmlName, dbName]) => {
@@ -103,7 +105,7 @@ export function loadCustomMappings() {
       });
     }
   } catch (error) {
-    console.error('Failed to load custom staff name mappings:', error);
+    console.error("Failed to load custom staff name mappings:", error);
   }
 }
 

@@ -5,6 +5,7 @@ import {
   refreshPeriodsCache,
   synchronizePeriodsCache,
 } from "../utils/dateUtils";
+import { PREFETCH_QUERY_KEYS } from "./useScheduleDataPrefetch";
 
 export const usePeriodsRealtime = () => {
   const queryClient = useQueryClient();
@@ -49,10 +50,16 @@ export const usePeriodsRealtime = () => {
       await refreshPeriodsCache();
       console.log("🔄 Force refreshed dateUtils cache from database");
 
-      // Force refetch React Query cache used by main schedule table
-      // Using refetchQueries instead of invalidateQueries to force immediate refetch
-      queryClient.refetchQueries({ queryKey: ["periods", "list"] });
-      console.log("🔄 Refetching React Query periods cache for main table");
+      // Force invalidate AND refetch React Query cache used by main schedule table
+      // invalidateQueries marks data as stale, then refetchQueries forces immediate refetch
+      const periodsQueryKey = PREFETCH_QUERY_KEYS.periods();
+      await queryClient.invalidateQueries({ queryKey: periodsQueryKey });
+      await queryClient.refetchQueries({ queryKey: periodsQueryKey });
+      console.log("🔄 Invalidated and refetched React Query periods cache for main table");
+
+      // Also invalidate schedule data queries since period dates changed
+      await queryClient.invalidateQueries({ queryKey: ["schedule"] });
+      console.log("🔄 Invalidated schedule data cache (period dates changed)");
     } catch (err) {
       console.error("Failed to load periods:", err);
       setError(err.message);

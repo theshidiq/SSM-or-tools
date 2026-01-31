@@ -16,8 +16,11 @@
  * Replaces: ConfigurationService (localStorage-only, no real-time updates)
  */
 
-import { useMemo, useCallback } from "react";
+import { useMemo, useCallback, useState, useEffect } from "react";
 import { useSettingsData } from "./useSettingsData";
+
+// Local storage key for earlyShiftConfig (not stored in database yet)
+const EARLY_SHIFT_CONFIG_KEY = "shift-schedule-earlyShiftConfig";
 
 /**
  * Hook for AI systems to access settings with real-time WebSocket updates
@@ -44,6 +47,57 @@ export const useAISettings = () => {
     backendMode,
     updateSettings,
   } = useSettingsData(true);
+
+  // Load earlyShiftConfig from localStorage (not stored in database yet)
+  const earlyShiftConfig = useMemo(() => {
+    // ✅ FIX: Default config with postPeriodDays=2 to ensure March 7 protection
+    const defaultConfig = {
+      postPeriodConstraint: {
+        enabled: true,
+        isHardConstraint: true,
+        minPeriodLength: 3,
+        postPeriodDays: 2,  // ← CRITICAL: Protects 2 days after period (e.g., March 6 AND March 7)
+        avoidDayOffForShain: true,
+        avoidDayOffForHaken: true,
+        allowEarlyForShain: true,
+      }
+    };
+
+    try {
+      const saved = localStorage.getItem(EARLY_SHIFT_CONFIG_KEY);
+      console.log("[useAISettings] 🔍 DEBUG - localStorage raw value:", saved);
+      const localConfig = saved ? JSON.parse(saved) : defaultConfig;
+      console.log("[useAISettings] 🔍 DEBUG - parsed localConfig:", JSON.stringify(localConfig, null, 2));
+
+      // Merge: defaultConfig < settings < localConfig (localStorage has highest priority)
+      // ✅ CRITICAL FIX: Ensure NEW fields like postPeriodDays are ALWAYS present
+      // even if localStorage has an old config without them
+      const mergedPostPeriodConstraint = {
+        ...defaultConfig.postPeriodConstraint,
+        ...settings?.earlyShiftConfig?.postPeriodConstraint,
+        ...localConfig?.postPeriodConstraint,
+      };
+
+      // ✅ CRITICAL: Force postPeriodDays to 2 if missing (backward compatibility for old localStorage)
+      if (mergedPostPeriodConstraint.postPeriodDays === undefined || mergedPostPeriodConstraint.postPeriodDays === null) {
+        console.log("[useAISettings] ⚠️ postPeriodDays missing from merged config, setting default: 2");
+        mergedPostPeriodConstraint.postPeriodDays = 2;
+      }
+
+      const merged = {
+        ...defaultConfig,
+        ...settings?.earlyShiftConfig,
+        ...localConfig,
+        postPeriodConstraint: mergedPostPeriodConstraint,
+      };
+      console.log("[useAISettings] 🔍 DEBUG - merged earlyShiftConfig:", JSON.stringify(merged, null, 2));
+      console.log("[useAISettings] 🎯 CRITICAL - postPeriodDays value:", merged.postPeriodConstraint?.postPeriodDays);
+      return merged;
+    } catch (e) {
+      console.error("Failed to load earlyShiftConfig from localStorage:", e);
+      return settings?.earlyShiftConfig || defaultConfig;
+    }
+  }, [settings?.earlyShiftConfig]);
 
   /**
    * Transform staff groups from database format to AI format
@@ -108,7 +162,7 @@ export const useAISettings = () => {
     // Default values if no database limits
     const defaults = {
       minOffPerDay: 0,
-      maxOffPerDay: 3,
+      maxOffPerDay: 4, // Changed from 3 to 4 to allow more day-off flexibility
       minEarlyPerDay: 0,
       maxEarlyPerDay: 2,
       minLatePerDay: 0,
@@ -190,7 +244,7 @@ export const useAISettings = () => {
         name: 'Staff Off Days Per Day',
         shiftType: 'off',
         minCount: limits.minOffPerDay ?? 0,      // ✅ NEW: MIN constraint
-        maxCount: limits.maxOffPerDay ?? 3,
+        maxCount: limits.maxOffPerDay ?? 4, // Changed from 3 to 4 to allow more day-off flexibility
         constraints: {
           daysOfWeek: [0, 1, 2, 3, 4, 5, 6],
           scope: 'all',
@@ -198,7 +252,7 @@ export const useAISettings = () => {
           isHardConstraint: true,
           penaltyWeight: 50,
         },
-        description: `${limits.minOffPerDay ?? 0}-${limits.maxOffPerDay ?? 3} staff should be off per day`,
+        description: `${limits.minOffPerDay ?? 0}-${limits.maxOffPerDay ?? 4} staff should be off per day`,
       });
 
       // Add early shifts limit (includes both MIN and MAX)
@@ -817,6 +871,7 @@ export const useAISettings = () => {
       ortoolsConfig, // ✅ NEW: OR-Tools solver configuration
       staffTypeLimits, // ✅ NEW: Per-staff-type daily limits
       backupAssignments, // ✅ NEW: Backup staff assignments for coverage
+      earlyShiftConfig, // ✅ NEW: Early shift post-period constraints (loaded from localStorage)
       allConstraints,
       constraintWeights,
     };
@@ -836,6 +891,7 @@ export const useAISettings = () => {
       ortoolsConfig, // ✅ NEW: OR-Tools solver configuration
       staffTypeLimits, // ✅ NEW: Per-staff-type daily limits
       backupAssignments, // ✅ NEW: Backup staff assignments for coverage
+      earlyShiftConfig, // ✅ NEW: Early shift post-period constraints (loaded from localStorage)
 
       // Aggregated data
       allConstraints,

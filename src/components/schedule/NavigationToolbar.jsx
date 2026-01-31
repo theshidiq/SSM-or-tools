@@ -38,7 +38,6 @@ import {
 } from "../ui/tooltip";
 import { addNextPeriod } from "../../utils/dateUtils";
 import { usePeriodsRealtime } from "../../hooks/usePeriodsRealtime";
-import { useAIAssistant } from "../../hooks/useAIAssistant";
 import { useAIAssistantLazy } from "../../hooks/useAIAssistantLazy";
 import { AISettingsProvider } from "../../contexts/AISettingsProvider";
 import ErrorBoundary from "../ui/ErrorBoundary";
@@ -149,28 +148,17 @@ const NavigationToolbar = ({
 
   // Note: Removed automatic period creation - users add periods manually via "Add Table" button
 
-  // Use lazy AI assistant when AI is enabled, fallback to regular when not
-  const regularAI = useAIAssistant(
-    scheduleData,
-    staffMembers,
-    currentMonthIndex,
-    updateSchedule,
-  );
-
-  const lazyAI = useAIAssistantLazy(
+  // Use OR-Tools via WebSocket for AI schedule generation
+  // Legacy TensorFlow.js system has been removed for portfolio optimization
+  const ai = useAIAssistantLazy(
     scheduleData,
     staffMembers,
     currentMonthIndex,
     updateSchedule, // This is handleScheduleUpdate which calls prefetchUpdateSchedule (backend save)
     {
       autoInitialize: aiEnabled,
-      enableEnhanced: true,
-      fallbackMode: true,
     },
   );
-
-  // Choose which AI system to use
-  const ai = aiEnabled ? lazyAI : regularAI;
 
   const {
     isInitialized,

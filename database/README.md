@@ -378,3 +378,138 @@ const { data: newVersion } = await supabase
 ## 📄 License
 
 This database migration system is part of the Shift Schedule Manager project.
+
+---
+
+## 🆕 AI Receptionist Feature (NEW)
+
+### Migration 016: Allergen Schema
+
+**File**: `migrations/016_allergen_schema_for_ai_receptionist.sql`
+**Project**: `ai-receptionist-allergen` (separate repository)
+**Date**: 2025-01-31
+**Status**: ✅ Safe to apply - INDEPENDENT schema
+
+### New Tables (8 tables for AI Receptionist)
+
+1. **allergen_types** - Standard allergen list (gluten, dairy, shellfish, etc.)
+2. **menu_categories** - Menu organization (Appetizers, Main Course, Desserts, Beverages)
+3. **menu_items** - Hotel menu with multilingual support (English + Japanese)
+4. **ingredients** - Shared ingredient library
+5. **ingredient_allergens** - Maps ingredients to allergen types
+6. **menu_item_ingredients** - Maps menu items to ingredients with quantities
+7. **allergen_conversations** - Conversation logs for analytics
+8. **allergen_sessions** - User session tracking
+
+### Quick Start
+
+```bash
+# Apply allergen schema migration
+psql $SUPABASE_DB_URL -f database/migrations/016_allergen_schema_for_ai_receptionist.sql
+
+# Or via Supabase SQL Editor:
+# 1. Open Supabase dashboard
+# 2. Navigate to SQL Editor
+# 3. Copy contents of 016_allergen_schema_for_ai_receptionist.sql
+# 4. Execute
+```
+
+### Sample Data Included
+
+- ✅ 10 standard allergen types with Japanese translations
+- ✅ 4 menu categories
+- ✅ 20 sample ingredients
+- ✅ 4 sample menu items (Caesar Salad, Grilled Salmon, Shrimp Pasta, Grilled Chicken Rice Bowl)
+- ✅ Accurate allergen mappings
+
+**Next Step**: Add 16-26 more menu items for production (target: 20-30 total).
+
+### Verification Queries
+
+```sql
+-- Check migration success
+SELECT COUNT(*) AS allergen_count FROM allergen_types;  -- Should be 10
+SELECT COUNT(*) AS menu_items FROM menu_items;          -- Should be 4+
+
+-- Test allergen query (find items safe for shellfish allergy)
+SELECT
+  mi.name,
+  mi.name_ja,
+  COALESCE(ARRAY_AGG(DISTINCT at.name), '{}') AS allergens
+FROM menu_items mi
+LEFT JOIN menu_item_ingredients mii ON mi.id = mii.menu_item_id
+LEFT JOIN ingredients i ON mii.ingredient_id = i.id
+LEFT JOIN ingredient_allergens ia ON i.id = ia.ingredient_id
+LEFT JOIN allergen_types at ON ia.allergen_type_id = at.id
+WHERE mi.is_available = true
+GROUP BY mi.id, mi.name, mi.name_ja
+HAVING 'shellfish' != ALL(COALESCE(ARRAY_AGG(DISTINCT at.name), '{}'));
+```
+
+### Database Architecture
+
+**Shared Supabase Instance**: Both Shift Scheduler and AI Receptionist use the SAME database.
+
+**Benefits**:
+- ✅ Cost efficient (1 Supabase FREE tier instance)
+- ✅ Shared connection credentials
+- ✅ Independent schemas (no foreign keys between projects)
+- ✅ Safe to add/remove without affecting shift scheduler
+
+**Environment Variables** (shared):
+```bash
+SUPABASE_URL=https://[your-project-id].supabase.co
+SUPABASE_ANON_KEY=eyJhbGc...
+SUPABASE_SERVICE_KEY=eyJhbGc...  # For admin operations
+```
+
+### Rollback (if needed)
+
+```sql
+-- Remove all AI Receptionist tables
+DROP TABLE IF EXISTS allergen_conversations CASCADE;
+DROP TABLE IF EXISTS allergen_sessions CASCADE;
+DROP TABLE IF EXISTS menu_item_ingredients CASCADE;
+DROP TABLE IF EXISTS ingredient_allergens CASCADE;
+DROP TABLE IF EXISTS ingredients CASCADE;
+DROP TABLE IF EXISTS menu_items CASCADE;
+DROP TABLE IF EXISTS menu_categories CASCADE;
+DROP TABLE IF EXISTS allergen_types CASCADE;
+
+-- Drop triggers and functions
+DROP TRIGGER IF EXISTS trigger_allergen_types_updated_at ON allergen_types;
+DROP TRIGGER IF EXISTS trigger_menu_items_updated_at ON menu_items;
+DROP TRIGGER IF EXISTS trigger_update_session_on_message ON allergen_conversations;
+DROP FUNCTION IF EXISTS update_allergen_types_timestamp();
+DROP FUNCTION IF EXISTS update_menu_items_timestamp();
+DROP FUNCTION IF EXISTS update_session_activity();
+```
+
+### Next Steps for AI Receptionist Implementation
+
+1. **Data Curation** (Week 1)
+   - Add 16-26 more menu items (target: 20-30 total)
+   - Include hotel-specific dishes with Japanese names
+   - Verify allergen mappings for guest safety
+
+2. **Backend Setup** (Week 1)
+   - Initialize NestJS project
+   - Configure TypeORM with Supabase
+   - Implement allergen query API
+
+3. **Frontend Setup** (Week 2)
+   - Initialize SvelteKit project
+   - Build chat UI components
+   - Integrate with NestJS backend
+
+4. **Testing & Deployment** (Week 3)
+   - Write unit and integration tests
+   - Deploy to Vercel (frontend) + Fly.io (backend)
+   - Setup CI/CD pipeline
+
+### Documentation
+
+See comprehensive implementation guide:
+- `docs/AI_RECEPTIONIST_AGENT_GUIDELINE.md` - Complete agent guideline
+- `docs/NEXTBEAT_JOB_ALIGNMENT_ANALYSIS.md` - Job alignment analysis
+- `docs/SVELTEKIT_IMPLEMENTATION_EXAMPLE.md` - Code examples

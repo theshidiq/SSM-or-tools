@@ -197,7 +197,7 @@ export const useSettingsData = (autosaveEnabled = true) => {
         staffGroups: normalizedStaffGroups, // ✅ FIX #3: Use normalized groups with consistent field names
         weeklyLimits: wsSettings?.weeklyLimits ?? [],
         monthlyLimits: wsSettings?.monthlyLimits ?? [],
-        dailyLimits: wsSettings?.dailyLimits ?? settingsRef.current?.dailyLimits ?? { minOffPerDay: 0, maxOffPerDay: 3, minEarlyPerDay: 0, maxEarlyPerDay: 2, minLatePerDay: 0, maxLatePerDay: 3, minWorkingStaffPerDay: 3 }, // Daily limits (per-date constraints with MIN/MAX)
+        dailyLimits: wsSettings?.dailyLimits ?? settingsRef.current?.dailyLimits ?? { minOffPerDay: 0, maxOffPerDay: 4, minEarlyPerDay: 0, maxEarlyPerDay: 2, minLatePerDay: 0, maxLatePerDay: 3, minWorkingStaffPerDay: 3 }, // Daily limits (per-date constraints with MIN/MAX) - maxOffPerDay=4 for more flexibility
         // ✅ NEW: Staff Type Daily Limits (per-staff-type constraints)
         // Synced via dailyLimits.staffTypeLimits or as top-level field
         staffTypeLimits: wsSettings?.dailyLimits?.staffTypeLimits ?? wsSettings?.staffTypeLimits ?? settingsRef.current?.staffTypeLimits ?? {},

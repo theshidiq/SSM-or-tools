@@ -5,7 +5,9 @@
  * Uses advanced ensemble learning and neural architectures for 90%+ accuracy.
  */
 
-import * as tf from "@tensorflow/tfjs";
+// Portfolio Optimization: Use stub instead of actual TensorFlow.js
+// OR-Tools via WebSocket is now the primary optimizer
+import { tf } from "./tensorflow-stub";
 // Removed circular dependency - HighAccuracyMLScheduler imports TensorFlowScheduler
 import {
   extractAllDataForAI,

@@ -6,7 +6,9 @@
  * training strategies to achieve 90%+ prediction accuracy.
  */
 
-import * as tf from "@tensorflow/tfjs";
+// Portfolio Optimization: Use stub instead of actual TensorFlow.js
+// OR-Tools via WebSocket is now the primary optimizer
+import { tf } from "./tensorflow-stub";
 
 export class AdvancedNeuralArchitecture {
   constructor() {

@@ -60,7 +60,15 @@
       "Bash(docker-compose up:*)",
       "Bash(docker network rm:*)",
       "Bash(rm:*)",
-      "Bash(FAST_REFRESH=false npm run start:react:*)"
+      "Bash(FAST_REFRESH=false npm run start:react:*)",
+      "Bash(xargs:*)",
+      "WebSearch",
+      "mcp__chrome-devtools__fill",
+      "Bash(pandoc:*)",
+      "Bash(grep:*)",
+      "Bash(npm install:*)",
+      "WebFetch(domain:hrmos.co)",
+      "WebFetch(domain:www.nextbeat.co.jp)"
     ],
     "deny": [],
     "ask": []

@@ -1,17 +1,76 @@
 import React, { useState, useEffect, useCallback, useMemo } from "react";
-import { Calendar as CalendarIcon, Users, Check, X, AlertCircle, Info } from "lucide-react";
+import { Calendar as CalendarIcon, Users, Check, X, AlertCircle, Info, ChevronLeft, ChevronRight } from "lucide-react";
 import { toast } from "sonner";
 import { format, startOfMonth, endOfMonth, eachDayOfInterval, addMonths, getDay } from "date-fns";
 import { ja } from "date-fns/locale";
 import { useRestaurant } from "../../../contexts/RestaurantContext";
+import { useSettings } from "../../../contexts/SettingsContext";
 import { useCalendarRules } from "../../../hooks/useCalendarRules";
 import { useEarlyShiftPreferences } from "../../../hooks/useEarlyShiftPreferences";
 import { supabase } from "../../../utils/supabase";
 import { Button } from "../../ui/button";
 import { Badge } from "../../ui/badge";
 
+// Local storage key for earlyShiftConfig (not stored in database yet)
+const EARLY_SHIFT_CONFIG_KEY = "shift-schedule-earlyShiftConfig";
+
 const EarlyShiftPreferencesTab = () => {
   const { restaurant } = useRestaurant();
+  const { settings, updateSettings } = useSettings();
+
+  // Load earlyShiftConfig from localStorage on mount
+  const [localEarlyShiftConfig, setLocalEarlyShiftConfig] = useState(() => {
+    try {
+      const saved = localStorage.getItem(EARLY_SHIFT_CONFIG_KEY);
+      return saved ? JSON.parse(saved) : {};
+    } catch (e) {
+      console.error("Failed to load earlyShiftConfig from localStorage:", e);
+      return {};
+    }
+  });
+
+  // Merge localStorage config with settings (localStorage takes priority)
+  const earlyShiftConfig = useMemo(() => ({
+    ...settings?.earlyShiftConfig,
+    ...localEarlyShiftConfig,
+  }), [settings?.earlyShiftConfig, localEarlyShiftConfig]);
+
+  // Post day-off period constraint settings
+  const postPeriodConfig = earlyShiftConfig?.postPeriodConstraint || {
+    enabled: true,                  // CHANGED: Now enabled by default
+    isHardConstraint: true,         // NEW: HARD mode by default
+    minPeriodLength: 3,            // NEW: Only apply to 3+ day periods
+    postPeriodDays: 2,             // NEW: Protect 2 days after period (e.g., March 6 AND March 7)
+    avoidDayOffForShain: true,
+    avoidDayOffForHaken: true,
+    allowEarlyForShain: true,
+  };
+
+  // Handler for updating post-period constraint settings
+  const handlePostPeriodConfigChange = useCallback((key, value) => {
+    const newConfig = {
+      ...postPeriodConfig,
+      [key]: value,
+    };
+    const newEarlyShiftConfig = {
+      ...earlyShiftConfig,
+      postPeriodConstraint: newConfig,
+    };
+
+    // Save to localStorage for persistence
+    try {
+      localStorage.setItem(EARLY_SHIFT_CONFIG_KEY, JSON.stringify(newEarlyShiftConfig));
+      setLocalEarlyShiftConfig(newEarlyShiftConfig);
+    } catch (e) {
+      console.error("Failed to save earlyShiftConfig to localStorage:", e);
+    }
+
+    // Also update settings context for immediate use
+    updateSettings({
+      earlyShiftConfig: newEarlyShiftConfig,
+    });
+    toast.success("設定を保存しました");
+  }, [postPeriodConfig, earlyShiftConfig, updateSettings]);
 
   // Calendar rules (read-only preview)
   const dateRange = useMemo(() => {
@@ -42,18 +101,65 @@ const EarlyShiftPreferencesTab = () => {
   const [isLoadingStaff, setIsLoadingStaff] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
 
-  // Get first and last must_day_off date from calendar rules
-  const { firstMustDayOffDate, lastMustDayOffDate } = useMemo(() => {
+  // Group consecutive must_day_off dates into periods
+  const dayOffPeriods = useMemo(() => {
     const mustDayOffDates = Object.entries(rules)
       .filter(([_, ruleType]) => ruleType === "must_day_off")
       .map(([dateString, _]) => dateString)
       .sort(); // Sort chronologically
 
-    return {
-      firstMustDayOffDate: mustDayOffDates.length > 0 ? mustDayOffDates[0] : null,
-      lastMustDayOffDate: mustDayOffDates.length > 0 ? mustDayOffDates[mustDayOffDates.length - 1] : null,
-    };
+    if (mustDayOffDates.length === 0) return [];
+
+    // Group consecutive dates into periods
+    const periods = [];
+    let currentPeriod = { start: mustDayOffDates[0], end: mustDayOffDates[0] };
+
+    for (let i = 1; i < mustDayOffDates.length; i++) {
+      const prevDate = new Date(mustDayOffDates[i - 1]);
+      const currDate = new Date(mustDayOffDates[i]);
+      const diffDays = (currDate - prevDate) / (1000 * 60 * 60 * 24);
+
+      if (diffDays === 1) {
+        // Consecutive - extend current period
+        currentPeriod.end = mustDayOffDates[i];
+      } else {
+        // Gap - start new period
+        periods.push(currentPeriod);
+        currentPeriod = { start: mustDayOffDates[i], end: mustDayOffDates[i] };
+      }
+    }
+    periods.push(currentPeriod);
+
+    return periods;
   }, [rules]);
+
+  // State for selected period navigation
+  const [selectedPeriodIndex, setSelectedPeriodIndex] = useState(0);
+
+  // Auto-select first non-expired period on mount/update
+  useEffect(() => {
+    if (dayOffPeriods.length === 0) return;
+
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    const nextUpcomingIndex = dayOffPeriods.findIndex(period => {
+      const startDate = new Date(period.start);
+      return startDate >= today;
+    });
+
+    // If all expired, show the last one; otherwise show next upcoming
+    const targetIndex = nextUpcomingIndex >= 0 ? nextUpcomingIndex : dayOffPeriods.length - 1;
+    setSelectedPeriodIndex(targetIndex);
+  }, [dayOffPeriods]);
+
+  // Get selected period and reference date
+  const selectedPeriod = dayOffPeriods[selectedPeriodIndex] || null;
+  const referenceDate = selectedPeriod?.start || null;
+
+  // Legacy: Keep these for backward compatibility with existing code
+  const firstMustDayOffDate = referenceDate;
+  const lastMustDayOffDate = selectedPeriod?.end || null;
 
   // Auto-assign all staff to early shift (default checked)
   const [autoAssignAll, setAutoAssignAll] = useState(true);
@@ -476,12 +582,46 @@ const EarlyShiftPreferencesTab = () => {
               <Users className="w-5 h-5 text-blue-600" />
               早番可能スタッフ選択 (社員のみ)
             </h3>
-            {firstMustDayOffDate && (
-              <p className="text-sm text-gray-600 mt-1">
-                基準日: {format(new Date(firstMustDayOffDate), "yyyy年M月d日", { locale: ja })}
-                <span className="ml-2 text-xs text-gray-500">
-                  (最初の休日必須日に在籍しているスタッフを表示)
+            {dayOffPeriods.length > 0 ? (
+              <div className="flex items-center gap-2 mt-1">
+                <Button
+                  onClick={() => setSelectedPeriodIndex(prev => Math.max(0, prev - 1))}
+                  disabled={selectedPeriodIndex === 0}
+                  variant="ghost"
+                  size="sm"
+                  className="h-7 w-7 p-0"
+                >
+                  <ChevronLeft className="w-4 h-4" />
+                </Button>
+
+                <span className="text-sm text-gray-600 min-w-[220px] text-center">
+                  基準日: {format(new Date(referenceDate), "yyyy年M月d日", { locale: ja })}
+                  {selectedPeriod?.start !== selectedPeriod?.end && (
+                    <span> 〜 {format(new Date(selectedPeriod.end), "M月d日", { locale: ja })}</span>
+                  )}
+                  <span className="text-xs text-gray-400 ml-1">
+                    ({selectedPeriodIndex + 1}/{dayOffPeriods.length})
+                  </span>
                 </span>
+
+                <Button
+                  onClick={() => setSelectedPeriodIndex(prev => Math.min(dayOffPeriods.length - 1, prev + 1))}
+                  disabled={selectedPeriodIndex === dayOffPeriods.length - 1}
+                  variant="ghost"
+                  size="sm"
+                  className="h-7 w-7 p-0"
+                >
+                  <ChevronRight className="w-4 h-4" />
+                </Button>
+              </div>
+            ) : (
+              <p className="text-sm text-gray-500 mt-1">
+                休日必須日が設定されていません
+              </p>
+            )}
+            {dayOffPeriods.length > 0 && (
+              <p className="text-xs text-gray-500 mt-1">
+                (選択した休日期間に在籍しているスタッフを表示)
               </p>
             )}
           </div>
@@ -588,6 +728,165 @@ const EarlyShiftPreferencesTab = () => {
               </p>
             </label>
           </div>
+        </div>
+      )}
+
+      {/* Post Day-Off Period Constraint Section */}
+      {dayOffPeriods.length > 0 && (
+        <div className="bg-white border rounded-lg p-4">
+          <h3 className="text-lg font-semibold text-gray-900 flex items-center gap-2 mb-3">
+            <AlertCircle className="w-5 h-5 text-orange-500" />
+            休日期間終了後の制約設定
+          </h3>
+          <p className="text-sm text-gray-600 mb-4">
+            長期休日期間（メンテナンス等）の翌日に適用する制約を設定します。
+            営業再開日に十分なスタッフを確保するための設定です。
+          </p>
+
+          {/* Main toggle */}
+          <div className="flex items-start gap-3 p-3 border rounded-lg bg-gray-50 mb-3">
+            <input
+              type="checkbox"
+              checked={postPeriodConfig.enabled}
+              onChange={(e) => handlePostPeriodConfigChange('enabled', e.target.checked)}
+              className="w-5 h-5 text-blue-600 rounded focus:ring-blue-500 mt-0.5"
+              id="post-period-enabled"
+            />
+            <label htmlFor="post-period-enabled" className="flex-1 cursor-pointer">
+              <div className="font-semibold text-gray-900">
+                休日期間終了後の制約を有効にする
+              </div>
+              <p className="text-sm text-gray-500 mt-1">
+                休日必須期間の翌日に、以下の制約を適用します
+              </p>
+            </label>
+          </div>
+
+          {/* Sub-options (only shown when enabled) */}
+          {postPeriodConfig.enabled && (
+            <div className="ml-6 space-y-3 border-l-2 border-blue-200 pl-4">
+              {/* Avoid day-off for 社員 */}
+              <div className="flex items-center gap-3">
+                <input
+                  type="checkbox"
+                  checked={postPeriodConfig.avoidDayOffForShain}
+                  onChange={(e) => handlePostPeriodConfigChange('avoidDayOffForShain', e.target.checked)}
+                  className="w-4 h-4 text-blue-600 rounded focus:ring-blue-500"
+                  id="avoid-dayoff-shain"
+                />
+                <label htmlFor="avoid-dayoff-shain" className="text-sm text-gray-700 cursor-pointer">
+                  <span className="font-medium">社員</span>の休日(×)を避ける
+                </label>
+              </div>
+
+              {/* Avoid day-off for 派遣 */}
+              <div className="flex items-center gap-3">
+                <input
+                  type="checkbox"
+                  checked={postPeriodConfig.avoidDayOffForHaken}
+                  onChange={(e) => handlePostPeriodConfigChange('avoidDayOffForHaken', e.target.checked)}
+                  className="w-4 h-4 text-blue-600 rounded focus:ring-blue-500"
+                  id="avoid-dayoff-haken"
+                />
+                <label htmlFor="avoid-dayoff-haken" className="text-sm text-gray-700 cursor-pointer">
+                  <span className="font-medium">派遣</span>の休日(×)を避ける
+                </label>
+              </div>
+
+              {/* Allow early shift for 社員 */}
+              <div className="flex items-center gap-3">
+                <input
+                  type="checkbox"
+                  checked={postPeriodConfig.allowEarlyForShain}
+                  onChange={(e) => handlePostPeriodConfigChange('allowEarlyForShain', e.target.checked)}
+                  className="w-4 h-4 text-blue-600 rounded focus:ring-blue-500"
+                  id="allow-early-shain"
+                />
+                <label htmlFor="allow-early-shain" className="text-sm text-gray-700 cursor-pointer">
+                  <span className="font-medium">社員</span>の早番(△)を許可する
+                </label>
+              </div>
+
+              {/* Divider */}
+              <div className="border-t my-3"></div>
+
+              {/* HARD mode toggle */}
+              <div className="flex items-start gap-3 p-3 border rounded-lg bg-yellow-50">
+                <input
+                  type="checkbox"
+                  checked={postPeriodConfig.isHardConstraint !== false}
+                  onChange={(e) => handlePostPeriodConfigChange('isHardConstraint', e.target.checked)}
+                  className="w-4 h-4 text-yellow-600 rounded focus:ring-yellow-500 mt-0.5"
+                  id="post-period-hard-mode"
+                />
+                <label htmlFor="post-period-hard-mode" className="flex-1 cursor-pointer">
+                  <div className="font-semibold text-gray-900">
+                    ハード制約モード (絶対禁止)
+                  </div>
+                  <p className="text-xs text-gray-600 mt-1">
+                    有効時: 翌日の休日を絶対に許可しない (ペナルティ10000)
+                    <br />
+                    無効時: 避けるが許可する場合あり (ペナルティ500)
+                  </p>
+                </label>
+              </div>
+
+              {/* Minimum period length */}
+              <div className="flex items-start gap-3 p-3 border rounded-lg bg-white">
+                <label className="flex-1">
+                  <div className="font-medium text-gray-700 mb-2">
+                    最小期間日数 (この日数以上の休日期間に適用)
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="number"
+                      min="1"
+                      max="10"
+                      value={postPeriodConfig.minPeriodLength || 3}
+                      onChange={(e) => handlePostPeriodConfigChange('minPeriodLength', parseInt(e.target.value))}
+                      className="w-20 px-3 py-2 border rounded text-sm"
+                    />
+                    <span className="text-sm text-gray-500">日以上の連続休日</span>
+                  </div>
+                  <p className="text-xs text-gray-400 mt-2">
+                    推奨: 3日 (3日以上の営業停止のみ適用)
+                  </p>
+                </label>
+              </div>
+
+              {/* Post-period days config - NEW */}
+              <div className="flex items-center gap-3 p-3 border rounded-lg bg-white">
+                <label className="flex-1">
+                  <div className="font-medium text-gray-700 mb-1">
+                    制約適用日数 (休日期間後)
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="number"
+                      min="1"
+                      max="5"
+                      value={postPeriodConfig.postPeriodDays || 2}
+                      onChange={(e) => handlePostPeriodConfigChange('postPeriodDays', parseInt(e.target.value))}
+                      className="w-20 px-3 py-2 border rounded text-sm"
+                    />
+                    <span className="text-sm text-gray-500">日間</span>
+                  </div>
+                  <p className="text-xs text-gray-400 mt-2">
+                    推奨: 2日 (休日期間終了後の2日間に制約を適用)
+                  </p>
+                </label>
+              </div>
+
+              {/* Info note */}
+              <div className="mt-3 pt-3 border-t flex items-start gap-2 text-xs text-gray-500">
+                <Info className="w-3 h-3 mt-0.5 flex-shrink-0" />
+                <span>
+                  例: 3月3日〜5日が休日期間(3日間)の場合、制約適用日数が2日なら3月6日と7日に上記制約が適用されます。
+                  これにより営業再開後も十分な人員を確保できます。
+                </span>
+              </div>
+            </div>
+          )}
         </div>
       )}
     </div>

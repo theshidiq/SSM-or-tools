@@ -297,6 +297,7 @@ class ShiftScheduleOptimizer:
             self._add_monthly_early_shift_limits()           # Max 3 early shifts per month for 社員
             self._add_adjacent_conflict_prevention()         # No xx, sx, xs
             self._add_5_day_rest_constraint()               # PHASE 4
+            self._add_post_period_constraints()              # Post day-off period constraints
             self._add_priority_rules()                       # PHASE 1 (soft constraints)
 
             # 3. Add optimization objective
@@ -1240,7 +1241,10 @@ class ShiftScheduleOptimizer:
             logger.info(f"  🛡️ {len(self.backup_staff_ids)} backup staff excluded from daily limits (staff_count={staff_count})")
 
         default_min = min(2, staff_count - 1) if staff_count > 1 else 0
-        default_max = min(3, staff_count - 1) if staff_count > 1 else 0
+        # Phase 2 fix: Increase default max from 3 to 4 to allow more day-off flexibility
+        # With 10 staff and max=3, only 84 slots available (3×28) but 100 needed (10×10)
+        # With max=4, 112 slots available (4×28) which satisfies all staff reaching 10
+        default_max = min(4, staff_count - 1) if staff_count > 1 else 0
 
         min_off = daily_limits.get('minOffPerDay', default_min)
         max_off = daily_limits.get('maxOffPerDay', default_max)
@@ -1857,13 +1861,21 @@ class ShiftScheduleOptimizer:
             staff_name = staff.get('name', staff_id)
 
             # ═══════════════════════════════════════════════════════════════════════════
-            # SKIP BACKUP STAFF - They are exempt from monthly limits
-            # Backup staff schedule is determined ONLY by group coverage constraints
+            # BACKUP STAFF - Apply RELAXED monthly limits (not exempt)
+            # Backup staff should still have reasonable day-off limits to avoid imbalance
+            # Use 1.5x the normal max to give them flexibility for coverage
             # ═══════════════════════════════════════════════════════════════════════════
-            if staff_id in self.backup_staff_ids:
-                skipped_backup_count += 1
-                logger.info(f"  🛡️ Skipping backup staff {staff_name} from monthly limits (coverage-based schedule)")
-                continue
+            is_backup = staff_id in self.backup_staff_ids
+            backup_max_scaled = None  # Will be set if backup
+            backup_min_scaled = None
+
+            if is_backup:
+                # Apply relaxed limits for backup staff (1.5x normal max)
+                backup_max_off = int(max_off * 1.5)  # e.g., 10 * 1.5 = 15
+                backup_min_off = 0  # No minimum for backup
+                backup_max_scaled = backup_max_off * 2
+                backup_min_scaled = backup_min_off * 2
+                logger.info(f"  🛡️ Backup staff {staff_name}: relaxed limits min={backup_min_off}, max={backup_max_off} (1.5x normal)")
 
             # ═══════════════════════════════════════════════════════════════════════════
             # PRORATE MONTHLY LIMITS FOR STAFF WITH start_period OR end_period
@@ -1916,6 +1928,15 @@ class ShiftScheduleOptimizer:
                 # No start_period or end_period - use original limits
                 staff_min_scaled = min_scaled
                 staff_max_scaled = max_scaled
+
+            # ═══════════════════════════════════════════════════════════════════════════
+            # OVERRIDE WITH BACKUP LIMITS if this is backup staff
+            # Backup staff get relaxed limits regardless of prorating
+            # ═══════════════════════════════════════════════════════════════════════════
+            if is_backup and backup_max_scaled is not None:
+                staff_min_scaled = backup_min_scaled
+                staff_max_scaled = backup_max_scaled
+                logger.info(f"      → Using backup limits: min={staff_min_scaled/2:.1f}, max={staff_max_scaled/2:.1f}")
 
             # ═══════════════════════════════════════════════════════════════════════════
             # Get priority rule off-equivalent consumption for this staff (FOR LOGGING ONLY)
@@ -2307,6 +2328,242 @@ class ShiftScheduleOptimizer:
 
         logger.info(f"[OR-TOOLS] Added {constraint_count} 5-day rest {constraint_mode} constraints")
 
+    def _add_post_period_constraints(self):
+        """
+        Post day-off period constraints.
+
+        After a long day-off period (must_day_off), apply constraints on the day after:
+        - Avoid day-off (×) for 社員 and 派遣 staff
+        - Allow early shift (△) for 社員 staff
+
+        This ensures adequate staffing when returning from maintenance/holiday periods.
+
+        Configuration from constraints_config['earlyShiftConfig']['postPeriodConstraint']:
+        {
+            'enabled': bool,
+            'isHardConstraint': bool,        # HARD (escape hatch) vs SOFT (penalty) mode
+            'minPeriodLength': int,          # Minimum consecutive days (default: 3)
+            'avoidDayOffForShain': bool,     # Avoid × for 社員
+            'avoidDayOffForHaken': bool,     # Avoid × for 派遣
+            'allowEarlyForShain': bool,      # Allow △ for 社員
+        }
+        """
+        # Enhanced logging header
+        logger.info("=" * 60)
+        logger.info("[OR-TOOLS] POST DAY-OFF PERIOD CONSTRAINTS")
+        logger.info("=" * 60)
+
+        # Get early shift config from constraints
+        early_shift_config = self.constraints_config.get('earlyShiftConfig', {})
+        logger.info(f"  earlyShiftConfig received: {early_shift_config}")
+
+        post_period_config = early_shift_config.get('postPeriodConstraint', {})
+        logger.info(f"  postPeriodConstraint: {post_period_config}")
+
+        if not post_period_config.get('enabled', False):
+            logger.info("  Status: DISABLED (enabled=False)")
+            logger.info("=" * 60)
+            return
+
+        logger.info("  Status: ENABLED - Processing constraints...")
+
+        # Extract configuration options
+        min_period_length = post_period_config.get('minPeriodLength', 3)
+        is_hard_constraint = post_period_config.get('isHardConstraint', True)  # Default: HARD mode
+        avoid_dayoff_shain = post_period_config.get('avoidDayOffForShain', True)
+        avoid_dayoff_haken = post_period_config.get('avoidDayOffForHaken', True)
+        allow_early_shain = post_period_config.get('allowEarlyForShain', True)
+        post_period_days = post_period_config.get('postPeriodDays', 2)  # NEW: Number of days to protect after period (default: 2)
+
+        constraint_mode = "HARD (with escape hatch)" if is_hard_constraint else "SOFT (penalty-based)"
+        logger.info(f"  Config: minPeriodLength={min_period_length}, mode={constraint_mode}, postPeriodDays={post_period_days}")
+        logger.info(f"  Config: avoidDayOffForShain={avoid_dayoff_shain}, avoidDayOffForHaken={avoid_dayoff_haken}, allowEarlyForShain={allow_early_shain}")
+
+        # Find the day after each day-off period ends
+        # Group consecutive must_day_off dates into periods
+        calendar_rules = self.constraints_config.get('calendarRules', {})
+
+        # DIAGNOSTIC: Log the actual calendar_rules structure
+        logger.info(f"  [DIAGNOSTIC] Calendar rules received (first 5 entries):")
+        for idx, (date, rule) in enumerate(list(calendar_rules.items())[:5]):
+            logger.info(f"    {date}: {rule} (type: {type(rule).__name__})")
+
+        must_day_off_dates = sorted([
+            date for date, rule in calendar_rules.items()
+            if isinstance(rule, dict) and rule.get('must_day_off') and date in self.date_range
+        ])
+
+        # DIAGNOSTIC: Also check if any use the string format
+        must_day_off_dates_alt = sorted([
+            date for date, rule in calendar_rules.items()
+            if rule == 'must_day_off' and date in self.date_range
+        ])
+
+        logger.info(f"  [DIAGNOSTIC] must_day_off dates (dict format): {must_day_off_dates}")
+        logger.info(f"  [DIAGNOSTIC] must_day_off dates (string format): {must_day_off_dates_alt}")
+
+        # Use the one that has data
+        if not must_day_off_dates and must_day_off_dates_alt:
+            logger.info(f"  [DIAGNOSTIC] Switching to string format - found {len(must_day_off_dates_alt)} dates")
+            must_day_off_dates = must_day_off_dates_alt
+
+        if not must_day_off_dates:
+            logger.info("  No must_day_off dates found - skipping post-period constraints")
+            return
+
+        # Group consecutive dates into periods
+        from datetime import datetime, timedelta
+
+        periods = []
+        current_period = {'start': must_day_off_dates[0], 'end': must_day_off_dates[0]}
+
+        for i in range(1, len(must_day_off_dates)):
+            prev_date = datetime.strptime(must_day_off_dates[i-1], '%Y-%m-%d')
+            curr_date = datetime.strptime(must_day_off_dates[i], '%Y-%m-%d')
+            diff_days = (curr_date - prev_date).days
+
+            if diff_days == 1:
+                # Consecutive - extend current period
+                current_period['end'] = must_day_off_dates[i]
+            else:
+                # Gap - save current period and start new one
+                periods.append(current_period)
+                current_period = {'start': must_day_off_dates[i], 'end': must_day_off_dates[i]}
+
+        periods.append(current_period)
+
+        logger.info(f"  Found {len(periods)} day-off periods (before filtering)")
+
+        # Filter periods by minimum length (only apply to long periods)
+        filtered_periods = []
+        for period in periods:
+            start_date = datetime.strptime(period['start'], '%Y-%m-%d')
+            end_date = datetime.strptime(period['end'], '%Y-%m-%d')
+            period_length = (end_date - start_date).days + 1  # +1 to include both start and end
+
+            if period_length >= min_period_length:
+                filtered_periods.append(period)
+                logger.info(f"    Period {period['start']} ~ {period['end']} ({period_length} days) → INCLUDED")
+            else:
+                logger.info(f"    Period {period['start']} ~ {period['end']} ({period_length} days) → SKIPPED (< {min_period_length})")
+
+        periods = filtered_periods
+        logger.info(f"  Filtered to {len(periods)} periods with {min_period_length}+ days")
+
+        if not periods:
+            logger.info(f"  No periods ≥ {min_period_length} days - skipping post-period constraints")
+            logger.info("=" * 60)
+            return
+
+        # Find the days after each period ends (supports multiple days via postPeriodDays config)
+        post_period_dates = []
+        for period in periods:
+            end_date = datetime.strptime(period['end'], '%Y-%m-%d')
+
+            # Generate multiple post-period dates based on postPeriodDays config
+            period_post_dates = []
+            for day_offset in range(1, post_period_days + 1):
+                post_date = (end_date + timedelta(days=day_offset)).strftime('%Y-%m-%d')
+
+                # Only add if the date is within our date range
+                if post_date in self.date_range:
+                    post_period_dates.append(post_date)
+                    period_post_dates.append(post_date)
+
+            if period_post_dates:
+                logger.info(f"    Period {period['start']} ~ {period['end']} → Post-period dates: {period_post_dates}")
+
+        if not post_period_dates:
+            logger.info("  No post-period dates within schedule range")
+            logger.info("=" * 60)
+            return
+
+        # DIAGNOSTIC: Confirm what dates will be protected
+        logger.info(f"  [DIAGNOSTIC] POST-PERIOD DATES TO PROTECT: {post_period_dates}")
+        logger.info(f"  [DIAGNOSTIC] These dates will have HARD constraints against day-off (×)")
+
+        constraint_count = 0
+        escape_hatch_count = 0
+
+        # Penalty weights based on mode
+        if is_hard_constraint:
+            escape_penalty = 10000  # 20x higher than SOFT mode
+            logger.info(f"  Using HARD mode with escape hatch (penalty={escape_penalty})")
+        else:
+            standard_penalty = 500
+            logger.info(f"  Using SOFT mode (penalty={standard_penalty})")
+
+        for date in post_period_dates:
+            logger.info(f"  [DIAGNOSTIC] Processing post-period date: {date}")
+            staff_constraint_count = 0
+
+            for staff in self.staff_members:
+                staff_id = staff['id']
+                staff_name = staff.get('name', staff_id)
+                staff_status = staff.get('status', '社員')
+
+                # Skip if staff doesn't work on this date
+                if not self._staff_works_on_date(staff_id, date) or not self._has_shift_var(staff_id, date):
+                    logger.debug(f"    Skipping {staff_name}: doesn't work on {date}")
+                    continue
+
+                # Determine if constraint applies to this staff type
+                should_avoid_dayoff = (
+                    (staff_status == '社員' and avoid_dayoff_shain) or
+                    (staff_status == '派遣' and avoid_dayoff_haken)
+                )
+
+                if should_avoid_dayoff:
+                    staff_constraint_count += 1
+                    off_var = self.shifts[(staff_id, date, self.SHIFT_OFF)]
+
+                    if is_hard_constraint:
+                        # HARD MODE: Conditional constraint with escape hatch
+                        escape_var = self.model.NewBoolVar(f'post_period_escape_{staff_id}_{date}')
+
+                        # Cannot have off day UNLESS escape hatch is triggered
+                        # Logically: off_var == 0 OR escape_var == 1
+                        # Using OnlyEnforceIf: off_var == 0 is enforced when escape_var == 0
+                        self.model.Add(off_var == 0).OnlyEnforceIf(escape_var.Not())
+
+                        # Heavily penalize escape hatch usage
+                        self.violation_vars.append((
+                            escape_var,
+                            escape_penalty,
+                            f'HARD escape: Post-period day-off for {staff_name} ({staff_status}) on {date}'
+                        ))
+                        escape_hatch_count += 1
+                        constraint_count += 1
+
+                        logger.debug(f"    HARD: {staff_name} ({staff_status}) cannot have × on {date} (escape penalty={escape_penalty})")
+                    else:
+                        # SOFT MODE: Standard penalty approach
+                        self.violation_vars.append((
+                            off_var,
+                            standard_penalty,
+                            f'Post-period day-off avoided for {staff_name} ({staff_status}) on {date}'
+                        ))
+                        constraint_count += 1
+
+                        logger.debug(f"    SOFT: {staff_name} ({staff_status}) avoid × on {date} (penalty={standard_penalty})")
+
+                    # If allowEarlyForShain is enabled, add slight preference for early shift
+                    if staff_status == '社員' and allow_early_shain:
+                        early_var = self.shifts[(staff_id, date, self.SHIFT_EARLY)]
+                        if not hasattr(self, 'preferred_vars'):
+                            self.preferred_vars = []
+                        self.preferred_vars.append((early_var, 20))  # Small preference weight
+                        logger.debug(f"    {staff_name}: Prefer △ on {date} (preference=20)")
+
+            logger.info(f"    → Applied constraints to {staff_constraint_count} staff on {date}")
+
+        if is_hard_constraint:
+            logger.info(f"  Added {constraint_count} post-period HARD constraints (escape hatches={escape_hatch_count}, penalty={escape_penalty})")
+        else:
+            logger.info(f"  Added {constraint_count} post-period SOFT constraints (penalty={standard_penalty})")
+
+        logger.info("=" * 60)
+
     def _add_priority_rules(self):
         """
         PHASE 1: Staff priority rules (preferred and avoided shifts).
@@ -2516,10 +2773,10 @@ class ShiftScheduleOptimizer:
                                 if allowed_shift_key not in self.shifts:
                                     continue
                                 allowed_shift_var = self.shifts[allowed_shift_key]
-                                # Use MUCH higher weight (50) for exception preferences to FORCE some early shifts
-                                # Violation penalties are 50-200, so 50 will compete meaningfully
-                                # This should produce 2-4 early shifts out of ~12 applicable days
-                                exception_weight = 50
+                                # Use moderate weight (15) for exception preferences - early shifts are an option, not forced
+                                # This allows day-off bonus (30) on free days to compete, giving more balanced day-offs
+                                # This should produce some early shifts while still allowing day-offs on free days
+                                exception_weight = 15
                                 self.preferred_vars.append((allowed_shift_var, exception_weight))
                                 # DEBUG: Log each exception preference added
                                 with open('/tmp/priority_rule_debug.log', 'a') as f:
@@ -2560,6 +2817,237 @@ class ShiftScheduleOptimizer:
             rules_applied += 1
 
         logger.info(f"[OR-TOOLS] Priority rules: {rules_applied} applied, {rules_skipped} skipped")
+
+        # ═══════════════════════════════════════════════════════════════════════════
+        # EARLY SHIFT SUBSTITUTION: Allow staff with "avoid day-off" rules to get rest
+        # by taking early shifts, which then enables them to have day-offs elsewhere
+        # ═══════════════════════════════════════════════════════════════════════════
+        self._add_priority_rule_rest_guarantee(priority_rules, valid_staff_ids)
+
+    def _add_priority_rule_rest_guarantee(self, priority_rules, valid_staff_ids):
+        """
+        Ensure staff with 'avoid_shift_with_exceptions' rules (that avoid day-offs)
+        still get adequate rest through a combination of early shifts and day-offs.
+
+        Strategy:
+        1. Identify staff with rules that avoid day-offs (×) but allow early shifts (△)
+        2. For these staff, add a SOFT constraint to encourage a minimum number of
+           "rest equivalent" = (day-offs × 2) + (early shifts × 1)
+        3. On days when multiple other staff already have early shifts, reduce the
+           penalty for this staff to also take early shifts (cooperative early shift)
+
+        This allows 料理長 to:
+        - Take early shift on Feb 21 (when 小池, 岸 already have △)
+        - Take day-off on Feb 27 (as "earned" rest)
+        """
+        logger.info("[OR-TOOLS] Checking for priority rule rest guarantee (early shift substitution)...")
+
+        # Find staff with avoid_shift_with_exceptions rules that avoid day-offs and allow early shifts
+        avoid_dayoff_staff = {}  # {staff_id: {'allowed_shifts': [...], 'days': [...]}}
+
+        for rule in priority_rules:
+            if not rule.get('isActive', True):
+                continue
+
+            rule_type = rule.get('ruleType', rule.get('type', ''))
+
+            # Handle both direct field and nested ruleDefinition
+            rule_def = rule.get('ruleDefinition', {})
+            if not rule_type and isinstance(rule_def, dict):
+                rule_type = rule_def.get('type', '')
+
+            if rule_type != 'avoid_shift_with_exceptions':
+                continue
+
+            # Get shift type being avoided
+            shift_type_name = (
+                rule.get('shiftType', '') or
+                rule.get('shift_type', '') or
+                rule_def.get('shiftType', '') or
+                rule_def.get('shift_type', '') or
+                rule.get('preferences', {}).get('avoidedShift', '')
+            )
+
+            # Only process rules that avoid day-offs (off, day_off, ×)
+            if shift_type_name.lower() not in ['off', 'day_off', '×', 'dayoff']:
+                continue
+
+            # Get allowed shifts (exceptions)
+            allowed_shifts = rule.get('allowedShifts', [])
+            if not allowed_shifts:
+                allowed_shifts = rule_def.get('allowedShifts', [])
+            if not allowed_shifts:
+                allowed_shifts = rule.get('preferences', {}).get('allowedShifts', [])
+
+            # Check if early shift is allowed as exception
+            early_allowed = any(s.lower() in ['early', '△', 'early_shift', 'earlyshift']
+                               for s in allowed_shifts)
+
+            if not early_allowed:
+                continue
+
+            # Get target staff IDs
+            target_staff_ids = self._extract_staff_ids_from_rule(rule)
+            target_staff_ids = [sid for sid in target_staff_ids if sid in valid_staff_ids]
+
+            # Get target days
+            target_days = []
+            days_of_week = rule.get('daysOfWeek', rule_def.get('days_of_week', rule_def.get('daysOfWeek', [])))
+            day_index_to_name = {0: 'sunday', 1: 'monday', 2: 'tuesday', 3: 'wednesday',
+                                4: 'thursday', 5: 'friday', 6: 'saturday'}
+
+            for d in days_of_week:
+                if isinstance(d, int) and d in day_index_to_name:
+                    target_days.append(day_index_to_name[d])
+                elif isinstance(d, str):
+                    target_days.append(d.lower())
+
+            for staff_id in target_staff_ids:
+                if staff_id not in avoid_dayoff_staff:
+                    avoid_dayoff_staff[staff_id] = {'allowed_shifts': set(), 'days': set()}
+                avoid_dayoff_staff[staff_id]['allowed_shifts'].update(allowed_shifts)
+                avoid_dayoff_staff[staff_id]['days'].update(target_days)
+
+        if not avoid_dayoff_staff:
+            logger.info("  No staff with 'avoid day-off + allow early' rules found")
+            return
+
+        logger.info(f"  Found {len(avoid_dayoff_staff)} staff with 'avoid day-off + allow early' rules")
+
+        # Get total days in period (excluding calendar forced days)
+        total_days = len(self.date_range)
+        calendar_off_days = len(self.calendar_off_dates)
+        flexible_days = total_days - calendar_off_days
+
+        # For each staff with avoid-dayoff rules, ensure minimum rest through early shifts + day-offs
+        constraint_count = 0
+
+        for staff_id, rule_info in avoid_dayoff_staff.items():
+            staff = next((s for s in self.staff_members if s['id'] == staff_id), None)
+            if not staff:
+                continue
+
+            staff_name = staff.get('name', staff_id)
+            target_days = rule_info['days']
+
+            # Count applicable days (days where the rule applies)
+            applicable_dates = []
+            non_applicable_dates = []
+
+            for date in self.date_range:
+                if date in self.calendar_off_dates:
+                    continue
+                if not self._staff_works_on_date(staff_id, date):
+                    continue
+                if not self._has_shift_var(staff_id, date):
+                    continue
+
+                day_name = self._get_day_of_week(date)
+                if target_days and day_name in target_days:
+                    applicable_dates.append(date)
+                else:
+                    non_applicable_dates.append(date)
+
+            # If rule applies to ALL days (no target_days specified), treat all as applicable
+            if not target_days:
+                applicable_dates = [d for d in self.date_range
+                                   if d not in self.calendar_off_dates
+                                   and self._staff_works_on_date(staff_id, d)
+                                   and self._has_shift_var(staff_id, d)]
+                non_applicable_dates = []
+
+            logger.info(f"  {staff_name}: {len(applicable_dates)} days with avoid-dayoff rule, {len(non_applicable_dates)} free days")
+
+            # Strategy 1: ENCOURAGE MINIMUM day-offs on NON-APPLICABLE days
+            # (days where the avoid-dayoff rule doesn't apply)
+            # Only encourage ENOUGH to meet monthly minimum, not all free days
+            if non_applicable_dates:
+                # Get monthly minimum/maximum constraints
+                monthly_min = self.constraints_config.get('monthly_limits', {}).get('min_days_off_per_month', 4)
+                monthly_max = self.constraints_config.get('monthly_limits', {}).get('max_days_off_per_month', 10)
+
+                # Target: push toward maximum day-offs (staff should get as much rest as possible)
+                target_dayoffs = monthly_max  # e.g., 10 if max=10
+
+                # Use SOFT constraint to encourage minimum day-offs on free days
+                # Rather than preferring ALL days, just ensure minimum is met
+                off_vars_free = [self.shifts[(staff_id, d, self.SHIFT_OFF)] for d in non_applicable_dates]
+
+                if off_vars_free:
+                    # Create variable for under-minimum penalty
+                    under_min_var = self.model.NewIntVar(0, monthly_max, f'under_min_dayoff_{staff_id}')
+                    self.model.Add(under_min_var >= target_dayoffs - sum(off_vars_free))
+                    self.model.Add(under_min_var >= 0)
+
+                    # Penalize if below target (but lower penalty than avoid rule = 500)
+                    # Weight 200 < 500 (avoid penalty), so won't override rule days
+                    self.violation_vars.append((
+                        under_min_var,
+                        200,
+                        f'Below target day-offs for {staff_name} on free days (target={target_dayoffs})'
+                    ))
+
+                    logger.info(f"    → Added target day-off constraint: {target_dayoffs} day-offs on {len(non_applicable_dates)} free days (penalty=200)")
+
+            # Strategy 2: ENCOURAGE early shifts on APPLICABLE days (limited number)
+            # This gives them "rest credit" while still working
+            # Only encourage 2-3 early shifts per month (not all applicable days)
+            max_early_per_month = 3  # Same as the 社員 monthly early shift limit
+            early_vars_applicable = [self.shifts[(staff_id, d, self.SHIFT_EARLY)] for d in applicable_dates]
+
+            if early_vars_applicable:
+                # Use soft constraint to encourage some early shifts (but not too many)
+                # Create variable for under-minimum early shifts
+                target_early = min(2, len(applicable_dates))  # Target 2 early shifts
+
+                under_early_var = self.model.NewIntVar(0, max_early_per_month, f'under_early_{staff_id}')
+                self.model.Add(under_early_var >= target_early - sum(early_vars_applicable))
+                self.model.Add(under_early_var >= 0)
+
+                # Weight 100 encourages early shifts as alternative to day-offs
+                self.violation_vars.append((
+                    under_early_var,
+                    100,
+                    f'Below target early shifts for {staff_name} on rule days (target={target_early})'
+                ))
+
+                logger.info(f"    → Added target early shift constraint: {target_early} early shifts on {len(applicable_dates)} applicable days (penalty=100)")
+
+            # Strategy 3: MINIMUM REST GUARANTEE (combined day-offs + early shifts)
+            # Ensure they get at least some rest through combination of early shifts and day-offs
+            # Rest equivalent = (day-offs × 2) + (early shifts × 1)
+            # Target: at least 4-5 rest-equivalent per 28-day period
+
+            all_working_dates = applicable_dates + non_applicable_dates
+            if len(all_working_dates) > 0:
+                # Calculate minimum rest equivalent (roughly 1 per 6 working days)
+                min_rest_equiv = max(4, len(all_working_dates) // 6)  # At least 4, or 1 per 6 days
+
+                # Sum up rest equivalent: off×2 + early×1
+                off_vars = [self.shifts[(staff_id, d, self.SHIFT_OFF)] for d in all_working_dates]
+                early_vars = [self.shifts[(staff_id, d, self.SHIFT_EARLY)] for d in all_working_dates]
+
+                # rest_equiv = sum(off×2) + sum(early×1)
+                rest_equiv = sum(v * 2 for v in off_vars) + sum(v * 1 for v in early_vars)
+
+                # SOFT constraint: penalize if below minimum rest equivalent
+                max_possible = len(all_working_dates) * 3  # Upper bound
+                under_rest_var = self.model.NewIntVar(0, max_possible, f'under_rest_{staff_id}')
+                self.model.Add(under_rest_var >= min_rest_equiv - rest_equiv)
+                self.model.Add(under_rest_var >= 0)
+
+                # VERY HIGH penalty for insufficient rest (300 = higher than priority avoid penalty)
+                # This ensures staff with avoid-dayoff rules still get minimum rest
+                self.violation_vars.append((
+                    under_rest_var,
+                    300,  # Very high priority (higher than 5-day rest=200)
+                    f'Insufficient rest-equivalent for {staff_name} (min={min_rest_equiv/2:.1f})'
+                ))
+                constraint_count += 1
+
+                logger.info(f"    → Added minimum rest guarantee: {min_rest_equiv/2:.1f} rest-equivalent (penalty=300)")
+
+        logger.info(f"[OR-TOOLS] Added {constraint_count} priority rule rest guarantee constraints")
 
     def _add_priority_rules_object_format(self, priority_rules):
         """
@@ -2613,6 +3101,7 @@ class ShiftScheduleOptimizer:
 
         PRIMARY GOAL: Minimize constraint violations (soft constraints)
         SECONDARY GOAL: Maximize preferred shifts, minimize avoided shifts
+        TERTIARY GOAL: Maximize day-offs for non-backup staff (balanced rest)
 
         This enables "best effort" solutions like TensorFlow - always provides
         a schedule even when perfect constraint satisfaction is impossible.
@@ -2626,6 +3115,39 @@ class ShiftScheduleOptimizer:
             objective_terms.append(-weight * violation_var)
 
         logger.info(f"[OR-TOOLS] Added {len(self.violation_vars)} violation penalties to objective")
+
+        # TERTIARY: Maximize day-offs for non-backup staff to encourage balanced rest
+        # This pushes the solver to give staff MORE day-offs when there's room
+        # Use weight 30 to compete with exception preferences (15) while staying below violation penalties (50-500)
+        # Only apply to non-backup staff to avoid excessive day-offs for backup
+        dayoff_bonus_weight = 30
+        dayoff_bonus_count = 0
+
+        for staff in self.staff_members:
+            staff_id = staff['id']
+
+            # Skip backup staff - they should work more, not get bonuses for day-offs
+            if staff_id in self.backup_staff_ids:
+                continue
+
+            for date in self.date_range:
+                # Skip if staff doesn't work on this date or no shift variable
+                if not self._staff_works_on_date(staff_id, date) or not self._has_shift_var(staff_id, date):
+                    continue
+
+                # Add bonus for day-off (×)
+                off_var = self.shifts.get((staff_id, date, self.SHIFT_OFF))
+                if off_var is not None:
+                    objective_terms.append(dayoff_bonus_weight * off_var)
+                    dayoff_bonus_count += 1
+
+                # Add smaller bonus for early shift (△) - counts as 0.5 day-off
+                early_var = self.shifts.get((staff_id, date, self.SHIFT_EARLY))
+                if early_var is not None:
+                    objective_terms.append((dayoff_bonus_weight // 2) * early_var)
+
+        if dayoff_bonus_count > 0:
+            logger.info(f"[OR-TOOLS] Added {dayoff_bonus_count} day-off bonus terms (weight={dayoff_bonus_weight}) to maximize rest")
 
         # SECONDARY: Handle priority rules (preferred/avoided shifts)
         if hasattr(self, 'preferred_vars') and hasattr(self, 'avoided_vars'):

@@ -1382,7 +1382,7 @@ export class BusinessRuleValidator {
       const dailyLimitsRaw = liveSettings.dailyLimitsRaw || {};
       const staffGroups = liveSettings.staffGroups || [];
       const minOffPerDay = dailyLimitsRaw.minOffPerDay ?? 0;
-      const maxOffPerDay = dailyLimitsRaw.maxOffPerDay ?? 3;
+      const maxOffPerDay = dailyLimitsRaw.maxOffPerDay ?? 4; // Changed from 3 to 4 to allow more day-off flexibility
 
       console.log(`⚖️ [BALANCE] Starting daily limit balancing (min: ${minOffPerDay}, max: ${maxOffPerDay})...`);
       console.log(`⚖️ [BALANCE] dailyLimitsRaw source: ${dailyLimitsRaw._source || 'fallback'}, raw values:`, {
@@ -1579,15 +1579,15 @@ export class BusinessRuleValidator {
 
     // Get daily limits configuration for × assignment checks
     const dailyLimits = liveSettings.dailyLimits;
-    let maxOffPerDay = 3; // Default: max 3 staff off per day
+    let maxOffPerDay = 4; // Default: max 4 staff off per day (changed from 3 to allow more day-off flexibility)
 
     if (Array.isArray(dailyLimits)) {
       const offDayLimit = dailyLimits.find((l) =>
         l.shiftType === "off" || l.name?.toLowerCase().includes("off")
       );
-      maxOffPerDay = offDayLimit?.maxCount || 3;
+      maxOffPerDay = offDayLimit?.maxCount || 4;
     } else if (dailyLimits && typeof dailyLimits === "object") {
-      maxOffPerDay = dailyLimits.maxOffPerDay || 3;
+      maxOffPerDay = dailyLimits.maxOffPerDay || 4;
     }
 
     console.log(`📅 [PRIORITY-LIMIT] Using maxOffPerDay = ${maxOffPerDay}`);

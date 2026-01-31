@@ -316,7 +316,7 @@ export const setDynamicDailyLimits = (limits) => {
   if (limits && typeof limits === 'object') {
     _dynamicDailyLimits = {
       minOffPerDay: limits.minOffPerDay ?? 0,
-      maxOffPerDay: limits.maxOffPerDay ?? 3,
+      maxOffPerDay: limits.maxOffPerDay ?? 4, // Changed from 3 to 4 to allow more day-off flexibility
       minEarlyPerDay: limits.minEarlyPerDay ?? 0,
       maxEarlyPerDay: limits.maxEarlyPerDay ?? 2,
       minLatePerDay: limits.minLatePerDay ?? 0,

@@ -48,6 +48,7 @@ const StaffEditModal = ({
   error = null, // New prop to show errors
   invalidateAllPeriodsCache = null, // Phase 3: Cache invalidation for database refresh
   currentScheduleId = null, // Schedule ID for WebSocket integration
+  resolveStaffId = null, // Phase 4: Resolve temp IDs to real IDs for optimistic updates
 }) => {
   // Debug staffMembers prop changes
   React.useEffect(() => {
@@ -401,6 +402,17 @@ const StaffEditModal = ({
           duration: 1000,
         });
 
+        // Resolve temp ID to real ID if available (for optimistic updates)
+        const resolvedStaffId = resolveStaffId
+          ? resolveStaffId(selectedStaffForEdit.id)
+          : selectedStaffForEdit.id;
+
+        if (resolvedStaffId !== selectedStaffForEdit.id) {
+          console.log(
+            `🔗 [StaffModal-Update] Resolved temp ID to real ID: ${selectedStaffForEdit.id} -> ${resolvedStaffId}`,
+          );
+        }
+
         // Check if staff type changed (requires schedule validation)
         const staffTypeChanged =
           safeEditingStaffData.status !== selectedStaffForEdit.status;
@@ -409,11 +421,11 @@ const StaffEditModal = ({
             `🔄 [StaffModal-Update] Staff type changed: ${selectedStaffForEdit.status} → ${safeEditingStaffData.status}`,
           );
 
-          // Validate schedule constraints for new staff type
-          const hasScheduleData = schedule && schedule[selectedStaffForEdit.id];
+          // Validate schedule constraints for new staff type - use resolved ID
+          const hasScheduleData = schedule && schedule[resolvedStaffId];
           if (hasScheduleData) {
             const shiftCount = Object.values(
-              schedule[selectedStaffForEdit.id],
+              schedule[resolvedStaffId],
             ).filter((shift) => shift && shift !== "×").length;
 
             if (shiftCount > 0) {
@@ -428,7 +440,7 @@ const StaffEditModal = ({
         }
 
         updateStaff(
-          selectedStaffForEdit.id,
+          resolvedStaffId,
           safeEditingStaffData,
           (updatedStaffArray) => {
             if (enhancedLoggingEnabled) {
@@ -456,12 +468,15 @@ const StaffEditModal = ({
               );
 
               // Request full schedule sync to ensure consistency
-              webSocketShifts.syncSchedule().catch((error) => {
+              // Note: syncSchedule() may not return a Promise, so we call it directly
+              try {
+                webSocketShifts.syncSchedule();
+              } catch (error) {
                 console.warn(
                   `⚠️ [StaffModal-Update] Schedule sync failed:`,
                   error,
                 );
-              });
+              }
             }
 
             // Phase 3: Invalidate React Query cache to trigger re-render with fresh data
@@ -555,8 +570,17 @@ const StaffEditModal = ({
   const handleDeleteStaff = async () => {
     if (!staffToDelete) return;
 
-    const staffId = staffToDelete.id;
+    // Resolve temp ID to real ID if available (for optimistic updates)
+    const staffId = resolveStaffId
+      ? resolveStaffId(staffToDelete.id)
+      : staffToDelete.id;
     const staffName = staffToDelete.name || "スタッフ";
+
+    if (staffId !== staffToDelete.id) {
+      console.log(
+        `🔗 [StaffModal-Delete] Resolved temp ID to real ID: ${staffToDelete.id} -> ${staffId}`,
+      );
+    }
 
     // Close confirmation modal
     closeDeleteConfirmation();
@@ -947,23 +971,11 @@ const StaffEditModal = ({
                       <RadioGroup
                         value={safeEditingStaffData.status}
                         onValueChange={(value) => {
-                          const currentYear = new Date().getFullYear();
                           updateEditingStaffData((prev) => ({
                             ...prev,
                             status: value,
-                            // If 派遣 or パート is selected, set both periods to current year
-                            ...(value === "派遣" || value === "パート"
-                              ? {
-                                  startPeriod: {
-                                    ...prev.startPeriod,
-                                    year: currentYear,
-                                  },
-                                  endPeriod: {
-                                    ...prev.endPeriod,
-                                    year: currentYear,
-                                  },
-                                }
-                              : {}),
+                            // Don't auto-populate period dates when changing status
+                            // User should explicitly set the start/end periods
                           }));
                         }}
                         className="flex flex-row space-x-6"

@@ -127,6 +127,7 @@ const StaffTypeLimitsSection = ({
     const updated = {
       ...localLimits,
       [staffType]: {
+        minOff: 1,     // NEW: Minimum staff of this type off per day
         maxOff: 1,
         maxEarly: 2,
         isHard: true,
@@ -217,11 +218,11 @@ const StaffTypeLimitsSection = ({
           <AlertTriangle className="w-5 h-5 text-blue-600 flex-shrink-0 mt-0.5" />
           <div className="text-sm text-blue-800">
             <p className="font-medium mb-1">Business Rule Example:</p>
-            <p>For 社員 with 6 total staff, setting Max Off = 1 ensures:</p>
+            <p>For 社員 with 6 total staff, setting Min Off = 1, Max Off = 1 ensures:</p>
             <ul className="list-disc list-inside ml-2 mt-1 space-y-0.5">
-              <li className="text-green-700">1 off + 1 early + 4 normal = OK</li>
-              <li className="text-green-700">0 off + 2 early + 4 normal = OK</li>
-              <li className="text-red-700">2 off + 0 early + 4 normal = NOT ALLOWED</li>
+              <li className="text-green-700">1 off + 1 early + 4 normal = OK (exactly 1 off)</li>
+              <li className="text-red-700">0 off + 2 early + 4 normal = NOT ALLOWED (below minimum)</li>
+              <li className="text-red-700">2 off + 0 early + 4 normal = NOT ALLOWED (exceeds maximum)</li>
             </ul>
           </div>
         </div>
@@ -259,7 +260,38 @@ const StaffTypeLimitsSection = ({
                 </div>
 
                 {/* Limit Controls */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  {/* Min Off Per Day - NEW */}
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium text-gray-700 flex items-center gap-2">
+                      Minimum Off Per Day
+                      <span className="text-green-500 text-xs">(HARD)</span>
+                    </label>
+                    <div className="flex items-center gap-3">
+                      <input
+                        type="range"
+                        min={0}
+                        max={Math.min(staffCount, 4)}
+                        step={1}
+                        value={limits.minOff ?? 0}
+                        onChange={(e) => {
+                          const newMin = parseInt(e.target.value);
+                          // Ensure min doesn't exceed max
+                          if (newMin <= (limits.maxOff ?? 1)) {
+                            handleLimitChange(staffType, "minOff", newMin);
+                          }
+                        }}
+                        className="flex-1 h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-green-500"
+                      />
+                      <span className="w-12 text-center px-2 py-1 bg-green-100 text-green-800 rounded-lg font-bold text-lg">
+                        {limits.minOff ?? 0}
+                      </span>
+                    </div>
+                    <p className="text-xs text-gray-500">
+                      At least {limits.minOff ?? 0} {staffType} must be off (x) every day
+                    </p>
+                  </div>
+
                   {/* Max Off Per Day */}
                   <div className="space-y-2">
                     <label className="text-sm font-medium text-gray-700 flex items-center gap-2">
@@ -273,7 +305,13 @@ const StaffTypeLimitsSection = ({
                         max={Math.min(staffCount, 4)}
                         step={1}
                         value={limits.maxOff ?? 1}
-                        onChange={(e) => handleLimitChange(staffType, "maxOff", parseInt(e.target.value))}
+                        onChange={(e) => {
+                          const newMax = parseInt(e.target.value);
+                          // Ensure max doesn't go below min
+                          if (newMax >= (limits.minOff ?? 0)) {
+                            handleLimitChange(staffType, "maxOff", newMax);
+                          }
+                        }}
                         className="flex-1 h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-red-500"
                       />
                       <span className="w-12 text-center px-2 py-1 bg-red-100 text-red-800 rounded-lg font-bold text-lg">
@@ -384,7 +422,7 @@ const DailyLimitsSection = ({
   const [localLimits, setLocalLimits] = useState(dailyLimits || {
     enabled: true, // NEW: Flag to enable/disable daily limits
     minOffPerDay: 0,
-    maxOffPerDay: 3,
+    maxOffPerDay: 4, // Changed from 3 to 4 to allow more day-off flexibility
     minEarlyPerDay: 0,
     maxEarlyPerDay: 2,
     minLatePerDay: 0,
@@ -400,7 +438,7 @@ const DailyLimitsSection = ({
       setLocalLimits({
         enabled: dailyLimits.enabled ?? true, // NEW: Default to enabled
         minOffPerDay: dailyLimits.minOffPerDay ?? 0,
-        maxOffPerDay: dailyLimits.maxOffPerDay ?? 3,
+        maxOffPerDay: dailyLimits.maxOffPerDay ?? 4, // Changed from 3 to 4
         minEarlyPerDay: dailyLimits.minEarlyPerDay ?? 0,
         maxEarlyPerDay: dailyLimits.maxEarlyPerDay ?? 2,
         minLatePerDay: dailyLimits.minLatePerDay ?? 0,
@@ -496,7 +534,7 @@ const DailyLimitsSection = ({
     const defaults = {
       enabled: true, // Reset to enabled
       minOffPerDay: 0,
-      maxOffPerDay: 3,
+      maxOffPerDay: 4, // Changed from 3 to 4 to allow more day-off flexibility
       minEarlyPerDay: 0,
       maxEarlyPerDay: 2,
       minLatePerDay: 0,
@@ -707,24 +745,17 @@ const LimitsTab = ({
   const [isValidating, setIsValidating] = useState(false);
   const [pendingValidationErrors, setPendingValidationErrors] = useState([]); // Show validation errors in UI
 
-  // Daily Limits state - DEPRECATED (kept for backward compatibility)
-  // Global daily limits have been replaced by Staff Type Daily Limits
-  // eslint-disable-next-line no-unused-vars
+  // Daily Limits state - Global daily limits for all staff
   const [dailyLimits, setDailyLimits] = useState(null);
-  // eslint-disable-next-line no-unused-vars
   const [isLoadingDailyLimits, setIsLoadingDailyLimits] = useState(false);
 
   // Staff Type Limits state
   const [staffTypeLimits, setStaffTypeLimits] = useState(null);
   const [isLoadingStaffTypeLimits, setIsLoadingStaffTypeLimits] = useState(true);
 
-  // Daily Limits Violations state - DEPRECATED
-  // Global daily limits have been replaced by Staff Type Daily Limits
-  // eslint-disable-next-line no-unused-vars
+  // Daily Limits Violations state
   const [showDailyLimitViolations, setShowDailyLimitViolations] = useState(false);
-  // eslint-disable-next-line no-unused-vars
   const [dailyLimitViolations, setDailyLimitViolations] = useState([]);
-  // eslint-disable-next-line no-unused-vars
   const [dailyLimitOnAccept, setDailyLimitOnAccept] = useState(null);
 
   // Schedule validation hook
@@ -773,7 +804,7 @@ const LimitsTab = ({
         setIsLoadingDailyLimits(true);
         const limits = settings?.dailyLimits || {
           minOffPerDay: 0,
-          maxOffPerDay: 3,
+          maxOffPerDay: 4, // Changed from 3 to 4 to allow more day-off flexibility
           minEarlyPerDay: 0,
           maxEarlyPerDay: 2,
           minLatePerDay: 0,
@@ -2021,9 +2052,29 @@ const LimitsTab = ({
         </div>
       )}
 
-      {/* Staff Type Daily Limits Section - PRIMARY constraint method */}
-      {/* NOTE: Global Daily Limits (DailyLimitsSection) has been DEPRECATED */}
-      {/* in favor of per-staff-type limits for more granular control */}
+      {/* Global Daily Limits Section - Configure overall daily constraints */}
+      {isLoadingDailyLimits ? (
+        <div className="p-6 bg-gray-50 rounded-lg">
+          <p className="text-gray-600">Loading daily limits...</p>
+        </div>
+      ) : (
+        <DailyLimitsSection
+          dailyLimits={dailyLimits}
+          onUpdate={handleUpdateDailyLimits}
+          onValidate={handleValidateDailyLimits}
+          onShowViolations={(violations, onAccept) => {
+            setDailyLimitViolations(violations);
+            setDailyLimitOnAccept(() => onAccept);
+            setShowDailyLimitViolations(true);
+          }}
+          currentScheduleId={currentScheduleId}
+        />
+      )}
+
+      {/* Separator */}
+      <div className="border-t-2 border-gray-200" />
+
+      {/* Staff Type Daily Limits Section - Per-type constraint method */}
       {isLoadingStaffTypeLimits ? (
         <div className="p-6 bg-gray-50 rounded-lg">
           <p className="text-gray-600">Loading staff type limits...</p>

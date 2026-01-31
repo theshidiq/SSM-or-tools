@@ -98,14 +98,25 @@ func (sa *SettingsAggregate) MarshalJSON() ([]byte, error) {
 	if len(sa.ORToolsConfig) > 0 {
 		// Take the first (and typically only) config
 		config := sa.ORToolsConfig[0]
-		reactORToolsConfig = map[string]interface{}{
-			"id":             config.ID,
-			"preset":         config.Preset,
-			"penaltyWeights": config.PenaltyWeights,
-			"solverSettings": config.SolverSettings,
-			"isActive":       config.IsActive,
+		// Use hardConstraints from database, or default with staffGroups=true
+		hardConstraints := config.HardConstraints
+		if hardConstraints == nil {
+			hardConstraints = map[string]interface{}{
+				"dailyLimits":  false,
+				"monthlyLimits": false,
+				"staffGroups":  true, // Default to HARD for staff groups
+				"fiveDayRest":  false,
+			}
 		}
-		log.Printf("🔧 [MarshalJSON] OR-Tools config included: preset=%s, penaltyWeights=%v", config.Preset, config.PenaltyWeights)
+		reactORToolsConfig = map[string]interface{}{
+			"id":              config.ID,
+			"preset":          config.Preset,
+			"penaltyWeights":  config.PenaltyWeights,
+			"solverSettings":  config.SolverSettings,
+			"hardConstraints": hardConstraints,
+			"isActive":        config.IsActive,
+		}
+		log.Printf("🔧 [MarshalJSON] OR-Tools config included: preset=%s, hardConstraints=%v", config.Preset, hardConstraints)
 	} else {
 		// Provide defaults if no config exists
 		reactORToolsConfig = map[string]interface{}{
@@ -122,8 +133,14 @@ func (sa *SettingsAggregate) MarshalJSON() ([]byte, error) {
 				"timeout":    30,
 				"numWorkers": 4,
 			},
+			"hardConstraints": map[string]interface{}{
+				"dailyLimits":   false,
+				"monthlyLimits": false,
+				"staffGroups":   true, // Default to HARD for staff groups
+				"fiveDayRest":   false,
+			},
 		}
-		log.Printf("🔧 [MarshalJSON] No OR-Tools config found, using defaults")
+		log.Printf("🔧 [MarshalJSON] No OR-Tools config found, using defaults with staffGroups=HARD")
 	}
 
 	// Create response structure with converted data
@@ -500,16 +517,17 @@ type MLModelConfig struct {
 // ORToolsSolverConfig represents OR-Tools solver configuration
 // Note: Uses snake_case JSON tags to match Supabase column names for proper deserialization
 type ORToolsSolverConfig struct {
-	ID             string                 `json:"id"`
-	RestaurantID   string                 `json:"restaurant_id"`
-	VersionID      string                 `json:"version_id,omitempty"`
-	Name           string                 `json:"name"`
-	Preset         string                 `json:"preset"`
-	PenaltyWeights map[string]interface{} `json:"penalty_weights"`
-	SolverSettings map[string]interface{} `json:"solver_settings"`
-	IsActive       bool                   `json:"is_active"`
-	CreatedAt      time.Time              `json:"created_at"`
-	UpdatedAt      time.Time              `json:"updated_at"`
+	ID              string                 `json:"id"`
+	RestaurantID    string                 `json:"restaurant_id"`
+	VersionID       string                 `json:"version_id,omitempty"`
+	Name            string                 `json:"name"`
+	Preset          string                 `json:"preset"`
+	PenaltyWeights  map[string]interface{} `json:"penalty_weights"`
+	SolverSettings  map[string]interface{} `json:"solver_settings"`
+	HardConstraints map[string]interface{} `json:"hard_constraints"` // Which constraints are strictly enforced
+	IsActive        bool                   `json:"is_active"`
+	CreatedAt       time.Time              `json:"created_at"`
+	UpdatedAt       time.Time              `json:"updated_at"`
 }
 
 // ToReactFormat converts snake_case to camelCase for React
@@ -1668,6 +1686,14 @@ func (s *StaffSyncServer) upsertDailyLimits(versionID string, limitData map[stri
 		limitConfig["minWorkingStaffPerDay"] = minWorkingStaffPerDay
 	}
 
+	// ✅ FIX: Preserve staffTypeLimits when embedded in dailyLimits
+	// React sends staffTypeLimits embedded in dailyLimits for server sync
+	// This ensures per-staff-type constraints (社員, 派遣, パート) persist
+	if staffTypeLimits, ok := limitData["staffTypeLimits"]; ok {
+		limitConfig["staffTypeLimits"] = staffTypeLimits
+		log.Printf("✅ [upsertDailyLimits] Preserving staffTypeLimits: %+v", staffTypeLimits)
+	}
+
 	upsertData["limit_config"] = limitConfig
 
 	// Optional metadata fields
@@ -2302,6 +2328,33 @@ func (s *StaffSyncServer) insertPriorityRule(versionID string, ruleData map[stri
 	}
 
 	log.Printf("🔍 [insertPriorityRule] INSERT payload: %+v", insertData)
+
+	// ✅ FIX: Check for duplicate rule by client-provided ID to prevent race condition duplication
+	// This happens when WebSocket broadcast triggers a second CREATE before the first one completes
+	if clientID, ok := ruleData["id"].(string); ok && clientID != "" {
+		// Check if rule with this ID already exists in database
+		checkURL := fmt.Sprintf("%s/rest/v1/priority_rules?id=eq.%s&select=id", s.supabaseURL, clientID)
+		checkReq, _ := http.NewRequest("GET", checkURL, nil)
+		checkReq.Header.Set("Authorization", "Bearer "+s.supabaseKey)
+		checkReq.Header.Set("apikey", s.supabaseKey)
+
+		client := &http.Client{Timeout: 5 * time.Second}
+		checkResp, err := client.Do(checkReq)
+		if err == nil {
+			defer checkResp.Body.Close()
+			var existingRules []map[string]interface{}
+			if body, _ := io.ReadAll(checkResp.Body); json.Unmarshal(body, &existingRules) == nil {
+				if len(existingRules) > 0 {
+					log.Printf("⏭️ [insertPriorityRule] Rule with ID %s already exists, skipping duplicate INSERT", clientID)
+					return nil // Skip insertion - rule already exists
+				}
+			}
+		}
+
+		// Use client-provided ID instead of letting database generate one
+		insertData["id"] = clientID
+		log.Printf("🔍 [insertPriorityRule] Using client-provided ID: %s", clientID)
+	}
 
 	// Send POST request to Supabase
 	jsonData, err := json.Marshal(insertData)

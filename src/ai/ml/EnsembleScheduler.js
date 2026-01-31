@@ -6,7 +6,9 @@
  * strategies, and provides uncertainty quantification.
  */
 
-import * as tf from "@tensorflow/tfjs";
+// Portfolio Optimization: Use stub instead of actual TensorFlow.js
+// OR-Tools via WebSocket is now the primary optimizer
+import { tf } from "./tensorflow-stub";
 import { extractAllDataForAI } from "../utils/DataExtractor.js";
 import { ConfigurationService } from "../../services/ConfigurationService.js";
 import { AdvancedNeuralArchitecture } from "./AdvancedNeuralArchitecture.js";

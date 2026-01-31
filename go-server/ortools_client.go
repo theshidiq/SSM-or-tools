@@ -20,10 +20,12 @@ type ORToolsClient struct {
 
 // ORToolsStaffMember represents a staff member for OR-Tools optimization
 type ORToolsStaffMember struct {
-	ID       string `json:"id"`
-	Name     string `json:"name"`
-	Status   string `json:"status"`
-	Position string `json:"position"`
+	ID          string                 `json:"id"`
+	Name        string                 `json:"name"`
+	Status      string                 `json:"status"`
+	Position    string                 `json:"position"`
+	StartPeriod map[string]interface{} `json:"start_period,omitempty"`
+	EndPeriod   map[string]interface{} `json:"end_period,omitempty"`
 }
 
 // ORToolsRequest represents the request to the OR-Tools service

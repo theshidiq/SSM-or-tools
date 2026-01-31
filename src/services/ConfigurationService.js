@@ -354,7 +354,7 @@ export class ConfigurationService {
       // Ensure dailyLimits object exists (from v4)
       if (!migratedSettings.dailyLimits) {
         migratedSettings.dailyLimits = {
-          maxOffPerDay: 3,
+          maxOffPerDay: 4, // Changed from 3 to 4 to allow more day-off flexibility
           maxEarlyPerDay: 2,
           maxLatePerDay: 3,
           minWorkingStaffPerDay: 3,
@@ -554,7 +554,7 @@ export class ConfigurationService {
       // Daily Limits
       dailyLimits: {
         minOffPerDay: 0, // Default: 0 (no minimum enforced), Range: 0-4
-        maxOffPerDay: 3, // Default: 3, Range: 0-4
+        maxOffPerDay: 4, // Default: 4, Range: 0-4 (changed from 3 to allow more day-off flexibility)
         minEarlyPerDay: 0, // Default: 0 (no minimum enforced), Range: 0-2
         maxEarlyPerDay: 2, // Default: 2, Range: 0-2
         minLatePerDay: 0, // Default: 0 (no minimum enforced), Range: 0-3
@@ -669,7 +669,7 @@ export class ConfigurationService {
       console.warn("⚠️ dailyLimits not found in settings, using defaults");
       return {
         minOffPerDay: 0,
-        maxOffPerDay: 3,
+        maxOffPerDay: 4, // Changed from 3 to 4 to allow more day-off flexibility
         minEarlyPerDay: 0,
         maxEarlyPerDay: 2,
         minLatePerDay: 0,

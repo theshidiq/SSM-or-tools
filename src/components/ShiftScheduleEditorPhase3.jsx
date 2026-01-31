@@ -110,6 +110,7 @@ const ShiftScheduleEditorPhase3 = ({
     webSocketEnabled: isPrefetchWebSocketEnabled,
     fallbackMode,
     shiftWebSocket, // For clearing pending updates
+    resolveStaffId, // Phase 4: Resolve temp IDs to real IDs for optimistic updates
   } = useScheduleDataPrefetch(currentMonthIndex, { enabled: true });
 
   // For backwards compatibility, create aliases
@@ -844,6 +845,7 @@ const ShiftScheduleEditorPhase3 = ({
             error={supabaseError}
             invalidateAllPeriodsCache={invalidateAllPeriodsCache} // Phase 3: Cache refresh for database sync
             currentScheduleId={currentScheduleId} // Phase 3: WebSocket shift integration
+            resolveStaffId={resolveStaffId} // Phase 4: Resolve temp IDs to real IDs
           />
         )}
 

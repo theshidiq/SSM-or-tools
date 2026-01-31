@@ -24,7 +24,12 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "../utils/supabase";
-import { generateDateRange } from "../utils/dateUtils";
+import {
+  generateDateRange,
+  remapScheduleDataToPeriod,
+  detectOriginalPeriodStart,
+  reverseRemapDateKey,
+} from "../utils/dateUtils";
 import {
   cleanupStaffData,
   isStaffActiveInCurrentPeriod,
@@ -93,10 +98,21 @@ export const useScheduleDataPrefetch = (
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
 
+  // Optimistic staff additions - merged with WebSocket data for instant UI updates
+  const [optimisticStaffAdditions, setOptimisticStaffAdditions] = useState([]);
+
+  // Track confirmed temp ID to real ID mappings for UI sync
+  const [confirmedStaffMappings, setConfirmedStaffMappings] = useState({});
+
   // AI modification tracking to prevent WebSocket from wiping AI-generated data
   const lastAIModificationRef = useRef(null);
   const localModificationsRef = useRef(new Set()); // Track modified cells
   const aiSyncInProgressRef = useRef(false); // Flag to prevent sync during AI operation
+
+  // 🔄 DATE REMAPPING: Track original period start for reverse-remapping on save
+  // When schedule data is remapped for display, we need to reverse-remap when saving
+  const originalPeriodStartRef = useRef(null); // Original start date string (e.g., "2025-12-21")
+  const isRemappedRef = useRef(false); // Whether current schedule data is remapped
 
   // WebSocket connection state tracking
   const isConnected = useMemo(() => {
@@ -164,33 +180,81 @@ export const useScheduleDataPrefetch = (
   );
 
   // Staff data from WebSocket (source of truth) with React Query persistence
+  // Merged with optimistic additions for instant UI updates
   const staffMembers = useMemo(() => {
+    let baseStaffData = [];
+
     if (isWebSocketEnabled && webSocketStaff.connectionStatus === "connected") {
       // WebSocket is connected - use real-time data
-      const staffData = webSocketStaff.staffMembers || [];
-      if (staffData.length > 0) {
+      baseStaffData = webSocketStaff.staffMembers || [];
+      if (baseStaffData.length > 0) {
         cacheHitCountRef.current++;
       }
-      return staffData;
     } else if (isWebSocketEnabled && cachedAllPeriodsStaff) {
       // WebSocket disconnected - use React Query cache as fallback
-      const cachedData = cachedAllPeriodsStaff[currentMonthIndex] || [];
-      if (cachedData.length > 0) {
+      baseStaffData = cachedAllPeriodsStaff[currentMonthIndex] || [];
+      if (baseStaffData.length > 0) {
         cacheMissCountRef.current++;
         console.log(
           "📦 [PHASE3-CACHE] Using cached data during WebSocket disconnection",
         );
       }
-      return cachedData;
     }
-    // No WebSocket and no cache - fallback to empty
-    return [];
+
+    // Merge optimistic staff additions that haven't been confirmed yet
+    if (optimisticStaffAdditions.length > 0) {
+      // Filter out optimistic additions that are now in the real data (by matching name)
+      // Also create temp ID -> real ID mappings for confirmed staff
+      const staffByName = {};
+      baseStaffData.forEach((s) => {
+        staffByName[s.name] = s;
+      });
+
+      const pendingOptimistic = [];
+      const newMappings = {};
+
+      optimisticStaffAdditions.forEach((opt) => {
+        const realStaff = staffByName[opt.name];
+        if (realStaff) {
+          // Staff has been confirmed - create mapping from temp ID to real ID
+          newMappings[opt.id] = realStaff.id;
+          console.log(
+            `🔗 [OPTIMISTIC] Mapping temp ID ${opt.id} -> real ID ${realStaff.id} for "${opt.name}"`,
+          );
+        } else {
+          // Staff not yet confirmed - keep in pending
+          pendingOptimistic.push(opt);
+        }
+      });
+
+      if (Object.keys(newMappings).length > 0) {
+        // Some optimistic additions have been confirmed - update state
+        console.log(
+          `✅ [OPTIMISTIC] ${Object.keys(newMappings).length} staff additions confirmed by server`,
+        );
+        // Schedule cleanup of confirmed optimistic additions and save mappings
+        setTimeout(() => {
+          setOptimisticStaffAdditions(pendingOptimistic);
+          setConfirmedStaffMappings((prev) => ({ ...prev, ...newMappings }));
+        }, 0);
+      }
+
+      if (pendingOptimistic.length > 0) {
+        console.log(
+          `⏳ [OPTIMISTIC] Merging ${pendingOptimistic.length} pending optimistic additions`,
+        );
+        return [...baseStaffData, ...pendingOptimistic];
+      }
+    }
+
+    return baseStaffData;
   }, [
     isWebSocketEnabled,
     webSocketStaff.connectionStatus,
     webSocketStaff.staffMembers,
     cachedAllPeriodsStaff,
     currentMonthIndex,
+    optimisticStaffAdditions,
   ]);
 
   // Period data management (Supabase)
@@ -299,14 +363,70 @@ export const useScheduleDataPrefetch = (
     refetchOnWindowFocus: false,
   });
 
+  // 🔧 CRITICAL: Clear schedule state when period changes to prevent stale data
+  // This ensures fresh data from React Query is used instead of old period's data
+  const previousPeriodRef = useRef(currentMonthIndex);
+  useEffect(() => {
+    if (previousPeriodRef.current !== currentMonthIndex) {
+      console.log(`🧹 [WEBSOCKET-PREFETCH] Period changed ${previousPeriodRef.current} → ${currentMonthIndex}, clearing schedule state`);
+      setSchedule({});
+      setCurrentScheduleId(null);
+      setIsLoading(true);
+      previousPeriodRef.current = currentMonthIndex;
+    }
+  }, [currentMonthIndex]);
+
   // Update local state when schedule data changes
+  // 🔄 DYNAMIC DATE REMAPPING: Remap schedule data to match current period configuration
   useEffect(() => {
     if (currentScheduleData) {
-      setSchedule({ ...(currentScheduleData.schedule || {}) }); // Always create new reference
+      const rawSchedule = currentScheduleData.schedule || {};
+      const staffCount = Object.keys(rawSchedule).length;
+
+      console.log(`📥 [WEBSOCKET-PREFETCH] Loading schedule data for period ${currentMonthIndex}:`, {
+        scheduleId: currentScheduleData.scheduleId,
+        staffCount,
+      });
+
+      // Get current period for date remapping
+      const currentPeriod = periods?.[currentMonthIndex];
+
+      if (currentPeriod && staffCount > 0) {
+        // Detect original period start from schedule data
+        const originalStart = detectOriginalPeriodStart(rawSchedule);
+        const currentStart = currentPeriod.start instanceof Date
+          ? currentPeriod.start.toISOString().split('T')[0]
+          : new Date(currentPeriod.start).toISOString().split('T')[0];
+
+        if (originalStart && originalStart !== currentStart) {
+          console.log(`🔄 [DATE-REMAP] Schedule data needs remapping: ${originalStart} → ${currentStart}`);
+
+          // Store original start for reverse remapping when saving
+          originalPeriodStartRef.current = originalStart;
+          isRemappedRef.current = true;
+
+          // Apply date remapping for display
+          const remappedSchedule = remapScheduleDataToPeriod(rawSchedule, currentPeriod);
+          setSchedule({ ...remappedSchedule }); // Always create new reference
+
+          console.log(`✅ [DATE-REMAP] Schedule remapped successfully for period ${currentMonthIndex}`);
+        } else {
+          // No remapping needed - dates already match
+          originalPeriodStartRef.current = null;
+          isRemappedRef.current = false;
+          setSchedule({ ...rawSchedule }); // Always create new reference
+        }
+      } else {
+        // No period data or empty schedule - use raw data
+        originalPeriodStartRef.current = null;
+        isRemappedRef.current = false;
+        setSchedule({ ...rawSchedule }); // Always create new reference
+      }
+
       setCurrentScheduleId(currentScheduleData.scheduleId);
       setIsLoading(false);
     }
-  }, [currentScheduleData]);
+  }, [currentScheduleData, currentMonthIndex, periods]);
 
   // DON'T auto-create schedule - only create when user actually updates a shift
   // This prevents empty orphaned schedules in the database
@@ -349,82 +469,113 @@ export const useScheduleDataPrefetch = (
 
   // Sync WebSocket shift data with local schedule state (WITH PERIOD VALIDATION + AI PROTECTION)
   useEffect(() => {
+    // 🔧 CRITICAL: Only sync when WebSocket has actual data AND it's for the correct period
+    // Skip sync if:
+    // 1. Not connected
+    // 2. WebSocket scheduleData is empty (cleared during period switch)
+    // 3. syncedPeriodIndex doesn't match current period
+    const hasWebSocketData = Object.keys(webSocketShifts.scheduleData).length > 0;
+    const syncedPeriod = webSocketShifts.syncedPeriodIndex;
+
     if (
       webSocketShifts.isConnected &&
-      Object.keys(webSocketShifts.scheduleData).length > 0
+      hasWebSocketData &&
+      syncedPeriod !== null &&
+      syncedPeriod === currentMonthIndex
     ) {
-      // CRITICAL FIX: Only sync if WebSocket data matches current period
-      const syncedPeriod = webSocketShifts.syncedPeriodIndex;
-
-      if (syncedPeriod === currentMonthIndex) {
-        // 🛡️ AI PROTECTION: Block sync during active AI operation
-        if (aiSyncInProgressRef.current) {
-          console.warn(
-            `⚠️ [WEBSOCKET-PREFETCH] Skipping WebSocket sync - AI sync in progress`,
-          );
-          return;
-        }
-
-        // 🛡️ AI PROTECTION: Check if we have recent AI modifications (within 5 seconds)
-        const aiTimestamp = lastAIModificationRef.current || 0;
-        const timeSinceAI = Date.now() - aiTimestamp;
-        const AI_PROTECTION_WINDOW = 5000; // 5 seconds protection window
-
-        if (timeSinceAI < AI_PROTECTION_WINDOW && localModificationsRef.current.size > 0) {
-          console.warn(
-            `⚠️ [WEBSOCKET-PREFETCH] Skipping WebSocket sync - AI changes (${localModificationsRef.current.size} cells) are within protection window (${timeSinceAI}ms ago)`,
-          );
-          return;
-        }
-
-        console.log(
-          `🔄 [WEBSOCKET-PREFETCH] Syncing WebSocket shift data for period ${currentMonthIndex} to local state`,
-        );
-
-        // 🎯 SMART MERGE: Preserve locally-modified cells during sync
-        // CRITICAL: Always create a NEW object reference for React to detect changes
-        if (localModificationsRef.current.size > 0) {
-          console.log(
-            `🔀 [WEBSOCKET-PREFETCH] Smart merge: preserving ${localModificationsRef.current.size} locally-modified cells`,
-          );
-
-          setSchedule(prev => {
-            // Deep clone to ensure new references at all levels
-            const merged = JSON.parse(JSON.stringify(webSocketShifts.scheduleData));
-
-            // Preserve AI-modified cells
-            localModificationsRef.current.forEach(cellKey => {
-              const [staffId, dateKey] = cellKey.split('::');
-              if (prev[staffId]?.[dateKey] !== undefined) {
-                if (!merged[staffId]) merged[staffId] = {};
-                merged[staffId][dateKey] = prev[staffId][dateKey];
-              }
-            });
-
-            return merged;
-          });
-        } else {
-          // No local modifications - deep clone for new reference
-          setSchedule(JSON.parse(JSON.stringify(webSocketShifts.scheduleData)));
-        }
-      } else {
+      // 🛡️ AI PROTECTION: Block sync during active AI operation
+      if (aiSyncInProgressRef.current) {
         console.warn(
-          `⚠️ [WEBSOCKET-PREFETCH] Ignoring WebSocket data for period ${syncedPeriod} (currently viewing period ${currentMonthIndex})`,
+          `⚠️ [WEBSOCKET-PREFETCH] Skipping WebSocket sync - AI sync in progress`,
         );
-        // Don't sync - this prevents wrong period data from overwriting current display
+        return;
+      }
+
+      // 🛡️ AI PROTECTION: Check if we have recent AI modifications (within 5 seconds)
+      const aiTimestamp = lastAIModificationRef.current || 0;
+      const timeSinceAI = Date.now() - aiTimestamp;
+      const AI_PROTECTION_WINDOW = 5000; // 5 seconds protection window
+
+      if (timeSinceAI < AI_PROTECTION_WINDOW && localModificationsRef.current.size > 0) {
+        console.warn(
+          `⚠️ [WEBSOCKET-PREFETCH] Skipping WebSocket sync - AI changes (${localModificationsRef.current.size} cells) are within protection window (${timeSinceAI}ms ago)`,
+        );
+        return;
+      }
+
+      console.log(
+        `🔄 [WEBSOCKET-PREFETCH] Syncing WebSocket shift data for period ${currentMonthIndex} to local state`,
+      );
+
+      // Get current period for potential date remapping
+      const currentPeriod = periods?.[currentMonthIndex];
+
+      // Function to apply remapping if needed
+      const applyRemappingIfNeeded = (scheduleData) => {
+        if (!currentPeriod || Object.keys(scheduleData).length === 0) {
+          return scheduleData;
+        }
+
+        // Check if remapping is needed
+        const originalStart = detectOriginalPeriodStart(scheduleData);
+        const currentStart = currentPeriod.start instanceof Date
+          ? currentPeriod.start.toISOString().split('T')[0]
+          : new Date(currentPeriod.start).toISOString().split('T')[0];
+
+        if (originalStart && originalStart !== currentStart) {
+          console.log(`🔄 [WEBSOCKET-SYNC-REMAP] Remapping synced data: ${originalStart} → ${currentStart}`);
+          return remapScheduleDataToPeriod(scheduleData, currentPeriod);
+        }
+
+        return scheduleData;
+      };
+
+      // 🎯 SMART MERGE: Preserve locally-modified cells during sync
+      // CRITICAL: Always create a NEW object reference for React to detect changes
+      if (localModificationsRef.current.size > 0) {
+        console.log(
+          `🔀 [WEBSOCKET-PREFETCH] Smart merge: preserving ${localModificationsRef.current.size} locally-modified cells`,
+        );
+
+        setSchedule(prev => {
+          // Deep clone to ensure new references at all levels
+          const rawMerged = JSON.parse(JSON.stringify(webSocketShifts.scheduleData));
+
+          // Apply date remapping if needed
+          const merged = applyRemappingIfNeeded(rawMerged);
+
+          // Preserve AI-modified cells
+          localModificationsRef.current.forEach(cellKey => {
+            const [staffId, dateKey] = cellKey.split('::');
+            if (prev[staffId]?.[dateKey] !== undefined) {
+              if (!merged[staffId]) merged[staffId] = {};
+              merged[staffId][dateKey] = prev[staffId][dateKey];
+            }
+          });
+
+          return merged;
+        });
+      } else {
+        // No local modifications - deep clone for new reference
+        const rawSchedule = JSON.parse(JSON.stringify(webSocketShifts.scheduleData));
+        const remappedSchedule = applyRemappingIfNeeded(rawSchedule);
+        setSchedule(remappedSchedule);
       }
     }
-  }, [webSocketShifts.scheduleData, webSocketShifts.isConnected, webSocketShifts.syncedPeriodIndex, currentMonthIndex]);
+    // Silently skip sync when conditions aren't met (period mismatch, no data, etc.)
+  }, [webSocketShifts.scheduleData, webSocketShifts.isConnected, webSocketShifts.syncedPeriodIndex, currentMonthIndex, periods]);
 
   // Overall loading state
   const isPrefetching =
     periodsLoading || scheduleLoading || webSocketStaff.isLoading;
 
   // Generate date range for current period
-  // IMPORTANT: Depends on periods to trigger regeneration when periods are updated
+  // IMPORTANT: Pass periods directly to ensure date range uses latest period data
+  // This fixes the issue where period configuration changes weren't reflected in the UI
   const dateRange = useMemo(() => {
     try {
-      return generateDateRange(currentMonthIndex);
+      // Pass periods from React Query directly to avoid stale cache issues
+      return generateDateRange(currentMonthIndex, periods);
     } catch (error) {
       console.warn("Failed to generate date range:", error);
       return [];
@@ -466,7 +617,7 @@ export const useScheduleDataPrefetch = (
         return {
           staff: processedStaffMembers,
           schedule: currentScheduleData?.schedule || {},
-          dateRange: generateDateRange(periodIndex),
+          dateRange: generateDateRange(periodIndex, periods), // Pass periods for consistency
           isFromCache: true,
           scheduleId: currentScheduleId,
         };
@@ -516,6 +667,7 @@ export const useScheduleDataPrefetch = (
       currentScheduleId,
       isWebSocketEnabled,
       webSocketStaff.connectionStatus,
+      periods, // Include periods for generateDateRange call
     ],
   );
 
@@ -632,21 +784,49 @@ export const useScheduleDataPrefetch = (
           console.log(
             `➕ [PHASE3-CACHE] Adding staff via WebSocket: ${newStaff.name}`,
           );
+
+          // Generate a temporary ID for optimistic update
+          const tempId = `temp_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+          const optimisticStaff = {
+            ...newStaff,
+            id: tempId,
+            _isOptimistic: true,
+            _createdAt: Date.now(),
+          };
+
+          // Add to optimistic additions state for immediate UI update
+          setOptimisticStaffAdditions((prev) => [...prev, optimisticStaff]);
+          console.log(
+            "⚡ [OPTIMISTIC] Added optimistic staff for instant UI (temp ID: " + tempId + ")",
+          );
+
+          // Call onSuccess immediately with optimistic data for instant UI feedback
+          if (onSuccess) {
+            const currentStaffWithOptimistic = [
+              ...(webSocketStaff.staffMembers || []),
+              optimisticStaff,
+            ];
+            onSuccess(currentStaffWithOptimistic);
+          }
+
           return webSocketStaff
             .addStaff(newStaff)
             .then(() => {
-              // Phase 3: Invalidate cache on successful add
-              queryClient.invalidateQueries({
-                queryKey: PREFETCH_QUERY_KEYS.allPeriodsStaff(),
-              });
+              // The optimistic state will be cleaned up automatically when
+              // WebSocket broadcasts the STAFF_CREATE response and staffMembers updates
               console.log(
-                "🔄 [PHASE3-CACHE] Cache invalidated after staff add",
+                "✅ [PHASE3-CACHE] Staff add confirmed by server, optimistic state will auto-cleanup",
               );
-
-              if (onSuccess) onSuccess(webSocketStaff.staffMembers);
             })
             .catch((error) => {
               console.error("WebSocket addStaff failed:", error);
+              // Rollback optimistic update on error - remove the optimistic staff
+              setOptimisticStaffAdditions((prev) =>
+                prev.filter((s) => s.id !== tempId)
+              );
+              console.log(
+                "⏪ [OPTIMISTIC] Rolled back optimistic addition due to error",
+              );
               setError(`スタッフの追加に失敗しました: ${error.message}`);
             });
         },
@@ -1396,5 +1576,17 @@ export const useScheduleDataPrefetch = (
       clientId: webSocketShifts.clientId,
       clearPendingUpdates: webSocketShifts.clearPendingUpdates, // Clear pending updates when schedule is cleared
     },
+
+    // Optimistic update utilities - for resolving temp IDs to real IDs
+    resolveStaffId: (staffId) => {
+      // If this is a temp ID that has been confirmed, return the real ID
+      if (staffId && staffId.startsWith("temp_") && confirmedStaffMappings[staffId]) {
+        const realId = confirmedStaffMappings[staffId];
+        console.log(`🔗 [RESOLVE-ID] Resolved temp ID ${staffId} -> ${realId}`);
+        return realId;
+      }
+      return staffId;
+    },
+    confirmedStaffMappings, // Expose for debugging
   };
 };

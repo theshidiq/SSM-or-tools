@@ -5,7 +5,9 @@
  * Prevents memory leaks, manages tensor lifecycle, and optimizes memory usage.
  */
 
-import * as tf from "@tensorflow/tfjs";
+// Portfolio Optimization: Use stub instead of actual TensorFlow.js
+// OR-Tools via WebSocket is now the primary optimizer
+import { tf } from "../ml/tensorflow-stub";
 
 class TensorMemoryManager {
   constructor() {

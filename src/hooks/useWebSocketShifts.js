@@ -553,7 +553,7 @@ export const useWebSocketShifts = (
   const syncSchedule = useCallback(() => {
     if (!scheduleId) {
       console.log(`⏳ [WEBSOCKET-SHIFTS] Skipping sync: No scheduleId`);
-      return;
+      return Promise.resolve();
     }
 
     // Don't attempt sync if not connected
@@ -561,7 +561,7 @@ export const useWebSocketShifts = (
       console.log(
         `⏳ [WEBSOCKET-SHIFTS] Skipping sync: Not connected (will sync after reconnection)`,
       );
-      return;
+      return Promise.resolve();
     }
 
     setIsSyncing(true);
@@ -569,6 +569,7 @@ export const useWebSocketShifts = (
       scheduleId,
       periodIndex: currentPeriod,
     });
+    return Promise.resolve();
   }, [scheduleId, currentPeriod, sendMessage, isConnected]);
 
   // Connect on mount and when enabled/period changes
@@ -576,6 +577,13 @@ export const useWebSocketShifts = (
     if (enabled) {
       // Clear the period switching flag and connect
       isPeriodSwitchingRef.current = false;
+
+      // 🔧 CRITICAL: Clear stale schedule data and synced period when period changes
+      // This prevents old period data from briefly appearing during navigation
+      setScheduleData({});
+      setSyncedPeriodIndex(null);
+      pendingUpdatesRef.current.clear();
+      console.log(`🧹 [WEBSOCKET-SHIFTS] Cleared schedule data for period switch to ${currentPeriod}`);
 
       // Small delay to ensure cleanup is complete before new connection
       const timer = setTimeout(() => {

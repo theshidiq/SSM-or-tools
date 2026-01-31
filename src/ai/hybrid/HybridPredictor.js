@@ -1830,7 +1830,7 @@ export class HybridPredictor {
       // liveSettings.dailyLimits is an array format for AI, dailyLimitsRaw is the object format
       const dailyLimits = liveSettings?.dailyLimitsRaw || liveSettings?.dailyLimits || {};
       const minOffPerDay = dailyLimits.minOffPerDay ?? 0;
-      const maxOffPerDay = dailyLimits.maxOffPerDay ?? 3;
+      const maxOffPerDay = dailyLimits.maxOffPerDay ?? 4; // Changed from 3 to 4 to allow more day-off flexibility
 
       console.log(`⚖️ [MIN-ENFORCE] Post-processing schedule for MIN limits (minOffPerDay: ${minOffPerDay}, maxOffPerDay: ${maxOffPerDay})`);
 

@@ -1419,6 +1419,13 @@ func (s *StaffSyncServer) handleGenerateScheduleORTools(client *Client, msg *Mes
 			Status:   getStringField(staffMap, "status"),
 			Position: getStringField(staffMap, "position"),
 		}
+		// Extract start_period and end_period for employment period handling
+		if startPeriod, ok := staffMap["start_period"].(map[string]interface{}); ok {
+			staff.StartPeriod = startPeriod
+		}
+		if endPeriod, ok := staffMap["end_period"].(map[string]interface{}); ok {
+			staff.EndPeriod = endPeriod
+		}
 		if staff.ID != "" {
 			staffMembers = append(staffMembers, staff)
 		}
@@ -1542,6 +1549,26 @@ func (s *StaffSyncServer) handleGenerateScheduleORTools(client *Client, msg *Mes
 		}
 	} else {
 		log.Printf("[ORTOOLS] prefilledSchedule: NONE (generating full schedule)")
+	}
+
+	// Log earlyShiftConfig (post day-off period constraints)
+	if earlyShiftConfig, ok := constraints["earlyShiftConfig"].(map[string]interface{}); ok {
+		if postPeriodConstraint, ok := earlyShiftConfig["postPeriodConstraint"].(map[string]interface{}); ok {
+			log.Printf("[ORTOOLS] 🎯 earlyShiftConfig.postPeriodConstraint:")
+			log.Printf("[ORTOOLS]   enabled=%v, isHardConstraint=%v, minPeriodLength=%v, postPeriodDays=%v",
+				postPeriodConstraint["enabled"],
+				postPeriodConstraint["isHardConstraint"],
+				postPeriodConstraint["minPeriodLength"],
+				postPeriodConstraint["postPeriodDays"])
+			log.Printf("[ORTOOLS]   avoidDayOffForShain=%v, avoidDayOffForHaken=%v, allowEarlyForShain=%v",
+				postPeriodConstraint["avoidDayOffForShain"],
+				postPeriodConstraint["avoidDayOffForHaken"],
+				postPeriodConstraint["allowEarlyForShain"])
+		} else {
+			log.Printf("[ORTOOLS] earlyShiftConfig: postPeriodConstraint NOT configured")
+		}
+	} else {
+		log.Printf("[ORTOOLS] earlyShiftConfig: NONE or invalid format")
 	}
 
 	log.Printf("[ORTOOLS] === End Constraint Debug Info ===")

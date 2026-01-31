@@ -342,7 +342,7 @@ export const useAIAssistantLazy = (
           // See Python scheduler _add_daily_limits() for AUTO-DISABLE logic
           dailyLimitsRaw: aiSettings?.dailyLimitsRaw || {
             minOffPerDay: 0,  // Set to 0 to effectively disable
-            maxOffPerDay: 3,
+            maxOffPerDay: 4, // Changed from 3 to 4 to allow more day-off flexibility
           },
           // ✅ FIX: Use extracted monthly limit config (from monthlyLimits array)
           monthlyLimit: monthlyLimitConfig,
@@ -382,7 +382,17 @@ export const useAIAssistantLazy = (
           // - When NO member of a group has day off, backup staff gets Unavailable (⊘)
           // - This is a HARD constraint in OR-Tools
           backupAssignments: aiSettings?.backupAssignments || [],
+          // ✅ NEW: Early shift config (post day-off period constraints)
+          // Configures behavior after day-off periods end (e.g., avoid × for 社員/派遣)
+          earlyShiftConfig: aiSettings?.earlyShiftConfig || {},
         };
+
+        // 🔍 DEBUG: Log earlyShiftConfig to verify data flow
+        console.log("[OR-TOOLS] 🎯 earlyShiftConfig being sent:", JSON.stringify(constraints.earlyShiftConfig, null, 2));
+        if (!constraints.earlyShiftConfig || Object.keys(constraints.earlyShiftConfig).length === 0) {
+          console.warn("[OR-TOOLS] ⚠️ WARNING - earlyShiftConfig is EMPTY! Post-period constraints will NOT apply.");
+          console.warn("[OR-TOOLS] Please enable the toggle in Settings → Early Shift tab");
+        }
 
         // Log the ortoolsConfig being sent
         console.log("[OR-TOOLS] Using ortoolsConfig:", JSON.stringify(constraints.ortoolsConfig, null, 2));
@@ -473,6 +483,7 @@ export const useAIAssistantLazy = (
               name: s.name,
               status: s.status,
               position: s.position,
+              start_period: s.start_period || s.startPeriod || null, // { year, month, day } or null
               end_period: s.end_period || s.endPeriod || null,  // { year, month, day } or null
             })),
             dateRange,
