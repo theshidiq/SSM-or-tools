@@ -54,16 +54,25 @@
 
 ### Tech Stack Alignment
 
-| NextBeat Uses | Your Portfolio | Gap Analysis |
-|---------------|----------------|--------------|
-| **TypeScript** | JavaScript | Easy conversion, 1-2 weeks |
-| **Angular/SvelteKit** | React | React is transferable, learn SvelteKit basics |
-| **Scala/Play** | Go | Both are compiled, strongly-typed (transferable concepts) |
-| **AWS/GCP** | Docker, can deploy anywhere | Show AWS cost optimization doc ✅ |
-| **Claude Code Max** | ✅ USING IT NOW | **PERFECT MATCH** |
-| **GitHub Copilot** | ✅ Can add | AI-assisted development |
+| NextBeat Uses | Your Portfolio | Adaptation Strategy |
+|---------------|----------------|---------------------|
+| **TypeScript** | JavaScript | ✅ Convert React to TypeScript (1 week) |
+| **Angular/SvelteKit** | React | ✅ Implement AI Receptionist with SvelteKit |
+| **Scala 2/3 + Play** | Go | ✅ Implement backend API with Scala + http4s |
+| **NestJS** | Go WebSocket | ✅ Alternative: Use NestJS for TypeScript backend |
+| **AWS/GCP/Azure** | Docker | ✅ Show AWS cost optimization doc |
+| **Claude Code Max** | ✅ USING IT NOW | **PERFECT MATCH** ✅ |
+| **GitHub Copilot** | ✅ USING IT | AI-assisted development ✅ |
+| **Terraform** | Docker Compose | ⚠️ Can learn (IaC concepts transferable) |
+| **GitHub Actions** | Manual git | ✅ Can add CI/CD pipeline |
 
-**Key Finding**: Your portfolio uses **Claude Code Max** (same as NextBeat!) - this is a HUGE plus point.
+**Key Finding**:
+1. **Claude Code Max** - EXACT MATCH (huge plus!) ✅
+2. **TypeScript ecosystem** - Can demonstrate with AI Receptionist
+3. **Functional programming** - Can show with Scala implementation
+4. **Full-stack** - Already proven with React + Go + Python
+
+**Recommendation**: Implement AI Receptionist using **NextBeat's exact tech stack** to demonstrate immediate productivity.
 
 ---
 
@@ -166,12 +175,21 @@ NextBeat's おもてなしHR platform addresses:
    - Ingredients tagged with allergen types (gluten, dairy, shellfish, nuts, etc.)
    - AI queries database to answer questions
 
-**Tech Stack**:
-- **Frontend**: React component for receptionist chat
-- **Backend**: Go endpoint or Python service
-- **AI**: Claude API (Anthropic) or OpenAI GPT-4
-- **Database**: Supabase (extend existing schema)
-- **Vision API**: Google Vision API or Azure Computer Vision (Phase 2)
+**Tech Stack** (Aligned with NextBeat):
+- **Frontend**: **SvelteKit** (NextBeat's framework) + TypeScript
+- **Backend**: **Scala 3 + http4s** (NextBeat's stack) OR **NestJS** (TypeScript alternative)
+- **AI**: **Claude API** (Anthropic) - same as NextBeat's Claude Code Max
+- **Database**: PostgreSQL (compatible with NextBeat's likely stack)
+- **Infrastructure**: Docker + **Terraform** (NextBeat uses this)
+- **CI/CD**: **GitHub Actions** (NextBeat uses this)
+- **Vision API**: Google Vision API (Phase 2)
+
+**Why This Tech Stack**:
+1. ✅ **Exact match** with NextBeat job posting requirements
+2. ✅ **Demonstrates** immediate productivity (no learning curve)
+3. ✅ **Shows** you researched company tech stack
+4. ✅ **Proves** TypeScript + functional programming skills
+5. ✅ **Impresses** hiring managers (most candidates use React/Node)
 
 ---
 
@@ -334,38 +352,152 @@ CREATE TABLE menu_ingredients (
 
 ---
 
-## Implementation Roadmap
+## Implementation Roadmap (NextBeat Tech Stack)
 
-### Phase 1: Core AI Receptionist (1-2 Weeks) ✅ PRIORITY
+### Tech Stack Decision Matrix
 
-**Week 1**: Database + Backend
-1. Design allergen database schema (Supabase)
-2. Create 20-30 menu items with ingredients
-3. Build Go/Python API endpoint for allergen queries
-4. Write tests for allergen logic
+| Component | Option A (NextBeat Match) | Option B (Easier) | Recommendation |
+|-----------|--------------------------|-------------------|----------------|
+| **Frontend** | SvelteKit + TypeScript ✅ | React + TypeScript | **SvelteKit** (exact match) |
+| **Backend** | Scala 3 + http4s ✅ | NestJS (TypeScript) | **NestJS** (faster, still TypeScript) |
+| **Database** | PostgreSQL | PostgreSQL | **PostgreSQL** ✅ |
+| **AI** | Claude API | Claude API | **Claude API** ✅ |
+| **Deployment** | Terraform + Docker | Docker only | **Docker** (start simple) |
+| **CI/CD** | GitHub Actions | GitHub Actions | **GitHub Actions** ✅ |
 
-**Week 2**: Frontend + AI Integration
-1. Create AI receptionist chat component (React)
-2. Integrate Claude API or OpenAI GPT-4
-3. Implement conversation flow:
-   - Guest question → AI parses intent → Query database → AI responds
-4. Add chat history and context management
+**Strategic Recommendation**:
+- ✅ **SvelteKit** for frontend (exact NextBeat match, 1 week learning curve)
+- ✅ **NestJS** for backend (TypeScript, easier than Scala, 3-5 days learning curve)
+- ✅ Both demonstrate NextBeat tech stack compatibility
 
-**Deliverables**:
-- Functional AI receptionist demo
-- 20-30 hotel menu items with allergen data
-- Chat interface integrated into existing app
-- API documentation
+---
 
-**Demo Script**:
+### Phase 1: Core AI Receptionist (2-3 Weeks) ✅ PRIORITY
+
+#### Week 1: Learn SvelteKit + Setup (Foundation)
+
+**Days 1-3**: SvelteKit Learning
+- Complete official Svelte tutorial (https://learn.svelte.dev/)
+- Build simple todo app to understand reactivity
+- Learn SvelteKit routing and server routes
+- **Goal**: Comfortable with Svelte syntax and SvelteKit structure
+
+**Days 4-5**: Database + Backend Setup
+- Design allergen database schema (PostgreSQL)
+- Create 20-30 menu items with ingredients
+- Setup NestJS project with TypeScript
+- Connect to PostgreSQL database
+
+**Days 6-7**: Basic API Implementation
+- Build NestJS allergen query endpoint
+- Implement database queries
+- Test API with Postman/Thunder Client
+
+**Deliverables Week 1**:
+- ✅ SvelteKit project initialized
+- ✅ Database schema with sample data (20-30 items)
+- ✅ Basic NestJS API working
+- ✅ PostgreSQL connection established
+
+---
+
+#### Week 2: Frontend + AI Integration
+
+**Days 1-2**: SvelteKit Chat UI
+- Create chat component with Svelte stores
+- Implement message list and input
+- Add loading states and error handling
+- Style with Tailwind CSS
+
+**Days 3-4**: Claude API Integration
+- Setup Claude API client in NestJS
+- Implement allergen extraction (NLP)
+- Implement response generation
+- Test conversation flow
+
+**Days 5-7**: Full Integration + Polish
+- Connect SvelteKit frontend to NestJS backend
+- Implement session management
+- Add menu item display components
+- Test end-to-end user flow
+
+**Deliverables Week 2**:
+- ✅ Functional chat interface (SvelteKit)
+- ✅ Claude API integration working
+- ✅ End-to-end allergen query flow
+- ✅ Professional UI with Tailwind CSS
+
+---
+
+#### Week 3: Testing + Documentation (Polish)
+
+**Days 1-2**: Testing
+- Write unit tests (NestJS)
+- Write component tests (Svelte Testing Library)
+- Test edge cases (no allergens, multiple allergens, etc.)
+
+**Days 3-4**: Documentation
+- API documentation (Swagger/OpenAPI)
+- Frontend component documentation
+- User guide (how to use AI receptionist)
+- README with tech stack explanation
+
+**Days 5-7**: Deployment
+- Setup Docker containers (SvelteKit + NestJS)
+- Deploy to Railway or Fly.io
+- Setup GitHub Actions CI/CD
+- Test production deployment
+
+**Deliverables Week 3**:
+- ✅ Test coverage >70%
+- ✅ Complete documentation
+- ✅ Production deployment working
+- ✅ CI/CD pipeline setup
+
+---
+
+### Demo Script (For Interview)
+
+**Scenario**: Hotel guest with shellfish allergy
+
 ```
+[Chat Interface]
+
 Guest: "I'm allergic to shellfish. What can I order?"
-AI Receptionist: "I've found 12 dishes without shellfish. Here are our most popular options:
-1. Grilled Chicken Teriyaki (no allergens)
-2. Vegetable Pasta (contains gluten, dairy)
-3. Beef Steak (no allergens)
-Would you like more details about any of these dishes?"
+
+AI Receptionist: "I understand you have a shellfish allergy. I've found 12
+dishes that are safe for you. Here are our most popular options:
+
+✅ Safe for you:
+1. Grilled Chicken Teriyaki (no allergens) - ¥2,200
+2. Beef Steak with Garlic Butter (contains dairy) - ¥3,800
+3. Vegetable Pasta Primavera (contains gluten, dairy) - ¥1,980
+4. Caesar Salad (contains eggs, dairy) - ¥1,200
+5. Miso Soup with Tofu (contains soy) - ¥580
+
+Would you like more details about any of these dishes, or shall I show you
+other options?"
+
+Guest: "Tell me more about the chicken teriyaki"
+
+AI Receptionist: "The Grilled Chicken Teriyaki is our signature dish:
+
+🍗 Grilled Chicken Teriyaki (¥2,200)
+- Ingredients: Chicken breast, teriyaki sauce (soy, mirin, sugar), steamed rice
+- Allergen info: Contains SOY (from teriyaki sauce)
+- Allergen-free: No shellfish, gluten, dairy, eggs, nuts ✓
+- Preparation: Can be made without teriyaki sauce upon request
+
+This is one of our most popular dishes and is completely safe for your
+shellfish allergy. Would you like to order this?"
 ```
+
+**Why This Demo Impresses**:
+1. ✅ Natural conversation flow (Claude API)
+2. ✅ Accurate allergen detection
+3. ✅ Clear visual presentation (SvelteKit components)
+4. ✅ Professional Japanese business context
+5. ✅ Solves REAL hotel problem
 
 ---
 
@@ -607,7 +739,16 @@ INSERT INTO menu_item_ingredients (menu_item_id, ingredient_id, quantity) VALUES
 
 ## AI Receptionist Implementation
 
-### Backend API (Go Example)
+### Option 1: Scala 3 + http4s (NextBeat's Exact Stack) ✅ RECOMMENDED
+
+**Why Scala**:
+- NextBeat uses Scala 2/3 + Play Framework / http4s
+- Demonstrates functional programming skills
+- Strongly-typed (safer than JavaScript)
+- Shows you can learn new languages quickly
+- **HUGE interview plus**: "I learned Scala specifically for this application"
+
+### Backend API (Scala 3 + http4s Example)
 
 ```go
 // go-server/allergen_api.go
@@ -747,7 +888,226 @@ Keep response under 100 words.`, message, allergens, safeItemsList)
 }
 ```
 
-### Frontend Component (React)
+**Scala 3 Implementation**:
+
+```scala
+// src/main/scala/com/hotel/allergen/AllergenService.scala
+package com.hotel.allergen
+
+import cats.effect._
+import org.http4s._
+import org.http4s.dsl.io._
+import org.http4s.circe.CirceEntityCodec._
+import io.circe.generic.auto._
+import io.circe.syntax._
+
+case class AllergenQuery(message: String, sessionId: String)
+case class MenuItem(id: String, name: String, allergens: List[String], price: Double)
+case class AllergenResponse(
+  response: String,
+  safeItems: List[MenuItem],
+  unsafeItems: List[MenuItem]
+)
+
+class AllergenService(
+  claudeClient: ClaudeClient,
+  database: Database
+) {
+
+  val routes: HttpRoutes[IO] = HttpRoutes.of[IO] {
+    case req @ POST -> Root / "api" / "allergen-query" =>
+      for {
+        query <- req.as[AllergenQuery]
+
+        // 1. Extract allergens using Claude API
+        allergens <- claudeClient.detectAllergens(query.message)
+
+        // 2. Query database for safe menu items
+        (safeItems, unsafeItems) <- database.findMenuItems(allergens)
+
+        // 3. Generate AI response
+        aiResponse <- claudeClient.generateResponse(
+          query.message,
+          allergens,
+          safeItems
+        )
+
+        // 4. Log conversation
+        _ <- database.logConversation(
+          query.sessionId,
+          query.message,
+          aiResponse,
+          allergens
+        )
+
+        response = AllergenResponse(aiResponse, safeItems, unsafeItems)
+        result <- Ok(response.asJson)
+      } yield result
+  }
+}
+
+// Claude API Client with cats-effect
+class ClaudeClient(apiKey: String) {
+  import org.http4s.client._
+  import org.http4s.client.dsl.io._
+
+  def detectAllergens(message: String): IO[List[String]] = {
+    val prompt = s"""Extract allergen types from this message: "$message"
+
+    Return JSON array of allergen types. Valid types: gluten, dairy, eggs,
+    shellfish, fish, nuts, peanuts, soy, sesame, alcohol
+
+    Example: "I can't eat dairy or nuts" → ["dairy", "nuts"]
+
+    If no allergens mentioned, return empty array."""
+
+    callClaudeAPI(prompt).map(parseAllergens)
+  }
+
+  def generateResponse(
+    message: String,
+    allergens: List[String],
+    safeItems: List[MenuItem]
+  ): IO[String] = {
+    val itemsList = safeItems.take(5)
+      .zipWithIndex
+      .map { case (item, idx) =>
+        s"${idx + 1}. ${item.name} (¥${item.price.toInt})"
+      }
+      .mkString("\n")
+
+    val prompt = s"""You are a helpful hotel receptionist AI. A guest asked: "$message"
+
+Detected allergens: ${allergens.mkString(", ")}
+
+Safe menu items for this guest:
+$itemsList
+
+Generate a friendly, professional response that:
+1. Acknowledges their allergen concerns
+2. Lists 3-5 safe menu items
+3. Offers to provide more details
+
+Keep response under 100 words."""
+
+    callClaudeAPI(prompt)
+  }
+
+  private def callClaudeAPI(prompt: String): IO[String] = {
+    // Implementation using http4s client
+    ???
+  }
+
+  private def parseAllergens(response: String): List[String] = {
+    // Parse JSON response
+    ???
+  }
+}
+
+// Database layer with Doobie (functional JDBC)
+import doobie._
+import doobie.implicits._
+
+class Database(xa: Transactor[IO]) {
+
+  def findMenuItems(allergens: List[String]): IO[(List[MenuItem], List[MenuItem])] = {
+    val query = sql"""
+      SELECT DISTINCT
+        mi.id,
+        mi.name,
+        mi.price_jpy,
+        ARRAY_AGG(DISTINCT at.name) as allergens
+      FROM menu_items mi
+      LEFT JOIN menu_item_ingredients mii ON mi.id = mii.menu_item_id
+      LEFT JOIN ingredient_allergens ia ON mii.ingredient_id = ia.ingredient_id
+      LEFT JOIN allergen_types at ON ia.allergen_type_id = at.id
+      WHERE mi.is_available = TRUE
+      GROUP BY mi.id, mi.name, mi.price_jpy
+    """.query[(String, String, Double, List[String])]
+
+    query.to[List].transact(xa).map { items =>
+      val (safe, unsafe) = items.partition { case (_, _, _, itemAllergens) =>
+        !allergens.exists(itemAllergens.contains)
+      }
+
+      (
+        safe.map { case (id, name, price, allergns) => MenuItem(id, name, allergns, price) },
+        unsafe.map { case (id, name, price, allergns) => MenuItem(id, name, allergns, price) }
+      )
+    }
+  }
+
+  def logConversation(
+    sessionId: String,
+    guestMessage: String,
+    aiResponse: String,
+    allergens: List[String]
+  ): IO[Unit] = {
+    sql"""
+      INSERT INTO receptionist_conversations
+      (session_id, guest_message, ai_response, detected_allergens)
+      VALUES ($sessionId, $guestMessage, $aiResponse, ${allergens.toArray})
+    """.update.run.transact(xa).void
+  }
+}
+```
+
+---
+
+### Option 2: NestJS + TypeScript (Easier Alternative) ⚠️
+
+**Why NestJS**:
+- NextBeat also uses NestJS (TypeScript backend)
+- Easier learning curve than Scala
+- Still demonstrates TypeScript skills
+- Faster implementation (1 week vs 2 weeks for Scala)
+
+**NestJS Implementation** (abbreviated):
+
+```typescript
+// src/allergen/allergen.service.ts
+import { Injectable } from '@nestjs/common';
+import { ClaudeService } from '../claude/claude.service';
+import { DatabaseService } from '../database/database.service';
+
+@Injectable()
+export class AllergenService {
+  constructor(
+    private readonly claudeService: ClaudeService,
+    private readonly databaseService: DatabaseService,
+  ) {}
+
+  async queryAllergens(message: string, sessionId: string) {
+    // 1. Extract allergens using Claude API
+    const allergens = await this.claudeService.detectAllergens(message);
+
+    // 2. Query database
+    const { safeItems, unsafeItems } =
+      await this.databaseService.findMenuItems(allergens);
+
+    // 3. Generate AI response
+    const response = await this.claudeService.generateResponse(
+      message,
+      allergens,
+      safeItems
+    );
+
+    // 4. Log conversation
+    await this.databaseService.logConversation(
+      sessionId,
+      message,
+      response,
+      allergens
+    );
+
+    return { response, safeItems, unsafeItems };
+  }
+}
+```
+
+---
+
+### Frontend Component (SvelteKit + TypeScript) ✅ RECOMMENDED
 
 ```jsx
 // src/components/AIReceptionist.jsx
