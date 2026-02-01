@@ -1,30 +1,48 @@
-# AI Receptionist Feature - Agent Implementation Guideline
+# AI Receptionist Feature - Initial Project Setup Guideline
 
 ## 📋 Executive Summary
 
-**Project**: AI Receptionist for Allergen Query System
+**Project**: Allergen Management System (Phase 1: Foundation)
 **Target**: NextBeat Job Application Portfolio (https://hrmos.co/pages/nextbeat/jobs/1928055294849511742)
-**Tech Stack**: SvelteKit + NestJS + PostgreSQL + Claude API (NextBeat-aligned)
+**Tech Stack**: SvelteKit + NestJS + PostgreSQL (NextBeat-aligned)
 **Database**: Use EXISTING Supabase from shift-schedule-manager-ortools
-**Timeline**: 2-3 weeks
+**Timeline**: 1 week (Initial setup only)
 **Strategy**: Separate repository, shared database
+
+**Important**: This guideline covers **Phase 1: Initial Project Setup** only.
+AI integration (Claude API) will be added in Phase 2 after foundation is solid.
 
 ---
 
-## 🎯 Project Goals
+## 🎯 Project Goals (Phase 1)
 
 ### Primary Objectives
-1. ✅ Demonstrate NextBeat tech stack proficiency (SvelteKit + TypeScript + NestJS)
-2. ✅ Show full-stack capabilities (Frontend + Backend + Database + AI)
-3. ✅ Showcase hospitality domain expertise
-4. ✅ Prove learning agility (learn SvelteKit in 1 week)
-5. ✅ Demonstrate data quality thinking (manual curation over API)
+1. ✅ Setup database schema for allergen management
+2. ✅ Create basic CRUD API with NestJS
+3. ✅ Build simple menu display UI with SvelteKit
+4. ✅ Demonstrate NextBeat tech stack proficiency (SvelteKit + TypeScript + NestJS)
+5. ✅ Curate quality data (20-30 menu items with accurate allergen info)
+
+### Phase 1 Scope
+**What's Included**:
+- ✅ Database schema and migration
+- ✅ NestJS REST API (CRUD operations)
+- ✅ SvelteKit UI (menu display, allergen filtering)
+- ✅ Manual data entry interface
+- ✅ Basic search and filter functionality
+
+**What's NOT Included** (Phase 2):
+- ❌ Claude API integration (conversational AI)
+- ❌ Natural language processing
+- ❌ Chat interface
+- ❌ Session management
+- ❌ Conversation logging
 
 ### Strategic Positioning
 **Interview Narrative**:
 > "I have 2 hospitality tech projects:
 > 1. **Shift Scheduler** (6-month thesis) - React + Go + OR-Tools
-> 2. **AI Receptionist** (2-week sprint) - SvelteKit + NestJS + Claude API
+> 2. **Allergen Management System** (1-week sprint) - SvelteKit + NestJS + PostgreSQL
 >
 > The second project demonstrates I researched NextBeat's tech stack and learned SvelteKit + NestJS specifically to be immediately productive on day 1."
 
@@ -396,23 +414,27 @@ FROM menu_categories c WHERE c.name = 'Main Course';
 - SvelteKit Docs: https://kit.svelte.dev/docs
 - TypeScript + Svelte: https://svelte.dev/docs/typescript
 
-**Project Structure**:
+**Project Structure** (Phase 1):
 ```
-ai-receptionist-allergen/
+allergen-management-system/
 ├── src/
 │   ├── routes/
-│   │   ├── +page.svelte              # Main chat page
+│   │   ├── +page.svelte              # Main menu display page
 │   │   ├── +page.ts                  # Page load function
+│   │   ├── admin/
+│   │   │   └── +page.svelte          # Admin data entry form
 │   │   └── api/
-│   │       └── allergen-query/
-│   │           └── +server.ts        # SvelteKit API endpoint
+│   │       ├── menu-items/
+│   │       │   └── +server.ts        # Menu items API proxy
+│   │       └── allergens/
+│   │           └── +server.ts        # Allergen filter API proxy
 │   ├── lib/
 │   │   ├── components/
-│   │   │   ├── ChatMessage.svelte
-│   │   │   ├── MenuItemCard.svelte
-│   │   │   └── LoadingDots.svelte
+│   │   │   ├── MenuItemCard.svelte   # Menu item display
+│   │   │   ├── AllergenFilter.svelte # Filter UI component
+│   │   │   └── MenuItemForm.svelte   # Data entry form
 │   │   ├── stores/
-│   │   │   └── chat.ts               # Svelte stores
+│   │   │   └── menu.ts               # Menu state store
 │   │   └── types/
 │   │       └── allergen.ts           # TypeScript types
 │   └── app.html
@@ -439,33 +461,57 @@ ai-receptionist-allergen/
 - Exact match with NextBeat backend
 - More impressive but slower to implement
 
-**NestJS Project Structure**:
+**NestJS Project Structure** (Phase 1):
 ```
-ai-receptionist-backend/
+allergen-backend/
 ├── src/
 │   ├── main.ts
 │   ├── app.module.ts
+│   ├── menu/
+│   │   ├── menu.module.ts
+│   │   ├── menu.controller.ts
+│   │   ├── menu.service.ts
+│   │   └── dto/
+│   │       ├── create-menu-item.dto.ts
+│   │       ├── update-menu-item.dto.ts
+│   │       └── filter-menu.dto.ts
 │   ├── allergen/
 │   │   ├── allergen.module.ts
 │   │   ├── allergen.controller.ts
-│   │   ├── allergen.service.ts
-│   │   └── dto/
-│   │       ├── allergen-query.dto.ts
-│   │       └── allergen-response.dto.ts
-│   ├── claude/
-│   │   ├── claude.module.ts
-│   │   └── claude.service.ts
+│   │   └── allergen.service.ts
 │   ├── database/
 │   │   ├── database.module.ts
 │   │   └── database.service.ts
 │   └── entities/
 │       ├── menu-item.entity.ts
 │       ├── ingredient.entity.ts
-│       └── allergen-type.entity.ts
+│       ├── allergen-type.entity.ts
+│       ├── menu-category.entity.ts
+│       └── menu-item-ingredient.entity.ts
 ├── test/
 ├── nest-cli.json
 ├── tsconfig.json
 └── package.json
+```
+
+**Key API Endpoints** (Phase 1):
+```typescript
+// Menu Management
+GET    /api/menu-items              # Get all menu items
+GET    /api/menu-items/:id          # Get single menu item
+POST   /api/menu-items              # Create menu item
+PUT    /api/menu-items/:id          # Update menu item
+DELETE /api/menu-items/:id          # Delete menu item
+
+// Allergen Filtering
+GET    /api/menu-items/filter       # Filter by allergens
+  Query params: ?exclude=shellfish,gluten
+
+// Allergen Types
+GET    /api/allergens               # Get all allergen types
+
+// Categories
+GET    /api/categories              # Get all menu categories
 ```
 
 ---
@@ -502,162 +548,100 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 **Migration Files**:
 Create `database/migrations/001_allergen_schema.sql` with the schema above.
 
----
-
-### AI: Claude API (Anthropic)
-
-**Why Claude API**:
-1. ✅ **NextBeat Uses Claude** - They have Claude Code Max subscription
-2. ✅ **Best for Conversations** - Superior to GPT for chat
-3. ✅ **JSON Mode** - Structured output for allergen extraction
-4. ✅ **Cost Effective** - $3/million tokens (vs GPT-4 $30/million)
-
-**Claude Integration**:
-```typescript
-// claude.service.ts
-import Anthropic from '@anthropic-ai/sdk';
-
-@Injectable()
-export class ClaudeService {
-  private client: Anthropic;
-
-  constructor() {
-    this.client = new Anthropic({
-      apiKey: process.env.CLAUDE_API_KEY,
-    });
-  }
-
-  async detectAllergens(message: string): Promise<string[]> {
-    const response = await this.client.messages.create({
-      model: 'claude-3-5-sonnet-20241022',
-      max_tokens: 1024,
-      messages: [{
-        role: 'user',
-        content: `Extract allergens from this message: "${message}"
-
-        Return ONLY a JSON array of allergen names.
-        Valid allergens: gluten, dairy, eggs, shellfish, fish, nuts, peanuts, soy, sesame, alcohol
-
-        Examples:
-        - "I'm allergic to shellfish" → ["shellfish"]
-        - "Can't have gluten or dairy" → ["gluten", "dairy"]
-        - "What's safe for someone with nut allergies?" → ["nuts"]
-
-        Message: "${message}"
-        JSON array:`,
-      }],
-    });
-
-    const content = response.content[0].text;
-    return JSON.parse(content); // ["shellfish", "gluten"]
-  }
-
-  async generateResponse(
-    userMessage: string,
-    allergens: string[],
-    safeItems: MenuItem[],
-  ): Promise<string> {
-    const response = await this.client.messages.create({
-      model: 'claude-3-5-sonnet-20241022',
-      max_tokens: 2048,
-      messages: [{
-        role: 'user',
-        content: `You are an AI receptionist at a hotel. A guest asked: "${userMessage}"
-
-        Detected allergens: ${allergens.join(', ')}
-        Safe menu items: ${safeItems.length} items
-
-        Generate a friendly, professional response in Japanese explaining which dishes are safe.
-        Be concise and helpful.`,
-      }],
-    });
-
-    return response.content[0].text;
-  }
-}
-```
 
 ---
 
-## 📝 Implementation Checklist
+## 📝 Implementation Checklist (Phase 1: 1 Week)
 
-### Week 1: Foundation (Learn + Setup)
+### Day 1-2: Setup & Learning
 
-**Day 1-2: SvelteKit Learning**
-- [ ] Complete Svelte tutorial (https://learn.svelte.dev/)
-- [ ] Build simple todo app with Svelte
-- [ ] Understand Svelte stores and reactivity
-- [ ] Learn SvelteKit routing
+**SvelteKit Learning**
+- [ ] Complete Svelte tutorial (https://learn.svelte.dev/) - 4 hours
+- [ ] Build simple todo app with Svelte - 2 hours
+- [ ] Understand Svelte stores and reactivity - 1 hour
+- [ ] Learn SvelteKit routing - 1 hour
 
-**Day 3-4: Database Setup**
+**Database Setup**
 - [ ] Copy Supabase credentials from shift-schedule-manager
-- [ ] Run allergen schema migration (001_allergen_schema.sql)
+- [ ] Run allergen schema migration (016_allergen_schema_for_ai_receptionist.sql)
 - [ ] Verify tables created in Supabase dashboard
-- [ ] Insert sample allergen types (10 allergens)
-- [ ] Create 20-30 menu items with ingredients
-- [ ] Test queries in Supabase SQL editor
-
-**Day 5-7: NestJS Backend**
-- [ ] Initialize NestJS project: `nest new ai-receptionist-backend`
-- [ ] Setup TypeORM with Supabase connection
-- [ ] Create entities (MenuItem, Ingredient, AllergenType)
-- [ ] Implement allergen query service
-- [ ] Setup Claude API integration
-- [ ] Test API with Postman (POST /api/allergen-query)
+- [ ] Review sample data (10 allergens, 4 menu items)
+- [ ] Test basic queries in Supabase SQL editor
 
 ---
 
-### Week 2: Frontend + AI Integration
+### Day 3-4: Backend Development (NestJS)
 
-**Day 1-3: SvelteKit Chat UI**
-- [ ] Initialize SvelteKit project: `npm create svelte@latest`
-- [ ] Setup Tailwind CSS
-- [ ] Create chat store (Svelte stores)
-- [ ] Build ChatMessage component
-- [ ] Build MenuItemCard component
-- [ ] Implement message input and send
+**NestJS Setup**
+- [ ] Initialize NestJS project: `nest new allergen-backend`
+- [ ] Install dependencies: TypeORM, @supabase/supabase-js, class-validator
+- [ ] Setup Supabase connection with TypeORM
+- [ ] Create entities (MenuItem, Ingredient, AllergenType, MenuCategory)
+
+**API Development**
+- [ ] Create MenuModule with CRUD operations
+- [ ] Create AllergenModule for filtering
+- [ ] Implement GET /api/menu-items (list all)
+- [ ] Implement GET /api/menu-items/filter?exclude=allergens
+- [ ] Implement POST /api/menu-items (create)
+- [ ] Implement PUT /api/menu-items/:id (update)
+- [ ] Implement DELETE /api/menu-items/:id (delete)
+- [ ] Implement GET /api/allergens (list allergen types)
+- [ ] Test all endpoints with Postman/Thunder Client
+
+---
+
+### Day 5-6: Frontend Development (SvelteKit)
+
+**SvelteKit Setup**
+- [ ] Initialize SvelteKit project: `npm create svelte@latest allergen-management`
+- [ ] Setup Tailwind CSS: `npx svelte-add@latest tailwindcss`
+- [ ] Configure API proxy to NestJS backend
+
+**UI Components**
+- [ ] Create MenuItemCard component (display menu item with allergen icons)
+- [ ] Create AllergenFilter component (checkbox filters)
+- [ ] Create MenuItemList component (grid/list view)
+- [ ] Create MenuItemForm component (add/edit menu items)
+
+**Pages**
+- [ ] Create main page (/) - Menu display with filters
+- [ ] Create admin page (/admin) - Data entry form
+- [ ] Implement state management with Svelte stores
+- [ ] Connect to NestJS API
+
+---
+
+### Day 7: Testing & Polish
+
+**Testing**
+- [ ] Test allergen filtering (single allergen)
+- [ ] Test allergen filtering (multiple allergens)
+- [ ] Test data entry form (create menu item)
+- [ ] Test edit/delete operations
+- [ ] Test Japanese text display
+- [ ] Test responsive design (mobile/desktop)
+
+**Polish**
 - [ ] Add loading states
-
-**Day 4-5: Backend Integration**
-- [ ] Connect SvelteKit to NestJS API
-- [ ] Implement session management
-- [ ] Test end-to-end flow:
-  - User: "I'm allergic to shellfish"
-  - AI: Extract "shellfish"
-  - DB: Query safe items
-  - AI: Generate response
-  - UI: Display results
-
-**Day 6-7: Polish + Testing**
-- [ ] Add error handling
-- [ ] Improve UI styling
-- [ ] Test edge cases (no allergens, multiple allergens)
-- [ ] Add Japanese language support
-- [ ] Test on mobile devices
+- [ ] Add error handling and user feedback
+- [ ] Improve UI styling with Tailwind
+- [ ] Add allergen icons and colors
+- [ ] Write README with setup instructions
 
 ---
 
-### Week 3: Documentation + Deployment
+### Optional (If Time Permits)
 
-**Day 1-2: Testing**
-- [ ] Write NestJS unit tests (Jest)
-- [ ] Write Svelte component tests
-- [ ] Test conversation flows
-- [ ] Load testing (100 concurrent queries)
+**Data Curation**
+- [ ] Add 16-26 more menu items (target: 20-30 total)
+- [ ] Verify allergen mappings accuracy
+- [ ] Add ingredient details for all menu items
 
-**Day 3-4: Documentation**
-- [ ] Write API documentation (Swagger)
-- [ ] Create README with setup instructions
-- [ ] Document database schema
-- [ ] Create user guide
-- [ ] Add architecture diagrams
-
-**Day 5-7: Deployment**
-- [ ] Setup Docker containers
-- [ ] Deploy frontend to Vercel (FREE)
-- [ ] Deploy backend to Railway/Fly.io
-- [ ] Configure environment variables
-- [ ] Setup GitHub Actions CI/CD
+**Deployment** (Can be done later)
+- [ ] Deploy backend to Fly.io/Railway
+- [ ] Deploy frontend to Vercel
+- [ ] Setup environment variables
 - [ ] Test production deployment
 
 ---
@@ -731,10 +715,10 @@ SUPABASE_SERVICE_KEY=eyJhbGc... (for admin operations)
 
 ---
 
-## 🎤 Interview Talking Points
+## 🎤 Interview Talking Points (Phase 1)
 
 ### 1. Tech Stack Alignment
-> "I noticed NextBeat uses SvelteKit in production, so I implemented the AI Receptionist feature using SvelteKit + TypeScript instead of React. This demonstrates:
+> "I noticed NextBeat uses SvelteKit in production, so I implemented the Allergen Management System using SvelteKit + TypeScript instead of React. This demonstrates:
 > - I researched your tech stack before applying
 > - I can learn new frameworks quickly (learned SvelteKit in 1 week)
 > - I'm immediately productive with your stack on day 1"
@@ -755,59 +739,66 @@ SUPABASE_SERVICE_KEY=eyJhbGc... (for admin operations)
 > - Reduced manual scheduling from 4-8 hours to 1-3 seconds
 > - React + Go + Python OR-Tools
 >
-> **AI Receptionist** (2-week sprint):
-> - Conversational AI with Claude API
+> **Allergen Management System** (1-week sprint):
 > - Full-stack TypeScript (SvelteKit + NestJS)
 > - Manual data curation for quality
+> - RESTful API design with proper filtering
 > - Learned SvelteKit specifically for NextBeat alignment"
 
 ### 4. Learning Agility
 > "When I researched NextBeat's tech stack and saw SvelteKit, I had never used it before. Within 1 week I:
 > - Completed the official Svelte tutorial
-> - Built a production-ready chat interface
-> - Integrated with NestJS backend and Claude API
-> - Deployed to Vercel with CI/CD
+> - Built a production-ready menu management interface
+> - Integrated with NestJS backend
+> - Implemented complex allergen filtering logic
 >
 > This demonstrates I can quickly learn new technologies and be productive immediately."
 
 ### 5. Hospitality Domain Expertise
 > "Both my projects solve real problems in the hospitality industry:
 > - **Labor shortage** → Automated shift scheduling saves 4-8 hours/month
-> - **Guest safety** → AI allergen queries prevent allergic reactions
+> - **Guest safety** → Allergen management system prevents allergic reactions
 >
 > This aligns perfectly with NextBeat's mission to solve Japan's demographic crisis through hospitality tech innovation."
 
+### 6. Incremental Development
+> "I built this in phases:
+> - **Phase 1** (1 week): Database + CRUD API + Basic UI - Foundation for future features
+> - **Phase 2** (Future): Add AI conversational interface with Claude API
+>
+> This shows I can deliver working software quickly while planning for future enhancements."
+
 ---
 
-## 📊 Success Metrics
+## 📊 Success Metrics (Phase 1)
 
 ### Technical Metrics
 - [ ] Frontend bundle size: <100KB (SvelteKit target)
-- [ ] API response time: <500ms (Claude API + database query)
+- [ ] API response time: <200ms (database query only)
 - [ ] Database query time: <50ms (20-30 menu items)
-- [ ] Conversation accuracy: >90% (allergen extraction)
-- [ ] Test coverage: >80% (NestJS + Svelte tests)
+- [ ] Filter accuracy: 100% (exact allergen matching)
+- [ ] Test coverage: >70% (Basic CRUD tests)
 
 ### Portfolio Metrics
 - [ ] 2 separate repositories on GitHub
-- [ ] Clean README with architecture diagrams
-- [ ] Live demo URLs (Vercel + Fly.io)
-- [ ] Comprehensive documentation
-- [ ] CI/CD pipeline (GitHub Actions)
+- [ ] Clean README with setup instructions
+- [ ] Working demo (local or deployed)
+- [ ] API documentation (Swagger/OpenAPI)
+- [ ] Database schema documentation
 
 ### Learning Metrics
-- [ ] SvelteKit proficiency: Build production app in 1 week
-- [ ] NestJS proficiency: Build REST API in 3-5 days
-- [ ] Claude API integration: Working chatbot
+- [ ] SvelteKit proficiency: Build basic app in 1 week
+- [ ] NestJS proficiency: Build REST API in 2-3 days
 - [ ] TypeScript: Fully typed codebase
+- [ ] PostgreSQL: Design normalized schema
 
 ---
 
-## ⚠️ Common Pitfalls to Avoid
+## ⚠️ Common Pitfalls to Avoid (Phase 1)
 
 ### 1. Over-engineering
-❌ **Don't**: Add complex features like ML-based recommendations, multi-language support, user authentication
-✅ **Do**: Focus on core feature (allergen query) with clean implementation
+❌ **Don't**: Add AI chat, ML recommendations, user authentication, multi-language support
+✅ **Do**: Focus on basic CRUD + filtering with clean implementation
 
 ### 2. Tech Stack Confusion
 ❌ **Don't**: Mix React components into SvelteKit project
@@ -817,11 +808,7 @@ SUPABASE_SERVICE_KEY=eyJhbGc... (for admin operations)
 ❌ **Don't**: Modify existing shift-schedule-manager tables
 ✅ **Do**: Add NEW tables with clear naming (allergen_*, menu_*)
 
-### 4. API Overuse
-❌ **Don't**: Call Claude API for every message (expensive)
-✅ **Do**: Cache allergen extraction, reuse session context
-
-### 5. Poor Documentation
+### 4. Poor Documentation
 ❌ **Don't**: Minimal README with just installation steps
 ✅ **Do**: Comprehensive docs with architecture, tech stack rationale, interview talking points
 
@@ -868,29 +855,36 @@ SUPABASE_SERVICE_KEY=eyJhbGc... (for admin operations)
 
 ---
 
-## ✅ Final Deliverables
+## ✅ Final Deliverables (Phase 1)
 
-### Repository: `ai-receptionist-allergen`
-1. **SvelteKit Frontend** - Chat interface with TypeScript
-2. **NestJS Backend** - REST API with Claude integration
-3. **Database Schema** - PostgreSQL migrations in `database/migrations/`
-4. **Documentation** - README, API docs, architecture diagrams
-5. **Tests** - Unit tests (NestJS) + Component tests (Svelte)
-6. **CI/CD** - GitHub Actions pipeline
-7. **Deployment** - Live demo on Vercel + Fly.io
+### Repository: `allergen-management-system`
+1. **SvelteKit Frontend** - Menu display interface with filtering
+2. **NestJS Backend** - REST API with CRUD operations
+3. **Database Schema** - PostgreSQL migration (016_allergen_schema_for_ai_receptionist.sql)
+4. **Documentation** - README with setup instructions, API documentation
+5. **Tests** - Basic CRUD tests (NestJS)
+6. **Sample Data** - 20-30 hotel menu items with accurate allergen info
 
 ### Interview Assets
-1. **Portfolio URLs** - 2 live demos (shift scheduler + AI receptionist)
+1. **Portfolio URLs** - 2 projects (shift scheduler + allergen management)
 2. **GitHub Repositories** - 2 separate repos with clean commit history
-3. **Talking Points Document** - Prepare 5-minute presentation
-4. **Architecture Diagrams** - Visual explanation of system design
-5. **NextBeat Alignment Doc** - Tech stack match analysis
+3. **Talking Points Document** - Emphasize learning agility and tech stack match
+4. **Database Design** - Showcase normalized schema design skills
+5. **NextBeat Alignment** - SvelteKit + NestJS + TypeScript
+
+### Future Enhancements (Phase 2 - Optional)
+- [ ] Add conversational AI interface (Claude API)
+- [ ] Implement natural language allergen extraction
+- [ ] Add chat UI components
+- [ ] Add session management and conversation logging
+- [ ] Deploy to production (Vercel + Fly.io)
 
 ---
 
-**End of Guideline Document**
+**End of Guideline Document (Phase 1)**
 
-**Version**: 1.0
+**Version**: 2.0 (Phase 1: Initial Setup)
 **Last Updated**: 2025-01-31
 **Author**: Claude Code (Anthropic)
-**Target Agent**: Next implementation agent for AI Receptionist feature
+**Target Agent**: Next implementation agent for Allergen Management System
+**Scope**: Phase 1 only - Database + CRUD + Basic UI (NO AI integration yet)
