@@ -283,13 +283,40 @@ export const useAIAssistantLazy = (
         const totalCells = staffMembers.length * dateRange.length;
         const fillPercentage = totalCells > 0 ? (prefilledCount / totalCells) * 100 : 0;
 
-        // If >30% filled, likely AI-generated schedule → ignore and regenerate fresh
+        // Define which symbols are "manager-entered" vs "AI-generated"
+        // Manager symbols (ALWAYS preserve): ★, ☆, ●, ◎, ▣ (special designations)
+        // AI-generated symbols (clear on regenerate): ×, △, ◇, ○ (standard shifts)
+        const MANAGER_SYMBOLS = ['★', '☆', '●', '◎', '▣', '\u2605', '\u2606', '\u25cf', '\u25ce', '\u25a3'];
+
+        // If >30% filled, likely AI-generated schedule → clear AI symbols but KEEP manager symbols
         let finalPrefilledSchedule = prefilledSchedule;
         if (fillPercentage > 30) {
           console.log(`[OR-TOOLS] Detected ${prefilledCount} filled cells (${fillPercentage.toFixed(1)}% of ${totalCells} total)`);
-          console.log(`[OR-TOOLS] >30% filled → likely AI-generated → ignoring for fresh generation`);
-          finalPrefilledSchedule = {}; // Clear prefilled to force fresh generation
-          prefilledCount = 0;
+          console.log(`[OR-TOOLS] >30% filled → likely AI-generated → clearing AI symbols but keeping manager symbols (★, ●, etc.)`);
+
+          // Filter to keep only manager-entered symbols
+          finalPrefilledSchedule = {};
+          let keptCount = 0;
+          let clearedCount = 0;
+
+          Object.entries(prefilledSchedule).forEach(([staffId, dates]) => {
+            Object.entries(dates).forEach(([dateKey, shiftValue]) => {
+              if (MANAGER_SYMBOLS.includes(shiftValue)) {
+                // Keep manager symbols
+                if (!finalPrefilledSchedule[staffId]) {
+                  finalPrefilledSchedule[staffId] = {};
+                }
+                finalPrefilledSchedule[staffId][dateKey] = shiftValue;
+                keptCount++;
+              } else {
+                // Clear AI-generated symbols
+                clearedCount++;
+              }
+            });
+          });
+
+          console.log(`[OR-TOOLS] Kept ${keptCount} manager symbols (★, ●, etc.), cleared ${clearedCount} AI-generated symbols`);
+          prefilledCount = keptCount;
         } else if (prefilledCount > 0) {
           console.log(`[OR-TOOLS] Extracted ${prefilledCount} pre-filled cells (${fillPercentage.toFixed(1)}% of ${totalCells}) - preserving as manager edits`);
         } else {
@@ -375,7 +402,8 @@ export const useAIAssistantLazy = (
           },
           // ✅ NEW: Pre-filled schedule (user-edited cells before AI generation)
           // These become HARD constraints in OR-Tools - they will NOT be changed
-          prefilledSchedule: prefilledSchedule,
+          // Uses finalPrefilledSchedule which filters out AI-generated symbols when >30% filled
+          prefilledSchedule: finalPrefilledSchedule,
           // ✅ NEW: Backup staff assignments (for coverage constraints)
           // Business Logic:
           // - When ANY member of a group has day off (×), backup staff MUST work (○)
@@ -420,7 +448,7 @@ export const useAIAssistantLazy = (
 
         // Log pre-filled cells summary
         if (prefilledCount > 0) {
-          const staffWithPrefills = Object.keys(prefilledSchedule).length;
+          const staffWithPrefills = Object.keys(finalPrefilledSchedule).length;
           console.log(`[OR-TOOLS] Pre-filled schedule: ${prefilledCount} cells across ${staffWithPrefills} staff members`);
         }
 
