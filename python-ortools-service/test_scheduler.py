@@ -303,6 +303,73 @@ class TestShiftScheduleOptimizer:
         assert result['stats']['staff_count'] == len(sample_staff)
         assert result['stats']['date_count'] == len(short_dates)
 
+    def test_individual_monthly_limit_override(self, short_dates):
+        """Test that individual monthly limits override staff_status limits.
+
+        Scenario:
+        - 小泉 is 派遣 with individual limit (min=5, max=5)
+        - Default limit for 派遣 is (min=7, max=7)
+        - 小泉 should use individual limit (5), not default (7)
+        """
+        # Staff setup: 小泉 is 派遣 but has individual override
+        staff_members = [
+            {'id': 'koizumi', 'name': '小泉', 'status': '派遣'},
+            {'id': 'tanaka', 'name': '田中', 'status': '派遣'},
+            {'id': 'yamada', 'name': '山田', 'status': '社員'},
+        ]
+
+        optimizer = ShiftScheduleOptimizer()
+        result = optimizer.optimize_schedule(
+            staff_members=staff_members,
+            date_range=short_dates,  # 10 days
+            constraints={
+                # New array format with priority: individual > staff_status > all
+                'monthlyLimitsArray': [
+                    {
+                        'id': 'limit-1',
+                        'name': '小泉',
+                        'scope': 'individual',
+                        'targetIds': ['koizumi'],
+                        'minCount': 2,  # Individual: min 2
+                        'maxCount': 3,  # Individual: max 3
+                        'isHardConstraint': True,
+                        'excludeCalendarRules': True,
+                    },
+                    {
+                        'id': 'limit-2',
+                        'name': 'Default',
+                        'scope': 'staff_status',
+                        'targetIds': ['派遣', '社員'],
+                        'minCount': 1,  # Default: min 1
+                        'maxCount': 4,  # Default: max 4
+                        'isHardConstraint': True,
+                        'excludeCalendarRules': True,
+                    },
+                ],
+                'dailyLimitsRaw': {'minOffPerDay': 1, 'maxOffPerDay': 1}
+            },
+            timeout_seconds=15
+        )
+
+        assert result['success'] == True
+
+        # Count off days for each staff
+        off_symbol = '\u00d7'
+
+        # 小泉 should have 2-3 off days (individual limit)
+        koizumi_off = sum(
+            1 for date in short_dates
+            if result['schedule']['koizumi'][date] == off_symbol
+        )
+        assert 2 <= koizumi_off <= 3, f"小泉 has {koizumi_off} off days (expected 2-3 from individual limit)"
+
+        # 田中 should have 1-4 off days (staff_status limit for 派遣)
+        tanaka_off = sum(
+            1 for date in short_dates
+            if result['schedule']['tanaka'][date] == off_symbol
+        )
+        assert 1 <= tanaka_off <= 4, f"田中 has {tanaka_off} off days (expected 1-4 from staff_status limit)"
+
 
 class TestFlaskAPI:
     """Test Flask API endpoints."""

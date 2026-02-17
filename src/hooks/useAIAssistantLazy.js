@@ -324,43 +324,58 @@ export const useAIAssistantLazy = (
         }
 
         // Step 4: Prepare constraints payload
-        // ✅ FIX: Extract monthly limit from monthlyLimits array (not singular monthlyLimit)
-        // The UI stores monthly limits as an array in settings.monthlyLimits
-        // We need to find the first "off_days" limit and extract minCount/maxCount
+        // ✅ ENHANCED: Send full monthlyLimits array for per-staff limit resolution
+        // The UI stores monthly limits as an array with different scopes:
+        // - scope: "all" → applies to everyone (lowest priority)
+        // - scope: "staff_status" → applies to specific staff types like 社員, 派遣 (medium priority)
+        // - scope: "individual" → applies to specific staff members (highest priority)
+        // Python scheduler will resolve the most specific limit for each staff member
         const monthlyLimitsArray = aiSettings?.monthlyLimits || [];
-        const offDaysLimit = monthlyLimitsArray.find(l =>
-          l.limitType === 'off_days' || l.limitType === 'max_off_days'
+
+        // Transform limits array to include all necessary fields for Python scheduler
+        const monthlyLimitsForOrTools = monthlyLimitsArray.map(limit => ({
+          id: limit.id,
+          name: limit.name,
+          limitType: limit.limitType || 'off_days',
+          minCount: limit.minCount,  // null = no minimum
+          maxCount: limit.maxCount ?? 8,
+          excludeCalendarRules: limit.excludeCalendarRules ?? true,
+          excludeEarlyShiftCalendar: limit.excludeEarlyShiftCalendar ?? true,
+          overrideWeeklyLimits: limit.overrideWeeklyLimits ?? true,
+          countHalfDays: limit.countHalfDays ?? true,
+          isHardConstraint: limit.constraints?.isHardConstraint ?? limit.isHardConstraint ?? false,
+          penaltyWeight: limit.penaltyWeight ?? 50,
+          // Scope determines priority: individual > staff_status > all
+          scope: limit.scope || 'all',
+          // targetIds: staff IDs (for individual) or staff types (for staff_status)
+          targetIds: limit.targetIds || [],
+        }));
+
+        // Also keep backward-compatible single monthlyLimit for legacy code
+        // Use the first "all" or "staff_status" scope limit as default
+        const defaultLimit = monthlyLimitsArray.find(l =>
+          l.scope === 'all' || l.scope === 'staff_status'
         ) || monthlyLimitsArray[0];
 
-        // Extract minCount/maxCount from the found limit
-        // ✅ FIX: Properly read values from database without incorrect fallbacks
-        // - minCount: null means "no minimum" - DO NOT fall back to maxCount!
-        // - isHardConstraint: Read from constraints.isHardConstraint (useAISettings path)
-        //   OR directly from the limit object (Go server extracts from limit_config)
-        const monthlyLimitConfig = offDaysLimit ? {
-          // ✅ FIX: Keep minCount as null when database has null (no minimum constraint)
-          // This gives flexibility for HARD priority rules to work
-          minCount: offDaysLimit.minCount,  // null = no minimum, number = enforce minimum
-          maxCount: offDaysLimit.maxCount ?? 8,
-          excludeCalendarRules: offDaysLimit.excludeCalendarRules ?? true,
-          excludeEarlyShiftCalendar: offDaysLimit.excludeEarlyShiftCalendar ?? true,
-          overrideWeeklyLimits: offDaysLimit.overrideWeeklyLimits ?? true,
-          countHalfDays: offDaysLimit.countHalfDays ?? true,
-          // ✅ FIX: Read isHardConstraint from correct path
-          // useAISettings transforms it to constraints.isHardConstraint
-          // But Go server also puts it at top level from is_hard_constraint column
-          isHardConstraint: offDaysLimit.constraints?.isHardConstraint ??
-                           offDaysLimit.isHardConstraint ??
-                           false,  // Default to SOFT to prevent INFEASIBLE conflicts
+        const monthlyLimitConfig = defaultLimit ? {
+          minCount: defaultLimit.minCount,
+          maxCount: defaultLimit.maxCount ?? 8,
+          excludeCalendarRules: defaultLimit.excludeCalendarRules ?? true,
+          excludeEarlyShiftCalendar: defaultLimit.excludeEarlyShiftCalendar ?? true,
+          overrideWeeklyLimits: defaultLimit.overrideWeeklyLimits ?? true,
+          countHalfDays: defaultLimit.countHalfDays ?? true,
+          isHardConstraint: defaultLimit.constraints?.isHardConstraint ??
+                           defaultLimit.isHardConstraint ??
+                           false,
         } : {
-          minCount: null,  // No minimum by default
+          minCount: null,
           maxCount: 8,
           excludeCalendarRules: true,
-          isHardConstraint: false, // Default to SOFT constraint
+          isHardConstraint: false,
         };
 
-        console.log(`[OR-TOOLS] Monthly limit config from settings:`, monthlyLimitConfig);
-        console.log(`[OR-TOOLS] Monthly limit isHardConstraint: ${monthlyLimitConfig.isHardConstraint} (will ${monthlyLimitConfig.isHardConstraint ? 'STRICTLY enforce' : 'softly penalize'} limits)`);
+        console.log(`[OR-TOOLS] Monthly limits array (${monthlyLimitsForOrTools.length} rules):`, monthlyLimitsForOrTools);
+        console.log(`[OR-TOOLS] Default monthly limit config:`, monthlyLimitConfig);
 
         const constraints = {
           calendarRules: calendarRules || {},
@@ -371,7 +386,10 @@ export const useAIAssistantLazy = (
             minOffPerDay: 0,  // Set to 0 to effectively disable
             maxOffPerDay: 4, // Changed from 3 to 4 to allow more day-off flexibility
           },
-          // ✅ FIX: Use extracted monthly limit config (from monthlyLimits array)
+          // ✅ ENHANCED: Send full monthly limits array for per-staff resolution
+          // Python scheduler will find the most specific limit for each staff member
+          monthlyLimitsArray: monthlyLimitsForOrTools,
+          // ✅ BACKWARD COMPAT: Keep single monthlyLimit for legacy code paths
           monthlyLimit: monthlyLimitConfig,
           staffGroups: aiSettings?.staffGroups || [],
           priorityRules: aiSettings?.priorityRules || {},

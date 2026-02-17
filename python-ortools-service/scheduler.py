@@ -1747,9 +1747,92 @@ class ShiftScheduleOptimizer:
         else:
             logger.info("[OR-TOOLS] 📋 No HARD priority rules with off/early shifts - no pre-consumption")
 
+    def _resolve_monthly_limit_for_staff(self, staff):
+        """
+        Resolve the most specific monthly limit for a staff member.
+
+        Priority order (highest to lowest):
+        1. individual: limit with scope="individual" and staff.id in targetIds
+        2. staff_status: limit with scope="staff_status" and staff.status in targetIds
+        3. all: limit with scope="all" (applies to everyone)
+        4. fallback: use legacy monthlyLimit config
+
+        Returns dict with: minCount, maxCount, isHardConstraint, name
+        """
+        monthly_limits_array = self.constraints_config.get('monthlyLimitsArray', [])
+        monthly_limit_legacy = self.constraints_config.get('monthlyLimit', {})
+
+        staff_id = staff['id']
+        staff_status = staff.get('status') or staff.get('type') or ''
+        staff_name = staff.get('name', staff_id)
+
+        # Priority 1: Individual limit (exact staff ID match)
+        for limit in monthly_limits_array:
+            if limit.get('scope') == 'individual':
+                target_ids = limit.get('targetIds', [])
+                if staff_id in target_ids:
+                    logger.info(f"  📌 {staff_name}: Using INDIVIDUAL limit '{limit.get('name')}' (min={limit.get('minCount')}, max={limit.get('maxCount')})")
+                    return {
+                        'minCount': limit.get('minCount'),
+                        'maxCount': limit.get('maxCount'),
+                        'isHardConstraint': limit.get('isHardConstraint', False),
+                        'excludeCalendarRules': limit.get('excludeCalendarRules', True),
+                        'name': limit.get('name', 'Individual'),
+                        'scope': 'individual',
+                    }
+
+        # Priority 2: Staff status/type limit
+        for limit in monthly_limits_array:
+            if limit.get('scope') == 'staff_status':
+                target_ids = limit.get('targetIds', [])
+                if staff_status in target_ids:
+                    logger.info(f"  📋 {staff_name}: Using STAFF_STATUS limit '{limit.get('name')}' for {staff_status} (min={limit.get('minCount')}, max={limit.get('maxCount')})")
+                    return {
+                        'minCount': limit.get('minCount'),
+                        'maxCount': limit.get('maxCount'),
+                        'isHardConstraint': limit.get('isHardConstraint', False),
+                        'excludeCalendarRules': limit.get('excludeCalendarRules', True),
+                        'name': limit.get('name', 'Staff Status'),
+                        'scope': 'staff_status',
+                    }
+
+        # Priority 3: "all" scope limit
+        for limit in monthly_limits_array:
+            if limit.get('scope') == 'all':
+                logger.info(f"  🌐 {staff_name}: Using ALL scope limit '{limit.get('name')}' (min={limit.get('minCount')}, max={limit.get('maxCount')})")
+                return {
+                    'minCount': limit.get('minCount'),
+                    'maxCount': limit.get('maxCount'),
+                    'isHardConstraint': limit.get('isHardConstraint', False),
+                    'excludeCalendarRules': limit.get('excludeCalendarRules', True),
+                    'name': limit.get('name', 'All'),
+                    'scope': 'all',
+                }
+
+        # Priority 4: Legacy monthlyLimit config (backward compatibility)
+        if monthly_limit_legacy:
+            return {
+                'minCount': monthly_limit_legacy.get('minCount'),
+                'maxCount': monthly_limit_legacy.get('maxCount', 8),
+                'isHardConstraint': monthly_limit_legacy.get('isHardConstraint', False),
+                'excludeCalendarRules': monthly_limit_legacy.get('excludeCalendarRules', True),
+                'name': 'Legacy Default',
+                'scope': 'legacy',
+            }
+
+        # No limit configured
+        return None
+
     def _add_monthly_limits(self):
         """
         Phase 6.6: Monthly MIN/MAX off-day limits with calendar exclusion.
+
+        ENHANCED: Now supports multiple monthly limits with priority resolution:
+        - individual: applies to specific staff IDs (highest priority)
+        - staff_status: applies to specific staff types like 社員, 派遣
+        - all: applies to everyone (lowest priority)
+
+        Each staff member gets the MOST SPECIFIC limit that applies to them.
 
         From AI_GENERATION_FLOW_DOCUMENTATION.md:
         - excludeCalendarRules: must_day_off dates DON'T count toward limits
@@ -1766,9 +1849,23 @@ class ShiftScheduleOptimizer:
         - HARD constraint: Strictly enforced, no violations allowed
         - SOFT constraint: Violations allowed with penalty
         """
+        # Check for new array format first, fall back to legacy
+        monthly_limits_array = self.constraints_config.get('monthlyLimitsArray', [])
         monthly_limit = self.constraints_config.get('monthlyLimit', {})
 
-        if not monthly_limit:
+        # Log monthly limits configuration
+        if monthly_limits_array:
+            logger.info(f"[OR-TOOLS] 📊 Monthly limits array received ({len(monthly_limits_array)} rules):")
+            for limit in monthly_limits_array:
+                scope = limit.get('scope', 'all')
+                target_ids = limit.get('targetIds', [])
+                min_count = limit.get('minCount')
+                max_count = limit.get('maxCount')
+                is_hard = limit.get('isHardConstraint', False)
+                logger.info(f"    • '{limit.get('name')}': scope={scope}, targets={target_ids}, min={min_count}, max={max_count}, hard={is_hard}")
+
+        if not monthly_limit and not monthly_limits_array:
+            logger.info("[OR-TOOLS] No monthly limits configured - skipping")
             return
 
         # Handle None/null values for minCount (means no minimum constraint)
@@ -1873,9 +1970,47 @@ class ShiftScheduleOptimizer:
         total_days = len(self.date_range)
         skipped_backup_count = 0
 
+        logger.info(f"[OR-TOOLS] Resolving monthly limits for {len(self.staff_members)} staff members...")
+
         for staff in self.staff_members:
             staff_id = staff['id']
             staff_name = staff.get('name', staff_id)
+
+            # ═══════════════════════════════════════════════════════════════════════════
+            # RESOLVE STAFF-SPECIFIC MONTHLY LIMIT (individual > staff_status > all)
+            # Each staff gets the MOST SPECIFIC limit that applies to them
+            # ═══════════════════════════════════════════════════════════════════════════
+            resolved_limit = self._resolve_monthly_limit_for_staff(staff)
+
+            if resolved_limit is None:
+                logger.info(f"  ⏭️ {staff_name}: No monthly limit applies - skipping")
+                continue
+
+            # Extract limit values for this staff
+            staff_min_off_raw = resolved_limit.get('minCount')
+            staff_max_off_raw = resolved_limit.get('maxCount')
+            staff_exclude_calendar = resolved_limit.get('excludeCalendarRules', True)
+            staff_monthly_limit_is_hard = resolved_limit.get('isHardConstraint', False)
+
+            # Parse min/max (handle None values)
+            staff_min_off = int(math.floor(float(staff_min_off_raw))) if staff_min_off_raw is not None else 0
+            staff_max_off = int(math.ceil(float(staff_max_off_raw))) if staff_max_off_raw is not None else 999
+
+            # Calculate flexible dates based on this staff's calendar exclusion setting
+            if staff_exclude_calendar:
+                staff_flexible_dates = [d for d in self.date_range if d not in self.calendar_off_dates]
+            else:
+                staff_flexible_dates = list(self.date_range)
+
+            # Sanity check: can't require more off days than available dates
+            staff_min_off = min(staff_min_off, len(staff_flexible_dates))
+            staff_max_off = min(staff_max_off, len(staff_flexible_dates))
+            if staff_min_off > staff_max_off:
+                staff_min_off = staff_max_off
+
+            # Scale for integer math (off × 2, early × 1)
+            staff_min_scaled = staff_min_off * 2
+            staff_max_scaled = staff_max_off * 2
 
             # ═══════════════════════════════════════════════════════════════════════════
             # BACKUP STAFF - Apply RELAXED monthly limits (not exempt)
@@ -1883,15 +2018,13 @@ class ShiftScheduleOptimizer:
             # Use 1.5x the normal max to give them flexibility for coverage
             # ═══════════════════════════════════════════════════════════════════════════
             is_backup = staff_id in self.backup_staff_ids
-            backup_max_scaled = None  # Will be set if backup
-            backup_min_scaled = None
 
             if is_backup:
                 # Apply relaxed limits for backup staff (1.5x normal max)
-                backup_max_off = int(max_off * 1.5)  # e.g., 10 * 1.5 = 15
-                backup_min_off = 0  # No minimum for backup
-                backup_max_scaled = backup_max_off * 2
-                backup_min_scaled = backup_min_off * 2
+                backup_max_off = int(staff_max_off * 1.5)
+                backup_min_off = 0
+                staff_max_scaled = backup_max_off * 2
+                staff_min_scaled = backup_min_off * 2
                 logger.info(f"  🛡️ Backup staff {staff_name}: relaxed limits min={backup_min_off}, max={backup_max_off} (1.5x normal)")
 
             # ═══════════════════════════════════════════════════════════════════════════
@@ -1913,17 +2046,17 @@ class ShiftScheduleOptimizer:
 
             if start_date or end_date:
                 # Staff has partial employment period - prorate limits
-                total_days = len(self.date_range)
+                total_period_days = len(self.date_range)
 
-                if actual_working_days < total_days and actual_working_days > 0:
+                if actual_working_days < total_period_days and actual_working_days > 0:
                     # Calculate prorated limits based on working days
                     # Formula: min_off = floor(working_days / 4.25)
                     # This ensures approximately 1 off day per ~4-5 work days
                     calculated_min = max(0, int(actual_working_days / 4.25))
 
-                    # Max should be proportionally scaled from original
-                    prorate_ratio = actual_working_days / total_days
-                    calculated_max = max(calculated_min + 1, int((max_scaled / 2) * prorate_ratio))
+                    # Max should be proportionally scaled from original (use staff-specific max)
+                    prorate_ratio = actual_working_days / total_period_days
+                    calculated_max = max(calculated_min + 1, int(staff_max_off * prorate_ratio))
 
                     # Scale for combined off-equivalent (off × 2 + early × 1)
                     staff_min_scaled = calculated_min * 2
@@ -1935,25 +2068,13 @@ class ShiftScheduleOptimizer:
                     if end_date:
                         period_info.append(f"end={end_date}")
 
-                    logger.info(f"  📅 {staff_name}: {', '.join(period_info)}, works {actual_working_days}/{total_days} days")
+                    logger.info(f"  📅 {staff_name}: {', '.join(period_info)}, works {actual_working_days}/{total_period_days} days")
                     logger.info(f"      → Prorated limits: min={staff_min_scaled/2:.1f}, max={staff_max_scaled/2:.1f} (ratio={prorate_ratio:.2f})")
-                else:
-                    # Edge case: no working days or full period
-                    staff_min_scaled = min_scaled
-                    staff_max_scaled = max_scaled
-            else:
-                # No start_period or end_period - use original limits
-                staff_min_scaled = min_scaled
-                staff_max_scaled = max_scaled
+                # else: keep staff_min_scaled and staff_max_scaled from resolved_limit (no override needed)
+            # else: keep staff_min_scaled and staff_max_scaled from resolved_limit (no override needed)
 
-            # ═══════════════════════════════════════════════════════════════════════════
-            # OVERRIDE WITH BACKUP LIMITS if this is backup staff
-            # Backup staff get relaxed limits regardless of prorating
-            # ═══════════════════════════════════════════════════════════════════════════
-            if is_backup and backup_max_scaled is not None:
-                staff_min_scaled = backup_min_scaled
-                staff_max_scaled = backup_max_scaled
-                logger.info(f"      → Using backup limits: min={staff_min_scaled/2:.1f}, max={staff_max_scaled/2:.1f}")
+            # Note: Backup staff limits are already set in lines 2022-2028 above
+            # No additional override needed here
 
             # ═══════════════════════════════════════════════════════════════════════════
             # Get priority rule off-equivalent consumption for this staff (FOR LOGGING ONLY)
@@ -1976,13 +2097,14 @@ class ShiftScheduleOptimizer:
                 logger.info(f"  📋 {staff_name}: priority rules force {priority_consumed/2:.1f} off-equiv (will count in combined total)")
                 logger.info(f"      → Monthly limit: max={staff_max_scaled/2:.1f}, min={staff_min_scaled/2:.1f} (includes priority shifts)")
 
-            if exclude_calendar:
+            if staff_exclude_calendar:
                 # Count combined off-equivalent for flexible dates (excluding calendar)
                 # off × 2 + early × 1 + prefilled_star × 2
                 # IMPORTANT: Only include dates where staff is employed (before end_period) AND shift var exists
-                staff_flexible_dates = [d for d in flexible_dates if self._staff_works_on_date(staff_id, d) and self._has_shift_var(staff_id, d)]
-                off_vars = [self.shifts[(staff_id, date, self.SHIFT_OFF)] for date in staff_flexible_dates]
-                early_vars = [self.shifts[(staff_id, date, self.SHIFT_EARLY)] for date in staff_flexible_dates]
+                # Use staff-specific flexible_dates based on their exclude_calendar setting
+                staff_flex_dates = [d for d in self.date_range if d not in self.calendar_off_dates and self._staff_works_on_date(staff_id, d) and self._has_shift_var(staff_id, d)]
+                off_vars = [self.shifts[(staff_id, date, self.SHIFT_OFF)] for date in staff_flex_dates]
+                early_vars = [self.shifts[(staff_id, date, self.SHIFT_EARLY)] for date in staff_flex_dates]
 
                 # Get pre-filled ★ count for this staff (★ is mapped to WORK but counts as off-equivalent)
                 prefilled_star_scaled = self.prefilled_star_equiv_by_staff.get(staff_id, 0)
@@ -1991,9 +2113,9 @@ class ShiftScheduleOptimizer:
                 combined_scaled = sum(var * 2 for var in off_vars) + sum(var * 1 for var in early_vars) + prefilled_star_scaled
 
                 # Upper bound for violation variables (scaled) - based on staff's working days
-                max_possible = len(staff_flexible_dates) * 3
+                max_possible = len(staff_flex_dates) * 3
 
-                if monthly_limit_is_hard:
+                if staff_monthly_limit_is_hard:
                     # HARD CONSTRAINT: Strictly enforce PRORATED limits
                     # Priority-forced shifts count in combined_scaled automatically
                     if staff_min_scaled > 0:
@@ -2025,7 +2147,7 @@ class ShiftScheduleOptimizer:
                     ))
                     constraint_count += 1
             else:
-                # Count combined off-equivalent for all dates
+                # Count combined off-equivalent for all dates (including calendar off dates)
                 # off × 2 + early × 1 + prefilled_star × 2
                 # IMPORTANT: Only include dates where staff is employed (before end_period) AND shift var exists
                 staff_all_dates = [d for d in self.date_range if self._staff_works_on_date(staff_id, d) and self._has_shift_var(staff_id, d)]
@@ -2038,7 +2160,7 @@ class ShiftScheduleOptimizer:
                 combined_scaled = sum(var * 2 for var in off_vars) + sum(var * 1 for var in early_vars) + prefilled_star_scaled
                 max_possible = len(staff_all_dates) * 3
 
-                if monthly_limit_is_hard:
+                if staff_monthly_limit_is_hard:
                     # HARD CONSTRAINT: Strictly enforce PRORATED limits
                     # Priority-forced shifts count in combined_scaled automatically
                     if staff_min_scaled > 0:
