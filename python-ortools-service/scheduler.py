@@ -95,6 +95,7 @@ class ShiftScheduleOptimizer:
         self.calendar_off_dates = set()  # Track must_day_off dates
         self.calendar_work_dates = set()  # Track must_work dates (for skipping priority rules)
         self.prefilled_cells = set()  # Track pre-filled cells (staff_id, date) for reference
+        self.prefilled_star_equiv_by_staff = {}  # Track ★ symbols per staff for monthly limits (★ is WORK but counts as off-equivalent)
         self.backup_unavailable_slots = {}  # Track (staff_id, date) -> any_member_off bool var for backup unavailability
         self.backup_staff_ids = set()  # Track backup staff IDs (exempt from monthly limits)
         self.staff_end_dates = {}  # Track staff end dates: staff_id -> end_date string (YYYY-MM-DD)
@@ -201,6 +202,7 @@ class ShiftScheduleOptimizer:
         self.constraints_config = constraints
         self.calendar_off_dates = set()
         self.prefilled_cells = set()  # Reset pre-filled cells tracking
+        self.prefilled_star_equiv_by_staff = {}  # Reset star equivalent tracking
         self.backup_unavailable_slots = {}  # Reset backup unavailable slots tracking
         self.violation_vars = []  # Reset violation tracking
 
@@ -1802,18 +1804,33 @@ class ShiftScheduleOptimizer:
             # Check for OFF symbol (×, x, X) - counts as 2 (scaled)
             if symbol in ['×', '\u00d7', 'x', 'X']:
                 prefilled_off_equiv_by_staff[staff_id] = prefilled_off_equiv_by_staff.get(staff_id, 0) + 2
+            # Check for STAR symbol (★, ☆) - designated day off, counts as 2 (scaled, = 1.0 off-equivalent)
+            elif symbol in ['★', '\u2605', '☆', '\u2606']:
+                prefilled_off_equiv_by_staff[staff_id] = prefilled_off_equiv_by_staff.get(staff_id, 0) + 2
             # Check for EARLY symbol (△) - counts as 1 (scaled, = 0.5 off-equivalent)
             elif symbol in ['△', '\u25b3', 's', 'S']:
                 prefilled_off_equiv_by_staff[staff_id] = prefilled_off_equiv_by_staff.get(staff_id, 0) + 1
 
+        # Store prefilled off-equivalent for use in constraint calculation
+        # Note: × and △ are counted via shift variables, but ★ is mapped to WORK
+        # so we need to track ★ separately and add it to the constraint
+        self.prefilled_star_equiv_by_staff = {}  # Track ONLY ★ symbols (not counted in shift vars)
+        for (staff_id, date), symbol in prefilled_symbols.items():
+            if exclude_calendar and date not in flexible_dates:
+                continue
+            # Only track ★ symbols here (× and △ are already in shift vars)
+            if symbol in ['★', '\u2605', '☆', '\u2606']:
+                self.prefilled_star_equiv_by_staff[staff_id] = self.prefilled_star_equiv_by_staff.get(staff_id, 0) + 2
+
         # Log pre-filled off-equivalent summary
         if prefilled_off_equiv_by_staff:
-            logger.info(f"[OR-TOOLS] 🔒 Pre-filled off-equivalent (×=1.0, △=0.5) counts towards monthly limits:")
+            logger.info(f"[OR-TOOLS] 🔒 Pre-filled off-equivalent (×=1.0, ★=1.0, △=0.5) counts towards monthly limits:")
             for staff_id, scaled_count in prefilled_off_equiv_by_staff.items():
                 staff_name = next((s.get('name', staff_id) for s in self.staff_members if s['id'] == staff_id), staff_id)
                 off_equiv = scaled_count / 2.0  # Convert back to original scale for display
                 remaining_equiv = max_off - off_equiv
-                logger.info(f"    {staff_name}: {off_equiv:.1f} pre-filled off-equiv → remaining: {remaining_equiv:.1f} (max {max_off})")
+                star_count = self.prefilled_star_equiv_by_staff.get(staff_id, 0) // 2
+                logger.info(f"    {staff_name}: {off_equiv:.1f} pre-filled off-equiv (★={star_count}) → remaining: {remaining_equiv:.1f} (max {max_off})")
 
         # Sanity check: can't require more off days than available dates
         min_off = min(min_off, num_flexible_days)
@@ -1961,14 +1978,17 @@ class ShiftScheduleOptimizer:
 
             if exclude_calendar:
                 # Count combined off-equivalent for flexible dates (excluding calendar)
-                # off × 2 + early × 1
+                # off × 2 + early × 1 + prefilled_star × 2
                 # IMPORTANT: Only include dates where staff is employed (before end_period) AND shift var exists
                 staff_flexible_dates = [d for d in flexible_dates if self._staff_works_on_date(staff_id, d) and self._has_shift_var(staff_id, d)]
                 off_vars = [self.shifts[(staff_id, date, self.SHIFT_OFF)] for date in staff_flexible_dates]
                 early_vars = [self.shifts[(staff_id, date, self.SHIFT_EARLY)] for date in staff_flexible_dates]
 
-                # Create scaled sum: off × 2 + early × 1
-                combined_scaled = sum(var * 2 for var in off_vars) + sum(var * 1 for var in early_vars)
+                # Get pre-filled ★ count for this staff (★ is mapped to WORK but counts as off-equivalent)
+                prefilled_star_scaled = self.prefilled_star_equiv_by_staff.get(staff_id, 0)
+
+                # Create scaled sum: off × 2 + early × 1 + prefilled_star (already scaled)
+                combined_scaled = sum(var * 2 for var in off_vars) + sum(var * 1 for var in early_vars) + prefilled_star_scaled
 
                 # Upper bound for violation variables (scaled) - based on staff's working days
                 max_possible = len(staff_flexible_dates) * 3
@@ -2006,13 +2026,16 @@ class ShiftScheduleOptimizer:
                     constraint_count += 1
             else:
                 # Count combined off-equivalent for all dates
-                # off × 2 + early × 1
+                # off × 2 + early × 1 + prefilled_star × 2
                 # IMPORTANT: Only include dates where staff is employed (before end_period) AND shift var exists
                 staff_all_dates = [d for d in self.date_range if self._staff_works_on_date(staff_id, d) and self._has_shift_var(staff_id, d)]
                 off_vars = [self.shifts[(staff_id, date, self.SHIFT_OFF)] for date in staff_all_dates]
                 early_vars = [self.shifts[(staff_id, date, self.SHIFT_EARLY)] for date in staff_all_dates]
 
-                combined_scaled = sum(var * 2 for var in off_vars) + sum(var * 1 for var in early_vars)
+                # Get pre-filled ★ count for this staff (★ is mapped to WORK but counts as off-equivalent)
+                prefilled_star_scaled = self.prefilled_star_equiv_by_staff.get(staff_id, 0)
+
+                combined_scaled = sum(var * 2 for var in off_vars) + sum(var * 1 for var in early_vars) + prefilled_star_scaled
                 max_possible = len(staff_all_dates) * 3
 
                 if monthly_limit_is_hard:
