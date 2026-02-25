@@ -266,7 +266,7 @@ graph TB
 
 ```mermaid
 graph LR
-    subgraph "手動方式 Manual Metrics (紙ベース)"
+    subgraph "手動方式 Manual Metrics"
         A1[作成時間<br/>Creation Time<br/>180-240 min]
         A2[制約違反率<br/>Violation Rate<br/>~35%]
         A3[同時ユーザー<br/>Users<br/>1]
@@ -275,7 +275,7 @@ graph LR
 
     subgraph "OR-Tools方式 CP-SAT Metrics"
         B1[作成時間<br/>Creation Time<br/>~5 min<br/>🔥 99% faster]
-        B2[制約違反率<br/>Violation Rate<br/>0% (HARD)<br/>✅ 100% compliant]
+        B2[制約違反率<br/>Violation Rate<br/>0% HARD制約<br/>✅ 100% compliant]
         B3[同時ユーザー<br/>Users<br/>1000+<br/>⚡ 1000x scale]
         B4[最適性保証<br/>Optimality<br/>数学的最適<br/>📈 Proven]
     end
