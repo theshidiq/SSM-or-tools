@@ -84,21 +84,21 @@ graph TD
 ```mermaid
 gantt
     title スケジュール作成時間比較 (Time Comparison)
-    dateFormat  X
-    axisFormat %s分
+    dateFormat X
+    axisFormat %s
 
-    section 手動方式 Manual (紙ベース Paper-based)
-    スタッフ要望収集 Collect Requests      :0, 40min
-    制約確認 Check Constraints              :40min, 60min
-    初期作成 Initial Creation (手書き)      :60min, 120min
-    エラー修正 Error Correction              :120min, 180min
-    公平性調整 Fairness Adjustment           :180min, 210min
-    最終確認 Final Review                    :210min, 240min
+    section 手動方式 Manual (紙ベース)
+    スタッフ要望収集 :0, 40
+    制約確認 :40, 60
+    初期作成 (手書き) :60, 120
+    エラー修正 :120, 180
+    公平性調整 :180, 210
+    最終確認 :210, 240
 
-    section OR-Tools CP-SAT方式 Optimized
-    データ準備 Data Preparation             :0, 1min
-    CP-SAT最適化 CP-SAT Solving              :1min, 3min
-    レビュー Manager Review                  :3min, 5min
+    section OR-Tools CP-SAT方式
+    データ準備 :0, 1
+    CP-SAT最適化 :1, 3
+    レビュー :3, 5
 ```
 
 **Time Savings Breakdown:**
